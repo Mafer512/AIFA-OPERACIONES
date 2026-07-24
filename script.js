@@ -11041,7 +11041,7 @@ function ndwFormatValue(value, metric) {
 }
 
 /* ── NDW shared view state ── */
-let NDW_VIEW_STATE = { mode: 'weekly', year: null, monthIdx: null };
+let NDW_VIEW_STATE = { mode: 'weekly', year: null, monthIdx: null, monthTouched: false };
 let _ndwDetailChart = null;
 
 /* ── Peak-line chart config (badge labels + gradient fill) for NDW modals ── */
@@ -11323,6 +11323,17 @@ function ndwGetMonthCutoff(yearStr) {
     return 11;
 }
 
+function ndwGetPreferredMonthIdx(yearStr, cutoffIdx) {
+    const safeCutoff = Number.isFinite(Number(cutoffIdx))
+        ? Math.max(0, Math.min(11, Number(cutoffIdx)))
+        : 0;
+    const now = new Date();
+    if (String(yearStr) === String(now.getFullYear())) {
+        return Math.max(0, Math.min(safeCutoff, now.getMonth()));
+    }
+    return safeCutoff;
+}
+
 function ndwGetAnnualVal(cat, metric, yearStr) {
     if (!AVIATION_ANALYTICS_DATA) return 0;
     const metricKey = metric === 'toneladas' ? 'tons_transportadas' : metric;
@@ -11361,10 +11372,12 @@ function renderNavdeckWeeklyBanner() {
         const defaultYear    = availableYears.includes(currentYear) ? currentYear
                              : (availableYears.length ? availableYears[availableYears.length - 1] : currentYear);
         if (!NDW_VIEW_STATE.year)         NDW_VIEW_STATE.year     = defaultYear;
-        if (NDW_VIEW_STATE.monthIdx === null) NDW_VIEW_STATE.monthIdx = Math.max(0, new Date().getMonth() - 1);
 
         const selYear = NDW_VIEW_STATE.year;
         const monthCutoff = ndwGetMonthCutoff(selYear);
+        if (NDW_VIEW_STATE.monthIdx === null || !NDW_VIEW_STATE.monthTouched) {
+            NDW_VIEW_STATE.monthIdx = ndwGetPreferredMonthIdx(selYear, monthCutoff);
+        }
         let selMonthIdx = Number(NDW_VIEW_STATE.monthIdx);
         if (!Number.isFinite(selMonthIdx)) selMonthIdx = 0;
         selMonthIdx = Math.max(0, Math.min(monthCutoff, selMonthIdx));
@@ -11556,6 +11569,10 @@ function renderNavdeckWeeklyBanner() {
                 const modeBtn = ev.target.closest('[data-ndw-mode]');
                 if (modeBtn) {
                     NDW_VIEW_STATE.mode = modeBtn.getAttribute('data-ndw-mode');
+                    if (NDW_VIEW_STATE.mode === 'monthly' && !NDW_VIEW_STATE.monthTouched) {
+                        const selYear = NDW_VIEW_STATE.year || String(new Date().getFullYear());
+                        NDW_VIEW_STATE.monthIdx = ndwGetPreferredMonthIdx(selYear, ndwGetMonthCutoff(selYear));
+                    }
                     renderNavdeckWeeklyBanner();
                     return;
                 }
@@ -11566,18 +11583,22 @@ function renderNavdeckWeeklyBanner() {
                     const cutoff    = ndwGetMonthCutoff(selYear);
                     const next      = Math.max(0, Math.min(cutoff, (NDW_VIEW_STATE.monthIdx ?? 0) + delta));
                     NDW_VIEW_STATE.monthIdx = next;
+                    NDW_VIEW_STATE.monthTouched = true;
                     renderNavdeckWeeklyBanner();
                     return;
                 }
                 const monthChip = ev.target.closest('[data-ndw-monthidx]');
                 if (monthChip) {
                     NDW_VIEW_STATE.monthIdx = Number(monthChip.getAttribute('data-ndw-monthidx'));
+                    NDW_VIEW_STATE.monthTouched = true;
                     renderNavdeckWeeklyBanner();
                     return;
                 }
                 const yearChip = ev.target.closest('[data-ndw-year]');
                 if (yearChip) {
                     NDW_VIEW_STATE.year = yearChip.getAttribute('data-ndw-year');
+                    NDW_VIEW_STATE.monthIdx = null;
+                    NDW_VIEW_STATE.monthTouched = false;
                     renderNavdeckWeeklyBanner();
                     return;
                 }
