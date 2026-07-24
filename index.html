@@ -5397,6 +5397,7 @@ FF
 
                 // ── drag & drop ───────────────────────────────────────────────
                 var _bhsPendingFile=null, _bhsPendingType=null;
+                var _bhsUploadBusy={arrivals:false,departures:false,bwf:false};
 
                 function bhsAskDate(file,type){
                     _bhsPendingFile=file; _bhsPendingType=type;
@@ -5436,8 +5437,12 @@ FF
                 };
 
                 window.bhsHandleFile=function(input,type){
-                    if(input.files[0]) bhsAskDate(input.files[0],type);
-                    input.value='';
+                    try{
+                        if(input.files[0]) bhsAskDate(input.files[0],type);
+                    }finally{
+                        // Permite volver a seleccionar el mismo archivo, incluso con el mismo nombre.
+                        input.value='';
+                    }
                 };
 
                 // ── date loader (from Supabase) ───────────────────────────────
@@ -5467,19 +5472,67 @@ FF
                 }
 
                 // ── PROCESS Excel ─────────────────────────────────────────────
-                function bhsProcess(file,type){
+                function bhsSetUploadState(type,state,msg){
                     var cardId={'arrivals':'bhs-arr-drop','departures':'bhs-dep-drop','bwf':'bhs-bwf-drop'}[type];
                     var statusId={'arrivals':'bhs-arr-status','departures':'bhs-dep-status','bwf':'bhs-bwf-status'}[type];
                     var card=document.getElementById(cardId);
                     var status=document.getElementById(statusId);
-                    if(card) card.classList.add('loading');
-                    if(status) status.textContent='Procesando…';
+                    if(card){
+                        card.classList.toggle('loading',state==='loading');
+                        if(state!=='ok') card.classList.remove('ok');
+                        if(state==='ok') card.classList.add('ok');
+                    }
+                    if(status && msg) status.innerHTML=msg;
+                }
+
+                function bhsResetFileInput(type){
+                    var id={'arrivals':'bhs-arr-input','departures':'bhs-dep-input','bwf':'bhs-bwf-input'}[type];
+                    var input=document.getElementById(id);
+                    if(input) input.value='';
+                }
+
+                function bhsValidateFile(file,type){
+                    if(!file) throw new Error('No se seleccionó ningún archivo.');
+                    var name=String(file.name||'');
+                    if(!/\.(xlsx|xls)$/i.test(name)) throw new Error('Formato no válido. Selecciona un archivo .xlsx o .xls.');
+                    if(!file.size) throw new Error('El archivo está vacío.');
+                    if(type==='arrivals' && _bhsUploadBusy.arrivals) throw new Error('Ya hay una carga de Llegadas en proceso. Espera a que termine.');
+                }
+
+                function bhsProcess(file,type){
+                    var statusId={'arrivals':'bhs-arr-status','departures':'bhs-dep-status','bwf':'bhs-bwf-status'}[type];
+                    var status=document.getElementById(statusId);
+                    try{ bhsValidateFile(file,type); }
+                    catch(preErr){
+                        bhsSetUploadState(type,'error','<span style="color:#dc2626">'+preErr.message+'</span>');
+                        bhsResetFileInput(type);
+                        console.error('[BHS] Upload rejected:',preErr.message);
+                        return;
+                    }
+
+                    _bhsUploadBusy[type]=true;
+                    bhsSetUploadState(type,'loading','Cargando…');
+                    console.log('[BHS] Inicio de carga:',{
+                        tipo:type,
+                        archivo:file.name,
+                        tamanio:file.size
+                    });
 
                     var reader=new FileReader();
+                    reader.onerror=function(){
+                        _bhsUploadBusy[type]=false;
+                        bhsResetFileInput(type);
+                        var err=new Error('No se pudo leer el archivo seleccionado.');
+                        bhsSetUploadState(type,'error','<span style="color:#dc2626">'+err.message+'</span>');
+                        console.error('[BHS] FileReader error:',reader.error||err);
+                    };
                     reader.onload=function(e){
                         try{
+                            if(!window.XLSX) throw new Error('La librería XLSX no está disponible. Recarga la página e intenta nuevamente.');
                             var wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+                            if(!wb.SheetNames||!wb.SheetNames.length) throw new Error('El archivo no contiene hojas para procesar.');
                             var ws=wb.Sheets[wb.SheetNames[0]];
+                            if(!ws) throw new Error('No se encontró la primera hoja del archivo.');
                             var raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
                             if(!raw.length) throw new Error('Archivo vacio');
                             var HDR_KW=['cia','vuelo','flight','tag','hora','plat','dest','proc','term','tras','maleta','origen','destino','compan','primera','ultima','etd'];
@@ -5490,6 +5543,7 @@ FF
                                 if(score>bestScore){bestScore=score;headerIdx=ri;}
                             }
                             var headers=raw[headerIdx].map(function(h){return String(h).trim();});
+                            console.log('[BHS] Hoja procesada:',wb.SheetNames[0]);
                             console.log('[BHS] File:',file.name,'| Header row:',headerIdx,'| Cols:',headers);
                             var rows=[];
                             for(var di=headerIdx+1;di<raw.length;di++){
@@ -5508,19 +5562,33 @@ FF
                             if(type==='arrivals')        records=bhsParseArrivals(rows,fecha);
                             else if(type==='departures') records=bhsParseDepartures(rows,fecha);
                             else                         records=bhsParseBWF(rows,fecha);
-                            console.log('[BHS] Records:',records.length,type,records.length?records[0]:'');
-                            if(!records.length){if(card)card.classList.remove('loading');if(status)status.innerHTML='<span style="color:#dc2626">0 registros. Cols: '+colNames+'</span>';return;}
+                            console.log('[BHS] Filas leídas:',rows.length,'| Filas válidas:',records.length,'| Tipo:',type);
+                            if(type==='arrivals'){
+                                console.log('[BHS] Totales calculados Llegadas:',{
+                                    total_maletas:records.reduce(function(a,r){return a+(Number(r.total_maletas)||0);},0),
+                                    terminacion:records.reduce(function(a,r){return a+(Number(r.terminacion)||0);},0),
+                                    transito:records.reduce(function(a,r){return a+(Number(r.tras)||0);},0),
+                                    vuelos:records.length
+                                });
+                            }
+                            if(!records.length) throw new Error('0 registros válidos. Revisa columnas y filas del archivo. Columnas detectadas: '+colNames);
                             bhsSaveToDB(type,fecha,records,function(err){
-                                if(card) card.classList.remove('loading');
-                                if(err){if(card)card.classList.remove('ok');if(status)status.innerHTML='<span style="color:#dc2626">Error: '+(err.message||JSON.stringify(err))+'</span>';console.error('[BHS] Save error:',err);}
-                                else{if(card)card.classList.add('ok');if(status)status.innerHTML='<span style="color:#16a34a">&#x2713; '+records.length+' registros guardados</span>';
+                                _bhsUploadBusy[type]=false;
+                                bhsResetFileInput(type);
+                                if(err){bhsSetUploadState(type,'error','<span style="color:#dc2626">Error: '+(err.message||JSON.stringify(err))+'</span>');console.error('[BHS] Save error:',err);}
+                                else{bhsSetUploadState(type,'ok','<span style="color:#16a34a">&#x2713; '+records.length+' registros guardados</span>');
                                     if(type==='arrivals')bhsRenderArrivals(records);else if(type==='departures')bhsRenderDepartures(records);else bhsRenderBWF(records);
-                                    document.getElementById('bhs-loaded-date').textContent='&#x1F4C5; '+fmtDate(fecha);}
+                                    _bhsTabDate[type==='arrivals'?'arr':type==='departures'?'dep':'bwf']=fecha;
+                                    bhsUpdateDateBadge();
+                                    bhsLoadAvailableDates();
+                                    console.log('[BHS] Carga finalizada correctamente:',{tipo:type,fecha:fecha,registros:records.length});
+                                }
                             });
                         }catch(err2){
-                            if(card) card.classList.remove('loading');
-                            if(status) status.innerHTML='<span class="text-danger">'+err2.message+'</span>';
-                            console.error(err2);
+                            _bhsUploadBusy[type]=false;
+                            bhsResetFileInput(type);
+                            bhsSetUploadState(type,'error','<span class="text-danger">'+err2.message+'</span>');
+                            console.error('[BHS] Error procesando archivo:',err2);
                         }
                     };
                     reader.readAsArrayBuffer(file);
@@ -5546,31 +5614,60 @@ FF
                     if(/^\d{1,2}:\d{2}/.test(s)) return s.slice(0,5);
                     return null;
                 }
+                function bhsToNumber(v){
+                    if(v===null||v===undefined||v==='') return 0;
+                    if(typeof v==='number') return Number.isFinite(v)?v:0;
+                    var s=String(v).replace(/\s+/g,'').replace(/,/g,'').trim();
+                    if(!s) return 0;
+                    var n=Number(s);
+                    return Number.isFinite(n)?n:0;
+                }
 
                 function bhsParseArrivals(rows,fecha){
                     var user=sessionStorage.getItem('user_fullname')||sessionStorage.getItem('currentUser')||'';
+                    if(!rows||!rows.length) throw new Error('El archivo de Llegadas no contiene filas de datos.');
+                    var sample=rows[0]||{};
+                    var cComp=findCol(sample,['compania','company','aerolinea','airline','cia']);
+                    var cProc=findCol(sample,['procedencia','origen','origin','proc']);
+                    var cPlat=findCol(sample,['plat','posicion','stand','gate']);
+                    var cVuelo=findCol(sample,['vuelo','flight','flt','nro']);
+                    var cTotal=findCol(sample,['total','total_maletas','bags','maletas']);
+                    var cTerm=findCol(sample,['terminacion','term','local','dest']);
+                    var cTras=findCol(sample,['tras','transito','transit','transfer']);
+                    var cHora=findCol(sample,['hora','sta','eta','arrival','llegada','hora_llegada','hora llegada','arr','scheduled']);
+                    var missing=[];
+                    if(!cComp) missing.push('Compañía / Aerolínea / CIA');
+                    if(!cVuelo) missing.push('Vuelo / Flight');
+                    if(!cTotal && !(cTerm&&cTras)) missing.push('Total de maletas o Terminación + Tránsito');
+                    if(!cTerm) missing.push('Terminación');
+                    if(!cTras) missing.push('Tránsito');
+                    if(missing.length) throw new Error('Archivo de Llegadas con columnas faltantes: '+missing.join(', '));
+                    console.log('[BHS] Columnas Llegadas mapeadas:',{
+                        compania:cComp, vuelo:cVuelo, procedencia:cProc, plat:cPlat,
+                        total:cTotal, terminacion:cTerm, transito:cTras, hora:cHora
+                    });
                     return rows.map(function(r){
-                        var cComp=findCol(r,['compania','company','aerolinea','airline','cia']);
-                        var cProc=findCol(r,['procedencia','origen','origin','proc']);
-                        var cPlat=findCol(r,['plat','posicion','stand','gate']);
-                        var cVuelo=findCol(r,['vuelo','flight','flt','nro']);
-                        var cTotal=findCol(r,['total','total_maletas','bags','maletas']);
-                        var cTerm=findCol(r,['terminacion','term','local','dest']);
-                        var cTras=findCol(r,['tras','transito','transit','transfer']);
-                        var cHora=findCol(r,['hora','sta','eta','arrival','llegada','hora_llegada','hora llegada','arr','scheduled']);
                         var horaVal=cHora?cellTime(r[cHora]):null;
+                        var term=bhsToNumber(cTerm?r[cTerm]:0);
+                        var tras=bhsToNumber(cTras?r[cTras]:0);
+                        var total=cTotal?bhsToNumber(r[cTotal]):(term+tras);
+                        if(!Number.isFinite(total)) total=0;
+                        if(!Number.isFinite(term)) term=0;
+                        if(!Number.isFinite(tras)) tras=0;
                         return {
                             fecha:fecha, uploaded_by:user,
                             vuelo:      cVuelo?String(r[cVuelo]).trim():'',
                             compania:   cComp ?String(r[cComp]).trim().toUpperCase():'',
                             procedencia:cProc ?String(r[cProc]).trim().toUpperCase():'',
                             plat:       cPlat ?String(r[cPlat]).trim():'',
-                            total_maletas: parseInt(r[cTotal])||0,
-                            terminacion:   parseInt(r[cTerm])||0,
-                            tras:          parseInt(r[cTras])||0,
+                            total_maletas: total,
+                            terminacion:   term,
+                            tras:          tras,
                             _hora:         horaVal  // local-only, not persisted
                         };
-                    }).filter(function(r){ return r.compania; });
+                    }).filter(function(r){
+                        return r.compania && (r.vuelo || r.total_maletas || r.terminacion || r.tras);
+                    });
                 }
 
                 function bhsParseDepartures(rows,fecha){
@@ -5648,24 +5745,54 @@ FF
                     var client=window.supabaseClient;
                     if(!client) return cb(new Error('No Supabase client'));
                     var table={'arrivals':'bhs_arrivals','departures':'bhs_departures','bwf':'bhs_bags_without_flight'}[type];
-                    // Delete existing records for this date first, then insert
-                    client.from(table).delete().eq('fecha',fecha).then(function(){
+                    // Delete existing records for this date first, then insert.
+                    // Supabase no siempre lanza excepción: puede devolver { error }.
+                    // Por eso se valida cada respuesta para evitar mostrar datos nuevos
+                    // si la tabla se quedó con información anterior.
+                    var cleanRecords=records.map(function(r){
+                        var copy=Object.assign({},r);
+                        delete copy._hora;
+                        return copy;
+                    });
+                    console.log('[BHS] Guardado: limpiando tabla',table,'fecha',fecha,'registros nuevos',cleanRecords.length);
+                    client.from(table).delete().eq('fecha',fecha).then(function(delRes){
+                        if(delRes&&delRes.error) throw delRes.error;
                         if(!records.length) return cb(null);
                         // Supabase insert in batches of 500
                         var batches=[];
-                        for(var i=0;i<records.length;i+=500) batches.push(records.slice(i,i+500));
+                        for(var i=0;i<cleanRecords.length;i+=500) batches.push(cleanRecords.slice(i,i+500));
                         var chain=Promise.resolve();
                         batches.forEach(function(batch){
                             chain=chain.then(function(){
-                                return client.from(table).insert(batch);
+                                return client.from(table).insert(batch).then(function(insRes){
+                                    if(insRes&&insRes.error) throw insRes.error;
+                                    return insRes;
+                                });
                             });
                         });
-                        chain.then(function(){ cb(null); }).catch(cb);
+                        chain.then(function(){
+                            if(type!=='arrivals') return cb(null);
+                            return client.from(table).select('id',{count:'exact',head:true}).eq('fecha',fecha).then(function(countRes){
+                                if(countRes&&countRes.error) throw countRes.error;
+                                if(typeof countRes.count==='number'&&countRes.count!==cleanRecords.length){
+                                    throw new Error('La verificación de guardado no coincide: se esperaban '+cleanRecords.length+' registros y Supabase reportó '+countRes.count+'.');
+                                }
+                                cb(null);
+                            });
+                        }).catch(cb);
                     }).catch(cb);
                 }
 
                 // ── RENDER functions ──────────────────────────────────────────
                 function bhsRenderArrivals(data){
+                    data=Array.isArray(data)?data:[];
+                    function bhsDestroyCanvasChart(id){
+                        var canvas=document.getElementById(id);
+                        if(canvas&&canvas._bhsChart){
+                            canvas._bhsChart.destroy();
+                            canvas._bhsChart=null;
+                        }
+                    }
                     // ── KPIs ────────────────────────────────────────────────
                     var total=data.reduce(function(a,r){return a+(r.total_maletas||0);},0);
                     var term =data.reduce(function(a,r){return a+(r.terminacion||0);},0);
@@ -5763,6 +5890,8 @@ FF
                                 animation:{duration:900}
                             }
                         });
+                    }else{
+                        bhsDestroyCanvasChart('bhs-arr-chart-al');
                     }
 
                     // Chart B: peak hours (only if _hora data is present)
@@ -5833,10 +5962,15 @@ FF
                                 return '<span style="background:'+bgs[idx]+';color:'+txts[idx]+';font-size:.7rem;font-weight:700;padding:3px 10px;border-radius:99px;">'+(idx===0?'&#x1F525; ':'')+(x.h<10?'0'+x.h:x.h)+':00&ndash;'+(x.h<10?'0'+x.h:x.h)+':59 · '+x.v+' vuelos</span>';
                             }).join('');
                         }
+                    }else{
+                        bhsDestroyCanvasChart('bhs-arr-chart-peak');
+                        var emptyBadgesEl=document.getElementById('bhs-arr-peak-badges');
+                        if(emptyBadgesEl) emptyBadgesEl.innerHTML='';
                     }
 
                     // ── Summary table ────────────────────────────────────────
                     var tbody=document.querySelector('#bhs-arr-table tbody');
+                    if(!tbody) return;
                     if(!sorted.length){
                         tbody.innerHTML='<tr><td colspan="6" class="text-muted small py-4">Sin datos para esta fecha</td></tr>'; return;
                     }
