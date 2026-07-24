@@ -184,6 +184,21 @@ class DataManager {
         return data;
     }
 
+    async getDailyOperationsForYear(year) {
+        const numericYear = Number(year);
+        if (!Number.isFinite(numericYear)) {
+            throw new Error('A valid year is required to load daily operations.');
+        }
+        const { data, error } = await this.client
+            .from('daily_operations')
+            .select('*')
+            .gte('date', `${numericYear}-01-01`)
+            .lte('date', `${numericYear}-12-31`)
+            .order('date', { ascending: true });
+        if (error) throw error;
+        return data;
+    }
+
     // --- Medical Attentions ---
     async getMedicalAttentions(year) {
         let query = this.client.from('medical_attentions').select('*').order('id', { ascending: true });

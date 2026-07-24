@@ -883,7 +883,10 @@ async function loadWeeklyOperationsFromDB() {
     }
 
     try {
-        const dailyOps = await window.dataManager.getDailyOperations(365);
+        const currentYear = new Date().getFullYear();
+        const dailyOps = typeof window.dataManager.getDailyOperationsForYear === 'function'
+            ? await window.dataManager.getDailyOperationsForYear(currentYear)
+            : await window.dataManager.getDailyOperations(366);
 
         if (!dailyOps || dailyOps.length === 0) {
             console.warn('No daily operations found in DB');
@@ -932,6 +935,8 @@ async function loadWeeklyOperationsFromDB() {
                 },
                 dias: days.map(d => ({
                     fecha: d.date,
+                    created_at: d.created_at,
+                    updated_at: d.updated_at,
                     label: formatDateLabel(d.date),
                     comercial: { operaciones: d.comercial_ops, pasajeros: d.comercial_pax },
                     general: { operaciones: d.general_ops, pasajeros: d.general_pax },
@@ -1160,9 +1165,11 @@ function buildAviationAnalyticsFromDB(monthlyRows, annualRows) {
                     }
                 });
 
-                // annual_operations is authoritative for annual/historical views.
+                // A closed year may use its official annual consolidation. The current
+                // year must stay aligned with the resolved monthly/daily series.
                 const officialTotal = result[scope][metric].years[year].dbTotal;
-                if (Number.isFinite(officialTotal) && officialTotal > 0) yearTotal = officialTotal;
+                const isCurrentYear = Number(year) === (new Date()).getFullYear();
+                if (!isCurrentYear && Number.isFinite(officialTotal) && officialTotal > 0) yearTotal = officialTotal;
 
                 result[scope][metric].years[year].total = yearTotal;
                 grandTotal += yearTotal;
@@ -1174,10 +1181,33 @@ function buildAviationAnalyticsFromDB(monthlyRows, annualRows) {
     return result;
 }
 
-window.cachedStaticRows = { annual: [], monthly: [] };
+const OPS_STATIC_CACHE_TTL_MS = 60 * 1000;
+window.cachedStaticRows = { annual: [], monthly: [], rawMonthly: [], daily: [], fetchedAt: 0 };
 
-async function syncStaticDataFromDB(targetYear = null) {
+function invalidateOperationsStaticCache() {
+    window.cachedStaticRows = { annual: [], monthly: [], rawMonthly: [], daily: [], fetchedAt: 0 };
+}
+
+function resolveOperationsMonthlyRows(monthlyRows, dailyRows) {
+    const engine = window.AifaOperationsMetrics;
+    if (!engine || typeof engine.resolveMonthlyOperationsRows !== 'function') {
+        console.warn('Operations metrics resolver is unavailable; using monthly rows without reconciliation.');
+        return Array.isArray(monthlyRows) ? monthlyRows : [];
+    }
+    return engine.resolveMonthlyOperationsRows(monthlyRows, dailyRows, new Date());
+}
+
+async function loadCurrentYearDailyOperations() {
+    const currentYear = new Date().getFullYear();
+    if (typeof window.dataManager.getDailyOperationsForYear === 'function') {
+        return window.dataManager.getDailyOperationsForYear(currentYear);
+    }
+    return window.dataManager.getDailyOperations(366);
+}
+
+async function syncStaticDataFromDB(targetYear = null, options = {}) {
     try {
+        const forceRefresh = options === true || !!options?.forceRefresh;
         const hasExplicitYear = targetYear !== null && targetYear !== undefined && String(targetYear).trim() !== '';
         if (isOpsFiltersModalActive() && !hasExplicitYear) {
             queueDeferredOpsSync('staticSyncNoYear');
@@ -1186,22 +1216,42 @@ async function syncStaticDataFromDB(targetYear = null) {
 
         if (!window.dataManager) {
             console.warn('DataManager no listo, reintentando syncStaticDataFromDB en 500ms...');
-            setTimeout(() => syncStaticDataFromDB(targetYear), 500);
+            setTimeout(() => syncStaticDataFromDB(targetYear, options), 500);
             return;
         }
 
-        let annualRows, monthlyRows;
-        if (window.cachedStaticRows.annual.length > 0 && window.cachedStaticRows.monthly.length > 0) {
+        let annualRows, monthlyRows, dailyRows;
+        const cachedRows = window.cachedStaticRows || {};
+        const cacheAge = Date.now() - Number(cachedRows.fetchedAt || 0);
+        const cacheIsFresh = cacheAge >= 0 && cacheAge < OPS_STATIC_CACHE_TTL_MS;
+        const canUseCache = !forceRefresh
+            && cacheIsFresh
+            && Array.isArray(cachedRows.annual) && cachedRows.annual.length > 0
+            && Array.isArray(cachedRows.monthly) && cachedRows.monthly.length > 0;
+        if (canUseCache) {
             console.log('Usando datos estáticos en caché');
-            annualRows = window.cachedStaticRows.annual;
-            monthlyRows = window.cachedStaticRows.monthly;
+            annualRows = cachedRows.annual;
+            monthlyRows = cachedRows.monthly;
+            dailyRows = Array.isArray(cachedRows.daily) ? cachedRows.daily : [];
         } else {
             console.log('Iniciando sincronización de datos estáticos desde DB...');
-            [annualRows, monthlyRows] = await Promise.all([
+            let rawMonthlyRows;
+            [annualRows, rawMonthlyRows, dailyRows] = await Promise.all([
                 window.dataManager.getAnnualOperations(),
-                window.dataManager.getMonthlyOperations()
+                window.dataManager.getMonthlyOperations(),
+                loadCurrentYearDailyOperations().catch((err) => {
+                    console.warn('Unable to load daily totals while reconciling operation cards:', err);
+                    return [];
+                })
             ]);
-            window.cachedStaticRows = { annual: annualRows, monthly: monthlyRows };
+            monthlyRows = resolveOperationsMonthlyRows(rawMonthlyRows, dailyRows);
+            window.cachedStaticRows = {
+                annual: annualRows,
+                monthly: monthlyRows,
+                rawMonthly: rawMonthlyRows,
+                daily: dailyRows,
+                fetchedAt: Date.now()
+            };
             console.log('Datos estáticos obtenidos y cacheados:', { annualRows, monthlyRows });
         }
 
@@ -1287,6 +1337,24 @@ async function syncStaticDataFromDB(targetYear = null) {
         AVIATION_ANALYTICS_DATA = buildAviationAnalyticsFromDB(monthlyRows, annualRows);
         AVIATION_ANALYTICS_CUTOFF_YEAR = String(latestAvailableYear);
 
+        // Every annual card must come from the same reconciled snapshot as its
+        // monthly card and modal. Closed years retain their official total;
+        // the active year is summed from resolved monthly/daily values.
+        staticData.operacionesTotales = {
+            comercial: deriveOpsYearlySeriesFromAnalytics(AVIATION_ANALYTICS_DATA, 'comercial', [
+                { metricKey: 'operaciones', prop: 'operaciones' },
+                { metricKey: 'pasajeros', prop: 'pasajeros' }
+            ]),
+            carga: deriveOpsYearlySeriesFromAnalytics(AVIATION_ANALYTICS_DATA, 'carga', [
+                { metricKey: 'operaciones', prop: 'operaciones' },
+                { metricKey: 'tons_transportadas', prop: 'toneladas' }
+            ]),
+            general: deriveOpsYearlySeriesFromAnalytics(AVIATION_ANALYTICS_DATA, 'general', [
+                { metricKey: 'operaciones', prop: 'operaciones' },
+                { metricKey: 'pasajeros', prop: 'pasajeros' }
+            ])
+        };
+
         // Determine cutoff month index based on data availability for the latest year
         let lastClosedMonth = -1;
         const cutoffYearStr = String(AVIATION_ANALYTICS_CUTOFF_YEAR);
@@ -1310,9 +1378,25 @@ async function syncStaticDataFromDB(targetYear = null) {
     }
 }
 
+let operationsCardsRefreshPromise = null;
+
+function refreshOperationsCardsData() {
+    if (operationsCardsRefreshPromise) return operationsCardsRefreshPromise;
+    invalidateOperationsStaticCache();
+    operationsCardsRefreshPromise = Promise.allSettled([
+        syncStaticDataFromDB(null, { forceRefresh: true }),
+        loadWeeklyOperationsFromDB()
+    ]).finally(() => {
+        operationsCardsRefreshPromise = null;
+    });
+    return operationsCardsRefreshPromise;
+}
+
 if (typeof window !== 'undefined') {
+    window.invalidateOperationsStaticCache = invalidateOperationsStaticCache;
+    window.refreshOperationsCardsData = refreshOperationsCardsData;
     window.addEventListener('DOMContentLoaded', () => { setTimeout(() => { syncStaticDataFromDB().catch(() => { }); }, 50); });
-    window.addEventListener('data-updated', () => { syncStaticDataFromDB().catch(() => { }); });
+    window.addEventListener('data-updated', () => { refreshOperationsCardsData().catch(() => { }); });
 }
 
 function getOpsAvailableYearsFromTotals(source = staticData?.operacionesTotales) {
@@ -1703,7 +1787,7 @@ function refreshAviationAnalyticsDataIfChanged(options = {}) {
     }
 
     // Use DB sync instead of JSON fetch
-    const requestPromise = syncStaticDataFromDB().then(() => {
+    const requestPromise = syncStaticDataFromDB(null, { forceRefresh: force }).then(() => {
         // syncStaticDataFromDB already updates AVIATION_ANALYTICS_DATA and triggers rerenders
         return true;
     }).catch(err => {
@@ -8770,6 +8854,30 @@ function getLastConsolidatedMonth(collection, valueKey) {
     }, 0);
 }
 
+function normalizeOpsDateKey(value) {
+    const engine = typeof window !== 'undefined' ? window.AifaOperationsMetrics : null;
+    if (engine && typeof engine.normalizeDateKey === 'function') {
+        return engine.normalizeDateKey(value);
+    }
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return match ? `${match[1]}-${match[2]}-${match[3]}` : null;
+}
+
+function getOpsDailyTimestamp(row) {
+    const raw = row?.updated_at || row?.created_at || row?._meta?.updated_at || row?._meta?.created_at;
+    if (!raw) return Number.NEGATIVE_INFINITY;
+    const timestamp = Date.parse(raw);
+    return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+}
+
+function shouldReplaceDailyCandidate(existing, candidate) {
+    if (!existing) return true;
+    const existingTimestamp = getOpsDailyTimestamp(existing.day || existing.row || existing);
+    const candidateTimestamp = getOpsDailyTimestamp(candidate.day || candidate.row || candidate);
+    return candidateTimestamp > existingTimestamp
+        || (candidateTimestamp === existingTimestamp && Number(candidate.index) > Number(existing.index));
+}
+
 function getOpsMonthLabel(monthCode) {
     const monthNumber = Number(monthCode);
     if (!Number.isFinite(monthNumber) || monthNumber < 1 || monthNumber > 12) {
@@ -8807,19 +8915,33 @@ function getOpsAggregatedData() {
         return { monthly: monthlyBase, yearly: yearlyBase };
     }
 
-    const monthTotals = new Map();
-    const seenDailyKeys = new Set();
+    const latestDailyByDate = new Map();
+    let dailyCandidateIndex = 0;
 
     weeklySources.forEach((week) => {
         if (!Array.isArray(week?.dias)) return;
         week.dias.forEach((day) => {
-            const iso = day?.fecha;
-            if (!iso || seenDailyKeys.has(iso)) return;
-            const parsed = parseIsoDay(iso);
-            if (!parsed) return;
-            seenDailyKeys.add(iso);
-            const year = parsed.getFullYear();
-            const monthCode = String(parsed.getMonth() + 1).padStart(2, '0');
+            const dateKey = normalizeOpsDateKey(day?.fecha);
+            if (!dateKey) return;
+            const candidate = { day, index: dailyCandidateIndex };
+            dailyCandidateIndex += 1;
+            const existing = latestDailyByDate.get(dateKey);
+            if (shouldReplaceDailyCandidate(existing, candidate)) {
+                latestDailyByDate.set(dateKey, candidate);
+            }
+        });
+    });
+
+    const monthTotals = new Map();
+
+    Array.from(latestDailyByDate.entries())
+        .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+        .forEach(([dateKey, candidate]) => {
+            const day = candidate.day;
+            const year = Number(dateKey.slice(0, 4));
+            const monthCode = dateKey.slice(5, 7);
+            const monthNum = Number(monthCode);
+            if (!Number.isFinite(year) || !Number.isFinite(monthNum) || monthNum < 1 || monthNum > 12) return;
             const key = `${year}-${monthCode}`;
             if (!monthTotals.has(key)) {
                 monthTotals.set(key, {
@@ -8845,7 +8967,6 @@ function getOpsAggregatedData() {
             addValue('carga', 'operaciones', day?.carga?.operaciones);
             addValue('carga', 'toneladas', day?.carga?.toneladas);
         });
-    });
 
     if (!monthTotals.size) {
         return { monthly: monthlyBase, yearly: yearlyBase };
@@ -10916,7 +11037,7 @@ function ndwFormatValue(value, metric) {
     if (metric === 'toneladas') {
         return Number(value || 0).toLocaleString('es-MX', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     }
-    return Number(value || 0).toLocaleString('es-MX');
+    return Number(value || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 });
 }
 
 /* ── NDW shared view state ── */
@@ -11089,25 +11210,24 @@ function ndwGetAvailableYears() {
     return Array.isArray(yearsArr) ? [...yearsArr] : [];
 }
 
-function ndwGetMonthlyVal(cat, metric, yearStr, monthIdx) {
-    if (!AVIATION_ANALYTICS_DATA) return 0;
-    const metricKey = metric === 'toneladas' ? 'tons_transportadas' : metric;
-    const monthKey = AVIATION_ANALYTICS_MONTH_KEYS[monthIdx];
-    const raw = AVIATION_ANALYTICS_DATA[cat]?.[metricKey]?.years?.[yearStr]?.months?.[monthKey];
-    let result;
-    if (raw != null && Number.isFinite(Number(raw))) {
-        result = Number(raw);
-    } else {
-        // Fallback: derive from captured daily data (for current in-progress month)
-        result = ndwComputeMonthFromDailyData(cat, metric, yearStr, monthIdx);
-    }
-    return result;
+function ndwGetStoredMonthlyRow(yearStr, monthIdx) {
+    const cache = window.cachedStaticRows || {};
+    const rows = Array.isArray(cache.rawMonthly) && cache.rawMonthly.length
+        ? cache.rawMonthly
+        : (Array.isArray(cache.monthly) ? cache.monthly : []);
+    return rows.find((row) => Number(row?.year) === Number(yearStr)
+        && Number(row?.month) === Number(monthIdx) + 1) || null;
 }
 
 /* Sum captured daily operations for a given year/month from weekly datasets. */
-function ndwComputeMonthFromDailyData(cat, metric, yearStr, monthIdx) {
+function ndwComputeMonthDailyAggregate(cat, metric, yearStr, monthIdx) {
     const yearNum = Number(yearStr);
-    if (!Number.isFinite(yearNum)) return 0;
+    if (!Number.isFinite(yearNum)) return { value: 0, hasData: false, days: 0, lastDate: null };
+    const monthNum = Number(monthIdx) + 1;
+    if (!Number.isFinite(monthNum) || monthNum < 1 || monthNum > 12) {
+        return { value: 0, hasData: false, days: 0, lastDate: null };
+    }
+    const targetMonthKey = `${String(yearNum).padStart(4, '0')}-${String(monthNum).padStart(2, '0')}`;
     const dailyField = metric === 'pasajeros' ? 'pasajeros'
         : metric === 'toneladas' ? 'toneladas'
         : 'operaciones';
@@ -11115,24 +11235,70 @@ function ndwComputeMonthFromDailyData(cat, metric, yearStr, monthIdx) {
         ...(Array.isArray(WEEKLY_OPERATIONS_DATASETS) ? WEEKLY_OPERATIONS_DATASETS : []),
         staticData?.operacionesSemanaActual
     ].filter(Boolean);
-    const seenDates = new Set();
-    let total = 0;
+    const latestByDate = new Map();
+    let candidateIndex = 0;
     weekSources.forEach((week) => {
         if (!Array.isArray(week?.dias)) return;
         week.dias.forEach((day) => {
-            const iso = day?.fecha;
-            if (!iso || seenDates.has(iso)) return;
-            const parsed = parseIsoDay(iso);
-            if (!parsed) return;
-            if (parsed.getFullYear() !== yearNum) return;
-            if (parsed.getMonth() !== monthIdx) return;
-            seenDates.add(iso);
+            const dateKey = normalizeOpsDateKey(day?.fecha);
+            if (!dateKey || dateKey.slice(0, 7) !== targetMonthKey) return;
             const raw = day?.[cat]?.[dailyField];
+            if (raw === null || raw === undefined || raw === '') return;
             const num = Number(raw);
-            if (Number.isFinite(num) && num > 0) total += num;
+            if (!Number.isFinite(num)) return;
+            const candidate = { day, value: num, index: candidateIndex };
+            candidateIndex += 1;
+            const existing = latestByDate.get(dateKey);
+            if (shouldReplaceDailyCandidate(existing, candidate)) {
+                latestByDate.set(dateKey, candidate);
+            }
         });
     });
-    return total;
+    let total = 0;
+    let lastDate = null;
+    latestByDate.forEach((candidate, dateKey) => {
+        total += candidate.value;
+        if (!lastDate || dateKey > lastDate) lastDate = dateKey;
+    });
+    const capturedDays = latestByDate.size;
+    return { value: total, hasData: capturedDays > 0, days: capturedDays, lastDate };
+}
+
+function ndwComputeMonthFromDailyData(cat, metric, yearStr, monthIdx) {
+    return ndwComputeMonthDailyAggregate(cat, metric, yearStr, monthIdx).value;
+}
+
+function ndwResolveMonthlyVal(cat, metric, yearStr, monthIdx) {
+    const metricKey = metric === 'toneladas' ? 'tons_transportadas' : metric;
+    const monthKey = AVIATION_ANALYTICS_MONTH_KEYS[monthIdx];
+    const raw = AVIATION_ANALYTICS_DATA?.[cat]?.[metricKey]?.years?.[yearStr]?.months?.[monthKey];
+    const monthlyValue = raw != null && Number.isFinite(Number(raw)) ? Number(raw) : null;
+    const daily = ndwComputeMonthDailyAggregate(cat, metric, yearStr, monthIdx);
+    const storedRow = ndwGetStoredMonthlyRow(yearStr, monthIdx);
+    const engine = window.AifaOperationsMetrics;
+    const isCurrentMonth = engine && typeof engine.isSameCalendarMonth === 'function'
+        ? engine.isSameCalendarMonth(yearStr, Number(monthIdx) + 1, new Date())
+        : Number(yearStr) === (new Date()).getFullYear() && Number(monthIdx) === (new Date()).getMonth();
+    const preferDaily = daily.hasData && (
+        isCurrentMonth
+        || !storedRow
+        || storedRow.is_official === false
+        || monthlyValue === null
+    );
+    if (preferDaily) {
+        return { value: daily.value, hasData: true, source: 'daily', lastDate: daily.lastDate };
+    }
+    if (monthlyValue !== null) {
+        return { value: monthlyValue, hasData: true, source: 'monthly', lastDate: null };
+    }
+    if (daily.hasData) {
+        return { value: daily.value, hasData: true, source: 'daily', lastDate: daily.lastDate };
+    }
+    return { value: 0, hasData: false, source: 'none', lastDate: null };
+}
+
+function ndwGetMonthlyVal(cat, metric, yearStr, monthIdx) {
+    return ndwResolveMonthlyVal(cat, metric, yearStr, monthIdx).value;
 }
 
 /* Returns the last available month index for a given year — mirrors AVIATION_ANALYTICS_LAST_CLOSED_MONTH_INDEX
@@ -11148,7 +11314,7 @@ function ndwGetMonthCutoff(yearStr) {
         if (todayMonth > baseCutoff) {
             const hasCurrentMonthData = ['comercial', 'general', 'carga'].some((cat) => {
                 const metric = cat === 'carga' ? 'toneladas' : 'operaciones';
-                return ndwComputeMonthFromDailyData(cat, metric, yearStr, todayMonth) > 0;
+                return ndwComputeMonthDailyAggregate(cat, metric, yearStr, todayMonth).hasData;
             });
             if (hasCurrentMonthData) return todayMonth;
         }
@@ -11161,10 +11327,12 @@ function ndwGetAnnualVal(cat, metric, yearStr) {
     if (!AVIATION_ANALYTICS_DATA) return 0;
     const metricKey = metric === 'toneladas' ? 'tons_transportadas' : metric;
     const annual = AVIATION_ANALYTICS_DATA[cat]?.[metricKey]?.years?.[yearStr];
-    if (annual && Number.isFinite(Number(annual.dbTotal)) && Number(annual.dbTotal) > 0) {
+    const isCurrentYear = Number(yearStr) === (new Date()).getFullYear();
+    if (!isCurrentYear && annual && Number.isFinite(Number(annual.dbTotal)) && Number(annual.dbTotal) > 0) {
         return Number(annual.dbTotal);
     }
-    // Fallback only when no official annual consolidation exists.
+    // The active year is always the sum of the same resolved month values used
+    // by the six cards and their detail modals.
     const cutoff = ndwGetMonthCutoff(yearStr);
     let total = 0;
     for (let i = 0; i <= cutoff; i++) {
@@ -11195,8 +11363,12 @@ function renderNavdeckWeeklyBanner() {
         if (!NDW_VIEW_STATE.year)         NDW_VIEW_STATE.year     = defaultYear;
         if (NDW_VIEW_STATE.monthIdx === null) NDW_VIEW_STATE.monthIdx = Math.max(0, new Date().getMonth() - 1);
 
-        const selYear     = NDW_VIEW_STATE.year;
-        const selMonthIdx = NDW_VIEW_STATE.monthIdx;
+        const selYear = NDW_VIEW_STATE.year;
+        const monthCutoff = ndwGetMonthCutoff(selYear);
+        let selMonthIdx = Number(NDW_VIEW_STATE.monthIdx);
+        if (!Number.isFinite(selMonthIdx)) selMonthIdx = 0;
+        selMonthIdx = Math.max(0, Math.min(monthCutoff, selMonthIdx));
+        NDW_VIEW_STATE.monthIdx = selMonthIdx;
 
         const MONTH_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
         const MONTH_FULL  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -11580,19 +11752,45 @@ function openNavdeckMonthlyDetail(idx) {
     const isCutoffYear = selYear === String(AVIATION_ANALYTICS_CUTOFF_YEAR);
     const prelimIdx    = (isCutoffYear && cutoffIdx === todayMonth) ? cutoffIdx : -1;
 
-    const monthVals    = indices.map(i => ndwGetMonthlyVal(def.cat, def.metric, selYear, i));
+    const resolvedMonths = indices.map(i => ndwResolveMonthlyVal(def.cat, def.metric, selYear, i));
+    const valuesForSummary = resolvedMonths.map((entry) => entry.hasData ? entry.value : null);
+    const summaryEngine = window.AifaOperationsMetrics;
+    const metricSummary = summaryEngine && typeof summaryEngine.summarizeMetricValues === 'function'
+        ? summaryEngine.summarizeMetricValues(valuesForSummary)
+        : {
+            total: valuesForSummary.reduce((sum, value) => sum + (Number.isFinite(Number(value)) ? Number(value) : 0), 0),
+            count: valuesForSummary.filter((value) => value !== null).length,
+            average: 0,
+            peakIndex: -1,
+            peakValue: null,
+            percentages: valuesForSummary.map(() => 0)
+        };
+    if (!metricSummary.average && metricSummary.count) {
+        metricSummary.average = metricSummary.total / metricSummary.count;
+    }
+    if (metricSummary.peakIndex < 0) {
+        valuesForSummary.forEach((value, valueIndex) => {
+            if (value === null) return;
+            if (metricSummary.peakValue === null || Number(value) > Number(metricSummary.peakValue)) {
+                metricSummary.peakValue = Number(value);
+                metricSummary.peakIndex = valueIndex;
+            }
+        });
+    }
+    if (!metricSummary.percentages.some((value) => value > 0) && metricSummary.total) {
+        metricSummary.percentages = valuesForSummary.map((value) => value === null ? 0 : (Number(value) / metricSummary.total) * 100);
+    }
+    const monthVals    = valuesForSummary;
     const chartLabels  = indices.map(i => MONTH_S[i]);
-    const selVal       = monthVals[selMonthIdx] || 0;
-    const yearTotal    = monthVals.reduce((a, v) => a + v, 0);
-    const maxVal       = Math.max(...monthVals, 0);
-    const peakIdx      = maxVal > 0 ? monthVals.indexOf(maxVal) : -1;
-    const activeMonths = monthVals.filter(v => v > 0).length || 1;
-    const monthAvg     = yearTotal / activeMonths;
+    const yearTotal    = metricSummary.total;
+    const maxVal       = Number(metricSummary.peakValue || 0);
+    const peakIdx      = metricSummary.peakIndex;
+    const monthAvg     = metricSummary.average;
     const sub          = def.sub.replace('semana', 'mes');
 
     const rowsHtml = indices.map(i => {
-        const v      = monthVals[i] || 0;
-        const pct    = yearTotal > 0 ? (v / yearTotal) * 100 : 0;
+        const v      = monthVals[i] ?? 0;
+        const pct    = metricSummary.percentages[i] || 0;
         const barPct = maxVal > 0 ? (v / maxVal) * 100 : 0;
         const isPeak = i === peakIdx && maxVal > 0;
         const isSel  = i === selMonthIdx;
@@ -11610,8 +11808,10 @@ function openNavdeckMonthlyDetail(idx) {
         </div>`;
     }).join('');
 
+    const prelimLastDate = prelimIdx >= 0 ? resolvedMonths[prelimIdx]?.lastDate : null;
+    const prelimLastDateLabel = prelimLastDate ? formatSpanishDate(prelimLastDate) : '';
     const prelimNote = prelimIdx >= 0
-        ? `<div class="ndw-prelim-note"><i class="fas fa-triangle-exclamation me-1"></i>Cifras preliminares — ${MONTH_F[prelimIdx]} aún en curso</div>`
+        ? `<div class="ndw-prelim-note"><i class="fas fa-triangle-exclamation me-1"></i>Cifras preliminares — ${MONTH_F[prelimIdx]} aún en curso${prelimLastDateLabel ? ` · Datos al ${escapeHTML(prelimLastDateLabel)}` : ''}</div>`
         : '';
 
     const html = `
@@ -11663,6 +11863,11 @@ function openNavdeckAnnualDetail(idx) {
     const yearVals   = availableYears.map(y => ndwGetAnnualVal(def.cat, def.metric, y));
     const selYearIdx = availableYears.indexOf(selYear);
     const selVal     = selYearIdx >= 0 ? yearVals[selYearIdx] : 0;
+    const isHistoric = NDW_VIEW_STATE.mode === 'historic';
+    const historicTotal = yearVals.reduce((sum, value) => sum + Number(value || 0), 0);
+    const historicAverage = availableYears.length ? historicTotal / availableYears.length : 0;
+    const summaryValue = isHistoric ? historicTotal : selVal;
+    const summaryLabel = isHistoric ? 'Total histórico' : selYear;
     const maxVal     = Math.max(...yearVals, 0);
     const peakIdx    = maxVal > 0 ? yearVals.indexOf(maxVal) : -1;
     const sub        = def.sub.replace('semana', 'año');
@@ -11671,7 +11876,10 @@ function openNavdeckAnnualDetail(idx) {
 
     let yoyLabel = '—';
     let yoyLbl   = 'Var. vs año ant.';
-    if (isCurrentYear) {
+    if (isHistoric) {
+        yoyLabel = ndwFormatValue(historicAverage, def.metric);
+        yoyLbl = 'Promedio anual';
+    } else if (isCurrentYear) {
         yoyLabel = `${selYear} En curso`;
         yoyLbl   = 'Estado del año';
     } else if (selYearIdx > 0 && yearVals[selYearIdx - 1] > 0) {
@@ -11684,7 +11892,7 @@ function openNavdeckAnnualDetail(idx) {
         const v      = yearVals[i] || 0;
         const barPct = maxVal > 0 ? (v / maxVal) * 100 : 0;
         const isPeak = i === peakIdx && maxVal > 0;
-        const isSel  = y === selYear;
+        const isSel  = !isHistoric && y === selYear;
         return `
         <div class="ndw-detail-row${isPeak ? ' is-peak' : ''}${isSel ? ' is-selected' : ''}">
             <div class="ndw-detail-row-top">
@@ -11709,14 +11917,14 @@ function openNavdeckAnnualDetail(idx) {
                     <span class="ndw-modal-head-icon"><i class="${def.icon}"></i></span>
                     <div class="ndw-modal-head-text">
                         <span class="ndw-modal-tag"><i class="${def.icon} me-1" style="font-size:.75em;opacity:.85"></i>${escapeHTML(def.label)} · ${escapeHTML(def.sub.replace(' semana',''))}</span>
-                        <span class="ndw-modal-range">${escapeHTML(selYear)} · Histórico</span>
+                        <span class="ndw-modal-range">${isHistoric ? `${escapeHTML(availableYears[0])}–${escapeHTML(availableYears[availableYears.length - 1])}` : `${escapeHTML(selYear)} · Histórico`}</span>
                     </div>
                 </div>
             </div>
             <div class="ndw-modal-kpis">
-                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(selVal, def.metric)}</span><span class="ndw-kpi-lbl">${escapeHTML(selYear)}</span></div>
+                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(summaryValue, def.metric)}</span><span class="ndw-kpi-lbl">${escapeHTML(summaryLabel)}</span></div>
                 <div class="ndw-kpi"><span class="ndw-kpi-val">${peakIdx >= 0 ? escapeHTML(availableYears[peakIdx]) : '—'}</span><span class="ndw-kpi-lbl">Mejor año</span></div>
-                <div class="ndw-kpi"><span class="ndw-kpi-val${isCurrentYear ? ' ndw-kpi-val--incourse' : ''}">${escapeHTML(yoyLabel)}</span><span class="ndw-kpi-lbl">${escapeHTML(yoyLbl)}</span></div>
+                <div class="ndw-kpi"><span class="ndw-kpi-val${!isHistoric && isCurrentYear ? ' ndw-kpi-val--incourse' : ''}">${escapeHTML(yoyLabel)}</span><span class="ndw-kpi-lbl">${escapeHTML(yoyLbl)}</span></div>
             </div>
             <div class="ndw-modal-body">
                 <div class="ndw-detail-title"><i class="fas fa-chart-bar"></i>Histórico por año</div>
@@ -11731,7 +11939,7 @@ function openNavdeckAnnualDetail(idx) {
 
     _ndwOpenChartModal(html, def,
         availableYears,
-        { values: yearVals, _selectedIdx: selYearIdx >= 0 ? selYearIdx : null }
+        { values: yearVals, _selectedIdx: !isHistoric && selYearIdx >= 0 ? selYearIdx : null }
     );
 }
 

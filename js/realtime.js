@@ -128,10 +128,12 @@
             'daily_operations',
             'vuelos_parte_operaciones',
             'parte_operations',
+            'monthly_operations',
             'monthly_operations_2025',
             'annual_operations'
         ], function() {
             _lazy('parteOpsReload')();
+            _lazy('refreshOperationsCardsData')();
             // Forzar recarga en analisis-mensual y analisis-anual
             window._monthlyDataLoaded = false;
             window._annualDataLoaded  = false;

@@ -628,7 +628,9 @@
                 const refreshPromises = [];
 
                 // 2. Refresh Main Dashboard Data (if functions are available)
-                if (typeof window.loadWeeklyOperationsFromDB === 'function') {
+                if (typeof window.refreshOperationsCardsData === 'function') {
+                    refreshPromises.push(window.refreshOperationsCardsData());
+                } else if (typeof window.loadWeeklyOperationsFromDB === 'function') {
                     refreshPromises.push(window.loadWeeklyOperationsFromDB());
                 }
 
