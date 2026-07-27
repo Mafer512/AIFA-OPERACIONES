@@ -17,8 +17,6 @@
 -- celda, guardado en lote, un script, o SQL directo en el panel de Supabase).
 -- ============================================================================
 
-CREATE EXTENSION IF NOT EXISTS hstore;
-
 -- ----------------------------------------------------------------------------
 -- 1) Tabla de historial. Sin FK hacia "Conciliación Manifiestos": el registro
 --    de auditoría debe sobrevivir aunque la fila original se elimine (por eso
@@ -47,18 +45,38 @@ COMMENT ON TABLE public.conciliacion_manifiestos_historial IS
 -- ----------------------------------------------------------------------------
 -- 2) Resuelve nombre/correo legibles del usuario actual, con fallbacks porque
 --    en este proyecto conviven varias versiones de handle_new_user() y no
---    todas las cuentas tienen fila en public.profiles.
+--    todas las cuentas tienen fila en public.profiles (o la tabla podría ni
+--    siquiera existir según qué variante quedó activa). Se comprueba su
+--    existencia con to_regclass() y se envuelve en EXCEPTION: un error aquí
+--    no debe abortar el UPDATE/INSERT/DELETE que disparó el trigger.
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public._cm_historial_usuario_actual()
 RETURNS TABLE(nombre TEXT, email TEXT)
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, auth
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public, auth
 AS $$
-    SELECT
-        COALESCE(NULLIF(TRIM(p.full_name), ''), NULLIF(TRIM(u.raw_user_meta_data->>'full_name'), ''), u.email, 'Usuario desconocido'),
-        u.email
-    FROM auth.users u
-    LEFT JOIN public.profiles p ON p.id = u.id
-    WHERE u.id = auth.uid();
+DECLARE
+    _email     TEXT;
+    _meta_name TEXT;
+    _full_name TEXT;
+BEGIN
+    SELECT u.email, u.raw_user_meta_data->>'full_name'
+      INTO _email, _meta_name
+      FROM auth.users u
+     WHERE u.id = auth.uid();
+
+    IF to_regclass('public.profiles') IS NOT NULL THEN
+        BEGIN
+            EXECUTE 'SELECT full_name FROM public.profiles WHERE id = $1'
+              INTO _full_name USING auth.uid();
+        EXCEPTION WHEN OTHERS THEN
+            _full_name := NULL;
+        END;
+    END IF;
+
+    RETURN QUERY SELECT
+        COALESCE(NULLIF(TRIM(_full_name), ''), NULLIF(TRIM(_meta_name), ''), _email, 'Usuario desconocido'),
+        _email;
+END;
 $$;
 REVOKE ALL ON FUNCTION public._cm_historial_usuario_actual() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public._cm_historial_usuario_actual() TO authenticated;
@@ -67,6 +85,17 @@ GRANT EXECUTE ON FUNCTION public._cm_historial_usuario_actual() TO authenticated
 -- 3) Trigger de auditoría. SECURITY DEFINER: el usuario que edita la tabla no
 --    necesita permiso directo de escritura sobre el historial (de hecho no lo
 --    tiene, ver política REVOKE más abajo); solo este trigger escribe en él.
+--
+--    NOTA (fix): la primera versión de este archivo diferenciaba NEW/OLD con
+--    hstore(record), que requiere la extensión `hstore`. En Supabase esa
+--    extensión suele instalarse en el esquema `extensions`, no en `public`
+--    (mismo caso que pgcrypto, ver db/admin_password_management.sql); como el
+--    search_path de esta función no incluía `extensions`, hstore(NEW) fallaba
+--    con "function hstore(record) does not exist" — y al ser un error DENTRO
+--    del trigger, abortaba toda la transacción del UPDATE (no solo el
+--    registro de historial: el cambio del usuario tampoco se guardaba).
+--    Esta versión usa jsonb (nativo de Postgres, sin extensión ni esquema de
+--    por medio) para el mismo diff, evitando el problema de raíz.
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public._conciliacion_manifiestos_log_change()
 RETURNS TRIGGER
@@ -76,35 +105,48 @@ DECLARE
     _nombre TEXT;
     _email  TEXT;
     _key    TEXT;
-    _diff   hstore;
+    _new_j  jsonb;
+    _old_j  jsonb;
 BEGIN
-    SELECT nombre, email INTO _nombre, _email FROM public._cm_historial_usuario_actual();
-    IF _nombre IS NULL THEN _nombre := 'Sistema'; END IF;
+    -- Defensa en profundidad: NINGÚN error dentro de este trigger debe poder
+    -- abortar el INSERT/UPDATE/DELETE real del usuario. Si algo falla aquí
+    -- (columna nueva con tipo raro, cambio futuro de esquema, etc.), se
+    -- registra un WARNING en los logs de Postgres y se deja pasar la
+    -- operación original sin auditoría, en vez de bloquearla.
+    BEGIN
+        SELECT nombre, email INTO _nombre, _email FROM public._cm_historial_usuario_actual();
+        IF _nombre IS NULL THEN _nombre := 'Sistema'; END IF;
 
-    IF TG_OP = 'INSERT' THEN
-        INSERT INTO public.conciliacion_manifiestos_historial
-            (manifiesto_id, operacion, valor_nuevo, usuario_id, usuario_nombre, usuario_email)
-        VALUES (NEW.id, 'INSERT', row_to_json(NEW)::text, auth.uid(), _nombre, _email);
-        RETURN NEW;
+        IF TG_OP = 'INSERT' THEN
+            INSERT INTO public.conciliacion_manifiestos_historial
+                (manifiesto_id, operacion, valor_nuevo, usuario_id, usuario_nombre, usuario_email)
+            VALUES (NEW.id, 'INSERT', to_jsonb(NEW)::text, auth.uid(), _nombre, _email);
 
-    ELSIF TG_OP = 'DELETE' THEN
-        INSERT INTO public.conciliacion_manifiestos_historial
-            (manifiesto_id, operacion, valor_anterior, usuario_id, usuario_nombre, usuario_email)
-        VALUES (OLD.id, 'DELETE', row_to_json(OLD)::text, auth.uid(), _nombre, _email);
-        RETURN OLD;
+        ELSIF TG_OP = 'DELETE' THEN
+            INSERT INTO public.conciliacion_manifiestos_historial
+                (manifiesto_id, operacion, valor_anterior, usuario_id, usuario_nombre, usuario_email)
+            VALUES (OLD.id, 'DELETE', to_jsonb(OLD)::text, auth.uid(), _nombre, _email);
 
-    ELSE -- UPDATE: una fila de historial por cada columna que realmente cambió.
-        _diff := (hstore(NEW) - hstore(OLD));
-        IF _diff IS NOT NULL AND array_length(akeys(_diff), 1) > 0 THEN
-            FOR _key IN SELECT (each(_diff)).key LOOP
+        ELSE -- UPDATE: una fila de historial por cada columna que realmente cambió.
+            _new_j := to_jsonb(NEW);
+            _old_j := to_jsonb(OLD);
+            FOR _key IN SELECT jsonb_object_keys(_new_j) LOOP
                 IF _key = 'id' THEN CONTINUE; END IF;
-                INSERT INTO public.conciliacion_manifiestos_historial
-                    (manifiesto_id, operacion, columna, valor_anterior, valor_nuevo, usuario_id, usuario_nombre, usuario_email)
-                VALUES (NEW.id, 'UPDATE', _key, (hstore(OLD)) -> _key, (hstore(NEW)) -> _key, auth.uid(), _nombre, _email);
+                IF (_new_j -> _key) IS DISTINCT FROM (_old_j -> _key) THEN
+                    INSERT INTO public.conciliacion_manifiestos_historial
+                        (manifiesto_id, operacion, columna, valor_anterior, valor_nuevo, usuario_id, usuario_nombre, usuario_email)
+                    VALUES (NEW.id, 'UPDATE', _key, _old_j ->> _key, _new_j ->> _key, auth.uid(), _nombre, _email);
+                END IF;
             END LOOP;
         END IF;
-        RETURN NEW;
+    EXCEPTION WHEN OTHERS THEN
+        RAISE WARNING 'conciliacion_manifiestos_historial: no se pudo registrar el cambio (%): %', TG_OP, SQLERRM;
+    END;
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
     END IF;
+    RETURN NEW;
 END;
 $$;
 
@@ -130,8 +172,19 @@ CREATE POLICY cm_historial_select_authenticated
 REVOKE INSERT, UPDATE, DELETE ON public.conciliacion_manifiestos_historial FROM authenticated, anon, PUBLIC;
 
 -- ----------------------------------------------------------------------------
--- VERIFICACIÓN
+-- VERIFICACIÓN — ejecutar después de correr todo lo de arriba.
 -- ----------------------------------------------------------------------------
+
+-- 1) ¿El trigger quedó activo sobre la tabla?
+-- select tgname, tgenabled from pg_trigger
+--   where tgrelid = '"Conciliación Manifiestos"'::regclass and not tgisinternal;
+
+-- 2) Prueba directa: actualiza una fila real y confirma que aparezca en el
+--    historial de inmediato (reemplaza 123 por un id que exista).
+-- update "Conciliación Manifiestos" set "MES" = "MES" where id = 123;
+-- select * from public.conciliacion_manifiestos_historial where manifiesto_id = 123 order by creado_en desc limit 5;
+
+-- 3) Ver todo lo más reciente / por registro:
 -- select * from public.conciliacion_manifiestos_historial order by creado_en desc limit 20;
 -- select * from public.conciliacion_manifiestos_historial where manifiesto_id = 123 order by creado_en desc;
 -- ============================================================================
