@@ -147,7 +147,7 @@
     <!-- Preload de los 5 scripts mas pesados (descarga en paralelo desde el primer byte del HTML).
          No altera el orden de ejecución: los <script> tags más abajo siguen mandando.
          Los hrefs DEBEN coincidir EXACTAMENTE con el src del script para que el navegador reuse el preload. -->
-    <link rel="preload" as="script" href="script.js?v=20260727-conci-fields-portal-v11" fetchpriority="high">
+    <link rel="preload" as="script" href="script.js?v=20260727-conci-fields-portal-v12" fetchpriority="high">
     <link rel="preload" as="script" href="js/manifiestos.js">
     <link rel="preload" as="script" href="js/data-management.js">
     <link rel="preload" as="script" href="js/analisis-operaciones.js?v=47">
@@ -1927,6 +1927,9 @@ FF
                                         <div class="si-body si-body--ger">
                                             <a class="menu-item si-link si-link--l2" href="#" data-section="hidraulicas">
                                                 <i class="fas fa-water si-ico"></i><span class="si-txt">Aprovechamiento del Agua</span>
+                                            </a>
+                                            <a class="menu-item si-link si-link--l2" href="#" data-section="hidraulicas" data-hidra-tab="residuos">
+                                                <i class="fas fa-recycle si-ico"></i><span class="si-txt">Residuos</span>
                                             </a>
                                         </div>
                                     </div>
@@ -20127,6 +20130,9 @@ FF
                                                         <button class="btn btn-sm btn-outline-primary" id="btn-conci-matricula-catalog" title="Administrar catálogo de matrículas">
                                                             <i class="fas fa-id-card me-1"></i>Catálogo de matrículas
                                                         </button>
+                                                        <button class="btn btn-sm btn-outline-secondary d-none" id="btn-conci-historial" title="Ver historial de cambios">
+                                                            <i class="fas fa-history me-1"></i>Historial
+                                                        </button>
                                                         <button class="btn btn-sm btn-outline-primary d-none" id="btn-conci-edit-mode" title="Editar toda la tabla">
                                                             <i class="fas fa-edit me-1"></i>Editar
                                                         </button>
@@ -34050,7 +34056,7 @@ FF
     <script src="js/medicas.js?v=2"></script>
     <script src="js/fauna.js"></script>
     <script src="js/hidraulicas.js?v=15"></script>
-    <script src="js/residuos-hidraulicas.js?v=20260727-1"></script>
+    <script src="js/residuos-hidraulicas.js?v=20260727-2"></script>
     <script src="js/ggen-energia.js?v=5"></script>
     <script src="js/gtrans-energia.js?v=1"></script>
     <script src="js/gtrans-preventivos.js?v=2"></script>
@@ -34217,7 +34223,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260727-conci-tab-capture-v4" defer></script>
+    <script src="script.js?v=20260727-historial-restore" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>
