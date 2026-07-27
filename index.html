@@ -791,30 +791,83 @@ FF
         }
         .conci-hist-filters input[type="date"] { max-width: 150px; }
         .conci-hist-filters select { max-width: 220px; }
-        .conci-hist-list { display: flex; flex-direction: column; gap: .7rem; }
-        .conci-hist-event {
-            display: flex; gap: .75rem; padding: .8rem .9rem; border: 1px solid #e2e8f0; border-radius: 12px;
-            background: #fff; border-left: 4px solid #cbd5e1;
+
+        /* Línea de tiempo: riel vertical con un punto por evento, y
+           separadores "Hoy / Ayer / fecha" para escanear rápido un
+           historial largo sin perder de dónde a dónde va cada día. */
+        .conci-hist-timeline { position: relative; display: flex; flex-direction: column; gap: .6rem; }
+        .conci-hist-day-sep {
+            display: flex; align-items: center; gap: .6rem; margin: .4rem 0 .1rem;
+            color: #64748b; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
         }
-        .conci-hist-event.conci-hist-tone-success { border-left-color: #16a34a; }
-        .conci-hist-event.conci-hist-tone-danger  { border-left-color: #dc2626; }
-        .conci-hist-event.conci-hist-tone-primary { border-left-color: #2563eb; }
+        .conci-hist-day-sep::after { content: ''; flex: 1 1 auto; height: 1px; background: #e2e8f0; }
+        .conci-hist-event { display: flex; gap: .6rem; }
+        .conci-hist-rail { flex: 0 0 auto; width: 28px; display: flex; flex-direction: column; align-items: center; }
+        .conci-hist-rail::before {
+            content: ''; width: 2px; flex: 1 1 auto; background: #e2e8f0; margin-top: 2px;
+        }
+        .conci-hist-event:last-child .conci-hist-rail::before { display: none; }
+        .conci-hist-dot {
+            flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; background: #f1f5f9;
+            border: 2px solid #cbd5e1; color: #64748b; display: flex; align-items: center; justify-content: center;
+            font-size: .68rem; z-index: 1;
+        }
+        .conci-hist-tone-success .conci-hist-dot { background: #dcfce7; border-color: #16a34a; color: #15803d; }
+        .conci-hist-tone-danger  .conci-hist-dot { background: #fee2e2; border-color: #dc2626; color: #b91c1c; }
+        .conci-hist-tone-primary .conci-hist-dot { background: #dbeafe; border-color: #2563eb; color: #1d4ed8; }
+
+        .conci-hist-card {
+            flex: 1 1 auto; min-width: 0; padding: .7rem .85rem .8rem; margin-bottom: .35rem;
+            border: 1px solid #e2e8f0; border-radius: 12px; background: #fff;
+        }
+        .conci-hist-headline { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; }
         .conci-hist-avatar {
-            flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; color: #fff; font-weight: 800;
-            font-size: .75rem; display: flex; align-items: center; justify-content: center;
+            flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; color: #fff; font-weight: 800;
+            font-size: .65rem; display: flex; align-items: center; justify-content: center;
         }
-        .conci-hist-main { flex: 1 1 auto; min-width: 0; }
-        .conci-hist-headline { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; font-size: .82rem; }
-        .conci-hist-user { font-weight: 700; color: #0f172a; }
-        .conci-hist-op { color: #475569; }
-        .conci-hist-time { color: #94a3b8; font-size: .74rem; white-space: nowrap; }
-        .conci-hist-fields { margin-top: .5rem; display: flex; flex-direction: column; gap: .3rem; }
-        .conci-hist-field {
+        .conci-hist-who { display: flex; flex-direction: column; line-height: 1.25; }
+        .conci-hist-user { font-weight: 700; color: #0f172a; font-size: .82rem; }
+        .conci-hist-op { color: #64748b; font-size: .74rem; }
+        .conci-hist-op-summary { color: #94a3b8; font-weight: 400; }
+        .conci-hist-time { color: #94a3b8; font-size: .72rem; white-space: nowrap; }
+
+        .conci-hist-flight-row { margin: .5rem 0 .15rem; }
+        .conci-hist-flight-badge {
+            background: #0f172a; color: #fff; font-weight: 700; font-size: .75rem;
+            padding: .28rem .7rem; border-radius: 999px; border: 0;
+        }
+        .conci-hist-flight-badge:hover { background: #1e293b; color: #fff; }
+
+        /* Grupos por tipo de cambio: cada uno con su propio color/ícono para
+           que "nuevo", "modificado" y "borrado" se distingan de un vistazo,
+           sin tener que leer cada campo para saber qué pasó. */
+        .conci-hist-group { margin-top: .55rem; }
+        .conci-hist-group-title {
+            font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+            margin-bottom: .3rem; display: flex; align-items: center; gap: .3rem;
+        }
+        .conci-hist-group-count {
+            background: currentColor; color: #fff !important; border-radius: 999px; font-size: .64rem;
+            min-width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px;
+        }
+        .conci-hist-group-nuevo .conci-hist-group-title       { color: #15803d; }
+        .conci-hist-group-modificado .conci-hist-group-title  { color: #1d4ed8; }
+        .conci-hist-group-vaciado .conci-hist-group-title     { color: #b91c1c; }
+        .conci-hist-group-count { color: inherit; }
+        .conci-hist-group-nuevo .conci-hist-group-count      { background: #16a34a; }
+        .conci-hist-group-modificado .conci-hist-group-count { background: #2563eb; }
+        .conci-hist-group-vaciado .conci-hist-group-count    { background: #dc2626; }
+
+        .conci-hist-chips { display: flex; flex-direction: column; gap: .3rem; }
+        .conci-hist-chip {
             display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap;
-            font-size: .78rem; padding: .3rem .5rem; background: #f8fafc; border-radius: 8px;
+            font-size: .78rem; padding: .35rem .6rem; border-radius: 8px; border-left: 3px solid transparent;
         }
-        .conci-hist-field-name { font-weight: 700; color: #1e3a8a; min-width: 120px; }
-        .conci-hist-field-diff { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+        .conci-hist-chip-nuevo       { background: #f0fdf4; border-left-color: #16a34a; }
+        .conci-hist-chip-modificado  { background: #eff6ff; border-left-color: #2563eb; }
+        .conci-hist-chip-vaciado     { background: #fef2f2; border-left-color: #dc2626; }
+        .conci-hist-chip-field { font-weight: 700; color: #1e293b; min-width: 120px; }
+        .conci-hist-chip-val { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
         .conci-hist-before { color: #b91c1c; text-decoration: line-through; opacity: .75; }
         .conci-hist-after { color: #15803d; font-weight: 600; }
         .conci-hist-empty { color: #94a3b8; font-style: italic; font-weight: 400; text-decoration: none; }
@@ -825,6 +878,7 @@ FF
         @media (max-width: 768px) {
             .conci-hist-filters { flex-direction: column; align-items: stretch; }
             .conci-hist-filters input, .conci-hist-filters select { max-width: none; }
+            .conci-hist-chip-field { min-width: 90px; }
         }
 
         /* Flex wrapper inside each filterable header cell */
@@ -35421,7 +35475,7 @@ FF
 <script src="js/ops-flights-admin.js?v=20260727-tablas-separadas" defer></script>
 <!-- Conciliación Manifiestos table + inline editing -->
 <script src="js/conci-manifiestos-table.js?v=1" defer></script>
-<script src="js/conci-manifiestos-historial.js?v=20260727a" defer></script>
+<script src="js/conci-manifiestos-historial.js?v=20260727-redesign" defer></script>
 <!-- Navegación inline del picker de fecha en Itinerario -->
 <script>
 (function () {
