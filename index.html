@@ -8660,6 +8660,14 @@ FF
                         .ctbl-table tbody td { padding: .38rem .8rem; color: #1a2540; max-width: 240px; overflow: hidden; text-overflow: ellipsis; text-align: center; }
                         .ctbl-table tbody td:first-child { font-weight: 700; color: #1565c0; }
                         .ctbl-table td.ctbl-td-conducta { white-space: nowrap; padding: .28rem .6rem; }
+                        .ctbl-status-badge {
+                            display: inline-flex; align-items: center; justify-content: center;
+                            min-width: 58px; padding: .12rem .5rem; border-radius: 999px;
+                            font-size: .72rem; font-weight: 800; line-height: 1.15;
+                            border: 1px solid transparent; white-space: nowrap;
+                        }
+                        .ctbl-status-activo { color: #047857; background: #d1fae5; border-color: #6ee7b7; }
+                        .ctbl-status-baja { color: #fff; background: #6b7280; border-color: #4b5563; }
                         .ctbl-count-badge {
                             background: #e8eef8; color: #1558d6;
                             border-radius: 999px; padding: .12rem .65rem;
@@ -10810,7 +10818,7 @@ FF
                                 nombre:          find('^nombre$', 'nombre'),
                                 puesto:          find('^puesto$', 'puesto', 'cargo', 'posici'),
                                 fecha_ingreso:   find('fecha.*ingreso', 'fecha.*alta', 'ingreso', 'alta'),
-                                onomastico:      find('onom', 'nacimient', 'cumple', 'birth', '^edad$', 'fecha.*nac'),
+                                onomastico:      find('^fecha\\s+de\\s+nacimiento$', 'fecha.*nac', 'nacimient', '^cumplea[nñ]os$', 'onom', 'birth'),
                                 edad_raw:        find('^edad$', 'edad'),  // fallback solo numérico
                                 celular:         find('cel[uú]lar', 'm[oó]vil', 'celular', 'cel', 'tel[eé]f[oó]nico', 'no\\.?\\s*tel', 'tel[eé]fono'),
                                 extension:       find('^ext\\.?$', 'extensi'),
@@ -11158,24 +11166,40 @@ FF
                                 /* Calcular cumpleaños desde onomastico/edad */
                                 const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio',
                                                   'julio','agosto','septiembre','octubre','noviembre','diciembre'];
-                                function formatBirthday(raw) {
+                                function normalizarAnioNacimiento(y) {
+                                    const n = parseInt(y, 10);
+                                    if (isNaN(n)) return null;
+                                    if (String(y).length === 2) {
+                                        const actual = new Date().getFullYear() % 100;
+                                        return n <= actual ? 2000 + n : 1900 + n;
+                                    }
+                                    return n;
+                                }
+                                function parseFechaNacimiento(raw) {
                                     if (!raw) return null;
                                     const s = String(raw).trim();
                                     // ISO date YYYY-MM-DD o YYYY/MM/DD
                                     const isoMatch = s.match(/^(\d{4})[\-\/](\d{1,2})[\-\/](\d{1,2})/);
                                     if (isoMatch) {
-                                        const d = parseInt(isoMatch[3], 10);
-                                        const m = parseInt(isoMatch[2], 10) - 1;
-                                        const y = parseInt(isoMatch[1], 10);
-                                        return d + ' de ' + MESES_ES[m] + ' de ' + y;
+                                        return { d: parseInt(isoMatch[3], 10), m: parseInt(isoMatch[2], 10) - 1, y: parseInt(isoMatch[1], 10) };
                                     }
-                                    // DD/MM/YYYY o DD-MM-YYYY
-                                    const dmyMatch = s.match(/^(\d{1,2})[\-\/](\d{1,2})[\-\/](\d{4})/);
-                                    if (dmyMatch) {
-                                        const d = parseInt(dmyMatch[1], 10);
-                                        const m = parseInt(dmyMatch[2], 10) - 1;
-                                        const y = parseInt(dmyMatch[3], 10);
-                                        return d + ' de ' + MESES_ES[m] + ' de ' + y;
+                                    // Fechas con / o - y año de 2 o 4 dígitos. Excel suele entregar M/D/YY.
+                                    const slashMatch = s.match(/^(\d{1,2})[\-\/](\d{1,2})[\-\/](\d{2,4})$/);
+                                    if (slashMatch) {
+                                        const a = parseInt(slashMatch[1], 10);
+                                        const b = parseInt(slashMatch[2], 10);
+                                        const y = normalizarAnioNacimiento(slashMatch[3]);
+                                        if (!y) return null;
+                                        const mesPrimero = b > 12 || (a <= 12 && b <= 31);
+                                        return mesPrimero ? { d: b, m: a - 1, y } : { d: a, m: b - 1, y };
+                                    }
+                                    return null;
+                                }
+                                function formatBirthday(raw) {
+                                    const s = String(raw ?? '').trim();
+                                    const f = parseFechaNacimiento(raw);
+                                    if (f && f.d >= 1 && f.d <= 31 && f.m >= 0 && f.m < 12 && f.y >= 1900) {
+                                        return f.d + ' de ' + MESES_ES[f.m] + ' de ' + f.y;
                                     }
                                     // Solo número: interpretar como edad ? año de nacimiento
                                     const age = parseInt(s, 10);
@@ -11545,9 +11569,20 @@ FF
                                     // YYYY-MM-DD o YYYY/MM/DD
                                     const iso = s.match(/^(\d{4})[\-\/](\d{1,2})[\-\/](\d{1,2})/);
                                     if (iso) return { dia: +iso[3], mes: +iso[2] - 1 };
-                                    // DD/MM/YYYY o DD-MM-YYYY
-                                    const dmy = s.match(/^(\d{1,2})[\-\/](\d{1,2})[\-\/](\d{4})/);
-                                    if (dmy) return { dia: +dmy[1], mes: +dmy[2] - 1 };
+                                    // Fechas con / o - y año de 2 o 4 dígitos. Excel suele entregar M/D/YY.
+                                    const dmy = s.match(/^(\d{1,2})[\-\/](\d{1,2})[\-\/](\d{2,4})$/);
+                                    if (dmy) {
+                                        const a = +dmy[1], b = +dmy[2];
+                                        const mesPrimero = b > 12 || (a <= 12 && b <= 31);
+                                        return mesPrimero ? { dia: b, mes: a - 1 } : { dia: a, mes: b - 1 };
+                                    }
+                                    // Cumpleaños sin año, por ejemplo 08-nov.
+                                    const corto = s.match(/^(\d{1,2})[\-\/\\s]([a-záéíóúñ]{3,})/i);
+                                    if (corto) {
+                                        const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+                                        const mes = meses.findIndex(m => corto[2].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').startsWith(m));
+                                        if (mes >= 0) return { dia: +corto[1], mes };
+                                    }
                                     return null;
                                 }
 
@@ -13291,12 +13326,13 @@ FF
 
                         // Orden preferido de columnas
                         const CTBL_COL_ORDER = [
+                            'estatus','Estatus','grado_academico','Grado Académico','sangre','Tipo de sangre',
                             'num_empleado','nombre','puesto','plaza','nivel','turno',
                             'direccion','subdireccion','gerencia','coordinacion',
                             'fecha_ingreso','correo','celular','extension','profesion',
-                            'grado_academico','estatus','grado','matricula','cedula',
+                            'grado','matricula','cedula',
                             'militar','comisionado','ryr','onomastico',
-                            'estado_civil','dependientes','nss','sangre',
+                            'estado_civil','dependientes','nss',
                             'domicilio','rfc','curp','licencia','licencia_tipo',
                             'vig_licencia','vig_credencial','vig_ine',
                             'c1_nombre','c1_parentesco','c1_tel',
@@ -13313,11 +13349,12 @@ FF
                             'gerencia':'Gerencia','coordinacion':'Coordinacion',
                             'fecha_ingreso':'Fecha Ingreso','correo':'Correo',
                             'celular':'Celular','extension':'Ext.','profesion':'Profesion',
-                            'grado_academico':'Grado Académico','estatus':'Estatus','grado':'Grado Militar',
+                            'grado_academico':'Grado Académico','Grado Académico':'Grado Académico',
+                            'estatus':'Estatus','Estatus':'Estatus','grado':'Grado Militar',
                             'matricula':'Matrícula','cedula':'Cédula',
                             'militar':'Mil./Civil','comisionado':'Comisionado','ryr':'R y R',
                             'onomastico':'Onomástico','estado_civil':'Edo. Civil',
-                            'dependientes':'Dependientes','nss':'NSS','sangre':'Sangre',
+                            'dependientes':'Dependientes','nss':'NSS','sangre':'Sangre','Tipo de sangre':'Sangre',
                             'domicilio':'Domicilio','rfc':'RFC','curp':'CURP',
                             'licencia':'Licencia','licencia_tipo':'Tipo Lic.',
                             'vig_licencia':'Vig. Lic.','vig_credencial':'Vig. Cred.',
@@ -13333,7 +13370,7 @@ FF
                         };
 
                         // Columnas a ocultar de la tabla (internas)
-                        const CTBL_HIDDEN_COLS = new Set(['id','created_at','foto_url','cv_url']);
+                        const CTBL_HIDDEN_COLS = new Set(['id','created_at','foto_url','cv_url','conducta','Conducta']);
 
                         // Columnas de texto largo que necesitan wrap
                         const CTBL_WRAP_COLS = new Set(['nombre','puesto','domicilio','comentarios','amonestaciones','profesion','grado_academico','coordinacion']);
@@ -13368,8 +13405,8 @@ FF
                                 </th>`;
                             });
                             const conductaTh = `<th style="white-space:nowrap"><div class="ctbl-th-inner"><i class="fas fa-shield-alt me-1" style="opacity:.6"></i>Conducta</div></th>`;
-                            const nombreIdx = ctblCols.indexOf('nombre');
-                            thCols.splice(nombreIdx >= 0 ? nombreIdx + 1 : 1, 0, conductaTh);
+                            const gradoAcadIdx = ctblCols.findIndex(k => k === 'grado_academico' || /^grado\s+acad[eé]mico$/i.test(k));
+                            thCols.splice(gradoAcadIdx >= 0 ? gradoAcadIdx + 1 : 1, 0, conductaTh);
                             thead.innerHTML = `<tr>${thCols.join('')}</tr>`;
                         }
 
@@ -13397,10 +13434,9 @@ FF
                                 ctblCols = [...preferred, ...rest];
                                 const estatusKey = ctblCols.find(k => /^estatus$/i.test(k));
                                 const gradoAcadKey = ctblCols.find(k => k === 'grado_academico' || /^grado\s+acad[eé]mico$/i.test(k));
-                                if (estatusKey && gradoAcadKey) {
-                                    ctblCols = ctblCols.filter(k => k !== estatusKey);
-                                    ctblCols.splice(ctblCols.indexOf(gradoAcadKey) + 1, 0, estatusKey);
-                                }
+                                const sangreKey = ctblCols.find(k => k === 'sangre' || /^tipo\s+de\s+sangre$/i.test(k));
+                                const frontKeys = [estatusKey, gradoAcadKey, sangreKey].filter(Boolean);
+                                ctblCols = [...frontKeys, ...ctblCols.filter(k => !frontKeys.includes(k))];
                                 // Columna de sort inicial: preferir num_empleado
                                 ctblSortCol = ctblCols.find(k => k === 'num_empleado' || k === 'num') || ctblCols[0] || 'nombre';
                                 ctblSortAsc = true;
@@ -13465,7 +13501,17 @@ FF
 
                             // Aplicar orden actual
                             const col = ctblSortCol;
+                            const estatusKey = ctblCols.find(k => /^estatus$/i.test(k));
+                            const estatusPeso = r => {
+                                const v = estatusKey ? String(r[estatusKey] ?? '').trim().toLowerCase() : '';
+                                if (v === 'activo') return 0;
+                                if (v === 'baja') return 2;
+                                return 1;
+                            };
                             ctblData.sort((a, b) => {
+                                const ea = estatusPeso(a);
+                                const eb = estatusPeso(b);
+                                if (ea !== eb) return ea - eb;
                                 const ra = String(a[col] ?? '').trim();
                                 const rb = String(b[col] ?? '').trim();
                                 const na = parseFloat(ra), nb = parseFloat(rb);
@@ -13652,14 +13698,22 @@ FF
                                 const n   = raw ? raw.split(/\n/).map(l => l.trim()).filter(Boolean).length : 0;
                                 const { cls } = semClassify(n);
                                 const rowCls  = cls === 'sem-rojo' ? ' class="ctbl-rojo"' : cls === 'sem-amarillo' ? ' class="ctbl-amarillo"' : '';
+                                const statusHtml = value => {
+                                    const limpio = String(value || '').trim();
+                                    const esBaja = /^baja$/i.test(limpio);
+                                    const esActivo = /^activo$/i.test(limpio);
+                                    const clsStatus = esBaja ? 'ctbl-status-baja' : esActivo ? 'ctbl-status-activo' : '';
+                                    return clsStatus ? `<span class="ctbl-status-badge ${clsStatus}">${esc(limpio)}</span>` : esc(limpio || '—');
+                                };
                                 const allTds  = ctblCols.map(col => {
                                     const v = String(r[col] ?? '').trim() || '—';
                                     const style = CTBL_WRAP_COLS.has(col) ? ' style="max-width:200px;white-space:normal"' : '';
-                                    return `<td${style}>${esc(v)}</td>`;
+                                    const content = /^estatus$/i.test(col) ? statusHtml(v) : esc(v);
+                                    return `<td${style}>${content}</td>`;
                                 });
                                 const semTd = `<td class="ctbl-td-conducta">${colabSemaforoHtml(r, true)}</td>`;
-                                const nombreIdx = ctblCols.indexOf('nombre');
-                                allTds.splice(nombreIdx >= 0 ? nombreIdx + 1 : 1, 0, semTd);
+                                const gradoAcadIdx = ctblCols.findIndex(k => k === 'grado_academico' || /^grado\s+acad[eé]mico$/i.test(k));
+                                allTds.splice(gradoAcadIdx >= 0 ? gradoAcadIdx + 1 : 1, 0, semTd);
                                 return `<tr${rowCls} onclick="colabTablaVerFicha(${i})" title="Ver ficha de ${nombreVal}">${allTds.join('')}</tr>`;
                             }).join('');
                             if (tbody) tbody.innerHTML = html;
