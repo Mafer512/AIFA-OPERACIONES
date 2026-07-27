@@ -22156,9 +22156,40 @@ async function _conciAutoSaveRow(tr) {
             if (!client) throw new Error('No se pudo inicializar el cliente de Supabase.');
             if (tr.dataset.rowFuente === 'Solo Vuelos') {
                 const airlineEntry = _conciAirlinePayloadEntry(payload);
-                if (!airlineEntry) return;
-                await _conciSaveVirtualAirlineOverride(client, tr, airlineEntry.value);
-                settleSavedCells(new Set([airlineEntry.key]));
+                // Sólo se tocó la aerolínea: es un ajuste ligero sobre el vuelo
+                // (no crea manifiesto — se conserva el comportamiento previo).
+                const onlyAirlineDirty = airlineEntry && dirtyCols.size > 0 &&
+                    [...dirtyCols].every(col => col === airlineEntry.key);
+                if (onlyAirlineDirty) {
+                    await _conciSaveVirtualAirlineOverride(client, tr, airlineEntry.value);
+                    settleSavedCells(new Set([airlineEntry.key]));
+                    tr.classList.remove('table-secondary');
+                    tr.removeAttribute('title');
+                    return;
+                }
+                if (dirtyCols.size === 0) return;
+
+                // El usuario capturó datos de manifiesto reales (matrícula, PAX,
+                // slot coordinado, observaciones, etc.) para un vuelo que todavía
+                // no tenía manifiesto propio: "Conciliación Manifiestos" es una
+                // tabla distinta a la de Itinerario de Vuelos, así que esto debe
+                // crear un registro real ahí, no perderse en la fila espejo.
+                const result = await _conciWriteRowSafe(client, payload, null);
+                if (!result.ok) {
+                    tr.title = `Pendiente de guardar: ${result.error?.message || 'error de base de datos'}`;
+                    tr.classList.add('table-secondary');
+                    console.warn('[Conciliación] fila (Solo Vuelos) pendiente de guardar:', result.error);
+                    return;
+                }
+                const inserted = Array.isArray(result.data) ? result.data[0] : result.data;
+                if (inserted?.id !== undefined && inserted?.id !== null) {
+                    tr.dataset.rowId = String(inserted.id);
+                    tr.dataset.rowFuente = 'Manifiestos + Vuelos';
+                    tr.classList.remove('conci-missing-manifiesto');
+                    const actionTd = tr.querySelector('td.conci-row-action-col');
+                    if (actionTd) _conciFillRowActionCell(actionTd, String(inserted.id));
+                }
+                settleSavedCells();
                 tr.classList.remove('table-secondary');
                 tr.removeAttribute('title');
                 return;
