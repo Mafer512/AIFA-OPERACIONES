@@ -123,7 +123,7 @@
         href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20260617O">
+    <link rel="stylesheet" href="style.css?v=20260727S">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="icon" type="image/png" sizes="192x192" href="images/icons/aifa-app-icon-192.png?v=20251126">
@@ -147,7 +147,7 @@
     <!-- Preload de los 5 scripts mas pesados (descarga en paralelo desde el primer byte del HTML).
          No altera el orden de ejecución: los <script> tags más abajo siguen mandando.
          Los hrefs DEBEN coincidir EXACTAMENTE con el src del script para que el navegador reuse el preload. -->
-    <link rel="preload" as="script" href="script.js?v=20260727-tablas-separadas" fetchpriority="high">
+    <link rel="preload" as="script" href="script.js?v=20260727-conci-fields-portal-v11" fetchpriority="high">
     <link rel="preload" as="script" href="js/manifiestos.js">
     <link rel="preload" as="script" href="js/data-management.js">
     <link rel="preload" as="script" href="js/analisis-operaciones.js?v=47">
@@ -1042,11 +1042,11 @@ FF
         #table-conci-manifiestos tbody tr.conci-row-tone-0 > td { background: #ffffff; }
         #table-conci-manifiestos tbody tr.conci-row-tone-1 > td { background: #f2f4f7; }
         #table-conci-manifiestos tbody tr:hover > td {
-            background: #eaf3ff !important;
+            background: #eef1f4 !important;
         }
         #table-conci-manifiestos tbody tr.conci-row-selected > td {
-            background: #fff3bf !important;
-            box-shadow: inset 0 1px 0 #ffe58a, inset 0 -1px 0 #ffe58a;
+            background: #e9ecef !important;
+            box-shadow: inset 0 1px 0 #ced4da, inset 0 -1px 0 #ced4da;
         }
         .board-global-search {
             max-width: 320px;
@@ -20024,23 +20024,25 @@ FF
                                                         <button class="btn btn-sm btn-outline-secondary" id="btn-conci-refresh" title="Actualizar desde la base de datos">
                                                             <i class="fas fa-sync-alt"></i>
                                                         </button>
+                                                        <button class="btn btn-sm btn-outline-success d-none" id="btn-conci-import-file" title="Importar manifiestos desde Excel o CSV">
+                                                            <i class="fas fa-file-import me-1"></i>Importar
+                                                        </button>
+                                                        <input type="file" id="input-conci-import-file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="d-none">
                                                         <button class="btn btn-sm btn-outline-primary" id="btn-conci-airline-colors" title="Administrar catálogo de aerolíneas">
                                                             <i class="fas fa-palette me-1"></i>Catálogo de aerolíneas
                                                         </button>
                                                         <button class="btn btn-sm btn-outline-primary" id="btn-conci-matricula-catalog" title="Administrar catálogo de matrículas">
                                                             <i class="fas fa-id-card me-1"></i>Catálogo de matrículas
                                                         </button>
-                                                        <button class="btn btn-sm btn-outline-secondary d-none" id="btn-conci-historial" title="Ver historial de cambios">
-                                                            <i class="fas fa-history me-1"></i>Historial
-                                                        </button>
                                                         <button class="btn btn-sm btn-outline-primary d-none" id="btn-conci-edit-mode" title="Editar toda la tabla">
                                                             <i class="fas fa-edit me-1"></i>Editar
                                                         </button>
-                                                        <button class="btn btn-sm btn-success d-none" id="btn-conci-save-mode" title="Guardar cambios de la tabla">
-                                                            <i class="fas fa-save me-1"></i>Guardar
-                                                        </button>
+
                                                         <button class="btn btn-sm btn-outline-secondary d-none" id="btn-conci-cancel-mode" title="Cancelar edición">
                                                             <i class="fas fa-times me-1"></i>Cancelar
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-secondary d-none" id="btn-conci-undo-mode" title="Deshacer el último cambio">
+                                                            <i class="fas fa-undo me-1"></i>Deshacer
                                                         </button>
                                                         <span class="badge bg-secondary" id="badge-conci-manifiestos-count" style="display:none"></span>
                                                     </div>
@@ -34122,7 +34124,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260727-tablas-separadas" defer></script>
+    <script src="script.js?v=20260727-conci-tab-capture-v4" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>

@@ -17147,19 +17147,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const btnConciRefresh = document.getElementById('btn-conci-refresh');
+    const btnConciImport = document.getElementById('btn-conci-import-file');
+    const inputConciImport = document.getElementById('input-conci-import-file');
     const btnConciEdit = document.getElementById('btn-conci-edit-mode');
     const btnConciAdd = document.getElementById('btn-conci-add-row');
     const btnConciAirlineColors = document.getElementById('btn-conci-airline-colors');
     const btnConciMatriculaCatalog = document.getElementById('btn-conci-matricula-catalog');
     const btnConciSave = document.getElementById('btn-conci-save-mode');
     const btnConciCancel = document.getElementById('btn-conci-cancel-mode');
+    const btnConciUndo = document.getElementById('btn-conci-undo-mode');
     if (btnConciRefresh) btnConciRefresh.addEventListener('click', () => loadConciliacionManifiestos({ forceRefresh: true }));
+    if (btnConciImport) btnConciImport.addEventListener('click', () => {
+        if (!_conciCanCurrentUserEdit()) {
+            alert('Solo usuarios editor o admin pueden importar manifiestos.');
+            return;
+        }
+        if (inputConciImport) {
+            inputConciImport.value = '';
+            inputConciImport.click();
+        }
+    });
+    if (inputConciImport) inputConciImport.addEventListener('change', async () => {
+        const file = inputConciImport.files && inputConciImport.files[0];
+        try {
+            if (file) await _conciImportManifiestosFile(file);
+        } finally {
+            inputConciImport.value = '';
+        }
+    });
     if (btnConciEdit) btnConciEdit.addEventListener('click', _conciEnterEditMode);
     if (btnConciAdd) btnConciAdd.addEventListener('click', _conciAddBlankRow);
     if (btnConciAirlineColors) btnConciAirlineColors.addEventListener('click', _conciOpenAirlineColors);
     if (btnConciMatriculaCatalog) btnConciMatriculaCatalog.addEventListener('click', _conciOpenMatriculaCatalog);
     if (btnConciSave) btnConciSave.addEventListener('click', _conciSaveBulkEdits);
     if (btnConciCancel) btnConciCancel.addEventListener('click', _conciCancelBulkEdits);
+    if (btnConciUndo) btnConciUndo.addEventListener('click', _conciUndoLastChange);
     window.addEventListener('admin-mode-changed', _conciRefreshEditToolbar);
     window.addEventListener('airline-catalog-updated', () => {
         _conciAirlineCatalogLoaded = false;
@@ -17197,6 +17219,429 @@ let _conciLoadRequestSeq = 0;
 let _conciRenderSeq = 0;
 const _conciRenderCache = new Map();
 let _conciRenderedKey = '';
+const _CONCI_COLUMN_VISIBILITY_STORAGE_KEY = 'aifa-conciliacion-manifiestos-hidden-columns-v1';
+let _conciHiddenColumns = _conciLoadHiddenColumns();
+let _conciDisplayColumns = [];
+
+function _conciLoadHiddenColumns() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(_CONCI_COLUMN_VISIBILITY_STORAGE_KEY) || '[]');
+        return new Set(Array.isArray(saved) ? saved.filter(value => typeof value === 'string') : []);
+    } catch (_) {
+        return new Set();
+    }
+}
+
+function _conciSaveHiddenColumns() {
+    try {
+        localStorage.setItem(_CONCI_COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify([..._conciHiddenColumns]));
+    } catch (_) {
+        // La tabla sigue funcionando si el navegador bloquea el almacenamiento local.
+    }
+}
+
+function _conciRenderColumnVisibilityMenu(columns) {
+    _conciDisplayColumns = Array.isArray(columns) ? [...columns] : [];
+
+    const menu = document.getElementById('conci-column-visibility-menu');
+    const button = document.getElementById('btn-conci-column-visibility');
+    if (!menu) return;
+
+    const hiddenCount = _conciDisplayColumns.filter(column => _conciHiddenColumns.has(column)).length;
+    if (button) {
+        button.classList.remove('btn-outline-warning');
+        button.classList.add('btn-outline-secondary');
+        button.title = hiddenCount
+            ? `Seleccionar los campos visibles (${_conciDisplayColumns.length - hiddenCount} de ${_conciDisplayColumns.length})`
+            : 'Seleccionar los campos visibles';
+    }
+
+    menu.innerHTML = '';
+    if (!_conciDisplayColumns.length) {
+        const empty = document.createElement('div');
+        empty.className = 'px-3 py-2 small text-muted';
+        empty.textContent = 'No hay campos disponibles.';
+        menu.appendChild(empty);
+        return;
+    }
+
+    const header = document.createElement('div');
+    header.className = 'd-flex align-items-center justify-content-between gap-2 px-3 py-2 border-bottom';
+    const title = document.createElement('span');
+    title.className = 'small fw-bold text-uppercase';
+    title.textContent = 'Campos visibles';
+    const showAll = document.createElement('button');
+    showAll.type = 'button';
+    showAll.className = 'btn btn-link btn-sm p-0 text-decoration-none';
+    showAll.textContent = 'Mostrar todos';
+    showAll.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        _conciHiddenColumns.clear();
+        _conciSaveHiddenColumns();
+        _conciApplyColumnVisibility();
+        _conciRenderColumnVisibilityMenu(_conciDisplayColumns);
+    });
+    header.appendChild(title);
+    header.appendChild(showAll);
+    menu.appendChild(header);
+
+    _conciDisplayColumns.forEach((column, index) => {
+        const item = document.createElement('label');
+        item.className = 'conci-column-visibility-item';
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.className = 'form-check-input';
+        input.id = `conci-column-visibility-${index}`;
+        input.checked = !_conciHiddenColumns.has(column);
+        input.dataset.column = column;
+        input.setAttribute('aria-label', `Mostrar ${column}`);
+        input.addEventListener('change', () => {
+            if (input.checked) _conciHiddenColumns.delete(column);
+            else _conciHiddenColumns.add(column);
+            _conciSaveHiddenColumns();
+            _conciApplyColumnVisibility();
+            _conciRenderColumnVisibilityMenu(_conciDisplayColumns);
+        });
+        const text = document.createElement('span');
+        text.textContent = column;
+        item.appendChild(input);
+        item.appendChild(text);
+        menu.appendChild(item);
+    });
+
+    if (!menu.dataset.conciColumnMenuBound) {
+        menu.dataset.conciColumnMenuBound = '1';
+        menu.addEventListener('click', event => event.stopPropagation());
+    }
+}
+
+function _conciApplyColumnVisibility() {
+    const table = document.getElementById('table-conci-manifiestos');
+    if (table) {
+        table.querySelectorAll('[data-conci-column-key]').forEach(cell => {
+            cell.classList.toggle('d-none', _conciHiddenColumns.has(cell.dataset.conciColumnKey || ''));
+        });
+    }
+
+    const button = document.getElementById('btn-conci-column-visibility');
+    const hiddenCount = _conciDisplayColumns.filter(column => _conciHiddenColumns.has(column)).length;
+    if (button) {
+        button.classList.remove('btn-outline-warning');
+        button.classList.add('btn-outline-secondary');
+        button.title = hiddenCount
+            ? `Seleccionar los campos visibles (${_conciDisplayColumns.length - hiddenCount} de ${_conciDisplayColumns.length})`
+            : 'Seleccionar los campos visibles';
+    }
+
+    requestAnimationFrame(() => {
+        _conciSyncColumnWidths();
+        _conciAttachColumnResizers();
+    });
+}
+
+function _conciSyncColumnWidths() {
+    const table = document.getElementById('table-conci-manifiestos');
+    const headerRow = table?.tHead?.rows?.[0];
+    if (!table || !headerRow) return;
+
+    const headers = Array.from(headerRow.cells).filter(header => !header.classList.contains('d-none'));
+    const hasManualWidths = headers.some(header => header.dataset.conciManualWidth === '1');
+    if (!hasManualWidths) {
+        table.style.tableLayout = 'auto';
+        table.style.width = '100%';
+        table.style.minWidth = '100%';
+        return;
+    }
+
+    const scrollWrap = table.closest('.table-responsive');
+    const width = headers.reduce((total, header) => total + header.offsetWidth, 0);
+    const targetWidth = Math.max(width, scrollWrap?.clientWidth || 0);
+    table.style.tableLayout = 'fixed';
+    table.style.width = `${targetWidth}px`;
+    table.style.minWidth = `${targetWidth}px`;
+}
+
+function _conciAttachColumnResizers() {
+    const table = document.getElementById('table-conci-manifiestos');
+    const headerRow = table?.tHead?.rows?.[0];
+    if (!table || !headerRow) return;
+
+    Array.from(headerRow.cells).forEach(header => {
+        header.querySelector('.conci-col-resizer')?.remove();
+        if (header.classList.contains('d-none')) return;
+
+        const handle = document.createElement('div');
+        handle.className = 'conci-col-resizer';
+        handle.title = 'Arrastra para ajustar el ancho';
+        header.appendChild(handle);
+
+        handle.addEventListener('mousedown', event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const visibleHeaders = Array.from(headerRow.cells).filter(item => !item.classList.contains('d-none'));
+            let totalWidth = 0;
+            visibleHeaders.forEach(item => {
+                const width = item.offsetWidth;
+                const px = `${width}px`;
+                item.style.width = px;
+                item.style.minWidth = px;
+                item.style.maxWidth = px;
+                item.dataset.conciManualWidth = '1';
+                totalWidth += width;
+            });
+            const scrollWrap = table.closest('.table-responsive');
+            const initialTableWidth = Math.max(totalWidth, scrollWrap?.clientWidth || 0);
+            table.style.tableLayout = 'fixed';
+            table.style.width = `${initialTableWidth}px`;
+            table.style.minWidth = `${initialTableWidth}px`;
+
+            const startX = event.pageX;
+            const startWidth = header.offsetWidth;
+            document.body.classList.add('conci-col-resizing');
+
+            const onMove = moveEvent => {
+                const width = Math.max(48, startWidth + (moveEvent.pageX - startX));
+                const px = `${width}px`;
+                header.style.width = px;
+                header.style.minWidth = px;
+                header.style.maxWidth = px;
+
+                const currentWidth = visibleHeaders.reduce((total, item) => total + item.offsetWidth, 0);
+                const targetWidth = Math.max(currentWidth, scrollWrap?.clientWidth || 0);
+                table.style.width = `${targetWidth}px`;
+                table.style.minWidth = `${targetWidth}px`;
+            };
+            const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                document.body.classList.remove('conci-col-resizing');
+            };
+
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+
+        handle.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+    });
+}
+
+// El menú de Campos se porta temporalmente al body al abrirse. De esta forma no
+// comparte el contexto de apilamiento de los encabezados sticky de la tabla.
+function _conciInitColumnVisibilityPortal() {
+    const button = document.getElementById('btn-conci-column-visibility');
+    const menu = document.getElementById('conci-column-visibility-menu');
+    const dropdown = button?.closest('.conci-column-visibility-dropdown');
+    if (!button || !menu || !dropdown || button.dataset.conciPortalBound === '1') return;
+
+    button.dataset.conciPortalBound = '1';
+    const originalParent = menu.parentElement;
+    const originalNextSibling = menu.nextSibling;
+    const originalStyle = menu.getAttribute('style') || '';
+
+    const positionPortalMenu = () => {
+        if (menu.parentElement !== document.body || !menu.classList.contains('show')) return;
+        const rect = button.getBoundingClientRect();
+        const viewportPadding = 8;
+        const menuWidth = menu.offsetWidth || 280;
+        const menuHeight = menu.offsetHeight || 0;
+        const left = Math.max(viewportPadding, Math.min(
+            rect.right - menuWidth,
+            window.innerWidth - menuWidth - viewportPadding
+        ));
+        const top = Math.min(
+            rect.bottom + 4,
+            Math.max(viewportPadding, window.innerHeight - menuHeight - viewportPadding)
+        );
+
+        menu.style.setProperty('position', 'fixed', 'important');
+        menu.style.setProperty('top', `${top}px`, 'important');
+        menu.style.setProperty('left', `${left}px`, 'important');
+        menu.style.setProperty('right', 'auto', 'important');
+        menu.style.setProperty('bottom', 'auto', 'important');
+        menu.style.setProperty('transform', 'none', 'important');
+        menu.style.setProperty('margin', '0', 'important');
+        menu.style.setProperty('z-index', '3000', 'important');
+    };
+
+    button.addEventListener('shown.bs.dropdown', () => {
+        document.body.appendChild(menu);
+        positionPortalMenu();
+        requestAnimationFrame(positionPortalMenu);
+    });
+
+    button.addEventListener('hidden.bs.dropdown', () => {
+        if (originalNextSibling?.parentNode === originalParent) {
+            originalParent.insertBefore(menu, originalNextSibling);
+        } else {
+            originalParent.appendChild(menu);
+        }
+        if (originalStyle) menu.setAttribute('style', originalStyle);
+        else menu.removeAttribute('style');
+    });
+
+    const repositionOnViewportChange = () => positionPortalMenu();
+    window.addEventListener('resize', repositionOnViewportChange, { passive: true });
+    window.addEventListener('scroll', repositionOnViewportChange, { passive: true, capture: true });
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _conciInitColumnVisibilityPortal, { once: true });
+} else {
+    _conciInitColumnVisibilityPortal();
+}
+
+const _CONCI_CHANGE_HIGHLIGHT_MS = 120000;
+const _CONCI_UNDO_LIMIT = 15;
+const _conciUndoHistory = [];
+let _conciUndoInProgress = false;
+
+function _conciHasUndoHistory() {
+    while (_conciUndoHistory.length && !_conciUndoHistory[_conciUndoHistory.length - 1]?.cell?.isConnected) {
+        _conciUndoHistory.pop();
+    }
+    return _conciUndoHistory.length > 0;
+}
+
+function _conciRecordUndo(cell, previousValue, nextValue) {
+    if (_conciUndoInProgress || !cell || previousValue === nextValue) return;
+    _conciUndoHistory.push({ cell, previousValue, nextValue });
+    if (_conciUndoHistory.length > _CONCI_UNDO_LIMIT) _conciUndoHistory.splice(0, _conciUndoHistory.length - _CONCI_UNDO_LIMIT);
+    _conciRefreshEditToolbar();
+}
+
+function _conciUndoLastChange() {
+    if (!_conciEditMode || !_conciCanCurrentUserEdit()) return;
+    while (_conciUndoHistory.length) {
+        const change = _conciUndoHistory.pop();
+        const cell = change?.cell;
+        if (!cell?.isConnected || cell.dataset.conciReadonly === '1') continue;
+        const currentValue = _conciNormalizeEditableCellText(
+            cell.dataset.pendingRaw !== undefined ? cell.dataset.pendingRaw : (cell.dataset.raw || cell.textContent)
+        );
+        if (currentValue !== change.nextValue) continue;
+        _conciUndoInProgress = true;
+        try {
+            _conciCommitCellRaw(cell, change.previousValue, false, change.previousValue);
+        } finally {
+            _conciUndoInProgress = false;
+        }
+        break;
+    }
+    _conciRefreshEditToolbar();
+}
+
+function _conciHideChangeTip() {
+    const tip = document.getElementById('conci-change-tip');
+    if (tip) tip.style.display = 'none';
+}
+
+function _conciShowChangeTip(cell) {
+    const previousValue = cell?.getAttribute('data-conci-previous-value');
+    if (previousValue === null || previousValue === undefined) return;
+
+    let tip = document.getElementById('conci-change-tip');
+    if (!tip) {
+        tip = document.createElement('div');
+        tip.id = 'conci-change-tip';
+        document.body.appendChild(tip);
+    }
+    tip.innerHTML = '';
+    const title = document.createElement('div');
+    title.className = 'conci-change-tip-title';
+    title.textContent = 'Valor anterior';
+    const value = document.createElement('div');
+    value.className = 'conci-change-tip-value';
+    value.textContent = previousValue === '' ? '(vacío)' : previousValue;
+    tip.appendChild(title);
+    tip.appendChild(value);
+
+    const rect = cell.getBoundingClientRect();
+    tip.style.display = 'block';
+    const width = tip.offsetWidth || 220;
+    let left = rect.left + (rect.width / 2) - (width / 2);
+    left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+    let top = rect.bottom + 6;
+    if (top + (tip.offsetHeight || 60) > window.innerHeight) top = rect.top - (tip.offsetHeight || 60) - 6;
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
+}
+
+function _conciBindChangeTip(cell) {
+    if (!cell || cell.dataset.conciChangeTipBound === '1') return;
+    cell.dataset.conciChangeTipBound = '1';
+    cell.addEventListener('mouseenter', () => _conciShowChangeTip(cell));
+    cell.addEventListener('mouseleave', _conciHideChangeTip);
+}
+
+function _conciMarkCellChanged(cell, previousValue) {
+    if (!cell) return;
+    if (typeof cell._conciChangeCleanup === 'function') cell._conciChangeCleanup();
+
+    const savedStyle = ['background', 'color', 'transition'].map(property => ({
+        property,
+        value: cell.style.getPropertyValue(property),
+        priority: cell.style.getPropertyPriority(property)
+    }));
+    cell.setAttribute('data-conci-previous-value', previousValue == null ? '' : String(previousValue));
+    _conciBindChangeTip(cell);
+    cell.classList.add('conci-cell-changed');
+
+    // Se pinta primero azul y, tras dos frames, inicia el degradado azul→verde.
+    cell.style.setProperty('transition', 'none', 'important');
+    cell.style.setProperty('background', '#084298', 'important');
+    cell.style.setProperty('color', '#fff', 'important');
+    void cell.offsetWidth;
+
+    const cleanup = () => {
+        cell.classList.remove('conci-cell-changed');
+        cell.removeAttribute('data-conci-previous-value');
+        clearTimeout(cell._conciChangeTimer);
+        clearTimeout(cell._conciChangeGreenTimer);
+        cell._conciChangeTimer = null;
+        cell._conciChangeGreenTimer = null;
+        cell._conciChangeCleanup = null;
+        savedStyle.forEach(({ property, value, priority }) => {
+            if (value) cell.style.setProperty(property, value, priority);
+            else cell.style.removeProperty(property);
+        });
+        _conciHideChangeTip();
+    };
+    const paintGreen = () => {
+        if (!cell.classList.contains('conci-cell-changed')) return;
+        cell.style.setProperty('transition', 'background 120s linear, color 120s linear', 'important');
+        cell.style.setProperty('background', '#198754', 'important');
+    };
+    const scheduleGreen = () => {
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(paintGreen);
+        else cell._conciChangeGreenTimer = setTimeout(paintGreen, 16);
+    };
+
+    cell._conciChangeCleanup = cleanup;
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(scheduleGreen);
+    else cell._conciChangeGreenTimer = setTimeout(scheduleGreen, 16);
+    cell._conciChangeTimer = setTimeout(cleanup, _CONCI_CHANGE_HIGHLIGHT_MS);
+}
+function _conciGetDirtyCellChanges(tr) {
+    if (!tr) return [];
+    return Array.from(tr.querySelectorAll('td[data-col][data-dirty="1"]')).map(cell => ({
+        cell,
+        column: cell.dataset.col || '',
+        previousValue: _conciNormalizeEditableCellText(cell.dataset.origRaw || '')
+    }));
+}
+
+function _conciMarkSavedCellChanges(changes, savedColumns) {
+    const allowed = savedColumns instanceof Set ? savedColumns : null;
+    (changes || []).forEach(change => {
+        if (!change?.cell || (allowed && !allowed.has(change.column))) return;
+        _conciMarkCellChanged(change.cell, change.previousValue);
+    });
+}
 // Raw-data cache: avoids re-fetching the (potentially large) supabase tables
 // every time the user changes year/month/day. Only the slicing is re-applied.
 const _CONCI_RAW_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -17611,10 +18056,12 @@ function _conciRefreshEditToolbar() {
     const btnEdit = document.getElementById('btn-conci-edit-mode');
     const btnSave = document.getElementById('btn-conci-save-mode');
     const btnCancel = document.getElementById('btn-conci-cancel-mode');
+    const btnUndo = document.getElementById('btn-conci-undo-mode');
     const btnAdd = document.getElementById('btn-conci-add-row');
     const btnAirlineColors = document.getElementById('btn-conci-airline-colors');
     const btnMatriculaCatalog = document.getElementById('btn-conci-matricula-catalog');
     const btnRefresh = document.getElementById('btn-conci-refresh');
+    const btnImport = document.getElementById('btn-conci-import-file');
     const yearSel = document.getElementById('filter-conci-manifiestos-year');
     const monthSel = document.getElementById('filter-conci-manifiestos-month');
     const daySel = document.getElementById('filter-conci-manifiestos-day');
@@ -17632,6 +18079,11 @@ function _conciRefreshEditToolbar() {
         btnCancel.classList.toggle('d-none', !canEdit || !_conciEditMode);
         btnCancel.disabled = !canEdit;
     }
+    if (btnUndo) {
+        const canUndo = _conciEditMode && _conciHasUndoHistory();
+        btnUndo.classList.toggle('d-none', !canEdit || !_conciEditMode);
+        btnUndo.disabled = !canUndo;
+    }
     if (btnAdd) {
         btnAdd.classList.toggle('d-none', !canEdit || !_conciEditMode);
         btnAdd.disabled = !canEdit || !_conciEditMode;
@@ -17643,6 +18095,11 @@ function _conciRefreshEditToolbar() {
     if (btnMatriculaCatalog) {
         btnMatriculaCatalog.classList.toggle('d-none', !canEdit);
         btnMatriculaCatalog.disabled = !canEdit;
+    }
+
+    if (btnImport) {
+        btnImport.classList.toggle('d-none', !canEdit);
+        btnImport.disabled = !canEdit;
     }
 
     const controlsLocked = _conciEditMode;
@@ -17715,20 +18172,65 @@ async function _ensureIataCityMap() {
     }
 }
 
-// Determina si una operación es Nacional o Internacional a partir del código
-// de origen/destino (IATA). Devuelve 'Nacional', 'Internacional' o '' si no se
-// puede determinar. AIFA está en México, por lo que la operación es Nacional
-// cuando el otro extremo del vuelo también está en México.
-function _conciOperacionNacInt(code) {
-    const k = String(code || '').trim().toUpperCase();
-    if (!k) return '';
-    // Fallback por prefijo ICAO mexicano (MM…) cuando el código es de 4 letras.
-    if (k.length === 4 && /^MM/.test(k)) return 'Nacional';
-    const country = window._iataToCountry ? window._iataToCountry(k) : '';
-    if (!country) return '';
-    return /^m[eé]xico$/i.test(country.trim()) ? 'Nacional' : 'Internacional';
+// Países por IATA provenientes de public.catalogo_aeropuertos. Se conserva en
+// memoria durante la sesión y se usa antes que el CSV local para clasificar rutas.
+let _conciAirportCountryByIata = new Map();
+let _conciAirportCatalogByIata = new Map();
+let _conciAirportCatalogPromise = null;
+
+async function _ensureConciAirportCatalog(client) {
+    if (_conciAirportCountryByIata.size) return _conciAirportCountryByIata;
+    if (_conciAirportCatalogPromise) return _conciAirportCatalogPromise;
+
+    _conciAirportCatalogPromise = (async () => {
+        try {
+            let activeClient = client || window.supabaseClient;
+            if (!activeClient && window.ensureSupabaseClient) activeClient = await window.ensureSupabaseClient();
+            if (!activeClient) return _conciAirportCountryByIata;
+            const { data, error } = await _concifetchAllRows(activeClient, 'catalogo_aeropuertos', { batchSize: 5000 });
+            if (error) throw error;
+            (data || []).forEach(row => {
+                const iata = String(row?.iata || '').trim().toUpperCase();
+                const pais = String(row?.pais || '').trim();
+                if (!iata) return;
+                if (pais) _conciAirportCountryByIata.set(iata, pais);
+                _conciAirportCatalogByIata.set(iata, {
+                    iata,
+                    ciudad: String(row?.ciudad || '').trim(),
+                    estado: String(row?.estado || '').trim(),
+                    pais,
+                    nombre: String(row?.nombre_aeropuerto || '').trim(),
+                    orden: Number(row?.orden_id)
+                });
+            });
+        } catch (error) {
+            // La tabla sigue operando con el catálogo CSV si el catálogo remoto
+            // no está disponible para la sesión actual.
+            console.warn('[Conciliación] No se pudo cargar catalogo_aeropuertos:', error);
+        } finally {
+            _conciAirportCatalogPromise = null;
+        }
+        return _conciAirportCountryByIata;
+    })();
+    return _conciAirportCatalogPromise;
 }
 
+// Determina si una operación es Nacional o Internacional a partir del IATA del
+// otro extremo de la ruta. México se obtiene prioritariamente de catalogo_aeropuertos.
+function _conciOperacionNacInt(code) {
+    const iata = String(code || '').trim().toUpperCase();
+    if (!iata) return '';
+    if (iata.length === 4 && /^MM/.test(iata)) return 'Nacional';
+    const country = _conciAirportCountryByIata.get(iata)
+        || (window._iataToCountry ? window._iataToCountry(iata) : '');
+    if (!country) return '';
+    const normalizedCountry = String(country)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
+    return normalizedCountry === 'mexico' ? 'Nacional' : 'Internacional';
+}
 // Fetch all rows from a Supabase table (paginated)
 async function _concifetchAllRows(client, tableName, options = {}) {
     let allRows = [];
@@ -18741,6 +19243,7 @@ async function loadConciliacionManifiestos(options = {}) {
         // Ensure airport-city map and airline catalog are available before rendering
         await Promise.all([
             _ensureIataCityMap(),
+            _ensureConciAirportCatalog(client),
             _ensureConciAirlineCatalog(),
             _ensureConciAirlineOverrides(),
             _ensureConciMatriculaCatalog(),
@@ -19391,6 +19894,332 @@ async function _conciExportToExcel(kind) {
     saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fname);
 }
 window.conciExportExcel = _conciExportToExcel;
+// ─── Importación de archivos para Conciliación Manifiestos ───────────────────
+// Cada manifiesto se identifica por Fecha + Tipo de manifiesto + Número de vuelo.
+// Esa llave permite sustituir una carga previa sin añadir filas duplicadas.
+const _CONCI_IMPORT_TABLE = 'Conciliación Manifiestos';
+const _CONCI_IMPORT_FALLBACK_COLUMNS = [
+    'CIERRE SUBSECRETARIA', 'MES', 'FECHA', 'TIPO DE MANIFIESTO', 'AEROLINEA',
+    'TIPO DE OPERACIÓN', 'AERONAVE', 'MATRÍCULA', 'ESTATUS MATRÍCULA', '# DE VUELO',
+    'DESTINO / ORIGEN', 'SLOT ASIGNADO', 'SLOT COORDINADO',
+    'HR. DE INICIO O TERMINO DE PERNOCTA', 'HR. DE EMBARQUE O DESEMBARQUE',
+    'HR. DE OPERACIÓN', 'HR. MÁXIMA DE ENTREGA', 'HR. DE RECEPCIÓN',
+    'HRS. CUMPLIDAS', 'PUNTUALIDAD / CANCELACIÓN', 'TOTAL PAX', 'DIPLOMATICOS',
+    'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS',
+    'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE EQUIPAJE', 'KGS. DE CARGA',
+    'CORREO', 'DEMORA +- 15 MIN.', 'CÓDIGO DEMORA', 'OBSERVACIONES', 'CAPTURÓ'
+];
+const _CONCI_IMPORT_IGNORED_COLUMNS = new Set([
+    'id', 'created_at', 'updated_at', '_fuente', '_ispax', '_validadoitinerario',
+    '_validadoporitinerario', '_concivueloid', '_concivuelodireccion'
+]);
+const _CONCI_IMPORT_HEADER_ALIASES = {
+    datos_subsecretaria: 'cierre_subsecretaria',
+    hrs_cumplidas: 'hrs_cumplidas',
+    hr_cumplidas: 'hrs_cumplidas',
+    puntualidad: 'puntualidad_cancelacion',
+    motivo: 'observaciones',
+    codigo: 'codigo_demora',
+    transito: 'transitos',
+    demora_15_min: 'demora_15_min',
+    demora_15_min_: 'demora_15_min'
+};
+
+function _conciImportNormalizeHeader(value) {
+    return String(value == null ? '' : value)
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+}
+
+function _conciImportValue(value) {
+    if (value === null || value === undefined) return '';
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return `${String(value.getDate()).padStart(2, '0')}/${String(value.getMonth() + 1).padStart(2, '0')}/${value.getFullYear()}`;
+    }
+    return String(value).replace(/\u00a0/g, ' ').trim();
+}
+
+function _conciImportParseDelimitedLine(line, delimiter) {
+    const out = [];
+    let current = '';
+    let quoted = false;
+    for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+            if (quoted && line[i + 1] === '"') {
+                current += '"';
+                i++;
+            } else {
+                quoted = !quoted;
+            }
+        } else if (ch === delimiter && !quoted) {
+            out.push(current);
+            current = '';
+        } else {
+            current += ch;
+        }
+    }
+    out.push(current);
+    return out;
+}
+
+function _conciImportDetectDelimiter(headerLine) {
+    const candidates = [',', ';', '\t'];
+    return candidates.reduce((best, delimiter) => {
+        const count = _conciImportParseDelimitedLine(headerLine, delimiter).length;
+        return count > best.count ? { delimiter, count } : best;
+    }, { delimiter: ',', count: 1 }).delimiter;
+}
+
+async function _conciReadImportRows(file) {
+    const name = String(file?.name || 'archivo').trim();
+    if (!file) throw new Error('Selecciona un archivo para importar.');
+
+    if (/\.csv$/i.test(name) || /text\/csv/i.test(String(file.type || ''))) {
+        const text = (await file.text()).replace(/^\uFEFF/, '');
+        const lines = text.split(/\r?\n/).filter(line => String(line).trim() !== '');
+        if (lines.length < 2) throw new Error('El CSV no contiene encabezados y registros.');
+        const delimiter = _conciImportDetectDelimiter(lines[0]);
+        return {
+            sheetName: 'CSV',
+            headers: _conciImportParseDelimitedLine(lines[0], delimiter),
+            rows: lines.slice(1).map(line => _conciImportParseDelimitedLine(line, delimiter))
+        };
+    }
+
+    if (!/\.(xlsx|xls)$/i.test(name)) {
+        throw new Error('Formato no compatible. Selecciona un archivo .xlsx, .xls o .csv.');
+    }
+    if (!window.XLSX) throw new Error('La librería de Excel aún no está disponible. Recarga la página e inténtalo de nuevo.');
+
+    const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false });
+    let fallback = null;
+    for (const sheetName of workbook.SheetNames || []) {
+        const sheet = workbook.Sheets[sheetName];
+        if (!sheet) continue;
+        const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+        const nonEmptyRows = matrix.filter(row => Array.isArray(row) && row.some(value => _conciImportValue(value) !== ''));
+        if (nonEmptyRows.length < 2) continue;
+        const headers = nonEmptyRows[0];
+        const headerKeys = headers.map(_conciImportNormalizeHeader);
+        const appearsToBeManifest = headerKeys.some(key => key === 'fecha')
+            && headerKeys.some(key => key.includes('vuelo') || key.includes('flight'));
+        const candidate = { sheetName, headers, rows: nonEmptyRows.slice(1) };
+        if (appearsToBeManifest) return candidate;
+        if (!fallback) fallback = candidate;
+    }
+    if (!fallback) throw new Error('No se encontró una hoja con encabezados y registros.');
+    return fallback;
+}
+
+function _conciImportBuildColumnMap(headers, schemaColumns) {
+    const destinationByKey = new Map();
+    (schemaColumns || []).forEach(column => {
+        const key = _conciImportNormalizeHeader(column);
+        if (key && !_CONCI_IMPORT_IGNORED_COLUMNS.has(key)) destinationByKey.set(key, column);
+    });
+
+    return (headers || []).map((header, index) => {
+        const sourceKey = _conciImportNormalizeHeader(header);
+        const aliasKey = _CONCI_IMPORT_HEADER_ALIASES[sourceKey] || sourceKey;
+        return { index, source: String(header || '').trim(), target: destinationByKey.get(aliasKey) || null };
+    }).filter(item => item.target);
+}
+
+function _conciImportFindColumn(columns, kind) {
+    const items = Array.isArray(columns) ? columns : [];
+    if (kind === 'fecha') return items.find(column => /(^|_)fecha($|_)/.test(_conciImportNormalizeHeader(column))) || null;
+    if (kind === 'tipo') return items.find(column => /tipo.*manifiest/.test(_conciImportNormalizeHeader(column))) || null;
+    if (kind === 'vuelo') return items.find(column => /(?:^|_)(?:de_)?vuelo$|flight.*(?:number|designator)?/.test(_conciImportNormalizeHeader(column))) || null;
+    return null;
+}
+
+function _conciImportNormalizeManifestType(value) {
+    const key = _conciImportNormalizeHeader(value);
+    if (/lleg|arriv|arrival/.test(key)) return 'Llegada';
+    if (/sal|dep|departure/.test(key)) return 'Salida';
+    return '';
+}
+
+function _conciImportSignature(row, columns, fallbackYear) {
+    const fecha = _conciImportValue(row?.[columns.fecha]);
+    const tipo = _conciImportNormalizeManifestType(row?.[columns.tipo]);
+    const vuelo = _conciImportValue(row?.[columns.vuelo]).toUpperCase().replace(/\s+/g, '');
+    const parts = _conciParseDateTimeParts(fecha, fallbackYear);
+    if (!parts || !Number.isFinite(parts.year) || !Number.isFinite(parts.month) || !Number.isFinite(parts.day) || !tipo || !vuelo) return null;
+    if (parts.month < 1 || parts.month > 12 || parts.day < 1 || parts.day > 31) return null;
+    const dateKey = `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
+    return `${dateKey}|${tipo.toUpperCase()}|${vuelo}`;
+}
+
+function _conciImportBuildRows(rawRows, columnMap, identityColumns, fallbackYear) {
+    const uniqueRows = [];
+    const invalidRows = [];
+    const signatures = new Set();
+    let repeatedInFile = 0;
+
+    (rawRows || []).forEach((raw, rowIndex) => {
+        const payload = {};
+        columnMap.forEach(({ index, target }) => {
+            const value = _conciImportValue(raw?.[index]);
+            if (value !== '') payload[target] = _conciPrepareValueForDatabase(target, value);
+        });
+        if (!Object.keys(payload).length) return;
+
+        const manifestType = _conciImportNormalizeManifestType(payload[identityColumns.tipo]);
+        if (manifestType) payload[identityColumns.tipo] = manifestType;
+        const signature = _conciImportSignature(payload, identityColumns, fallbackYear);
+        if (!signature) {
+            invalidRows.push(rowIndex + 2);
+            return;
+        }
+        if (signatures.has(signature)) {
+            repeatedInFile++;
+            return;
+        }
+        signatures.add(signature);
+        uniqueRows.push({ payload, signature, sourceRow: rowIndex + 2 });
+    });
+
+    return { uniqueRows, invalidRows, repeatedInFile };
+}
+
+async function _conciImportWriteRecords(client, records, existingBySignature) {
+    const updates = [];
+    const inserts = [];
+    const extraIds = [];
+
+    records.forEach(record => {
+        const matches = existingBySignature.get(record.signature) || [];
+        if (matches.length) {
+            const primary = matches[0];
+            if (primary.id === undefined || primary.id === null) {
+                throw new Error('No se pudo identificar un registro existente para sustituirlo.');
+            }
+            updates.push({ record, id: primary.id });
+            matches.slice(1).forEach(match => {
+                if (match?.id !== undefined && match?.id !== null) extraIds.push(match.id);
+            });
+        } else {
+            inserts.push({ record });
+        }
+    });
+
+    const writeBatch = async (items, isUpdate) => {
+        for (let i = 0; i < items.length; i += 20) {
+            const batch = items.slice(i, i + 20);
+            const results = await Promise.all(batch.map(async item => {
+                const result = await _conciWriteRowSafe(client, item.record.payload, isUpdate ? item.id : null);
+                if (!result.ok) throw new Error(result.error?.message || 'No se pudo guardar un registro del archivo.');
+                return result;
+            }));
+            if (results.length !== batch.length) throw new Error('No se completó la escritura del archivo.');
+        }
+    };
+
+    // Primero se actualiza/inserta; los duplicados viejos sólo se borran cuando
+    // toda la nueva carga ya quedó guardada correctamente.
+    await writeBatch(updates, true);
+    await writeBatch(inserts, false);
+
+    const idsToDelete = [...new Set(extraIds.map(String))];
+    for (let i = 0; i < idsToDelete.length; i += 200) {
+        const { error } = await client.from(_CONCI_IMPORT_TABLE).delete().in('id', idsToDelete.slice(i, i + 200));
+        if (error) throw new Error(`Se importaron los registros, pero no se pudieron limpiar duplicados previos: ${error.message}`);
+    }
+
+    return { updated: updates.length, inserted: inserts.length, removed: idsToDelete.length };
+}
+
+async function _conciImportManifiestosFile(file) {
+    if (!_conciCanCurrentUserEdit()) {
+        alert('Solo usuarios editor o admin pueden importar manifiestos.');
+        return;
+    }
+
+    const button = document.getElementById('btn-conci-import-file');
+    const defaultHtml = button?.innerHTML || '';
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Validando';
+    }
+
+    try {
+        const parsed = await _conciReadImportRows(file);
+        let client = window.supabaseClient;
+        if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
+        if (!client) throw new Error('No se pudo inicializar el cliente de Supabase.');
+
+        // Igual que el validador de la tabla origen, se consultan los registros
+        // existentes antes de escribir para detectar coincidencias reales.
+        const existingResult = await _concifetchAllRows(client, _CONCI_IMPORT_TABLE, {
+            batchSize: 5000,
+            orderBy: [{ column: 'id', ascending: true }]
+        });
+        if (existingResult.error) throw new Error(`No se pudieron verificar duplicados: ${existingResult.error.message}`);
+        const existingRows = existingResult.data || [];
+        const schemaColumns = existingRows.length
+            ? Object.keys(existingRows[0])
+            : _CONCI_IMPORT_FALLBACK_COLUMNS;
+        const columnMap = _conciImportBuildColumnMap(parsed.headers, schemaColumns);
+        if (!columnMap.length) throw new Error('Los encabezados del archivo no coinciden con los campos de Conciliación Manifiestos.');
+
+        const identityColumns = {
+            fecha: _conciImportFindColumn(schemaColumns, 'fecha'),
+            tipo: _conciImportFindColumn(schemaColumns, 'tipo'),
+            vuelo: _conciImportFindColumn(schemaColumns, 'vuelo')
+        };
+        if (!identityColumns.fecha || !identityColumns.tipo || !identityColumns.vuelo) {
+            throw new Error('No se pudo identificar la llave de duplicados (FECHA, TIPO DE MANIFIESTO y # DE VUELO).');
+        }
+
+        const fallbackYear = Number(document.getElementById('filter-conci-manifiestos-year')?.value) || new Date().getFullYear();
+        const prepared = _conciImportBuildRows(parsed.rows, columnMap, identityColumns, fallbackYear);
+        if (prepared.invalidRows.length) {
+            const sample = prepared.invalidRows.slice(0, 8).join(', ');
+            const extra = prepared.invalidRows.length > 8 ? '…' : '';
+            throw new Error(`Las filas ${sample}${extra} no tienen FECHA, TIPO DE MANIFIESTO (Llegada/Salida) y # DE VUELO válidos. Corrige el archivo para poder evitar duplicados.`);
+        }
+        if (!prepared.uniqueRows.length) throw new Error('No se encontraron registros válidos para importar.');
+
+        const existingBySignature = new Map();
+        existingRows.forEach(row => {
+            const signature = _conciImportSignature(row, identityColumns, fallbackYear);
+            if (!signature) return;
+            if (!existingBySignature.has(signature)) existingBySignature.set(signature, []);
+            existingBySignature.get(signature).push(row);
+        });
+
+        const matched = prepared.uniqueRows.filter(record => existingBySignature.has(record.signature));
+        const existingMatches = matched.reduce((sum, record) => sum + (existingBySignature.get(record.signature)?.length || 0), 0);
+        const newCount = prepared.uniqueRows.length - matched.length;
+        const repeatedNote = prepared.repeatedInFile
+            ? `\nAdemás, se descartarán ${prepared.repeatedInFile} repetido(s) dentro del mismo archivo.`
+            : '';
+        const message = matched.length
+            ? `Se detectaron ${matched.length} manifiesto(s) ya cargado(s) (${existingMatches} fila(s) existente(s)).\n\nSe sustituirán por los datos del archivo y se eliminarán las coincidencias duplicadas.\nTambién se agregarán ${newCount} manifiesto(s) nuevo(s).${repeatedNote}\n\n¿Deseas continuar?`
+            : `Se importarán ${newCount} manifiesto(s) nuevo(s) desde “${file.name}”.${repeatedNote}\n\n¿Deseas continuar?`;
+        if (!confirm(message)) return;
+
+        if (button) button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Importando';
+        const outcome = await _conciImportWriteRecords(client, prepared.uniqueRows, existingBySignature);
+        _conciRawCache = null;
+        _conciRenderCache.clear();
+        _conciRenderedKey = '';
+        _conciManifestColInfo = null;
+        await loadConciliacionManifiestos({ forceRefresh: true });
+        alert(`Importación terminada: ${outcome.inserted} nuevo(s), ${outcome.updated} sustituido(s)${outcome.removed ? ` y ${outcome.removed} duplicado(s) anterior(es) eliminado(s)` : ''}.`);
+    } catch (error) {
+        console.error('[Conciliación] error al importar manifiestos:', error);
+        alert(`No se importó el archivo: ${error.message || error}`);
+    } finally {
+        if (button) {
+            button.innerHTML = defaultHtml;
+            _conciRefreshEditToolbar();
+        }
+    }
+}
 
 // ── KPI Summary strip para la pestaña Manifiestos ─────────────────────────────
 // Cuenta TODAS las filas (manifiestos capturados + vuelos del itinerario).
@@ -19582,6 +20411,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     // Display columns: hide the internal marker columns
     const displayCols = (columns || (data.length ? Object.keys(data[0]) : [])).filter(c => !['_fuente', '_isPax', '_validado_itinerario', '_validado_por_itinerario', 'id', 'Año', 'Mes', 'Día'].includes(c));
     const showRowActions = _conciCanCurrentUserEdit();
+    _conciRenderColumnVisibilityMenu(displayCols);
 
     // Detect semantic columns for smart city-name display in routing/origen cell
     const _tipoCol    = displayCols.find(c => /tipo.*(manif)/i.test(c)) || null;
@@ -19616,6 +20446,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     displayCols.forEach(c => {
         const th = document.createElement('th');
         th.className = 'text-nowrap conci-th';
+        th.dataset.conciColumnKey = c;
         const thInner = document.createElement('div');
         thInner.className = 'conci-th-inner';
         const thLabel = document.createElement('span');
@@ -19665,6 +20496,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     displayCols.forEach(c => {
         const thF = document.createElement('th');
         thF.className = 'conci-th-filter';
+        thF.dataset.conciColumnKey = c;
         const inp = document.createElement('input');
         inp.type = 'text';
         inp.className = 'form-control form-control-sm conci-col-filter';
@@ -19684,6 +20516,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         trFilter.appendChild(thFAct);
     }
     thead.appendChild(trFilter);
+    _conciApplyColumnVisibility();
 
     // Delegar eventos de escritura en la fila de filtros (bind único por render).
     if (!thead.dataset.conciColFilterBound) {
@@ -19832,6 +20665,8 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                 const meta = colMeta[ci];
                 const td = document.createElement('td');
                 td.className = 'conci-cell';
+                td.dataset.conciColumnKey = c;
+                if (_conciHiddenColumns.has(c)) td.classList.add('d-none');
                 td.dataset.col = c;
                 const val = row[c];
                 const rawStr = String(val !== null && val !== undefined ? val : '').trim();
@@ -19865,30 +20700,15 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                     const city = code ? iataToCity(code) : rawStr;
                     const shown = city || rawStr;
                     td.textContent = shown;
+                    td.dataset.routeRaw = rawStr;
                     td.dataset.raw = shown;
                     if (rawStr && rawStr.toUpperCase() !== String(shown).toUpperCase()) td.title = rawStr;
                 } else if (meta.isOptype) {
                     const routingRaw = _routingCol ? String(row[_routingCol] || '') : '';
                     const tipoRaw = _tipoCol ? String(row[_tipoCol] || '') : '';
-                    // Conserva una clasificación manual guardada (Nacional /
-                    // Internacional); sólo calcula automáticamente cuando el
-                    // valor almacenado es un código de servicio u otro texto.
                     const storedOptype = String(row[c] || '').trim();
-                    const manualOptype = /^(nacional|internacional)$/i.test(storedOptype)
-                        ? storedOptype.charAt(0).toUpperCase() + storedOptype.slice(1).toLowerCase()
-                        : '';
-                    const op = manualOptype || resolveOptype(routingRaw, tipoRaw);
-                    if (op) {
-                        const isNac = op === 'Nacional';
-                        const badge = document.createElement('span');
-                        badge.style.cssText = `display:inline-block;padding:2px 10px;border-radius:999px;font-size:0.72rem;font-weight:700;line-height:1.2;border:1px solid ${isNac ? '#8bc34a' : '#64b5f6'};background:${isNac ? '#e8f5e9' : '#e3f2fd'};color:${isNac ? '#2e7d32' : '#1565c0'};`;
-                        badge.innerHTML = `<i class="fas ${isNac ? 'fa-flag' : 'fa-globe-americas'} me-1"></i>${op}`;
-                        td.appendChild(badge);
-                        td.dataset.raw = op;
-                    } else {
-                        td.textContent = '';
-                        td.dataset.raw = '';
-                    }
+                    const op = _conciNormalizeOperationType(storedOptype) || resolveOptype(routingRaw, tipoRaw);
+                    _conciRenderOperationTypeCell(td, op);
                 } else if (meta.isHrsCumplidas) {
                     const opRaw = _hrOperacionCol ? row[_hrOperacionCol] : '';
                     const recRaw = _hrRecepcionCol ? row[_hrRecepcionCol] : '';
@@ -20075,7 +20895,7 @@ function _conciEnsureEditStyles() {
     style.textContent = `
         #table-conci-manifiestos.conci-edit-mode td[data-col] {
             cursor: text;
-            background: #fffef2 !important;
+
         }
         #table-conci-manifiestos.conci-edit-mode td[data-conci-readonly="1"] {
             cursor: default;
@@ -20196,15 +21016,310 @@ function _conciIsMatriculaStatusColumn(col) {
     return /estatus.*matr[ií]cula|status.*matr[ií]cula/i.test(String(col || ''));
 }
 
+function _conciNormalizedColumnName(column) {
+    return String(column || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+function _conciIsProtectedEditColumn(column) {
+    const key = _conciNormalizedColumnName(column);
+    return key === 'mes' || key === 'fecha';
+}
+
+function _conciIsManifestTypeColumn(column) {
+    const key = _conciNormalizedColumnName(column);
+    return /^tipo(?: de)? manifiesto$/.test(key);
+}
+
+function _conciIsRoutingColumn(column) {
+    const key = _conciNormalizedColumnName(column);
+    return key === 'destino / origen' || key === 'destino/origen' || key === 'routing'
+        || /destino.*origen|origen.*destino/.test(key);
+}
+
+function _conciNormalizeManifestType(value) {
+    const key = _conciNormalizedColumnName(value);
+    if (/lleg|arr/.test(key)) return 'Llegada';
+    if (/sal|dep/.test(key)) return 'Salida';
+    return '';
+}
+
+function _conciRoutingEndpointCode(routingRaw, manifestType) {
+    const parts = String(routingRaw || '').toUpperCase().split(/[-/]+/).map(value => value.trim()).filter(Boolean);
+    if (!parts.length) return '';
+    return _conciNormalizeManifestType(manifestType) === 'Llegada'
+        ? parts[0]
+        : parts[parts.length - 1];
+}
+
+function _conciResolveOperationTypeFromRoute(routingRaw, manifestType) {
+    return _conciOperacionNacInt(_conciRoutingEndpointCode(routingRaw, manifestType));
+}
+function _conciCountryIsMexico(country) {
+    return String(country || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase() === 'mexico';
+}
+
+function _conciAirportOptionsForOperation(operationType) {
+    const normalizedOperation = _conciNormalizeOperationType(operationType);
+    return Array.from(_conciAirportCatalogByIata.values())
+        .filter(airport => {
+            if (normalizedOperation === 'Nacional') return _conciCountryIsMexico(airport.pais);
+            if (normalizedOperation === 'Internacional') return !_conciCountryIsMexico(airport.pais);
+            return true;
+        })
+        .sort((a, b) => {
+            const aOrder = Number.isFinite(a.orden) ? a.orden : Number.MAX_SAFE_INTEGER;
+            const bOrder = Number.isFinite(b.orden) ? b.orden : Number.MAX_SAFE_INTEGER;
+            if (aOrder !== bOrder) return aOrder - bOrder;
+            return `${a.ciudad} ${a.iata}`.localeCompare(`${b.ciudad} ${b.iata}`, 'es', { sensitivity: 'base' });
+        });
+}
+
+function _conciAirportOptionLabel(airport) {
+    const details = [airport?.ciudad, airport?.estado, airport?.pais].filter(Boolean);
+    const display = details.join(', ') || airport?.nombre || airport?.iata || '';
+    return `${airport?.iata || ''}${display ? ` — ${display}` : ''}`;
+}
+
+function _conciActivateRoutingEditor(td, currentRaw) {
+    const tr = td.closest('tr');
+    const operationCell = tr ? Array.from(tr.querySelectorAll('td[data-col]')).find(cell => _conciIsOperationTypeColumn(cell.dataset.col)) : null;
+    const operationType = _conciNormalizeOperationType(
+        operationCell?.dataset.pendingRaw ?? operationCell?.dataset.raw ?? operationCell?.textContent
+    );
+    const airports = _conciAirportOptionsForOperation(operationType);
+    const select = document.createElement('select');
+    select.className = 'form-select form-select-sm conci-cell-input conci-routing-input';
+    const fallbackRaw = _conciNormalizeEditableCellText(
+        td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.routeRaw ?? td.dataset.raw ?? '')
+    );
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = operationType
+        ? `Selecciona aeropuerto ${operationType.toLowerCase()}`
+        : 'Selecciona aeropuerto';
+    placeholder.disabled = true;
+    placeholder.hidden = true;
+    select.appendChild(placeholder);
+
+    const currentOptionValue = _conciNormalizeEditableCellText(currentRaw);
+    if (currentOptionValue && !airports.some(airport => airport.iata === currentOptionValue.toUpperCase())) {
+        const currentOption = document.createElement('option');
+        currentOption.value = currentOptionValue;
+        currentOption.textContent = `${currentOptionValue} (actual)`;
+        select.appendChild(currentOption);
+    }
+    airports.forEach(airport => {
+        const option = document.createElement('option');
+        option.value = airport.iata;
+        option.textContent = _conciAirportOptionLabel(airport);
+        select.appendChild(option);
+    });
+    select.value = currentOptionValue;
+
+    td.classList.add('conci-cell-active');
+    td.textContent = '';
+    td.appendChild(select);
+    let closed = false;
+    const closeEditor = (accept, move) => {
+        if (closed) return;
+        closed = true;
+        td._conciCloseEditor = null;
+        const selected = _conciNormalizeEditableCellText(select.value);
+        _conciCommitCellRaw(td, accept && selected ? selected : fallbackRaw, move, selected || fallbackRaw);
+    };
+    td._conciCloseEditor = closeEditor;
+    select.addEventListener('change', () => closeEditor(true, false));
+    select.addEventListener('keydown', event => {
+        if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
+        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
+        else if (event.key === 'Tab') { event.preventDefault(); closeEditor(true, event.shiftKey ? 'prev' : 'next'); }
+    });
+    select.addEventListener('blur', () => closeEditor(true, false));
+    select.focus();
+}
+function _conciIsOperationTypeColumn(column) {
+    const key = _conciNormalizedColumnName(column);
+    return key === 'tipo de operacion' || key === 'tipo operacion' || key === 'service type';
+}
+
+function _conciNormalizeOperationType(value) {
+    const key = _conciNormalizedColumnName(value);
+    if (key === 'nacional') return 'Nacional';
+    if (key === 'internacional') return 'Internacional';
+    return '';
+}
+
+function _conciRenderOperationTypeCell(td, value) {
+    if (!td) return;
+    const operationType = _conciNormalizeOperationType(value);
+    td.textContent = '';
+    td.dataset.raw = operationType;
+    td.style.textAlign = 'center';
+    if (!operationType) return;
+
+    const isNational = operationType === 'Nacional';
+    const badge = document.createElement('span');
+    badge.className = 'conci-operation-type-badge';
+    badge.style.cssText = `display:inline-block;padding:2px 10px;border-radius:999px;font-size:0.72rem;font-weight:700;line-height:1.2;border:1px solid ${isNational ? '#8bc34a' : '#64b5f6'};background:${isNational ? '#e8f5e9' : '#e3f2fd'};color:${isNational ? '#2e7d32' : '#1565c0'};`;
+    badge.innerHTML = `<i class="fas ${isNational ? 'fa-flag' : 'fa-globe'} me-1"></i>${operationType}`;
+    td.appendChild(badge);
+}
+
+function _conciSyncOperationTypeForRow(tr) {
+    if (!tr) return;
+    const cells = Array.from(tr.querySelectorAll('td[data-col]'));
+    const routingCell = cells.find(cell => _conciIsRoutingColumn(cell.dataset.col));
+    const manifestCell = cells.find(cell => _conciIsManifestTypeColumn(cell.dataset.col));
+    const operationCell = cells.find(cell => _conciIsOperationTypeColumn(cell.dataset.col));
+    if (!routingCell || !manifestCell || !operationCell) return;
+
+    const routingRaw = _conciNormalizeEditableCellText(
+        routingCell.dataset.pendingRaw ?? routingCell.dataset.routeRaw ?? routingCell.dataset.raw ?? routingCell.textContent
+    );
+    const manifestType = _conciNormalizeEditableCellText(
+        manifestCell.dataset.pendingRaw ?? manifestCell.dataset.raw ?? manifestCell.textContent
+    );
+    const nextOperation = _conciResolveOperationTypeFromRoute(routingRaw, manifestType);
+    if (!nextOperation) return;
+
+    const previousOperation = _conciNormalizeEditableCellText(
+        operationCell.dataset.pendingRaw ?? operationCell.dataset.raw ?? operationCell.textContent
+    );
+    if (nextOperation === previousOperation) return;
+    if (operationCell.dataset.origRaw === undefined) operationCell.dataset.origRaw = previousOperation;
+    operationCell.dataset.pendingRaw = nextOperation;
+    operationCell.dataset.raw = nextOperation;
+    const originalOperation = _conciNormalizeEditableCellText(operationCell.dataset.origRaw);
+    if (nextOperation !== originalOperation) operationCell.dataset.dirty = '1';
+    else operationCell.removeAttribute('data-dirty');
+    operationCell.dataset.conciReadonly = '1';
+    operationCell.title = 'Campo calculado desde Destino/origen.';
+    _conciRenderOperationTypeCell(operationCell, nextOperation);
+    _conciMarkCellChanged(operationCell, previousOperation);
+    if (tr.querySelector('td[data-dirty="1"]')) tr.dataset.dirty = '1';
+    else tr.removeAttribute('data-dirty');
+}
+
+function _conciActivateManifestTypeEditor(td, currentRaw) {
+    const select = document.createElement('select');
+    select.className = 'form-select form-select-sm conci-cell-input conci-manifest-type-input';
+    const fallbackRaw = _conciNormalizeEditableCellText(
+        td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
+    );
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Selecciona';
+    placeholder.disabled = true;
+    placeholder.hidden = true;
+    select.appendChild(placeholder);
+    ['Llegada', 'Salida'].forEach(value => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+    });
+    select.value = _conciNormalizeManifestType(currentRaw);
+
+    td.classList.add('conci-cell-active');
+    td.textContent = '';
+    td.appendChild(select);
+    let closed = false;
+    const closeEditor = (accept, move) => {
+        if (closed) return;
+        closed = true;
+        td._conciCloseEditor = null;
+        const selected = _conciNormalizeManifestType(select.value);
+        _conciCommitCellRaw(td, accept && selected ? selected : fallbackRaw, move, selected || fallbackRaw);
+    };
+    td._conciCloseEditor = closeEditor;
+    select.addEventListener('change', () => closeEditor(true, false));
+    select.addEventListener('keydown', event => {
+        if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
+        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
+        else if (event.key === 'Tab') { event.preventDefault(); closeEditor(true, event.shiftKey ? 'prev' : 'next'); }
+    });
+    select.addEventListener('blur', () => closeEditor(true, false));
+    select.focus();
+}
+function _conciActivateOperationTypeEditor(td, currentRaw) {
+    const select = document.createElement('select');
+    select.className = 'form-select form-select-sm conci-cell-input conci-operation-type-input';
+    const fallbackRaw = _conciNormalizeEditableCellText(
+        td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
+    );
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Selecciona';
+    placeholder.disabled = true;
+    placeholder.hidden = true;
+    select.appendChild(placeholder);
+    ['Nacional', 'Internacional'].forEach(value => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+    });
+    select.value = _conciNormalizeOperationType(currentRaw);
+
+    td.classList.add('conci-cell-active');
+    td.textContent = '';
+    td.appendChild(select);
+
+    let closed = false;
+    const closeEditor = (accept, move) => {
+        if (closed) return;
+        closed = true;
+        td._conciCloseEditor = null;
+        const selected = _conciNormalizeOperationType(select.value);
+        const nextRaw = accept && selected ? selected : fallbackRaw;
+        _conciCommitCellRaw(td, nextRaw, move, nextRaw);
+    };
+    td._conciCloseEditor = closeEditor;
+    select.addEventListener('change', () => closeEditor(true, false));
+    select.addEventListener('keydown', event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            closeEditor(true, 'next');
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            closeEditor(false, false);
+        } else if (event.key === 'Tab') {
+            event.preventDefault();
+            closeEditor(true, event.shiftKey ? 'prev' : 'next');
+        }
+    });
+    select.addEventListener('blur', () => closeEditor(true, false));
+    select.focus();
+}
 function _conciActivateCellEditor(td) {
     if (!td || td.querySelector('.conci-cell-input, .conci-cell-dt')) return;
 
     const col = td.dataset.col || '';
-    if (_conciIsMatriculaStatusColumn(col)) return;
+    if (_conciIsMatriculaStatusColumn(col) || _conciIsProtectedEditColumn(col)) return;
     const currentRaw = _conciNormalizeEditableCellText(
         td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
     );
-
+    if (_conciIsOperationTypeColumn(col)) {
+        _conciActivateOperationTypeEditor(td, currentRaw);
+        return;
+    }
+    if (_conciIsManifestTypeColumn(col)) {
+        _conciActivateManifestTypeEditor(td, currentRaw);
+        return;
+    }
+    if (_conciIsRoutingColumn(col)) {
+        _conciActivateRoutingEditor(td, currentRaw);
+        return;
+    }
     // Editor amigable para columnas de fecha / fecha+hora: calendario + hora 24h.
     const isDateCol = _conciColIsDate(col);
     const isDateTimeCol = !isDateCol && _conciColIsDateTime(col);
@@ -20273,13 +21388,21 @@ function _conciActivateCellEditor(td) {
 // opcionalmente pasa a la siguiente celda editable.
 function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     nextRaw = _conciNormalizeEditableCellText(nextRaw);
+    const previousRaw = _conciNormalizeEditableCellText(
+        td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || td.textContent)
+    );
+    const hasOriginalValue = td.dataset.origRaw !== undefined;
+    const origRaw = hasOriginalValue
+        ? _conciNormalizeEditableCellText(td.dataset.origRaw)
+        : previousRaw;
+    if (!hasOriginalValue) td.dataset.origRaw = origRaw;
+    const didChange = nextRaw !== previousRaw;
     td.dataset.pendingRaw = nextRaw;
     td.dataset.raw = nextRaw;
+    if (_conciIsRoutingColumn(td.dataset.col)) td.dataset.routeRaw = nextRaw;
 
-    const origRaw = _conciNormalizeEditableCellText(td.dataset.origRaw || '');
     if (nextRaw !== origRaw) td.dataset.dirty = '1';
     else td.removeAttribute('data-dirty');
-
     const tr = td.closest('tr');
     if (tr) {
         const rowDirty = !!tr.querySelector('td[data-dirty="1"]');
@@ -20288,20 +21411,31 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     }
 
     td.classList.remove('conci-cell-active');
-    const isAirlineCol = /aerol[ií]nea|airline/i.test(String(td.dataset.col || ''));
-    const committedMeta = isAirlineCol ? _conciResolveAirlineMeta(nextRaw) : null;
-    td.textContent = isAirlineCol
-        ? String(committedMeta?.name || nextRaw).toUpperCase()
-        : (displayText !== undefined ? displayText : nextRaw);
-    _conciApplyAirlineCellPreview(td, nextRaw);
+    const normalizedColumn = _conciNormalizedColumnName(td.dataset.col);
+    const isAirlineCol = normalizedColumn.includes('aerolinea') || normalizedColumn.includes('airline');
+    const isOperationTypeCol = _conciIsOperationTypeColumn(td.dataset.col);
+    if (isOperationTypeCol) {
+        _conciRenderOperationTypeCell(td, nextRaw);
+    } else {
+        const committedMeta = isAirlineCol ? _conciResolveAirlineMeta(nextRaw) : null;
+        td.textContent = isAirlineCol
+            ? String(committedMeta?.name || nextRaw).toUpperCase()
+            : (displayText !== undefined ? displayText : nextRaw);
+        _conciApplyAirlineCellPreview(td, nextRaw);
+    }
+    if (didChange) {
+        _conciRecordUndo(td, previousRaw, nextRaw);
+        _conciMarkCellChanged(td, previousRaw);
+    } else if (typeof td._conciChangeCleanup === 'function') {
+        td._conciChangeCleanup();
+    }
     td.title = 'Clic para editar';
     _conciRefreshMatriculaValidationForRow(tr);
 
     // Guardado tipo Excel: al salir de una celda se persiste la fila sin esperar
     // un botón global de Guardar.
     if (tr && _conciEditMode) {
-        clearTimeout(tr._conciAutoSaveTimer);
-        tr._conciAutoSaveTimer = setTimeout(() => _conciAutoSaveRow(tr), 250);
+        _conciAutoSaveRow(tr);
     }
     if (move === 'next') {
         const nextCell = _conciGetNextEditableCell(td);
@@ -20473,13 +21607,21 @@ function _conciSetTableEditableState(enabled) {
         tbody.addEventListener('keydown', _conciTabNavigationHandler, true);
 
         tbody.querySelectorAll('td[data-col]').forEach(td => {
-            td.dataset.origRaw = td.dataset.raw || '';
-            td.dataset.pendingRaw = td.dataset.raw || '';
+            const isProtected = _conciIsProtectedEditColumn(td.dataset.col);
+            const isReadOnly = isProtected || _conciIsMatriculaStatusColumn(td.dataset.col);
+            const editableRaw = _conciIsRoutingColumn(td.dataset.col) ? (td.dataset.routeRaw || td.dataset.raw || '') : (td.dataset.raw || '');
+            td.dataset.origRaw = editableRaw;
+            td.dataset.pendingRaw = editableRaw;
             td.removeAttribute('data-dirty');
             td.classList.remove('conci-cell-active');
-            td.title = 'Clic para editar';
-        });
-        tbody.querySelectorAll('tr').forEach(tr => tr.removeAttribute('data-dirty'));
+            if (isReadOnly) {
+                td.dataset.conciReadonly = '1';
+                td.title = isProtected ? 'Campo bloqueado: no se puede modificar.' : 'Campo calculado: no se puede modificar.';
+            } else {
+                td.removeAttribute('data-conci-readonly');
+                td.title = 'Clic para editar';
+            }
+        });        tbody.querySelectorAll('tr').forEach(tr => tr.removeAttribute('data-dirty'));
     } else {
         if (_conciCellClickHandler) tbody.removeEventListener('click', _conciCellClickHandler);
         if (_conciTabNavigationHandler) tbody.removeEventListener('keydown', _conciTabNavigationHandler, true);
@@ -20844,7 +21986,7 @@ async function _conciWriteRowSafe(client, payload, rowId) {
             ? await req.update(currentPayload).eq('id', rowId)
             : await req.insert(currentPayload).select('id').maybeSingle();
 
-        if (!result.error) return { ok: true, adjusted: attempt > 0, data: result.data || null };
+        if (!result.error) return { ok: true, adjusted: attempt > 0, data: result.data || null, payload: currentPayload };
 
         const message = String(result.error.message || '');
         let mutated = false;
@@ -20949,8 +22091,12 @@ async function _conciSaveVirtualAirlineOverride(client, tr, value) {
 
 async function _conciAutoSaveRow(tr) {
     if (!tr || !tr.isConnected || !_conciEditMode || !_conciCanCurrentUserEdit()) return;
-    if (tr._conciAutoSavePromise) return tr._conciAutoSavePromise;
+    if (tr._conciAutoSavePromise) {
+        tr._conciAutoSaveQueued = true;
+        return tr._conciAutoSavePromise;
+    }
     const cells = Array.from(tr.querySelectorAll('td[data-col]'));
+    const savedCellValues = new Map();
     const payload = {};
     const dirtyCols = new Set();
     cells.forEach(td => {
@@ -20959,9 +22105,25 @@ async function _conciAutoSaveRow(tr) {
         const raw = _conciNormalizeEditableCellText(
             liveInput ? liveInput.value : (td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent)
         );
+        savedCellValues.set(td, raw);
         if (raw) payload[col] = _conciPrepareValueForDatabase(col, raw);
         if (td.dataset.dirty === '1') dirtyCols.add(col);
     });
+    const settleSavedCells = (savedColumns) => {
+        const allowed = savedColumns instanceof Set ? savedColumns : null;
+        cells.forEach(td => {
+            if (allowed && !allowed.has(td.dataset.col)) return;
+            const savedRaw = savedCellValues.get(td);
+            const currentRaw = _conciNormalizeEditableCellText(
+                td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent
+            );
+            if (currentRaw !== savedRaw) return;
+            td.dataset.origRaw = savedRaw;
+            td.removeAttribute('data-dirty');
+        });
+        if (tr.querySelector('td[data-dirty="1"]')) tr.dataset.dirty = '1';
+        else tr.removeAttribute('data-dirty');
+    };
     // Si la fila nueva sólo tiene el mes capturado, usa la fecha actualmente
     // seleccionada en el filtro como fecha inicial del registro.
     if (tr.dataset.conciNew === '1' && !payload.FECHA) {
@@ -20979,38 +22141,11 @@ async function _conciAutoSaveRow(tr) {
             if (!client) throw new Error('No se pudo inicializar el cliente de Supabase.');
             if (tr.dataset.rowFuente === 'Solo Vuelos') {
                 const airlineEntry = _conciAirlinePayloadEntry(payload);
-                // Sólo se tocó la aerolínea: es un ajuste ligero sobre el vuelo
-                // (no crea manifiesto — se conserva el comportamiento previo).
-                const onlyAirlineDirty = airlineEntry && dirtyCols.size > 0 &&
-                    [...dirtyCols].every(col => col === airlineEntry.key);
-                if (onlyAirlineDirty) {
-                    await _conciSaveVirtualAirlineOverride(client, tr, airlineEntry.value);
-                    _conciMarkRowSaved(tr, cells);
-                    return;
-                }
-                if (dirtyCols.size === 0) return;
-
-                // El usuario capturó datos de manifiesto reales (matrícula, PAX,
-                // slot coordinado, observaciones, etc.) para un vuelo que todavía
-                // no tenía manifiesto propio: "Conciliación Manifiestos" es una
-                // tabla distinta a la de Itinerario de Vuelos, así que esto debe
-                // crear un registro real ahí, no perderse en la fila espejo.
-                const result = await _conciWriteRowSafe(client, payload, null);
-                if (!result.ok) {
-                    tr.title = `Pendiente de guardar: ${result.error?.message || 'error de base de datos'}`;
-                    tr.classList.add('table-warning');
-                    console.warn('[Conciliación] fila (Solo Vuelos) pendiente de guardar:', result.error);
-                    return;
-                }
-                const inserted = Array.isArray(result.data) ? result.data[0] : result.data;
-                if (inserted?.id !== undefined && inserted?.id !== null) {
-                    tr.dataset.rowId = String(inserted.id);
-                    tr.dataset.rowFuente = 'Manifiestos + Vuelos';
-                    tr.classList.remove('conci-missing-manifiesto');
-                    const actionTd = tr.querySelector('td.conci-row-action-col');
-                    if (actionTd) _conciFillRowActionCell(actionTd, String(inserted.id));
-                }
-                _conciMarkRowSaved(tr, cells);
+                if (!airlineEntry) return;
+                await _conciSaveVirtualAirlineOverride(client, tr, airlineEntry.value);
+                settleSavedCells(new Set([airlineEntry.key]));
+                tr.classList.remove('table-secondary');
+                tr.removeAttribute('title');
                 return;
             }
             const rowId = String(tr.dataset.rowId || '').trim();
@@ -21019,7 +22154,7 @@ async function _conciAutoSaveRow(tr) {
                 // Conserva la fila y sus valores para que el usuario pueda corregir
                 // el campo que causó el error; nunca se elimina silenciosamente.
                 tr.title = `Pendiente de guardar: ${result.error?.message || 'error de base de datos'}`;
-                tr.classList.add('table-warning');
+                tr.classList.add('table-secondary');
                 console.warn('[Conciliación] fila pendiente de guardar:', result.error);
                 return;
             }
@@ -21035,13 +22170,23 @@ async function _conciAutoSaveRow(tr) {
                     action.dataset.rowId = String(inserted.id);
                 }
             }
-            _conciMarkRowSaved(tr, cells);
+            cells.forEach(td => {
+                const raw = _conciNormalizeEditableCellText(td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent);
+                td.dataset.origRaw = raw;
+                td.removeAttribute('data-dirty');
+            });
+            tr.removeAttribute('data-dirty');
+            tr.classList.remove('table-warning');
+            tr.removeAttribute('title');
         } catch (error) {
             tr.title = `Pendiente de guardar: ${error.message || error}`;
-            tr.classList.add('table-warning');
+            tr.classList.add('table-secondary');
             console.warn('[Conciliación] error de guardado automático:', error);
         } finally {
+            const shouldRetry = tr._conciAutoSaveQueued && !!tr.querySelector('td[data-dirty="1"]');
+            tr._conciAutoSaveQueued = false;
             tr._conciAutoSavePromise = null;
+            if (shouldRetry) _conciAutoSaveRow(tr);
         }
     })();
     return tr._conciAutoSavePromise;
@@ -21111,9 +22256,13 @@ function _conciAddBlankRow() {
         td.dataset.raw = '';
         td.dataset.origRaw = '';
         td.dataset.pendingRaw = '';
-        td.title = 'Clic para editar';
-        td.textContent = '';
-        tr.appendChild(td);
+        if (_conciIsProtectedEditColumn(col) || _conciIsMatriculaStatusColumn(col)) {
+            td.dataset.conciReadonly = '1';
+            td.title = 'Campo bloqueado: no se puede modificar.';
+        } else {
+            td.title = 'Clic para editar';
+        }
+        td.textContent = '';        tr.appendChild(td);
     });
     const actionTd = document.createElement('td');
     actionTd.className = 'conci-row-action-col text-center';
@@ -21150,6 +22299,7 @@ function _conciEnterEditMode() {
     if (_conciEditMode) return;
 
     _conciEnsureEditStyles();
+    _conciUndoHistory.length = 0;
     _conciEditMode = true;
     _conciSetTableEditableState(true);
     _conciRefreshEditToolbar();
@@ -21158,6 +22308,7 @@ function _conciEnterEditMode() {
 async function _conciCancelBulkEdits() {
     if (!_conciEditMode) return;
     _conciEditMode = false;
+    _conciUndoHistory.length = 0;
     _conciSetTableEditableState(false);
     _conciRefreshEditToolbar();
     await loadConciliacionManifiestos();
