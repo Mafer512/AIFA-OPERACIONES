@@ -1,4 +1,4 @@
-﻿#login-sky.dawn {
+#login-sky.dawn {
    background: radial-gradient(1000px 520px at 20% 14%, rgba(255, 214, 176, 0.18), rgba(255, 214, 176, 0)), linear-gradient(180deg, #ffe8c8 0%, #ffe0d4 28%, #f3ecff 58%, #c7dcff 100%);
 }
 
@@ -17551,8 +17551,8 @@ body.dark-mode #table-conci-manifiestos thead th {
 }
 body.dark-mode #table-conci-manifiestos tbody tr.conci-row-tone-0 > td { background: rgba(255,255,255,.02) !important; color: var(--text-color); }
 body.dark-mode #table-conci-manifiestos tbody tr.conci-row-tone-1 > td { background: rgba(255,255,255,.05) !important; color: var(--text-color); }
-body.dark-mode #table-conci-manifiestos tbody tr:hover > td { background: rgba(77,171,247,.16) !important; }
-body.dark-mode #table-conci-manifiestos tbody tr.conci-row-selected > td { background: rgba(243,156,18,.22) !important; box-shadow: inset 0 1px 0 rgba(255,229,138,.55), inset 0 -1px 0 rgba(255,229,138,.55); }
+body.dark-mode #table-conci-manifiestos tbody tr:hover > td { background: rgba(255,255,255,.08) !important; }
+body.dark-mode #table-conci-manifiestos tbody tr.conci-row-selected > td { background: rgba(255,255,255,.10) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.18), inset 0 -1px 0 rgba(255,255,255,.18); }
 
 /* Fast cell styles for conciliacion table (replaces per-cell inline cssText for performance) */
 #table-conci-manifiestos thead th.conci-th {
@@ -17575,6 +17575,103 @@ body.dark-mode #table-conci-manifiestos tbody tr.conci-row-selected > td { backg
    white-space: nowrap;
 }
 
+/* Selector de campos y manijas para ajustar el ancho de columnas. */
+#conci-column-visibility-menu {
+   min-width: 280px;
+   max-height: 390px;
+   overflow-y: auto;
+   z-index: 1751;
+}
+
+.conci-column-visibility-dropdown {
+   position: relative;
+   z-index: 1750;
+}
+
+#conci-column-visibility-menu .conci-column-visibility-item {
+   display: flex;
+   align-items: center;
+   gap: 8px;
+   padding: 5px 12px;
+   margin: 0;
+   cursor: pointer;
+   font-size: .8rem;
+}
+
+#conci-column-visibility-menu .conci-column-visibility-item:hover {
+   background: #f1f5f9;
+}
+
+#conci-column-visibility-menu .conci-column-visibility-item input {
+   flex: 0 0 auto;
+   margin: 0;
+}
+
+#table-conci-manifiestos thead th.conci-th .conci-col-resizer {
+   position: absolute;
+   top: 0;
+   right: -4px;
+   width: 8px;
+   height: 100%;
+   cursor: col-resize;
+   user-select: none;
+   z-index: 12;
+}
+
+#table-conci-manifiestos thead th.conci-th .conci-col-resizer:hover,
+#table-conci-manifiestos thead th.conci-th .conci-col-resizer:active {
+   background: rgba(255,255,255,.45);
+}
+
+body.conci-col-resizing,
+body.conci-col-resizing * {
+   cursor: col-resize !important;
+   user-select: none !important;
+}
+
+body.dark-mode #conci-column-visibility-menu {
+   background: #343a40;
+   border-color: #495057;
+}
+
+body.dark-mode #conci-column-visibility-menu .conci-column-visibility-item {
+   color: #dee2e6;
+}
+
+body.dark-mode #conci-column-visibility-menu .conci-column-visibility-item:hover {
+   background: #454d55;
+}
+
+/* Campos recién guardados en Conciliación Manifiestos. */
+#table-conci-manifiestos tbody td.conci-cell-changed {
+   cursor: help;
+}
+#conci-change-tip {
+   position: fixed;
+   z-index: 3100;
+   display: none;
+   max-width: 260px;
+   padding: 8px 12px;
+   border-radius: 8px;
+   background: #0d2440;
+   color: #fff;
+   font-size: .8rem;
+   line-height: 1.3;
+   box-shadow: 0 6px 18px rgba(0,0,0,.28);
+   pointer-events: none;
+   word-break: break-word;
+}
+
+#conci-change-tip .conci-change-tip-title {
+   margin-bottom: 2px;
+   font-size: .72rem;
+   font-weight: 700;
+   letter-spacing: .04em;
+   opacity: .75;
+   text-transform: uppercase;
+}
+
+#conci-change-tip .conci-change-tip-value { font-weight: 500; }
 /* Itinerario validation column */
 #table-conci-manifiestos thead th.conci-it-val-col {
    background: #1a3a52;

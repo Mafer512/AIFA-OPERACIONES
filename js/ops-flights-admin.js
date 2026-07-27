@@ -284,7 +284,7 @@ window.opsFlightsAdmin = (function () {
             var sb = window.supabaseClient;
             if (!sb) throw new Error('Supabase no disponible');
 
-            var result = await sb.from('vuelos_parte_operaciones_csv').select('*').order('id', { ascending: true });
+            var result = await sb.from('itinerario_vuelos_editable').select('*').order('id', { ascending: true });
             if (result.error) throw result.error;
 
             adminData = result.data || [];
@@ -319,7 +319,7 @@ window.opsFlightsAdmin = (function () {
         if (!ok) return;
         try {
             var sb = window.supabaseClient;
-            var result = await sb.from('vuelos_parte_operaciones_csv').delete().in('id', ids);
+            var result = await sb.from('itinerario_vuelos_editable').delete().in('id', ids);
             if (result.error) throw result.error;
             showStatus('Vuelos del dia ' + dayPrefix + ' eliminados correctamente (' + ids.length + ' registros).', 'success');
             adminData = adminData.filter(function (r) { return !ids.includes(r.id); });
@@ -401,7 +401,7 @@ window.opsFlightsAdmin = (function () {
         var ids = vuelos.map(function (r) { return r.id; });
         try {
             var sb = window.supabaseClient;
-            var result = await sb.from('vuelos_parte_operaciones_csv').delete().in('id', ids);
+            var result = await sb.from('itinerario_vuelos_editable').delete().in('id', ids);
             if (result.error) throw result.error;
             showStatus('Eliminados ' + ids.length + ' vuelo(s) del rango ' + startPfx + ' - ' + endPfx + '.', 'success');
             adminData = adminData.filter(function (r) { return !ids.includes(r.id); });
@@ -419,7 +419,7 @@ window.opsFlightsAdmin = (function () {
         if (!ok) return;
         try {
             var sb = window.supabaseClient;
-            var result = await sb.from('vuelos_parte_operaciones_csv').delete().eq('id', id);
+            var result = await sb.from('itinerario_vuelos_editable').delete().eq('id', id);
             if (result.error) throw result.error;
             adminData = adminData.filter(function (r) { return r.id !== id; });
             renderTable();
@@ -437,7 +437,7 @@ window.opsFlightsAdmin = (function () {
         if (!ok) return;
         try {
             var sb = window.supabaseClient;
-            var result = await sb.from('vuelos_parte_operaciones_csv').delete().in('id', ids);
+            var result = await sb.from('itinerario_vuelos_editable').delete().in('id', ids);
             if (result.error) throw result.error;
             adminData = adminData.filter(function (r) { return !ids.includes(r.id); });
             renderTable();
