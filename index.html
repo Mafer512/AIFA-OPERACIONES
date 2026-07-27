@@ -13442,6 +13442,43 @@ FF
                         // Columnas a ocultar de la tabla (internas)
                         const CTBL_HIDDEN_COLS = new Set(['id','created_at','foto_url','cv_url','conducta','Conducta']);
 
+                        // Algunas fuentes traen el mismo dato con nombre técnico y nombre de Excel.
+                        // Esto evita duplicados visuales sin eliminar columnas reales de Supabase.
+                        function ctblCanonCol(k) {
+                            const raw = String(k || '').trim();
+                            const n = norm(raw).replace(/[_\-.]+/g, ' ').replace(/\s+/g, ' ').trim();
+                            if (n === 'estatus') return 'estatus';
+                            if (n === 'grado academico') return 'grado_academico';
+                            if (n === 'sangre' || n === 'tipo de sangre') return 'sangre';
+                            if (n === 'no empleado' || n === 'num empleado' || n === 'numero empleado') return 'num_empleado';
+                            if (n === 'nombre') return 'nombre';
+                            return n || raw;
+                        }
+
+                        function ctblValorUtil(v) {
+                            const s = String(v ?? '').trim();
+                            if (!s) return false;
+                            return !/^(—|-|null|undefined|#n\/d)$/i.test(s);
+                        }
+
+                        function ctblDeduplicarCols(keys, rows = []) {
+                            const grupos = new Map();
+                            keys.forEach((k, idx) => {
+                                const canon = ctblCanonCol(k);
+                                if (!grupos.has(canon)) grupos.set(canon, []);
+                                grupos.get(canon).push({ key: k, idx });
+                            });
+                            return [...grupos.values()].map(cands => {
+                                if (cands.length === 1) return cands[0].key;
+                                return cands
+                                    .map(c => ({
+                                        ...c,
+                                        score: rows.reduce((acc, r) => acc + (ctblValorUtil(r?.[c.key]) ? 1 : 0), 0)
+                                    }))
+                                    .sort((a, b) => (b.score - a.score) || (a.idx - b.idx))[0].key;
+                            });
+                        }
+
                         // Columnas de texto largo que necesitan wrap
                         const CTBL_WRAP_COLS = new Set(['nombre','puesto','domicilio','comentarios','amonestaciones','profesion','grado_academico','coordinacion']);
 
@@ -13498,15 +13535,17 @@ FF
 
                             // Detectar columnas del primer registro, ordenarlas por prioridad
                             if (ctblAllData.length) {
-                                const allKeys = Object.keys(ctblAllData[0]).filter(k => !CTBL_HIDDEN_COLS.has(k));
-                                const preferred = CTBL_COL_ORDER.filter(k => allKeys.includes(k));
-                                const rest = allKeys.filter(k => !CTBL_COL_ORDER.includes(k) && !CTBL_HIDDEN_COLS.has(k));
-                                ctblCols = [...preferred, ...rest];
+                                const allKeys = ctblDeduplicarCols(Object.keys(ctblAllData[0]).filter(k => !CTBL_HIDDEN_COLS.has(k)), ctblAllData);
+                                const preferred = ctblDeduplicarCols(CTBL_COL_ORDER.filter(k => allKeys.includes(k)), ctblAllData);
+                                const preferredCanon = new Set(preferred.map(ctblCanonCol));
+                                const rest = allKeys.filter(k => !preferredCanon.has(ctblCanonCol(k)) && !CTBL_HIDDEN_COLS.has(k));
+                                ctblCols = ctblDeduplicarCols([...preferred, ...rest], ctblAllData);
                                 const estatusKey = ctblCols.find(k => /^estatus$/i.test(k));
                                 const gradoAcadKey = ctblCols.find(k => k === 'grado_academico' || /^grado\s+acad[eé]mico$/i.test(k));
                                 const sangreKey = ctblCols.find(k => k === 'sangre' || /^tipo\s+de\s+sangre$/i.test(k));
                                 const frontKeys = [estatusKey, gradoAcadKey, sangreKey].filter(Boolean);
-                                ctblCols = [...frontKeys, ...ctblCols.filter(k => !frontKeys.includes(k))];
+                                const frontCanon = new Set(frontKeys.map(ctblCanonCol));
+                                ctblCols = [...frontKeys, ...ctblCols.filter(k => !frontCanon.has(ctblCanonCol(k)))];
                                 // Columna de sort inicial: preferir num_empleado
                                 ctblSortCol = ctblCols.find(k => k === 'num_empleado' || k === 'num') || ctblCols[0] || 'nombre';
                                 ctblSortAsc = true;
