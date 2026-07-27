@@ -17185,6 +17185,7 @@ let _conciEditFallbackYear = null;   // cached for post-save formatting
 let _conciEditFechaCol     = null;   // cached fecha column name for formatting
 let _conciEditMode         = false;  // global edit mode for the whole table
 let _conciCellClickHandler = null;   // delegated click handler for edit-mode cells
+let _conciTabNavigationHandler = null; // captura Tab para navegación horizontal
 let _conciAirlineCatalogLoaded = false;
 let _conciAirlineCodeMap = new Map();
 let _conciAirlineMasterCodeMap = new Map();
@@ -20156,14 +20157,31 @@ function _conciNormalizeTimeInput(value) {
 
 function _conciGetNextEditableCell(td) {
     if (!td) return null;
+    const SEL = 'td[data-col]:not([data-conci-readonly="1"])';
     let next = td.nextElementSibling;
-    while (next && !next.dataset?.col) next = next.nextElementSibling;
+    while (next && !next.matches(SEL)) next = next.nextElementSibling;
     if (next) return next;
     let row = td.parentElement ? td.parentElement.nextElementSibling : null;
     while (row) {
-        const first = row.querySelector('td[data-col]');
+        const first = row.querySelector(SEL);
         if (first) return first;
         row = row.nextElementSibling;
+    }
+    return null;
+}
+
+function _conciGetPrevEditableCell(td) {
+    if (!td) return null;
+    const SEL = 'td[data-col]:not([data-conci-readonly="1"])';
+    let prev = td.previousElementSibling;
+    while (prev && !prev.matches(SEL)) prev = prev.previousElementSibling;
+    if (prev) return prev;
+    let row = td.parentElement ? td.parentElement.previousElementSibling : null;
+    while (row) {
+        const cells = row.querySelectorAll(SEL);
+        const last = cells.length ? cells[cells.length - 1] : null;
+        if (last) return last;
+        row = row.previousElementSibling;
     }
     return null;
 }
@@ -20225,7 +20243,7 @@ function _conciActivateCellEditor(td) {
     if (isAirlineCol) _conciApplyAirlineCellPreview(td, input.value);
 
     let closed = false;
-    const closeEditor = (accept, moveNext) => {
+    const closeEditor = (accept, move) => {
         if (closed) return;
         closed = true;
         td._conciCloseEditor = null;
@@ -20234,17 +20252,21 @@ function _conciActivateCellEditor(td) {
             td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
         );
         const nextRaw = accept ? _conciNormalizeEditableCellText(input.value) : fallbackRaw;
-        _conciCommitCellRaw(td, nextRaw, moveNext, nextRaw);
+        _conciCommitCellRaw(td, nextRaw, move, nextRaw);
     };
     td._conciCloseEditor = closeEditor;
 
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            closeEditor(true, true);
+            closeEditor(true, 'next');
         } else if (e.key === 'Escape') {
             e.preventDefault();
             closeEditor(false, false);
+        } else if (e.key === 'Tab') {
+            // Tab avanza al siguiente campo editable de la fila/tabla; Shift+Tab retrocede.
+            e.preventDefault();
+            closeEditor(true, e.shiftKey ? 'prev' : 'next');
         }
     });
     input.addEventListener('input', () => {
@@ -20260,7 +20282,7 @@ function _conciActivateCellEditor(td) {
 
 // Aplica el nuevo valor a la celda: marca dirty, actualiza fila, re-renderiza y
 // opcionalmente pasa a la siguiente celda editable.
-function _conciCommitCellRaw(td, nextRaw, moveNext, displayText) {
+function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     nextRaw = _conciNormalizeEditableCellText(nextRaw);
     td.dataset.pendingRaw = nextRaw;
     td.dataset.raw = nextRaw;
@@ -20297,9 +20319,20 @@ function _conciCommitCellRaw(td, nextRaw, moveNext, displayText) {
     // el acceso no desaparezca según la forma en que inició sesión el usuario.
     if (btnAirlineColors) btnAirlineColors.classList.toggle('d-none', !canEdit);
 
-    if (moveNext) {
+    if (move === 'next') {
         const nextCell = _conciGetNextEditableCell(td);
-        if (nextCell) _conciActivateCellEditor(nextCell);
+        if (nextCell) {
+            // Mantiene visible la siguiente celda aun cuando la tabla tenga
+            // desplazamiento horizontal y deja el cursor listo para capturar.
+            nextCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            _conciActivateCellEditor(nextCell);
+        }
+    } else if (move === 'prev') {
+        const prevCell = _conciGetPrevEditableCell(td);
+        if (prevCell) {
+            prevCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            _conciActivateCellEditor(prevCell);
+        }
     }
 }
 
@@ -20349,7 +20382,7 @@ function _conciActivateDateTimeEditor(td, { withTime, parts }) {
     };
 
     let closed = false;
-    const closeEditor = (accept, moveNext) => {
+    const closeEditor = (accept, move) => {
         if (closed) return;
         closed = true;
         td._conciCloseEditor = null;
@@ -20358,17 +20391,31 @@ function _conciActivateDateTimeEditor(td, { withTime, parts }) {
             td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
         );
         const nextRaw = accept ? buildRaw() : fallbackRaw;
-        _conciCommitCellRaw(td, nextRaw, moveNext, nextRaw);
+        _conciCommitCellRaw(td, nextRaw, move, nextRaw);
     };
     td._conciCloseEditor = closeEditor;
 
     const onKeydown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            closeEditor(true, true);
+            closeEditor(true, 'next');
         } else if (e.key === 'Escape') {
             e.preventDefault();
             closeEditor(false, false);
+        } else if (e.key === 'Tab') {
+            if (e.shiftKey) {
+                if (e.target === dateInput) {
+                    // Ya está en el primer campo de la celda: retrocede a la celda anterior.
+                    e.preventDefault();
+                    closeEditor(true, 'prev');
+                }
+                // Desde la hora, Shift+Tab regresa de forma nativa a la fecha (misma celda).
+            } else if (withTime && e.target === dateInput) {
+                // Tab nativo: de la fecha pasa a la hora dentro de la misma celda.
+            } else {
+                e.preventDefault();
+                closeEditor(true, 'next');
+            }
         }
     };
     const onBlur = (e) => {
@@ -20414,6 +20461,33 @@ function _conciSetTableEditableState(enabled) {
         }
         tbody.addEventListener('click', _conciCellClickHandler);
 
+        // Captura Tab antes de que el navegador saque el foco de la tabla.
+        // Se usa captura porque algunos controles nativos (fecha/hora) cambian
+        // el foco antes de que el listener normal de la celda se ejecute.
+        if (!_conciTabNavigationHandler) {
+            _conciTabNavigationHandler = (ev) => {
+                if (!_conciEditMode || ev.key !== 'Tab') return;
+                const input = ev.target.closest('.conci-cell-input, .conci-cell-dt input');
+                const td = input ? input.closest('td[data-col]') : null;
+                if (!td || !tbody.contains(td)) return;
+                // La celda de fecha+hora deja pasar el Tab nativo cuando va de
+                // la fecha a la hora (misma celda); no interceptar ese caso.
+                const dtWrap = input.closest('.conci-cell-dt');
+                if (dtWrap && !ev.shiftKey && input.classList.contains('conci-dt-date') && dtWrap.querySelector('.conci-dt-time')) {
+                    return;
+                }
+                if (dtWrap && ev.shiftKey && input.classList.contains('conci-dt-time')) {
+                    return;
+                }
+                ev.preventDefault();
+                ev.stopImmediatePropagation();
+                if (typeof td._conciCloseEditor === 'function') {
+                    td._conciCloseEditor(true, ev.shiftKey ? 'prev' : 'next');
+                }
+            };
+        }
+        tbody.addEventListener('keydown', _conciTabNavigationHandler, true);
+
         tbody.querySelectorAll('td[data-col]').forEach(td => {
             td.dataset.origRaw = td.dataset.raw || '';
             td.dataset.pendingRaw = td.dataset.raw || '';
@@ -20424,6 +20498,7 @@ function _conciSetTableEditableState(enabled) {
         tbody.querySelectorAll('tr').forEach(tr => tr.removeAttribute('data-dirty'));
     } else {
         if (_conciCellClickHandler) tbody.removeEventListener('click', _conciCellClickHandler);
+        if (_conciTabNavigationHandler) tbody.removeEventListener('keydown', _conciTabNavigationHandler, true);
 
         tbody.querySelectorAll('td[data-col]').forEach(td => {
             if (typeof td._conciCloseEditor === 'function') td._conciCloseEditor(true, false);

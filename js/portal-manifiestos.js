@@ -1234,11 +1234,56 @@
     window.printManifest = function(modalId) {
         const modal = document.getElementById(modalId);
         if (!modal) return;
-        const body = modal.querySelector('.print-target');
-        if (!body) { window.print(); return; }
-        // Temporarily mark this as the only visible print area
-        document.querySelectorAll('.print-target').forEach(el => el.classList.remove('active-print'));
-        body.classList.add('active-print');
+        const source = modal.querySelector('.manifest-container');
+        if (!source) { window.print(); return; }
+
+        // El modal Bootstrap limita la altura y el overflow. Para impresión se
+        // clona solamente el documento en un host independiente de la ventana.
+        document.getElementById('manifest-print-host')?.remove();
+        const host = document.createElement('div');
+        host.id = 'manifest-print-host';
+        // Las reglas visuales del formato están acotadas a .portal-manifest.
+        // La copia debe conservarla para imprimir igual que se ve en el modal.
+        host.className = 'portal-manifest';
+        const clone = source.cloneNode(true);
+        source.querySelectorAll('input, select, textarea').forEach(original => {
+            const copy = original.id ? clone.querySelector(`#${CSS.escape(original.id)}`) : null;
+            if (!copy) return;
+            if (original.tagName === 'SELECT') {
+                copy.value = original.value;
+                [...copy.options].forEach(option => { option.selected = option.value === original.value; });
+            } else if (original.type === 'checkbox' || original.type === 'radio') {
+                copy.checked = original.checked;
+            } else {
+                copy.value = original.value;
+                copy.setAttribute('value', original.value);
+                if (copy.tagName === 'TEXTAREA') copy.textContent = original.value;
+            }
+        });
+        host.appendChild(clone);
+        document.body.appendChild(host);
+
+        // Carta vertical útil: 195 × 264 mm ≈ 740 × 1,000 px CSS.
+        // Se escala proporcionalmente para mostrar el formato completo en una
+        // sola hoja, sin alterar el color ni la distribución del documento.
+        const sourceWidth = Math.ceil(source.getBoundingClientRect().width);
+        const sourceHeight = Math.ceil(source.scrollHeight);
+        // Ajuste independiente de ancho y alto para utilizar toda la hoja carta
+        // imprimible (sin dejar franjas blancas a la derecha o al final).
+        const printWidth = 816;
+        const printHeight = 1056;
+        const printScaleX = printWidth / sourceWidth;
+        const printScaleY = printHeight / sourceHeight;
+        host.style.setProperty('--print-source-width', `${sourceWidth}px`);
+        host.style.setProperty('--print-scale-x', String(printScaleX));
+        host.style.setProperty('--print-scale-y', String(printScaleY));
+        host.style.setProperty('--print-host-height', `${printHeight}px`);
+
+        const cleanup = () => {
+            host.remove();
+            window.removeEventListener('afterprint', cleanup);
+        };
+        window.addEventListener('afterprint', cleanup, { once:true });
         window.print();
     };
 
@@ -1481,17 +1526,29 @@
                             scale: 2,
                             useCORS: true,
                             logging: false,
-                            backgroundColor: prefix === 'ms' ? '#fff3b0' : '#e2fce6',
+                            backgroundColor: (prefix === 'ms' || prefix === 'msc') ? '#fff3b0' : '#e2fce6',
                             scrollX: 0,
                             scrollY: 0,
-                            height: manifestEl.scrollHeight,
-                            windowWidth: 1090,
+                            windowWidth: 1480,
                             onclone: (clonedDoc) => {
                                 // Desbloquear overflow para capturar el formulario completo
                                 clonedDoc.querySelectorAll('.modal-body').forEach(mb => {
                                     mb.style.overflow  = 'visible';
                                     mb.style.maxHeight = 'none';
                                     mb.style.height    = 'auto';
+                                });
+                                // Ensanchar únicamente la copia capturada reduce la
+                                // relación vertical del formato y permite ocupar mejor
+                                // una hoja carta sin deformar tipografías o tablas.
+                                const clonedManifest = clonedDoc.querySelector(`#${CSS.escape(modalId)} .manifest-container`);
+                                if (clonedManifest) {
+                                    clonedManifest.style.width = '1400px';
+                                    clonedManifest.style.maxWidth = '1400px';
+                                    clonedManifest.style.margin = '0 auto';
+                                }
+                                // Los controles de edición no forman parte del documento legal.
+                                clonedDoc.querySelectorAll('.d-print-none, .embark-add-row, .embark-remove-row').forEach(el => {
+                                    el.style.display = 'none';
                                 });
                                 // Reemplazar inputs/selects con spans estáticos
                                 clonedDoc.querySelectorAll('input, select, textarea').forEach(inp => {
@@ -1568,13 +1625,20 @@
                 const pdf  = new window.jspdf.jsPDF('p', 'mm', 'letter');
                 const pdfW = pdf.internal.pageSize.getWidth();
                 const pdfH = pdf.internal.pageSize.getHeight();
-                // Mantener proporción real del formulario; si es más alto que una hoja
-                // se escala para que quepa completo sin cortes.
-                const ratio = canvas.height / canvas.width;
-                const imgH  = pdfW * ratio;
+                const isSalida = /salida/i.test(String(tipo || ''));
+                const pageColor = isSalida ? [255, 243, 176] : [226, 252, 230];
+                const trimmedCanvas = trimCanvasBackgroundBottom(canvas, pageColor);
+                // El formato se adapta a todo el lienzo carta: ancho y alto útiles
+                // de la página, sin bandas laterales ni espacio sobrante inferior.
+                const imgW = pdfW;
+                const imgH = pdfH;
+                const x = 0;
+                const y = 0;
+                pdf.setFillColor(...pageColor);
+                pdf.rect(0, 0, pdfW, pdfH, 'F');
                 pdf.addImage(
-                    canvas.toDataURL('image/jpeg', 0.95),
-                    'JPEG', 0, 0, pdfW, imgH <= pdfH ? imgH : pdfH
+                    trimmedCanvas.toDataURL('image/jpeg', 0.95),
+                    'JPEG', x, y, imgW, imgH
                 );
                 const pdfBlob = pdf.output('blob');
 
@@ -1601,6 +1665,36 @@
                 console.error('portal-manifiestos _uploadCanvasToPdf:', e);
             }
         })();
+    }
+
+    function trimCanvasBackgroundBottom(canvas, backgroundRgb) {
+        try {
+            const context = canvas.getContext('2d', { willReadFrequently: true });
+            const { width, height } = canvas;
+            const pixels = context.getImageData(0, 0, width, height).data;
+            const tolerance = 14;
+            let lastContentRow = -1;
+            for (let y = height - 1; y >= 0 && lastContentRow < 0; y -= 1) {
+                for (let x = 0; x < width; x += 4) {
+                    const index = (y * width + x) * 4;
+                    const differs = Math.abs(pixels[index] - backgroundRgb[0]) > tolerance
+                        || Math.abs(pixels[index + 1] - backgroundRgb[1]) > tolerance
+                        || Math.abs(pixels[index + 2] - backgroundRgb[2]) > tolerance
+                        || pixels[index + 3] < 250;
+                    if (differs) { lastContentRow = y; break; }
+                }
+            }
+            const croppedHeight = Math.min(height, Math.max(1, lastContentRow + 4));
+            if (croppedHeight >= height - 2) return canvas;
+            const cropped = document.createElement('canvas');
+            cropped.width = width;
+            cropped.height = croppedHeight;
+            cropped.getContext('2d').drawImage(canvas, 0, 0, width, croppedHeight, 0, 0, width, croppedHeight);
+            return cropped;
+        } catch (error) {
+            console.warn('portal-manifiestos: no se pudo recortar el lienzo PDF', error);
+            return canvas;
+        }
     }
 
 })();

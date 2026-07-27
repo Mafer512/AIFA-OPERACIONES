@@ -696,11 +696,19 @@
   .airport-suggestion { width:100%; border:0; border-bottom:1px solid rgba(49,47,32,.15); background:transparent; padding:.42rem .55rem; color:#1a202c; font-size:.74rem; line-height:1.2; text-align:left; }
   .airport-suggestion:hover { background:#fff3b0; }
   .airport-suggestion small { color:#64748b; display:block; }
+  #manifest-print-host { display:none; }
   @media print {
-    .portal-manifest .manifest-container { margin:0; padding:0; border:none; box-shadow:none; }
-    body * { visibility:hidden; }
-    .modal-body.print-target, .modal-body.print-target * { visibility:visible; }
-    .modal-body.print-target { position:absolute; left:0; top:0; margin:0; padding:0; width:100%; }
+    @page { size:letter portrait; margin:0; }
+    html,body { margin:0 !important; padding:0 !important; background:#fff !important; }
+    body > *:not(#manifest-print-host) { display:none !important; }
+    #manifest-print-host { display:block !important; width:100% !important; height:var(--print-host-height, auto) !important; margin:0 !important; padding:0 !important; overflow:hidden !important; }
+    #manifest-print-host .manifest-container { width:var(--print-source-width, 100%) !important; max-width:none !important; margin:0 !important; padding:5mm !important; border-radius:0 !important; box-shadow:none !important; transform:scale(var(--print-scale-x, 1), var(--print-scale-y, 1)) !important; transform-origin:top left !important; }
+    #manifest-print-host .section-box,
+    #manifest-print-host .signature-box { break-inside:avoid; page-break-inside:avoid; }
+    #manifest-print-host .d-print-none { display:none !important; }
+    #manifest-print-host input,
+    #manifest-print-host textarea { color:#1a202c !important; -webkit-text-fill-color:#1a202c !important; opacity:1 !important; }
+    #manifest-print-host, #manifest-print-host * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
   }
 </style>
 
@@ -1188,7 +1196,7 @@
                   </tbody>
                   <tfoot><tr><th>TOTAL</th><th><input type="number" id="ms-total-adultos" class="form-control" value="0" readonly aria-label="Total adultos"></th><th><input type="number" id="ms-total-menores" class="form-control" value="0" readonly aria-label="Total menores"></th><th><input type="number" id="ms-total-infantes-estacion" class="form-control" value="0" readonly aria-label="Total infantes"></th><th><input type="number" id="ms-total-equip-kg" class="form-control" value="0" readonly aria-label="Total equipaje"></th><th><input type="number" id="ms-total-carga-kg" class="form-control" value="0" readonly aria-label="Total carga"></th><th><input type="number" id="ms-total-correo-kg" class="form-control" value="0" readonly aria-label="Total correo"></th><th class="d-print-none"></th></tr></tfoot>
                 </table>
-                <button type="button" class="embark-add-row mt-2" id="btn-ms-add-estacion"><i class="fas fa-plus me-1"></i>Agregar fila</button>
+                <button type="button" class="embark-add-row mt-2 d-print-none" id="btn-ms-add-estacion"><i class="fas fa-plus me-1"></i>Agregar fila</button>
               </div>
               <div class="col-md-5 passenger-breakdown">
                 <h6 class="section-title mb-2">No. PASAJEROS</h6>
@@ -1838,6 +1846,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="js/supabase-client.js"></script>
-<script src="js/portal-manifiestos.js?v=20260720-resguardo-v13"></script>
+<script src="js/portal-manifiestos.js?v=20260722-print-full-page-v22"></script>
 </body>
 </html>
