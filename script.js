@@ -20603,11 +20603,12 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
 
     // Precompute column metadata once instead of running regex tests per cell.
     const hasIataMap = !!window._iataToCity;
+    const hasAirportCatalog = _conciAirportCatalogByIata.size > 0;
     const colMeta = displayCols.map(c => ({
         c,
         isAirline:   c === _airlineCol,
         isMatriculaStatus: c === _matriculaStatusCol,
-        isRouting:   c === _routingCol && hasIataMap,
+        isRouting:   c === _routingCol && (hasIataMap || hasAirportCatalog),
         isOptype:    c === _optypeCol,
         isHrsCumplidas: c === _hrsCumplidasCol && !!_hrOperacionCol && !!_hrRecepcionCol,
         isPuntualidad: c === _puntualidadCol && !!_slotAsignadoCol && !!_hrOperacionCol,
@@ -20697,7 +20698,8 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                     const code = (parts.length >= 2)
                         ? (isArr ? parts[0] : parts[parts.length - 1])
                         : (parts[0] || '');
-                    const city = code ? iataToCity(code) : rawStr;
+                    const catalogCity = code ? _conciAirportStoredValue(_conciAirportCatalogByIata.get(code)) : '';
+                    const city = catalogCity || (code ? iataToCity(code) : rawStr);
                     const shown = city || rawStr;
                     td.textContent = shown;
                     td.dataset.routeRaw = rawStr;
@@ -21083,12 +21085,21 @@ function _conciAirportOptionsForOperation(operationType) {
         });
 }
 
-function _conciAirportOptionLabel(airport) {
-    const details = [airport?.ciudad, airport?.estado, airport?.pais].filter(Boolean);
-    const display = details.join(', ') || airport?.nombre || airport?.iata || '';
-    return `${airport?.iata || ''}${display ? ` — ${display}` : ''}`;
+function _conciAirportStoredValue(airport) {
+    return String(airport?.ciudad || airport?.nombre || airport?.iata || '').trim();
 }
 
+function _conciAirportOptionLabel(airport) {
+    // Destino/origen se captura con el campo Ciudad del catálogo, no con IATA.
+    return _conciAirportStoredValue(airport);
+}
+
+function _conciAirportMatchesValue(airport, value) {
+    const selected = _conciNormalizeEditableCellText(value).toUpperCase();
+    if (!selected) return false;
+    return _conciAirportStoredValue(airport).toUpperCase() === selected
+        || String(airport?.iata || '').trim().toUpperCase() === selected;
+}
 function _conciActivateRoutingEditor(td, currentRaw) {
     const tr = td.closest('tr');
     const operationCell = tr ? Array.from(tr.querySelectorAll('td[data-col]')).find(cell => _conciIsOperationTypeColumn(cell.dataset.col)) : null;
@@ -21111,19 +21122,23 @@ function _conciActivateRoutingEditor(td, currentRaw) {
     select.appendChild(placeholder);
 
     const currentOptionValue = _conciNormalizeEditableCellText(currentRaw);
-    if (currentOptionValue && !airports.some(airport => airport.iata === currentOptionValue.toUpperCase())) {
+    const currentAirport = airports.find(airport => _conciAirportMatchesValue(airport, currentOptionValue));
+    const selectedCity = currentAirport ? _conciAirportStoredValue(currentAirport) : currentOptionValue;
+    if (currentOptionValue && !currentAirport) {
         const currentOption = document.createElement('option');
         currentOption.value = currentOptionValue;
         currentOption.textContent = `${currentOptionValue} (actual)`;
         select.appendChild(currentOption);
     }
     airports.forEach(airport => {
+        const city = _conciAirportStoredValue(airport);
+        if (!city) return;
         const option = document.createElement('option');
-        option.value = airport.iata;
+        option.value = city;
         option.textContent = _conciAirportOptionLabel(airport);
         select.appendChild(option);
     });
-    select.value = currentOptionValue;
+    select.value = selectedCity;
 
     td.classList.add('conci-cell-active');
     td.textContent = '';
