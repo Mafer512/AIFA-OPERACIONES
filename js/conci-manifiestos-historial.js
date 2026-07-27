@@ -145,13 +145,14 @@
         }
     }
 
-    function snapshotTable(json) {
-        const entries = Object.entries(json || {})
-            .filter(([k, v]) => k !== 'id' && v !== null && v !== '' && v !== undefined)
-            .slice(0, 40);
-        if (!entries.length) return '<span class="text-muted small">Sin datos capturados.</span>';
+    // Tabla EXHAUSTIVA (incluye columnas vacías/sin capturar) — la opción
+    // "ver registro completo" para quien quiera revisar todo el registro,
+    // separada de la vista rápida con los campos que sí tienen valor.
+    function snapshotTableFull(json) {
+        const entries = Object.entries(json || {}).filter(([k]) => k !== 'id');
+        if (!entries.length) return '<span class="text-muted small">Sin datos.</span>';
         return `<div class="conci-hist-snapshot"><table class="table table-sm mb-0">${
-            entries.map(([k, v]) => `<tr><th class="text-nowrap">${esc(k)}</th><td>${esc(String(v))}</td></tr>`).join('')
+            entries.map(([k, v]) => `<tr><th class="text-nowrap">${esc(k)}</th><td>${(v === null || v === '' || v === undefined) ? '<span class="conci-hist-empty">(vacío)</span>' : esc(String(v))}</td></tr>`).join('')
         }</table></div>`;
     }
 
@@ -260,6 +261,44 @@
         </div>`;
     }
 
+    // Campos con valor de un snapshot (INSERT/DELETE), listos para mostrar
+    // como chips directamente en la tarjeta — visibles de entrada, sin tener
+    // que abrir nada, igual que los campos "Modificado" de un UPDATE.
+    function snapshotFilledFields(json) {
+        return Object.entries(json || {})
+            .filter(([k, v]) => k !== 'id' && v !== null && v !== '' && v !== undefined)
+            .map(([columna, valor]) => ({ columna, valor }));
+    }
+
+    function renderSnapshotChip(kind, f) {
+        const cls = kind === 'nuevo' ? 'conci-hist-chip-nuevo' : 'conci-hist-chip-vaciado';
+        const valCls = kind === 'nuevo' ? 'conci-hist-after' : 'conci-hist-before';
+        return `<div class="conci-hist-chip ${cls}">
+            <span class="conci-hist-chip-field">${esc(f.columna)}</span>
+            <span class="conci-hist-chip-val ${valCls}">${esc(f.valor)}</span>
+        </div>`;
+    }
+
+    function renderSnapshotBody(ev) {
+        const isInsert = ev.operacion === 'INSERT';
+        const fields = snapshotFilledFields(ev.snapshot);
+        const kind = isInsert ? 'nuevo' : 'vaciado';
+        const k = FIELD_KIND[kind];
+        const chips = fields.length
+            ? `<div class="conci-hist-group conci-hist-group-${kind}">
+                <div class="conci-hist-group-title"><i class="fas ${k.icon} me-1"></i>${isInsert ? 'Capturado' : 'Eliminado'} <span class="conci-hist-group-count">${fields.length}</span></div>
+                <div class="conci-hist-chips">${fields.map(f => renderSnapshotChip(kind, f)).join('')}</div>
+            </div>`
+            : `<div class="text-muted small mt-1">Sin datos ${isInsert ? 'capturados' : 'guardados'} en este evento.</div>`;
+
+        const fullId = `hist-full-${Math.random().toString(36).slice(2)}`;
+        return `${chips}
+            <a href="#" class="conci-hist-toggle-snap small" data-target="${fullId}">
+                <i class="fas fa-chevron-right me-1"></i>Ver registro completo
+            </a>
+            <div id="${fullId}" class="d-none mt-2">${snapshotTableFull(ev.snapshot)}</div>`;
+    }
+
     function updateSummaryLabel(buckets) {
         const parts = [];
         if (buckets.nuevo.length) parts.push(`${buckets.nuevo.length} nuevo${buckets.nuevo.length > 1 ? 's' : ''}`);
@@ -285,12 +324,11 @@
                 renderFieldGroup('vaciado', buckets.vaciado),
             ].join('');
         } else {
-            const snapId = `hist-snap-${Math.random().toString(36).slice(2)}`;
-            body = `
-                <a href="#" class="conci-hist-toggle-snap small" data-target="${snapId}">
-                    <i class="fas fa-chevron-right me-1"></i>${ev.operacion === 'INSERT' ? 'Ver todos los datos capturados' : 'Ver todos los datos eliminados'}
-                </a>
-                <div id="${snapId}" class="d-none mt-2">${snapshotTable(ev.snapshot)}</div>`;
+            const filledCount = snapshotFilledFields(ev.snapshot).length;
+            if (filledCount) {
+                opLabel = `${meta.label} <span class="conci-hist-op-summary">(${filledCount} campo${filledCount > 1 ? 's' : ''})</span>`;
+            }
+            body = renderSnapshotBody(ev);
         }
 
         return `
