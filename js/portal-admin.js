@@ -14,6 +14,7 @@
     const val  = id  => { const e = $(id); return e ? e.value : ''; };
 
     let allRows = [], filteredRows = [], reviewModal = null, reviewingId = null;
+    let archiveModal = null, archiveCategory = 'pasajeros';
     let loaded  = false; // carga lazy: solo al primer acceso
     let currentUser = null, canAifa = true, canAfac = false; // AIFA staff por defecto aprueba AIFA
 
@@ -55,10 +56,17 @@
         if (modalEl && window.bootstrap) {
             reviewModal = new window.bootstrap.Modal(modalEl);
         }
+        const archiveModalEl = $('modal-manifest-archive');
+        if (archiveModalEl && window.bootstrap) {
+            archiveModal = new window.bootstrap.Modal(archiveModalEl);
+        }
 
         // Botones del panel
         $('btn-padmin-refresh')?.addEventListener('click', loadAll);
         $('btn-padmin-export') ?.addEventListener('click', exportExcel);
+        $('btn-padmin-archive-passengers')?.addEventListener('click', () => openArchive('pasajeros'));
+        $('btn-padmin-archive-cargo')?.addEventListener('click', () => openArchive('carga'));
+        $('btn-manifest-archive-refresh')?.addEventListener('click', () => loadArchive(archiveCategory));
 
         // Link del portal para compartir con aerolíneas
         try {
@@ -136,6 +144,68 @@
         } finally {
             hide('padmin-loading');
             $('padmin-table-wrap')?.classList.remove('opacity-50');
+        }
+    }
+
+    /* ================================================================
+       CONSULTA DE RESGUARDO (llegadas y salidas)
+       ================================================================ */
+    function openArchive(category) {
+        archiveCategory = category;
+        const isPassengers = category === 'pasajeros';
+        const title = $('modal-manifest-archive-label');
+        const header = $('manifest-archive-header');
+        if (title) title.innerHTML = `<i class="fas fa-${isPassengers ? 'users' : 'boxes-stacked'} me-2"></i>Manifiestos de ${isPassengers ? 'Pasajeros' : 'Carga'}`;
+        if (header) header.style.background = isPassengers ? '#e6f9fd' : '#f1f3f5';
+        archiveModal?.show();
+        loadArchive(category);
+    }
+
+    async function loadArchive(category) {
+        const sb = window.supabaseClient;
+        const tbody = $('manifest-archive-tbody');
+        const count = $('manifest-archive-count');
+        if (!sb) return;
+        if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-5"><span class="spinner-border spinner-border-sm me-2"></span>Cargando manifiestos resguardados…</td></tr>';
+        if (count) count.textContent = 'Consultando la base de datos…';
+
+        try {
+            const select = 'id,created_at,direccion,tipo_manifesto,fecha_vuelo,folio,aerolinea_codigo,aerolinea_nombre,numero_vuelo,aeronave,matricula,aeropuerto_referencia,total_pasajeros,total_carga_kg,empresa,estado';
+            const table = category === 'pasajeros' ? 'manifiestos_pasajeros' : 'manifiestos_carga';
+            const { data, error } = await sb.from(table).select(select).order('fecha_vuelo', { ascending: false });
+            if (error) throw error;
+            const categoryLabel = category === 'pasajeros' ? 'Pasajeros' : 'Carga';
+            const rows = (data || []).map(row => ({ ...row, category: categoryLabel }))
+                .sort((a, b) => String(b.fecha_vuelo || '').localeCompare(String(a.fecha_vuelo || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+
+            if (count) count.textContent = `${rows.length} registro${rows.length === 1 ? '' : 's'} de ${categoryLabel.toLowerCase()}`;
+            if (!rows.length) {
+                if (tbody) tbody.innerHTML = '<tr><td colspan="13" class="text-center text-muted py-5">Aún no hay manifiestos resguardados para esta operación.</td></tr>';
+                return;
+            }
+            const fmtDate = v => v ? new Date(`${v}T12:00:00`).toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' }) : '—';
+            const fmtTime = v => v ? new Date(v).toLocaleString('es-MX', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+            const fmtNum = v => Number(v || 0).toLocaleString('es-MX');
+            const stateClass = { pendiente:'warning', en_revision:'primary', aprobado:'success', rechazado:'danger' };
+            tbody.innerHTML = rows.map(r => `<tr>
+                <td class="ps-3 text-nowrap">${fmtDate(r.fecha_vuelo)}</td>
+                <td><span class="badge ${r.category === 'Carga' ? 'text-bg-secondary' : 'text-bg-info'}">${r.category}</span></td>
+                <td><span class="badge ${r.direccion === 'llegada' ? 'text-bg-success' : 'text-bg-warning'}">${esc(r.direccion === 'llegada' ? 'Llegada' : 'Salida')}</span></td>
+                <td class="fw-semibold">${esc(r.folio || '—')}</td>
+                <td class="fw-bold text-primary">${esc(r.numero_vuelo || '—')}</td>
+                <td>${esc(r.aerolinea_nombre || r.empresa || r.aerolinea_codigo || '—')}</td>
+                <td>${esc(r.aeropuerto_referencia || '—')}</td>
+                <td>${esc(r.aeronave || '—')}</td>
+                <td>${esc(r.matricula || '—')}</td>
+                <td class="text-end">${fmtNum(r.total_pasajeros)}</td>
+                <td class="text-end">${fmtNum(r.total_carga_kg)}</td>
+                <td><span class="badge text-bg-${stateClass[r.estado] || 'secondary'}">${esc(r.estado || 'pendiente')}</span></td>
+                <td class="text-nowrap small text-muted">${fmtTime(r.created_at)}</td>
+            </tr>`).join('');
+        } catch (err) {
+            console.error('portal-admin loadArchive error', err);
+            if (count) count.textContent = 'No fue posible consultar los registros.';
+            if (tbody) tbody.innerHTML = `<tr><td colspan="13" class="text-center text-danger py-5"><i class="fas fa-circle-exclamation me-2"></i>${esc(err.message || 'Error al cargar la base de datos.')}<div class="small text-muted mt-2">Verifica que se haya ejecutado la migración 004 de Supabase.</div></td></tr>`;
         }
     }
 

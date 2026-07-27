@@ -17185,6 +17185,7 @@ let _conciEditFallbackYear = null;   // cached for post-save formatting
 let _conciEditFechaCol     = null;   // cached fecha column name for formatting
 let _conciEditMode         = false;  // global edit mode for the whole table
 let _conciCellClickHandler = null;   // delegated click handler for edit-mode cells
+let _conciTabNavigationHandler = null; // captura Tab para navegación horizontal
 let _conciAirlineCatalogLoaded = false;
 let _conciAirlineCodeMap = new Map();
 let _conciAirlineMasterCodeMap = new Map();
@@ -20242,6 +20243,11 @@ function _conciActivateCellEditor(td) {
         if (e.key === 'Enter') {
             e.preventDefault();
             closeEditor(true, true);
+        } else if (e.key === 'Tab') {
+            // Navegación tipo hoja de cálculo: Tab guarda la celda actual y
+            // abre la siguiente celda editable de la misma fila.
+            e.preventDefault();
+            closeEditor(true, true);
         } else if (e.key === 'Escape') {
             e.preventDefault();
             closeEditor(false, false);
@@ -20299,7 +20305,12 @@ function _conciCommitCellRaw(td, nextRaw, moveNext, displayText) {
 
     if (moveNext) {
         const nextCell = _conciGetNextEditableCell(td);
-        if (nextCell) _conciActivateCellEditor(nextCell);
+        if (nextCell) {
+            // Mantiene visible la siguiente celda aun cuando la tabla tenga
+            // desplazamiento horizontal y deja el cursor listo para capturar.
+            nextCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            _conciActivateCellEditor(nextCell);
+        }
     }
 }
 
@@ -20366,6 +20377,11 @@ function _conciActivateDateTimeEditor(td, { withTime, parts }) {
         if (e.key === 'Enter') {
             e.preventDefault();
             closeEditor(true, true);
+        } else if (e.key === 'Tab') {
+            // Fecha y hora funcionan como una sola celda de la tabla; Tab
+            // continúa hacia la derecha en vez de salir del modo de edición.
+            e.preventDefault();
+            closeEditor(true, true);
         } else if (e.key === 'Escape') {
             e.preventDefault();
             closeEditor(false, false);
@@ -20414,6 +20430,24 @@ function _conciSetTableEditableState(enabled) {
         }
         tbody.addEventListener('click', _conciCellClickHandler);
 
+        // Captura Tab antes de que el navegador saque el foco de la tabla.
+        // Se usa captura porque algunos controles nativos (fecha/hora) cambian
+        // el foco antes de que el listener normal de la celda se ejecute.
+        if (!_conciTabNavigationHandler) {
+            _conciTabNavigationHandler = (ev) => {
+                if (!_conciEditMode || ev.key !== 'Tab') return;
+                const input = ev.target.closest('.conci-cell-input, .conci-cell-dt input');
+                const td = input ? input.closest('td[data-col]') : null;
+                if (!td || !tbody.contains(td)) return;
+                ev.preventDefault();
+                ev.stopImmediatePropagation();
+                if (typeof td._conciCloseEditor === 'function') {
+                    td._conciCloseEditor(true, true);
+                }
+            };
+        }
+        tbody.addEventListener('keydown', _conciTabNavigationHandler, true);
+
         tbody.querySelectorAll('td[data-col]').forEach(td => {
             td.dataset.origRaw = td.dataset.raw || '';
             td.dataset.pendingRaw = td.dataset.raw || '';
@@ -20424,6 +20458,7 @@ function _conciSetTableEditableState(enabled) {
         tbody.querySelectorAll('tr').forEach(tr => tr.removeAttribute('data-dirty'));
     } else {
         if (_conciCellClickHandler) tbody.removeEventListener('click', _conciCellClickHandler);
+        if (_conciTabNavigationHandler) tbody.removeEventListener('keydown', _conciTabNavigationHandler, true);
 
         tbody.querySelectorAll('td[data-col]').forEach(td => {
             if (typeof td._conciCloseEditor === 'function') td._conciCloseEditor(true, false);
