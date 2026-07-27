@@ -20,6 +20,13 @@
 -- csv (no es autogenerado) porque conciliacion_vuelo_overrides ya guarda
 -- ajustes de aerolínea usando ese id como referencia; si cambiara, esos
 -- ajustes quedarían huérfanos silenciosamente.
+--
+-- ⚠ IMPORTANTE: este script solo crea las tablas y deja preparado que las
+-- IMPORTACIONES FUTURAS las llenen. Los vuelos que ya existían en
+-- vuelos_parte_operaciones_csv antes de correr esto NO se copian solos —
+-- ejecutar además db/backfill_itinerario_manifiestos_tablas.sql (una sola
+-- vez, justo después de este) o Itinerario de Vuelos y Manifiestos
+-- aparecerán vacíos aunque la tabla cruda tenga datos.
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS public.itinerario_vuelos_editable (
