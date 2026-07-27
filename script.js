@@ -22335,7 +22335,11 @@ function _conciAddBlankRow() {
     tbody.appendChild(tr);
     tbody.scrollTop = tbody.scrollHeight;
     _conciBindRowActions();
-    const firstCell = tr.querySelector('td[data-col]');
+    // MES/FECHA quedan bloqueados en una fila nueva (se completan solos con
+    // el filtro de fecha activo al guardar) — activa la primera celda que sí
+    // se pueda escribir, para que "Agregar fila" deje el cursor listo de
+    // inmediato en vez de dejarlo sin foco en un campo bloqueado.
+    const firstCell = tr.querySelector('td[data-col]:not([data-conci-readonly="1"])');
     if (firstCell) _conciActivateCellEditor(firstCell);
 }
 
