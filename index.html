@@ -147,7 +147,7 @@
     <!-- Preload de los 5 scripts mas pesados (descarga en paralelo desde el primer byte del HTML).
          No altera el orden de ejecución: los <script> tags más abajo siguen mandando.
          Los hrefs DEBEN coincidir EXACTAMENTE con el src del script para que el navegador reuse el preload. -->
-    <link rel="preload" as="script" href="script.js?v=20260727-conci-solovuelos-fix" fetchpriority="high">
+    <link rel="preload" as="script" href="script.js?v=20260727-tablas-separadas" fetchpriority="high">
     <link rel="preload" as="script" href="js/manifiestos.js">
     <link rel="preload" as="script" href="js/data-management.js">
     <link rel="preload" as="script" href="js/analisis-operaciones.js?v=47">
@@ -471,6 +471,29 @@ FF
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.2px;
+        }
+
+        /* Edición por celda de Itinerario de Vuelos (mismo lenguaje visual
+           que el modo edición de Conciliación Manifiestos) */
+        #table-ops-flights-csv.itin-edit-mode td[data-col] {
+            cursor: pointer;
+        }
+        #table-ops-flights-csv.itin-edit-mode td[data-col]:hover {
+            background: #fffde7 !important;
+            outline: 1px dashed #f9c74f;
+            outline-offset: -1px;
+        }
+        #table-ops-flights-csv td[data-col].itin-cell-active {
+            padding: 2px !important;
+            background: #fffde7 !important;
+        }
+        #table-ops-flights-csv .itin-cell-input {
+            font-size: 11px;
+            height: 26px;
+            border-radius: 0;
+        }
+        #table-ops-flights-csv tbody tr[data-dirty="1"] > td {
+            box-shadow: inset 0 0 0 9999px rgba(255, 193, 7, .08);
         }
 
         #table-ops-flights-csv .csv-status-blue {
@@ -19477,6 +19500,15 @@ FF
                                             onclick="toggleConciliacionBoard()" title="Vista Llegadas / Salidas">
                                             <i class="fas fa-plane" style="transform:rotate(-90deg);display:inline-block;"></i>
                                         </button>
+                                        <button class="btn btn-sm btn-outline-primary d-none" id="btn-itin-edit-mode" title="Editar todos los campos de la tabla" onclick="window.opsFlights && window.opsFlights.enterEditMode()">
+                                            <i class="fas fa-edit me-1"></i>Editar
+                                        </button>
+                                        <button class="btn btn-sm btn-success d-none" id="btn-itin-save-mode" title="Guardar cambios" onclick="window.opsFlights && window.opsFlights.saveBulkEdits()">
+                                            <i class="fas fa-save me-1"></i>Guardar
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary d-none" id="btn-itin-cancel-mode" title="Cancelar edición" onclick="window.opsFlights && window.opsFlights.cancelBulkEdits()">
+                                            <i class="fas fa-times me-1"></i>Cancelar
+                                        </button>
                                         <!-- Columnas visibles — dropdown movido al toolbar -->
                                         <div class="dropdown">
                                             <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" id="dropdownMenuButtonCsvColumns" data-bs-toggle="dropdown" aria-expanded="false" title="Seleccionar columnas visibles">
@@ -20597,6 +20629,45 @@ FF
                     #hidraulicas-section .hidra-paap-table tbody tr.fw-bold th{ background:#1e3a8a; color:#fff; }
                     #hidraulicas-section .hidra-paap-table tbody tr.fw-bold td{ background:#eef4ff; }
                     #hidraulicas-section .hidra-paap-table tfoot td{ font-weight:800; background:#dbe7ff; text-align:right; }
+                    #hidraulicas-section .residuos-shell{ background:linear-gradient(135deg,#f8fafc 0%,#ecfdf5 100%); border:1px solid #dbeafe; border-radius:16px; padding:18px; }
+                    #hidraulicas-section .residuos-hero{ background:linear-gradient(120deg,#064e3b,#047857 52%,#0f766e); color:#fff; border-radius:14px; padding:20px 22px; box-shadow:0 8px 24px rgba(6,78,59,.18); position:relative; overflow:hidden; }
+                    #hidraulicas-section .residuos-hero::after{ content:""; position:absolute; width:180px; height:180px; border-radius:50%; right:-55px; top:-75px; background:rgba(255,255,255,.12); }
+                    #hidraulicas-section .residuos-hero h3{ font-size:1.35rem; font-weight:800; margin:0 0 4px; }
+                    #hidraulicas-section .residuos-hero p{ margin:0; color:rgba(255,255,255,.8); font-size:.82rem; }
+                    #hidraulicas-section .residuos-kpi{ background:#fff; border:1px solid #e2e8f0; border-radius:13px; padding:15px 16px; height:100%; box-shadow:0 3px 12px rgba(15,23,42,.05); position:relative; overflow:hidden; }
+                    #hidraulicas-section .residuos-kpi::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:var(--res-color,#059669); }
+                    #hidraulicas-section .residuos-kpi-label{ color:#64748b; font-size:.7rem; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
+                    #hidraulicas-section .residuos-kpi-value{ color:#0f172a; font-size:1.55rem; font-weight:850; line-height:1.15; margin-top:5px; }
+                    #hidraulicas-section .residuos-kpi-unit{ color:#64748b; font-size:.72rem; }
+                    #hidraulicas-section .residuos-panel{ background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:16px; box-shadow:0 3px 14px rgba(15,23,42,.05); height:100%; }
+                    #hidraulicas-section .residuos-panel-title{ color:#0f172a; font-size:.95rem; font-weight:800; margin-bottom:10px; }
+                    #hidraulicas-section .residuos-chart-host{ height:300px; position:relative; }
+                    #hidraulicas-section .residuos-table-wrap{ overflow:auto; border:1px solid #cbd5e1; border-radius:10px; }
+                    #hidraulicas-section .residuos-table{ min-width:850px; margin:0; }
+                    #hidraulicas-section .residuos-table thead th{ color:#fff; font-size:.72rem; text-align:center; vertical-align:middle; border-color:#fff; white-space:nowrap; }
+                    #hidraulicas-section .residuos-table thead th:first-child{ background:#2f7d22; }
+                    #hidraulicas-section .residuos-table thead th:nth-child(2){ background:#2f7d22; }
+                    #hidraulicas-section .residuos-table thead th:nth-child(3),
+                    #hidraulicas-section .residuos-table thead th:nth-child(4),
+                    #hidraulicas-section .residuos-table thead th:nth-child(5){ background:#17658a; }
+                    #hidraulicas-section .residuos-table thead th:nth-child(6){ background:#c00000; }
+                    #hidraulicas-section .residuos-table thead th:nth-child(7){ background:#ffc000; color:#111827; }
+                    #hidraulicas-section .residuos-table tbody td{ font-size:.78rem; text-align:right; white-space:nowrap; }
+                    #hidraulicas-section .residuos-table tbody td:first-child,
+                    #hidraulicas-section .residuos-table tbody td:nth-child(2){ text-align:center; font-weight:700; }
+                    #hidraulicas-section .residuos-table tbody tr.residuos-no-data td{ color:#94a3b8; background:#f8fafc; }
+                    #hidraulicas-section .residuos-table tfoot td{ font-weight:800; text-align:right; background:#e2e8f0; }
+                    #hidraulicas-section .residuos-table tfoot td:first-child{ text-align:left; }
+                    #hidraulicas-section .residuos-table .residuos-total-special{ background:#0b3040; color:#fff; }
+                    #hidraulicas-section .residuos-table .residuos-total-danger{ background:#c00000; color:#fff; }
+                    #hidraulicas-section .residuos-table .residuos-total-value{ background:#ffc000; color:#111827; }
+                    #hidraulicas-section .residuos-notes{ background:#f1f5f4; border-left:4px solid #047857; border-radius:8px; padding:15px 18px; color:#334155; font-size:.78rem; line-height:1.55; }
+                    #hidraulicas-section .residuos-notes-title{ color:#064e3b; font-weight:800; font-style:italic; margin-bottom:8px; }
+                    #hidraulicas-section .residuos-editor{ background:#fffbeb; border:1px solid #fde68a; border-radius:12px; padding:16px; }
+                    #hidraulicas-section .residuos-editor .form-label{ color:#475569; font-size:.72rem; font-weight:800; }
+                    #hidraulicas-section .residuos-editor input{ font-size:.82rem; }
+                    #hidraulicas-section .residuos-month-status{ font-size:.78rem; }
+                    #hidraulicas-section .residuos-capture-locked{ background:#fff7ed; border:1px solid #fed7aa; color:#9a3412; border-radius:8px; padding:8px 10px; font-size:.75rem; }
                     @media (max-width: 991px){
                       #hidraulicas-section .hidra-statgrid{ grid-template-columns:repeat(2,1fr); }
                       #hidraulicas-section .hidra-scada-grid{ grid-template-columns:repeat(2,1fr); }
@@ -20626,6 +20697,11 @@ FF
                         <li class="nav-item" role="presentation">
                           <button class="nav-link" id="hidra-tabbtn-edit" data-bs-toggle="tab" data-bs-target="#hidra-tab-editor" type="button" role="tab">
                             <i class="fas fa-edit me-2"></i>Captura de datos
+                          </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                          <button class="nav-link" id="hidra-tabbtn-residuos" data-bs-toggle="tab" data-bs-target="#hidra-tab-residuos" type="button" role="tab">
+                            <i class="fas fa-recycle me-2"></i>Residuos
                           </button>
                         </li>
                       </ul>
@@ -20960,6 +21036,77 @@ FF
                                 </div>
                                 <div class="mt-2 small"><strong>Total PTAR:</strong> <span id="hidra-cap-ptar-total">0</span> m³</div>
                               </div>
+                            </div>
+                          </div>
+                        </div>
+                        <!-- RESIDUOS · CAPTURA Y ANÁLISIS MENSUAL -->
+                        <div class="tab-pane fade" id="hidra-tab-residuos" role="tabpanel">
+                          <div class="residuos-shell">
+                            <div class="residuos-hero mb-3">
+                              <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                                <div>
+                                  <h3><i class="fas fa-recycle me-2"></i>Residuos generados</h3>
+                                  <p>Residuos de manejo especial, peligrosos y valorizables · GOMIH</p>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                  <label for="residuos-year-select" class="small fw-bold mb-0">Año</label>
+                                  <select id="residuos-year-select" class="form-select form-select-sm" style="min-width:100px;"></select>
+                                  <button id="residuos-refresh" class="btn btn-light btn-sm" type="button" title="Actualizar datos"><i class="fas fa-sync-alt"></i></button>
+                                  <button id="residuos-export" class="btn btn-warning btn-sm" type="button"><i class="fas fa-file-excel me-1"></i>Excel</button>
+                                </div>
+                              </div>
+                            </div>
+                            <div id="residuos-status" class="alert alert-info py-2 small d-none" role="status"></div>
+
+                            <div class="row g-3 mb-3">
+                              <div class="col-12 col-md-6 col-xl-3"><div class="residuos-kpi" style="--res-color:#17658a;"><div class="residuos-kpi-label"><i class="fas fa-layer-group me-1"></i>Manejo especial</div><div class="residuos-kpi-value" id="residuos-kpi-especial">—</div><div class="residuos-kpi-unit">kg · inorgánico + orgánico + lodos</div></div></div>
+                              <div class="col-12 col-md-6 col-xl-3"><div class="residuos-kpi" style="--res-color:#c00000;"><div class="residuos-kpi-label"><i class="fas fa-triangle-exclamation me-1"></i>Peligrosos</div><div class="residuos-kpi-value" id="residuos-kpi-peligrosos">—</div><div class="residuos-kpi-unit">kg acumulados</div></div></div>
+                              <div class="col-12 col-md-6 col-xl-3"><div class="residuos-kpi" style="--res-color:#e0a800;"><div class="residuos-kpi-label"><i class="fas fa-arrows-rotate me-1"></i>Valorizables</div><div class="residuos-kpi-value" id="residuos-kpi-valorizables">—</div><div class="residuos-kpi-unit">kg acumulados</div></div></div>
+                              <div class="col-12 col-md-6 col-xl-3"><div class="residuos-kpi" style="--res-color:#047857;"><div class="residuos-kpi-label"><i class="fas fa-calendar-check me-1"></i>Meses con información</div><div class="residuos-kpi-value" id="residuos-kpi-meses">—</div><div class="residuos-kpi-unit">de 12 meses</div></div></div>
+                            </div>
+
+                            <div class="row g-3 mb-3">
+                              <div class="col-12 col-xl-7"><div class="residuos-panel"><div class="residuos-panel-title"><i class="fas fa-chart-column me-2 text-success"></i>Comportamiento mensual por tipo de residuo</div><div class="residuos-chart-host"><canvas id="residuos-chart-mensual"></canvas></div></div></div>
+                              <div class="col-12 col-xl-5"><div class="residuos-panel"><div class="residuos-panel-title"><i class="fas fa-chart-pie me-2 text-danger"></i>Composición acumulada</div><div class="residuos-chart-host"><canvas id="residuos-chart-composicion"></canvas></div></div></div>
+                            </div>
+                            <div class="row g-3 mb-3">
+                              <div class="col-12"><div class="residuos-panel"><div class="residuos-panel-title"><i class="fas fa-chart-line me-2 text-primary"></i>Tendencia mensual · kg generados</div><div class="residuos-chart-host"><canvas id="residuos-chart-tendencia"></canvas></div></div></div>
+                            </div>
+
+                            <div class="residuos-panel mb-3">
+                              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                                <div><div class="residuos-panel-title mb-0"><i class="fas fa-table me-2 text-success"></i>Registro mensual de residuos</div><small class="text-muted">Los guiones representan meses sin información capturada.</small></div>
+                                <span id="residuos-table-source" class="badge text-bg-light border">Fuente: ASECA · datos preliminares</span>
+                              </div>
+                              <div class="residuos-table-wrap">
+                                <table class="table table-bordered residuos-table align-middle">
+                                  <thead><tr><th rowspan="2">Año</th><th rowspan="2">Mes</th><th colspan="3">Residuos de manejo especial</th><th rowspan="2">Residuos<br>peligrosos<br>(kg)</th><th rowspan="2">Residuos<br>valorizables<br>(kg)</th><th rowspan="2">Acciones</th></tr><tr><th>Inorgánico<br>(kg)</th><th>Orgánico<br>(kg)</th><th>Lodos<br>(kg)</th></tr></thead>
+                                  <tbody id="residuos-table-body"><tr><td colspan="8" class="text-center text-muted py-4">Cargando información…</td></tr></tbody>
+                                  <tfoot id="residuos-table-foot"></tfoot>
+                                </table>
+                              </div>
+                            </div>
+
+                            <div class="residuos-editor mb-3">
+                              <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h5 class="mb-1 fw-bold"><i class="fas fa-pen-to-square me-2 text-warning"></i>Captura / edición mensual</h5><div class="small text-muted">Captura únicamente los datos disponibles. Deja vacío un campo cuando aún no exista manifiesto.</div></div><span id="residuos-edit-status" class="residuos-month-status text-muted"></span></div>
+                              <div id="residuos-capture-locked" class="residuos-capture-locked d-none mb-3"><i class="fas fa-lock me-1"></i>Modo solo lectura: no tienes permiso para capturar datos en Hidráulicas.</div>
+                              <div class="row g-2 align-items-end">
+                                <div class="col-12 col-sm-3 col-lg-2"><label class="form-label" for="residuos-edit-month">Mes</label><select id="residuos-edit-month" class="form-select form-select-sm"></select></div>
+                                <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-inorganicos">Inorgánico (kg)</label><input id="residuos-inorganicos" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
+                                <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-organicos">Orgánico (kg)</label><input id="residuos-organicos" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
+                                <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-lodos">Lodos (kg)</label><input id="residuos-lodos" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
+                                <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-peligrosos">Peligrosos (kg)</label><input id="residuos-peligrosos" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
+                                <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-valorizables">Valorizables (kg)</label><input id="residuos-valorizables" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
+                                <div class="col-6 col-sm-3 col-lg-2"><button id="residuos-save" class="btn btn-success btn-sm w-100" type="button"><i class="fas fa-save me-1"></i>Guardar mes</button></div>
+                              </div>
+                              <div class="mt-2"><label class="form-label mb-1" for="residuos-observaciones">Observaciones</label><input id="residuos-observaciones" class="form-control form-control-sm" type="text" placeholder="Ej. Manifiesto pendiente de confirmación..." maxlength="1000"></div>
+                            </div>
+
+                            <div class="residuos-notes">
+                              <div class="residuos-notes-title"><i class="fas fa-note-sticky me-2"></i>Notas:</div>
+                              <p class="mb-2">* Los datos presentados son proporcionados por la empresa ASECA, S.A. de C.V., a través de la Gerencia de Servicios Generales.</p>
+                              <p class="mb-2">* Las cantidades registradas de manera mensual corresponden a datos preliminares, ya que los manifiestos que contienen las cantidades oficiales son emitidos por el sitio de disposición final con un desfase aproximado de 2 a 3 meses. Una vez recibidos dichos manifiestos, la información será actualizada, en su caso, para reflejar las cantidades definitivas.</p>
+                              <p class="mb-0">* Con la información presentada en esta tabla, se elaborarán gráficas que muestren el comportamiento mensual de las cantidades generadas para cada tipo de residuo (manejo especial, peligrosos, valorizables), con la finalidad de facilitar el análisis de su comportamiento durante el año.</p>
                             </div>
                           </div>
                         </div>
@@ -33808,6 +33955,7 @@ FF
     <script src="js/medicas.js?v=2"></script>
     <script src="js/fauna.js"></script>
     <script src="js/hidraulicas.js?v=15"></script>
+    <script src="js/residuos-hidraulicas.js?v=20260727-1"></script>
     <script src="js/ggen-energia.js?v=5"></script>
     <script src="js/gtrans-energia.js?v=1"></script>
     <script src="js/gtrans-preventivos.js?v=2"></script>
@@ -33841,7 +33989,7 @@ FF
     <script src="js/comparativa-historica.js"></script>
     <script src="js/yoy-general.js"></script>
     <script src="js/yoy-cargo.js"></script>
-    <script src="js/parte-ops-flights.js?v=2.2"></script>
+    <script src="js/parte-ops-flights.js?v=20260727-tablas-separadas"></script>
     <!-- Conciliación Board View — extraído a js/conciliacion-board.js (v=20260616m) -->
     <script src="js/conciliacion-board.js?v=20260616m" defer></script>
     <script src="js/analisis-mensual.js?v=1.0"></script>
@@ -33974,7 +34122,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260727-conci-solovuelos-fix" defer></script>
+    <script src="script.js?v=20260727-tablas-separadas" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>
@@ -35208,7 +35356,7 @@ FF
 </script>
 
 <!-- ====== Conciliación Admin Module — extraído a js/ops-flights-admin.js (v=20260616m) ====== -->
-<script src="js/ops-flights-admin.js?v=20260616m" defer></script>
+<script src="js/ops-flights-admin.js?v=20260727-tablas-separadas" defer></script>
 <!-- Conciliación Manifiestos table + inline editing -->
 <script src="js/conci-manifiestos-table.js?v=1" defer></script>
 <script src="js/conci-manifiestos-historial.js?v=20260727a" defer></script>

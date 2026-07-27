@@ -18661,7 +18661,7 @@ async function loadConciliacionManifiestos(options = {}) {
         if (!config.forceRefresh && vueolosFresh) {
             vuelosRows = _conciVuelosCache.rows;
         } else {
-            const vResult = await _concifetchAllRows(client, 'vuelos_parte_operaciones_csv', { batchSize: 5000 });
+            const vResult = await _concifetchAllRows(client, 'manifiestos_vuelos_editable', { batchSize: 5000 });
             if (requestSeq !== _conciLoadRequestSeq) return;
             if (vResult.error) throw vResult.error;
             vuelosRows = vResult.data || [];

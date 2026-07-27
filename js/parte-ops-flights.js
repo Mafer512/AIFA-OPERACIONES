@@ -4,6 +4,15 @@
  */
 (function () {
     const TABLE_NAME = 'vuelos_parte_operaciones_csv';
+    // Copia editable independiente que respalda esta pestaña de aquí en
+    // adelante (lectura, observaciones, validado, y edición de celda por
+    // celda). TABLE_NAME sigue siendo solo la bitácora cruda de importación
+    // — no se lee ni se edita directamente aquí, salvo al importar.
+    const EDIT_TABLE_NAME = 'itinerario_vuelos_editable';
+    // Copia hermana que usa Conciliación Manifiestos para el lado "vuelos"
+    // de su cruce. Solo se escribe aquí cuando algo debe seguir viéndose
+    // reflejado en ambas pestañas (por ahora: validado/validado_por/validado_at).
+    const MANIFIESTOS_MIRROR_TABLE_NAME = 'manifiestos_vuelos_editable';
     const HEADERS = [
         'Status',
         '[Arr] Airline code',
@@ -147,7 +156,10 @@
             getHeaders: () => HEADERS,
             getDateFields: () => DATE_FIELDS,
             getLastImportYear: () => lastImportYear,
-            clearAllFilters: clearAllCsvFilters
+            clearAllFilters: clearAllCsvFilters,
+            enterEditMode: () => itinEnterEditMode(),
+            saveBulkEdits: () => itinSaveBulkEdits(),
+            cancelBulkEdits: () => itinCancelBulkEdits()
         };
     });
 
@@ -320,7 +332,7 @@
 
         // Fetch only id + 2 date columns (much smaller than all 24 columns)
         const { data: probe, error } = await supabase
-            .from(TABLE_NAME)
+            .from(EDIT_TABLE_NAME)
             .select('id,"[Arr] SIBT","[Dep] SOBT"');
         if (error) throw error;
 
@@ -400,7 +412,7 @@
 
             // Phase 2: fetch full rows for all targeted day(s)
             const { data, error } = await supabase
-                .from(TABLE_NAME)
+                .from(EDIT_TABLE_NAME)
                 .select('*')
                 .in('id', targetIds);
             if (error) throw error;
@@ -529,6 +541,28 @@
         }
     }
 
+    // Copia cada fila recién insertada (con su mismo id) hacia las tablas
+    // editables independientes de Itinerario y Manifiestos. Nunca borra nada
+    // ahí — solo agrega — para que ediciones ya hechas en esas pestañas nunca
+    // se pierdan por una reimportación. Es best-effort: si esto falla, el
+    // import a la tabla cruda (ya confirmado al usuario) NO se revierte.
+    async function _mirrorRowsToEditableTables(supabase, rowsWithId) {
+        if (!rowsWithId.length) return;
+        try {
+            const chunks = chunkArray(rowsWithId, 500);
+            for (const chunk of chunks) {
+                const [itinRes, manifRes] = await Promise.all([
+                    supabase.from('itinerario_vuelos_editable').insert(chunk),
+                    supabase.from('manifiestos_vuelos_editable').insert(chunk)
+                ]);
+                if (itinRes.error) console.warn('[Itinerario] no se pudo copiar a itinerario_vuelos_editable:', itinRes.error);
+                if (manifRes.error) console.warn('[Itinerario] no se pudo copiar a manifiestos_vuelos_editable:', manifRes.error);
+            }
+        } catch (err) {
+            console.warn('[Itinerario] error copiando a tablas editables:', err);
+        }
+    }
+
     async function saveToDatabase(rows, append = false) {
         const supabase = window.supabaseClient;
         if (!supabase) throw new Error('Cliente Supabase no disponible');
@@ -543,10 +577,20 @@
         }
 
         const chunks = chunkArray(rows, 500);
+        const insertedWithId = [];
         for (const chunk of chunks) {
-            const { error: insError } = await supabase.from(TABLE_NAME).insert(chunk);
+            const { data: insertedRows, error: insError } = await supabase.from(TABLE_NAME).insert(chunk).select('id');
             if (insError) throw insError;
+            // PostgREST insert-returning preserva el orden de envío: se puede
+            // emparejar cada fila del chunk con su id recién asignado por índice.
+            (insertedRows || []).forEach((r, i) => {
+                if (r?.id !== undefined && r?.id !== null && chunk[i]) {
+                    insertedWithId.push({ ...chunk[i], id: r.id });
+                }
+            });
         }
+
+        await _mirrorRowsToEditableTables(supabase, insertedWithId);
 
         alert('CSV importado correctamente.');
     }
@@ -692,16 +736,18 @@
             // Stable index into currentData (survives filter changes)
             const dataIdx = dataIndexMap.has(row) ? dataIndexMap.get(row) : currentData.indexOf(row);
             const cells = HEADERS.map(h => {
-                const content = escapeHtml(row[h] || '');
+                const raw = row[h] || '';
+                const content = escapeHtml(raw);
                 const colClass = HEADER_CLASSES[h] || '';
+                const colAttr = `data-col="${escapeHtml(h)}" data-raw="${escapeHtml(raw)}"`;
 
                 if (h === '[Arr] Flight Designator' || h === '[Dep] Flight Designator') {
-                    return `<td class="fw-bold ${colClass}">${content}</td>`;
+                    return `<td class="fw-bold ${colClass}" ${colAttr}>${content}</td>`;
                 }
                 if (h === 'Status') {
-                    return `<td class="csv-status ${statusClass} ${colClass}">${content}</td>`;
+                    return `<td class="csv-status ${statusClass} ${colClass}" ${colAttr}>${content}</td>`;
                 }
-                return `<td class="${colClass}">${content}</td>`;
+                return `<td class="${colClass}" ${colAttr}>${content}</td>`;
             }).join('');
 
             // Validation cell — uses dataIdx to reference currentData
@@ -739,7 +785,7 @@
                 </div>
             </td>`;
 
-            return `<tr data-row-idx="${dataIdx}"${valido ? ' class="row-validated"' : ''}>${cells}${obsCell}${validCell}</tr>`;
+            return `<tr data-row-idx="${dataIdx}" data-row-id="${escapeHtml(row._id ?? '')}"${valido ? ' class="row-validated"' : ''}>${cells}${obsCell}${validCell}</tr>`;
         }).join('');
 
         tbody.innerHTML = html;
@@ -833,7 +879,7 @@
         try {
             const supabase = window.supabaseClient;
             const { error } = await supabase
-                .from('vuelos_parte_operaciones_csv')
+                .from(EDIT_TABLE_NAME)
                 .update({ observaciones: trimmed || null })
                 .eq('id', row._id);
             if (error) throw error;
@@ -860,7 +906,7 @@
         };
 
         try {
-            let query = supabase.from(TABLE_NAME).update(updateData);
+            let query = supabase.from(EDIT_TABLE_NAME).update(updateData);
 
             if (row._id) {
                 // Preferred: update by primary key
@@ -876,6 +922,19 @@
 
             const { error } = await query;
             if (error) throw error;
+
+            // Mantiene sincronizado el badge "Itinerario validado" que ve
+            // Conciliación Manifiestos (lee esta misma columna de su propia
+            // copia). Best-effort: si falla, no revierte la validación
+            // principal — solo se pierde el reflejo cruzado.
+            if (row._id) {
+                supabase.from(MANIFIESTOS_MIRROR_TABLE_NAME)
+                    .update(updateData)
+                    .eq('id', row._id)
+                    .then(({ error: mirrorError }) => {
+                        if (mirrorError) console.warn('[toggleValidacion] no se pudo reflejar en manifiestos_vuelos_editable:', mirrorError);
+                    });
+            }
 
             // Update local cache
             currentData[dataIdx]._validado = newState;
@@ -1533,6 +1592,284 @@
             row.setAttribute('aria-selected', 'true');
         });
     }
+
+    /* ════════════════════════════════════════════════════════════════════
+     * Edición por celda de Itinerario de Vuelos.
+     * Mismo patrón ya construido y probado en Conciliación Manifiestos
+     * (script.js: _conciActivateCellEditor / _conciCommitCellRaw / Tab con
+     * handler en fase de captura), adaptado a esta tabla: sin editor de
+     * fecha especial (los 7 campos de fecha se editan como texto plano en
+     * su formato original "DDMON HH:MM"), sin promoción de fila virtual
+     * (todas las filas de aquí ya tienen id real desde el import).
+     * ════════════════════════════════════════════════════════════════════ */
+    let _itinEditMode = false;
+    let _itinCellClickHandler = null;
+    let _itinTabNavigationHandler = null;
+
+    function _itinCanEdit() {
+        return typeof window._conciCanCurrentUserEdit === 'function' ? window._conciCanCurrentUserEdit() : false;
+    }
+
+    function _itinRefreshToolbar() {
+        const btnEdit = document.getElementById('btn-itin-edit-mode');
+        const btnSave = document.getElementById('btn-itin-save-mode');
+        const btnCancel = document.getElementById('btn-itin-cancel-mode');
+        const canEdit = _itinCanEdit();
+        if (btnEdit) { btnEdit.classList.toggle('d-none', !canEdit || _itinEditMode); btnEdit.disabled = !canEdit; }
+        if (btnSave) { btnSave.classList.toggle('d-none', !canEdit || !_itinEditMode); btnSave.disabled = !canEdit; }
+        if (btnCancel) { btnCancel.classList.toggle('d-none', !canEdit || !_itinEditMode); btnCancel.disabled = !canEdit; }
+    }
+
+    function _itinGetNextEditableCell(td) {
+        if (!td) return null;
+        const SEL = 'td[data-col]';
+        let next = td.nextElementSibling;
+        while (next && !next.matches(SEL)) next = next.nextElementSibling;
+        if (next) return next;
+        let row = td.parentElement ? td.parentElement.nextElementSibling : null;
+        while (row) {
+            const first = row.querySelector(SEL);
+            if (first) return first;
+            row = row.nextElementSibling;
+        }
+        return null;
+    }
+
+    function _itinGetPrevEditableCell(td) {
+        if (!td) return null;
+        const SEL = 'td[data-col]';
+        let prev = td.previousElementSibling;
+        while (prev && !prev.matches(SEL)) prev = prev.previousElementSibling;
+        if (prev) return prev;
+        let row = td.parentElement ? td.parentElement.previousElementSibling : null;
+        while (row) {
+            const cells = row.querySelectorAll(SEL);
+            const last = cells.length ? cells[cells.length - 1] : null;
+            if (last) return last;
+            row = row.previousElementSibling;
+        }
+        return null;
+    }
+
+    function _itinActivateCellEditor(td) {
+        if (!td || td.querySelector('.itin-cell-input')) return;
+        const currentRaw = td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '');
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-control form-control-sm itin-cell-input';
+        input.value = currentRaw;
+
+        td.classList.add('itin-cell-active');
+        td.textContent = '';
+        td.appendChild(input);
+
+        let closed = false;
+        const closeEditor = (accept, move) => {
+            if (closed) return;
+            closed = true;
+            td._itinCloseEditor = null;
+            const fallbackRaw = td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '');
+            const nextRaw = accept ? input.value : fallbackRaw;
+            _itinCommitCellRaw(td, nextRaw, move);
+        };
+        td._itinCloseEditor = closeEditor;
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                closeEditor(true, 'next');
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                closeEditor(false, false);
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+                closeEditor(true, e.shiftKey ? 'prev' : 'next');
+            }
+        });
+        input.addEventListener('blur', () => closeEditor(true, false));
+
+        input.focus();
+        input.select();
+    }
+
+    function _itinCommitCellRaw(td, nextRaw, move) {
+        nextRaw = String(nextRaw ?? '').trim();
+        td.dataset.pendingRaw = nextRaw;
+        td.dataset.raw = nextRaw;
+
+        const origRaw = td.dataset.origRaw || '';
+        if (nextRaw !== origRaw) td.dataset.dirty = '1';
+        else td.removeAttribute('data-dirty');
+
+        const tr = td.closest('tr');
+        if (tr) {
+            const rowDirty = !!tr.querySelector('td[data-dirty="1"]');
+            if (rowDirty) tr.dataset.dirty = '1';
+            else tr.removeAttribute('data-dirty');
+        }
+
+        td.classList.remove('itin-cell-active');
+        td.textContent = nextRaw;
+        td.title = 'Clic para editar';
+
+        if (tr && _itinEditMode) {
+            clearTimeout(tr._itinAutoSaveTimer);
+            tr._itinAutoSaveTimer = setTimeout(() => _itinAutoSaveRow(tr), 250);
+        }
+
+        if (move === 'next') {
+            const nextCell = _itinGetNextEditableCell(td);
+            if (nextCell) {
+                nextCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                _itinActivateCellEditor(nextCell);
+            }
+        } else if (move === 'prev') {
+            const prevCell = _itinGetPrevEditableCell(td);
+            if (prevCell) {
+                prevCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                _itinActivateCellEditor(prevCell);
+            }
+        }
+    }
+
+    async function _itinAutoSaveRow(tr) {
+        if (!tr || !tr.isConnected || !_itinEditMode || !_itinCanEdit()) return;
+        if (tr._itinAutoSavePromise) return tr._itinAutoSavePromise;
+        const rowId = tr.dataset.rowId;
+        if (!rowId) return; // todas las filas de esta tabla tienen id real desde el import
+        const cells = Array.from(tr.querySelectorAll('td[data-col]'));
+        const payload = {};
+        cells.forEach(td => {
+            const col = td.dataset.col;
+            const raw = td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '');
+            payload[col] = raw || null;
+        });
+        if (!Object.keys(payload).length) return;
+
+        tr._itinAutoSavePromise = (async () => {
+            try {
+                const supabase = window.supabaseClient;
+                if (!supabase) throw new Error('Supabase no disponible');
+                const { error } = await supabase.from(EDIT_TABLE_NAME).update(payload).eq('id', rowId);
+                if (error) {
+                    tr.title = `Pendiente de guardar: ${error.message || 'error de base de datos'}`;
+                    tr.classList.add('table-warning');
+                    console.warn('[Itinerario] fila pendiente de guardar:', error);
+                    return;
+                }
+                cells.forEach(td => {
+                    td.dataset.origRaw = td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '');
+                    td.removeAttribute('data-dirty');
+                });
+                tr.removeAttribute('data-dirty');
+                tr.classList.remove('table-warning');
+                tr.removeAttribute('title');
+                // Mantiene currentData en memoria al día para que otros
+                // renders (filtros, orden) no pisen la edición recién guardada.
+                const dataIdx = Number(tr.dataset.rowIdx);
+                if (Number.isFinite(dataIdx) && currentData[dataIdx]) {
+                    Object.keys(payload).forEach(col => { currentData[dataIdx][col] = payload[col] || ''; });
+                }
+            } catch (err) {
+                tr.title = `Pendiente de guardar: ${err.message || err}`;
+                tr.classList.add('table-warning');
+                console.warn('[Itinerario] error de guardado automático:', err);
+            } finally {
+                tr._itinAutoSavePromise = null;
+            }
+        })();
+        return tr._itinAutoSavePromise;
+    }
+
+    function _itinSetTableEditableState(enabled) {
+        const table = document.getElementById('table-ops-flights-csv');
+        const tbody = table ? table.querySelector('tbody') : null;
+        if (!table || !tbody) return;
+
+        table.classList.toggle('itin-edit-mode', !!enabled);
+
+        if (enabled) {
+            if (!_itinCellClickHandler) {
+                _itinCellClickHandler = (ev) => {
+                    if (!_itinEditMode) return;
+                    if (ev.target.closest('.itin-cell-input')) return;
+                    const td = ev.target.closest('td[data-col]');
+                    if (!td || !tbody.contains(td)) return;
+                    _itinActivateCellEditor(td);
+                };
+            }
+            tbody.addEventListener('click', _itinCellClickHandler);
+
+            // Captura Tab antes de que el navegador saque el foco de la
+            // tabla (mismo motivo que en Conciliación: sin esto, Tab se
+            // sale del modo edición en vez de avanzar a la siguiente celda).
+            if (!_itinTabNavigationHandler) {
+                _itinTabNavigationHandler = (ev) => {
+                    if (!_itinEditMode || ev.key !== 'Tab') return;
+                    const input = ev.target.closest('.itin-cell-input');
+                    const td = input ? input.closest('td[data-col]') : null;
+                    if (!td || !tbody.contains(td)) return;
+                    ev.preventDefault();
+                    ev.stopImmediatePropagation();
+                    if (typeof td._itinCloseEditor === 'function') {
+                        td._itinCloseEditor(true, ev.shiftKey ? 'prev' : 'next');
+                    }
+                };
+            }
+            tbody.addEventListener('keydown', _itinTabNavigationHandler, true);
+
+            tbody.querySelectorAll('td[data-col]').forEach(td => {
+                td.dataset.origRaw = td.dataset.raw || '';
+                td.dataset.pendingRaw = td.dataset.raw || '';
+                td.removeAttribute('data-dirty');
+                td.title = 'Clic para editar';
+            });
+        } else {
+            if (_itinCellClickHandler) tbody.removeEventListener('click', _itinCellClickHandler);
+            if (_itinTabNavigationHandler) tbody.removeEventListener('keydown', _itinTabNavigationHandler, true);
+            tbody.querySelectorAll('td[data-col]').forEach(td => {
+                if (typeof td._itinCloseEditor === 'function') td._itinCloseEditor(true, false);
+                td.classList.remove('itin-cell-active');
+                td.removeAttribute('data-dirty');
+                td.title = '';
+            });
+            tbody.querySelectorAll('tr[data-dirty]').forEach(tr => tr.removeAttribute('data-dirty'));
+        }
+    }
+
+    function itinEnterEditMode() {
+        if (!_itinCanEdit()) { alert('Solo usuarios autorizados pueden editar esta tabla.'); return; }
+        if (_itinEditMode) return;
+        _itinEditMode = true;
+        _itinSetTableEditableState(true);
+        _itinRefreshToolbar();
+    }
+
+    function itinCancelBulkEdits() {
+        if (!_itinEditMode) return;
+        _itinEditMode = false;
+        _itinSetTableEditableState(false);
+        _itinRefreshToolbar();
+        loadFlights();
+    }
+
+    async function itinSaveBulkEdits() {
+        if (!_itinEditMode) return;
+        const tbody = document.getElementById('tbody-ops-flights-csv');
+        if (tbody) {
+            const active = tbody.querySelector('td.itin-cell-active');
+            if (active && typeof active._itinCloseEditor === 'function') active._itinCloseEditor(true, false);
+            const pending = Array.from(tbody.querySelectorAll('tr[data-dirty="1"]'));
+            await Promise.all(pending.map(tr => _itinAutoSaveRow(tr)));
+        }
+        _itinEditMode = false;
+        _itinSetTableEditableState(false);
+        _itinRefreshToolbar();
+    }
+
+    window.addEventListener('admin-mode-changed', _itinRefreshToolbar);
+    setTimeout(_itinRefreshToolbar, 500);
 })();/**
  * Logic for "Vuelos" tab (PDF Reader)
  * Structure: WIDE TABLE (13 Columns)
