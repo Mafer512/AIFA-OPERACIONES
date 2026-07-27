@@ -19989,13 +19989,23 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                 actionTd.dataset.conciAction = '1';
                 const persistedId = String(row.id ?? '').trim();
                 if (persistedId) {
+                    const group = document.createElement('div');
+                    group.className = 'btn-group btn-group-sm';
+                    const hist = document.createElement('button');
+                    hist.type = 'button';
+                    hist.className = 'btn btn-outline-secondary conci-history-row';
+                    hist.title = 'Ver historial de este registro';
+                    hist.innerHTML = '<i class="fas fa-history"></i>';
+                    hist.dataset.rowId = persistedId;
+                    group.appendChild(hist);
                     const del = document.createElement('button');
                     del.type = 'button';
-                    del.className = 'btn btn-sm btn-outline-danger conci-delete-row';
+                    del.className = 'btn btn-outline-danger conci-delete-row';
                     del.title = 'Eliminar fila';
                     del.innerHTML = '<i class="fas fa-trash-alt"></i>';
                     del.dataset.rowId = persistedId;
-                    actionTd.appendChild(del);
+                    group.appendChild(del);
+                    actionTd.appendChild(group);
                 } else {
                     actionTd.innerHTML = '<span class="text-muted" title="Fila generada desde vuelos; no es un registro guardado">—</span>';
                 }
