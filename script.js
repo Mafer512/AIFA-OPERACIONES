@@ -20314,11 +20314,6 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
         clearTimeout(tr._conciAutoSaveTimer);
         tr._conciAutoSaveTimer = setTimeout(() => _conciAutoSaveRow(tr), 250);
     }
-    // El rol puede venir de sessionStorage, del gestor de sesión o de la caché
-    // de permisos; usa el mismo criterio que el resto de Conciliación para que
-    // el acceso no desaparezca según la forma en que inició sesión el usuario.
-    if (btnAirlineColors) btnAirlineColors.classList.toggle('d-none', !canEdit);
-
     if (move === 'next') {
         const nextCell = _conciGetNextEditableCell(td);
         if (nextCell) {
