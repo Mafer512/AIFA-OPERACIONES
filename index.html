@@ -13395,6 +13395,12 @@ FF
                                 const preferred = CTBL_COL_ORDER.filter(k => allKeys.includes(k));
                                 const rest = allKeys.filter(k => !CTBL_COL_ORDER.includes(k) && !CTBL_HIDDEN_COLS.has(k));
                                 ctblCols = [...preferred, ...rest];
+                                const estatusKey = ctblCols.find(k => /^estatus$/i.test(k));
+                                const gradoAcadKey = ctblCols.find(k => k === 'grado_academico' || /^grado\s+acad[eé]mico$/i.test(k));
+                                if (estatusKey && gradoAcadKey) {
+                                    ctblCols = ctblCols.filter(k => k !== estatusKey);
+                                    ctblCols.splice(ctblCols.indexOf(gradoAcadKey) + 1, 0, estatusKey);
+                                }
                                 // Columna de sort inicial: preferir num_empleado
                                 ctblSortCol = ctblCols.find(k => k === 'num_empleado' || k === 'num') || ctblCols[0] || 'nombre';
                                 ctblSortAsc = true;
