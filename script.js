@@ -19987,28 +19987,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                 const actionTd = document.createElement('td');
                 actionTd.className = 'conci-row-action-col text-center';
                 actionTd.dataset.conciAction = '1';
-                const persistedId = String(row.id ?? '').trim();
-                if (persistedId) {
-                    const group = document.createElement('div');
-                    group.className = 'btn-group btn-group-sm';
-                    const hist = document.createElement('button');
-                    hist.type = 'button';
-                    hist.className = 'btn btn-outline-secondary conci-history-row';
-                    hist.title = 'Ver historial de este registro';
-                    hist.innerHTML = '<i class="fas fa-history"></i>';
-                    hist.dataset.rowId = persistedId;
-                    group.appendChild(hist);
-                    const del = document.createElement('button');
-                    del.type = 'button';
-                    del.className = 'btn btn-outline-danger conci-delete-row';
-                    del.title = 'Eliminar fila';
-                    del.innerHTML = '<i class="fas fa-trash-alt"></i>';
-                    del.dataset.rowId = persistedId;
-                    group.appendChild(del);
-                    actionTd.appendChild(group);
-                } else {
-                    actionTd.innerHTML = '<span class="text-muted" title="Fila generada desde vuelos; no es un registro guardado">—</span>';
-                }
+                _conciFillRowActionCell(actionTd, String(row.id ?? '').trim());
                 tr.appendChild(actionTd);
             }
 
@@ -20835,6 +20814,16 @@ function _conciPrepareValueForDatabase(col, value) {
         const iso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         return hour ? `${iso} ${String(hour).padStart(2, '0')}:${minute}:00` : iso;
     }
+    // Filas sintetizadas desde Itinerario de Vuelos ("Solo Vuelos") traen FECHA
+    // como "DD/MM" sin año (el itinerario no lo conserva). Si el usuario nunca
+    // abrió el editor de esa celda, este es el único lugar donde se normaliza
+    // antes de guardar; sin esto, Postgres rechaza el INSERT ("invalid input
+    // syntax for type date"). Usa el año que ya está cargado en la vista.
+    const shortDateMatch = raw.match(/^(\d{1,2})\/(\d{1,2})$/);
+    if (shortDateMatch && _conciEditFallbackYear) {
+        const [, day, month] = shortDateMatch;
+        return `${_conciEditFallbackYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
     return value;
 }
 
@@ -20902,6 +20891,46 @@ function _conciAirlinePayloadEntry(payload) {
     return key ? { key, value: payload[key] } : null;
 }
 
+// Construye el contenido de la columna de acciones (historial + eliminar) para
+// un registro persistido, o el placeholder "—" cuando la fila aún no existe
+// como tal en "Conciliación Manifiestos" (solo vive del lado de Itinerario).
+function _conciFillRowActionCell(actionTd, persistedId) {
+    actionTd.innerHTML = '';
+    if (!persistedId) {
+        actionTd.innerHTML = '<span class="text-muted" title="Fila generada desde vuelos; no es un registro guardado">—</span>';
+        return;
+    }
+    const group = document.createElement('div');
+    group.className = 'btn-group btn-group-sm';
+    const hist = document.createElement('button');
+    hist.type = 'button';
+    hist.className = 'btn btn-outline-secondary conci-history-row';
+    hist.title = 'Ver historial de este registro';
+    hist.innerHTML = '<i class="fas fa-history"></i>';
+    hist.dataset.rowId = persistedId;
+    group.appendChild(hist);
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'btn btn-outline-danger conci-delete-row';
+    del.title = 'Eliminar fila';
+    del.innerHTML = '<i class="fas fa-trash-alt"></i>';
+    del.dataset.rowId = persistedId;
+    group.appendChild(del);
+    actionTd.appendChild(group);
+}
+
+// Limpia el estado "dirty"/warning de una fila tras un guardado exitoso.
+function _conciMarkRowSaved(tr, cells) {
+    cells.forEach(td => {
+        const raw = _conciNormalizeEditableCellText(td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent);
+        td.dataset.origRaw = raw;
+        td.removeAttribute('data-dirty');
+    });
+    tr.removeAttribute('data-dirty');
+    tr.classList.remove('table-warning');
+    tr.removeAttribute('title');
+}
+
 async function _conciSaveVirtualAirlineOverride(client, tr, value) {
     const vueloId = String(tr?.dataset?.conciVueloId || '').trim();
     const direccion = String(tr?.dataset?.conciVueloDireccion || '').trim().toUpperCase();
@@ -20923,6 +20952,7 @@ async function _conciAutoSaveRow(tr) {
     if (tr._conciAutoSavePromise) return tr._conciAutoSavePromise;
     const cells = Array.from(tr.querySelectorAll('td[data-col]'));
     const payload = {};
+    const dirtyCols = new Set();
     cells.forEach(td => {
         const col = td.dataset.col;
         const liveInput = td.querySelector('input, textarea, select');
@@ -20930,6 +20960,7 @@ async function _conciAutoSaveRow(tr) {
             liveInput ? liveInput.value : (td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent)
         );
         if (raw) payload[col] = _conciPrepareValueForDatabase(col, raw);
+        if (td.dataset.dirty === '1') dirtyCols.add(col);
     });
     // Si la fila nueva sólo tiene el mes capturado, usa la fecha actualmente
     // seleccionada en el filtro como fecha inicial del registro.
@@ -20948,16 +20979,38 @@ async function _conciAutoSaveRow(tr) {
             if (!client) throw new Error('No se pudo inicializar el cliente de Supabase.');
             if (tr.dataset.rowFuente === 'Solo Vuelos') {
                 const airlineEntry = _conciAirlinePayloadEntry(payload);
-                if (!airlineEntry) return;
-                await _conciSaveVirtualAirlineOverride(client, tr, airlineEntry.value);
-                cells.forEach(td => {
-                    const raw = _conciNormalizeEditableCellText(td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent);
-                    td.dataset.origRaw = raw;
-                    td.removeAttribute('data-dirty');
-                });
-                tr.removeAttribute('data-dirty');
-                tr.classList.remove('table-warning');
-                tr.removeAttribute('title');
+                // Sólo se tocó la aerolínea: es un ajuste ligero sobre el vuelo
+                // (no crea manifiesto — se conserva el comportamiento previo).
+                const onlyAirlineDirty = airlineEntry && dirtyCols.size > 0 &&
+                    [...dirtyCols].every(col => col === airlineEntry.key);
+                if (onlyAirlineDirty) {
+                    await _conciSaveVirtualAirlineOverride(client, tr, airlineEntry.value);
+                    _conciMarkRowSaved(tr, cells);
+                    return;
+                }
+                if (dirtyCols.size === 0) return;
+
+                // El usuario capturó datos de manifiesto reales (matrícula, PAX,
+                // slot coordinado, observaciones, etc.) para un vuelo que todavía
+                // no tenía manifiesto propio: "Conciliación Manifiestos" es una
+                // tabla distinta a la de Itinerario de Vuelos, así que esto debe
+                // crear un registro real ahí, no perderse en la fila espejo.
+                const result = await _conciWriteRowSafe(client, payload, null);
+                if (!result.ok) {
+                    tr.title = `Pendiente de guardar: ${result.error?.message || 'error de base de datos'}`;
+                    tr.classList.add('table-warning');
+                    console.warn('[Conciliación] fila (Solo Vuelos) pendiente de guardar:', result.error);
+                    return;
+                }
+                const inserted = Array.isArray(result.data) ? result.data[0] : result.data;
+                if (inserted?.id !== undefined && inserted?.id !== null) {
+                    tr.dataset.rowId = String(inserted.id);
+                    tr.dataset.rowFuente = 'Manifiestos + Vuelos';
+                    tr.classList.remove('conci-missing-manifiesto');
+                    const actionTd = tr.querySelector('td.conci-row-action-col');
+                    if (actionTd) _conciFillRowActionCell(actionTd, String(inserted.id));
+                }
+                _conciMarkRowSaved(tr, cells);
                 return;
             }
             const rowId = String(tr.dataset.rowId || '').trim();
@@ -20982,14 +21035,7 @@ async function _conciAutoSaveRow(tr) {
                     action.dataset.rowId = String(inserted.id);
                 }
             }
-            cells.forEach(td => {
-                const raw = _conciNormalizeEditableCellText(td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent);
-                td.dataset.origRaw = raw;
-                td.removeAttribute('data-dirty');
-            });
-            tr.removeAttribute('data-dirty');
-            tr.classList.remove('table-warning');
-            tr.removeAttribute('title');
+            _conciMarkRowSaved(tr, cells);
         } catch (error) {
             tr.title = `Pendiente de guardar: ${error.message || error}`;
             tr.classList.add('table-warning');
