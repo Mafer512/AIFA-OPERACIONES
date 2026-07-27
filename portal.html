@@ -23,6 +23,9 @@
     *,*::before,*::after{box-sizing:border-box}
     html{scroll-behavior:smooth}
     body{font-family:'Inter','Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;margin:0}
+    /* La Conciliación carga el formato en un iframe: se oculta el tablero del
+       portal para presentar únicamente la ventana del manifiesto. */
+    body.portal-embedded #portal-nav,body.portal-embedded #portal-main{display:none!important}
 
     /* ── LOADING ── */
     #app-loading{position:fixed;inset:0;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.6rem;z-index:9999;transition:opacity .5s}
@@ -1846,6 +1849,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="js/supabase-client.js"></script>
-<script src="js/portal-manifiestos.js?v=20260722-print-full-page-v22"></script>
+<script src="js/portal-manifiestos.js?v=20260727-conci-embedded-v24"></script>
 </body>
 </html>

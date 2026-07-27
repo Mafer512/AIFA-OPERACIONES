@@ -17867,6 +17867,18 @@ function _conciNormalizeMatricula(value) {
     return String(value || '')
         .replace(/\u00a0/g, ' ')
         .trim()
+        .toUpperCase()
+        // La fuente de vuelos puede traer XA-VXQ, XA VXQ o XAVXQ.
+        // Para validar contra el catálogo todos se comparan como XAVXQ.
+        .replace(/[^A-Z0-9]/g, '');
+}
+
+function _conciFormatMatriculaForCatalog(value) {
+    // Conserva la forma escrita por el usuario en el catálogo (incluido el
+    // guion), mientras _conciNormalizeMatricula se usa únicamente como llave.
+    return String(value || '')
+        .replace(/\u00a0/g, ' ')
+        .trim()
         .toUpperCase();
 }
 
@@ -21902,7 +21914,7 @@ async function _conciSaveScopedCatalog(event, kind) {
             aliases: value('aliases').split(/[\n,]+/).map(v => v.trim()).filter(Boolean), color: value('color') || '#6c757d', text_color: value('text_color') || '#ffffff',
             types: [...form.querySelectorAll('[name="conci-catalog-type"]:checked')].map(input => input.value), active: true,
         } : {
-            matricula: _conciNormalizeMatricula(value('matricula')), aerolinea: value('aerolinea').trim().toUpperCase(), estatus: value('estatus'),
+            matricula: _conciFormatMatriculaForCatalog(value('matricula')), aerolinea: value('aerolinea').trim().toUpperCase(), estatus: value('estatus'),
             tipo_de_aeronave: value('tipo_de_aeronave').trim().toUpperCase() || null, tipo_de_aeronave_2: value('tipo_de_aeronave_2').trim().toUpperCase() || null,
             mlw_ton: value('mlw_ton') === '' ? null : Number(value('mlw_ton')), mtow_ton: value('mtow_ton') === '' ? null : Number(value('mtow_ton')), mzfw_ton: value('mzfw_ton') === '' ? null : Number(value('mzfw_ton')), promedio: value('promedio') === '' ? null : Number(value('promedio')), pasajeros: Number(value('pasajeros') || 0), updated_at: new Date().toISOString(),
         };

@@ -20226,11 +20226,11 @@ FF
                                                                 <i class="fas fa-plus me-1"></i>Capturar Manifiesto
                                                             </button>
                                                             <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="dropdownCapturarManifiestos" style="font-size:0.85rem;">
-                                                                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalManifiestoLlegada"><i class="fas fa-plane-arrival text-primary me-2"></i>Llegada (Pasajeros)</a></li>
-                                                                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalManifiestoSalida"><i class="fas fa-plane-departure text-warning me-2"></i>Salida (Pasajeros)</a></li>
+                                                                <li><a class="dropdown-item" href="#" onclick="window.openConciDigitalManifest &amp;&amp; window.openConciDigitalManifest('llegada', 'Llegada — Pasajeros'); return false;"><i class="fas fa-plane-arrival text-success me-2"></i>Llegada (Pasajeros)</a></li>
+                                                                <li><a class="dropdown-item" href="#" onclick="window.openConciDigitalManifest &amp;&amp; window.openConciDigitalManifest('salida', 'Salida — Pasajeros'); return false;"><i class="fas fa-plane-departure text-warning me-2"></i>Salida (Pasajeros)</a></li>
                                                                 <li><hr class="dropdown-divider"></li>
-                                                                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalManifiestoLlegadaCarga"><i class="fas fa-box-open text-success me-2"></i>Llegada (Carga)</a></li>
-                                                                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalManifiestoSalidaCarga"><i class="fas fa-truck-loading text-info me-2"></i>Salida (Carga)</a></li>
+                                                                <li><a class="dropdown-item" href="#" onclick="window.openConciDigitalManifest &amp;&amp; window.openConciDigitalManifest('llegada-carga', 'Llegada — Carga'); return false;"><i class="fas fa-box-open text-success me-2"></i>Llegada (Carga)</a></li>
+                                                                <li><a class="dropdown-item" href="#" onclick="window.openConciDigitalManifest &amp;&amp; window.openConciDigitalManifest('salida-carga', 'Salida — Carga'); return false;"><i class="fas fa-truck-loading text-warning me-2"></i>Salida (Carga)</a></li>
                                                             </ul>
                                                         </div>
                                                     </div>
@@ -32296,6 +32296,21 @@ FF
         </div>
     </div>
 
+    <!-- Modal: captura digital desde Conciliación -->
+    <div class="modal fade" id="modal-conci-digital-manifest" tabindex="-1" aria-labelledby="modal-conci-digital-manifest-label">
+        <div class="modal-dialog modal-fullscreen m-0">
+            <div class="modal-content border-0 rounded-0 bg-transparent" style="height:100vh">
+                <div class="modal-header d-none">
+                    <h5 class="modal-title" id="modal-conci-digital-manifest-label"><i class="fas fa-file-signature me-2 text-primary"></i>Captura de manifiesto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body p-0 overflow-hidden bg-transparent">
+                    <iframe id="conci-digital-manifest-frame" title="Formato digital de manifiesto" style="width:100%;height:100%;border:0;background:#fff"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Consulta de manifiestos resguardados -->
     <div class="modal fade" id="modal-manifest-archive" tabindex="-1" aria-labelledby="modal-manifest-archive-label">
         <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
@@ -34277,7 +34292,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260727-hist-ui" defer></script>
+    <script src="script.js?v=20260727-conci-matriculas-normalizadas-v3" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>
@@ -35514,6 +35529,7 @@ FF
 <script src="js/ops-flights-admin.js?v=20260727-tablas-separadas" defer></script>
 <!-- Conciliación Manifiestos table + inline editing -->
 <script src="js/conci-manifiestos-table.js?v=1" defer></script>
+<script src="js/conci-manifiestos-captura.js?v=20260727-v1" defer></script>
 <script src="js/conci-manifiestos-historial.js?v=20260727-insert-chips" defer></script>
 <!-- Navegación inline del picker de fecha en Itinerario -->
 <script>

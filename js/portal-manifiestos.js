@@ -28,6 +28,15 @@
     let canAifa = false, canAfac = false, isReviewer = false, userRole = 'aerolinea';
     let provRows = [], adminRows = [], adminFiltered = [];
     let viewMode = 'provider'; // 'provider' | 'admin'
+    const requestedManifest = new URLSearchParams(window.location.search).get('manifest');
+    const embeddedMode = new URLSearchParams(window.location.search).get('embed') === '1';
+    if (embeddedMode) document.body.classList.add('portal-embedded');
+
+    function notifyEmbedding(type) {
+        if (embeddedMode && window.parent !== window) {
+            window.parent.postMessage({ type }, window.location.origin);
+        }
+    }
 
     /* ── roles ──
        aerolinea → captura · aifa → aprueba AIFA · afac → aprueba AFAC · admin → ambos */
@@ -255,7 +264,10 @@
 
         // BLOQUEO CRUZADO: una cuenta interna de AIFA Operaciones (sin perfil
         // de portal y sin señales de portal) no puede entrar al portal.
-        if (tablaOk && !perfil && !portalSignals) {
+        // Desde Conciliación se puede abrir directamente uno de los formatos
+        // digitales con ?manifest=. En ese caso se permite a la sesión interna
+        // capturar el documento sin mostrar los formatos antiguos del dashboard.
+        if (tablaOk && !perfil && !portalSignals && !requestedManifest) {
             hide('screen-app');
             show('screen-login');
             loginAlert('Esta cuenta pertenece a AIFA — Operaciones, no al Portal de Manifiestos.', 'danger');
@@ -305,6 +317,22 @@
         // Los revisores (AIFA/AFAC) entran directo al panel de revisión
         if (isReviewer) showAdminView();
         else            showProviderView();
+
+        openRequestedManifest();
+    }
+
+    // Abre directamente el formato digital solicitado desde Conciliación.
+    function openRequestedManifest() {
+        const modalId = {
+            llegada:       'modalPortalLlegada',
+            salida:        'modalPortalSalida',
+            'llegada-carga': 'modalPortalLlegadaCarga',
+            'salida-carga':  'modalPortalSalidaCarga',
+        }[requestedManifest];
+        if (!modalId || !window.bootstrap) return;
+        const modalEl = $(modalId);
+        if (!modalEl) return;
+        window.setTimeout(() => window.bootstrap.Modal.getOrCreateInstance(modalEl).show(), 120);
     }
 
     /* ──────────────────────────────────────────
@@ -1003,6 +1031,13 @@
             const folio = $(`${prefix}-folio`);
             if (folio) folio.value = '';
         });
+        if (embeddedMode) {
+            el.addEventListener('hidden.bs.modal', () => {
+                const saved = el.dataset.pmiSaved === '1';
+                delete el.dataset.pmiSaved;
+                notifyEmbedding(saved ? 'aifa-manifest-saved' : 'aifa-manifest-closed');
+            });
+        }
     }
 
     function getSalidaEmbarkRows() {
@@ -1574,7 +1609,9 @@
             }
 
             // Close Bootstrap modal
-            const bsModal = bootstrap?.Modal?.getInstance(document.getElementById(modalId));
+            const modalElement = document.getElementById(modalId);
+            if (embeddedMode && modalElement) modalElement.dataset.pmiSaved = '1';
+            const bsModal = bootstrap?.Modal?.getInstance(modalElement);
             bsModal?.hide();
 
             // Subir PDF en segundo plano
