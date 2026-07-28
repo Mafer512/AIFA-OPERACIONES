@@ -22029,20 +22029,31 @@ async function _conciWriteRowSafe(client, payload, rowId) {
 const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bigint|integer|numeric|double precision|real|smallint|decimal):\s*"([^"]+)"/i);
         if (typeValueMatch) {
             const badValue = _conciNormalizeEditableCellText(typeValueMatch[1]).toLowerCase();
+            const knownNumCols = ['TOTAL PAX', 'KGS. DE EQUIPAJE', 'HRS. CUMPLIDAS', '# DE VUELO', 'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE CARGA', 'CORREO', 'DIPLOMATICOS', 'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS'];
+            // El valor reportado por Postgres puede ser un carácter genérico
+            // (ej. "-" para "sin dato"), que sería substring de casi cualquier
+            // fecha ("2026-07-27") o texto libre ("Retraso - reprogramado").
+            // Buscarlo por coincidencia de substring en ese caso borraría campos
+            // de texto que nada tienen que ver con el error real. Cuando el
+            // valor es así de corto/ambiguo, se corrige únicamente entre las
+            // columnas que sabemos que son numéricas, nunca en columnas de texto.
+            const isAmbiguousValue = badValue.length <= 2;
             Object.keys(currentPayload).forEach(col => {
+                if (isAmbiguousValue && !knownNumCols.some(kc => _conciNormalizedColumnName(kc) === _conciNormalizedColumnName(col))) return;
                 const val = currentPayload[col];
                 if (val === null || val === undefined) return;
-                const valNorm = _conciNormalizeEditableCellText(String(val)).toLowerCase();   
-                if (!valNorm.includes(badValue) && !badValue.includes(valNorm)) return;
+                const valNorm = _conciNormalizeEditableCellText(String(val)).toLowerCase();
+                if (!isAmbiguousValue && !valNorm.includes(badValue) && !badValue.includes(valNorm)) return;
+                if (isAmbiguousValue && valNorm !== badValue) return;
 
                 const coerced = _conciCoerceNumberCandidate(val);
                 if (coerced === null || Number.isNaN(coerced)) delete currentPayload[col];
                 else currentPayload[col] = coerced;
                 mutated = true;
             });
-            // Fallback: If STILL not mutated, forcefully remove the exact known columns that are numeric if they somehow received this value
+            // Fallback: si aún no se identificó la columna, elimina las columnas
+            // numéricas conocidas que sigan presentes en el payload.
              if (!mutated) {
-                 const knownNumCols = ['TOTAL PAX', 'KGS. DE EQUIPAJE', 'HRS. CUMPLIDAS', '# DE VUELO', 'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE CARGA', 'CORREO'];
                  knownNumCols.forEach(kc => { if (currentPayload[kc] !== undefined) { delete currentPayload[kc]; mutated = true; } });
              }
         }
