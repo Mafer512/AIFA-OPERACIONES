@@ -21164,15 +21164,22 @@ function _conciActivateRoutingEditor(td, currentRaw) {
     td.textContent = '';
     td.appendChild(select);
     let closed = false;
+    // El <select> abre con una opción ya preseleccionada (el valor actual),
+    // antes de que el usuario elija nada. Un blur sin haber elegido (ej. el
+    // foco avanzó automáticamente a esta celda tras un Enter en otra, y el
+    // usuario ya está trabajando en una tercera celda) no debe tratarse como
+    // una confirmación real — sólo un "change" del usuario cuenta como tal.
+    let userChanged = false;
     const closeEditor = (accept, move) => {
         if (closed) return;
         closed = true;
         td._conciCloseEditor = null;
         const selected = _conciNormalizeEditableCellText(select.value);
-        _conciCommitCellRaw(td, accept && selected ? selected : fallbackRaw, move, selected || fallbackRaw);
+        const shouldAccept = accept && userChanged && selected;
+        _conciCommitCellRaw(td, shouldAccept ? selected : fallbackRaw, move, shouldAccept ? selected : fallbackRaw);
     };
     td._conciCloseEditor = closeEditor;
-    select.addEventListener('change', () => closeEditor(true, false));
+    select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
         else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
@@ -21268,15 +21275,21 @@ function _conciActivateManifestTypeEditor(td, currentRaw) {
     td.textContent = '';
     td.appendChild(select);
     let closed = false;
+    // El <select> abre con una opción ya preseleccionada (el valor actual);
+    // un blur sin que el usuario haya elegido nada (foco avanzado por Enter
+    // en otra celda mientras el usuario ya trabaja en una tercera) no debe
+    // tratarse como confirmación — sólo un "change" real cuenta como tal.
+    let userChanged = false;
     const closeEditor = (accept, move) => {
         if (closed) return;
         closed = true;
         td._conciCloseEditor = null;
         const selected = _conciNormalizeManifestType(select.value);
-        _conciCommitCellRaw(td, accept && selected ? selected : fallbackRaw, move, selected || fallbackRaw);
+        const shouldAccept = accept && userChanged && selected;
+        _conciCommitCellRaw(td, shouldAccept ? selected : fallbackRaw, move, shouldAccept ? selected : fallbackRaw);
     };
     td._conciCloseEditor = closeEditor;
-    select.addEventListener('change', () => closeEditor(true, false));
+    select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
         else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
@@ -21310,16 +21323,20 @@ function _conciActivateOperationTypeEditor(td, currentRaw) {
     td.appendChild(select);
 
     let closed = false;
+    // El <select> abre con una opción ya preseleccionada (el valor actual);
+    // un blur sin que el usuario haya elegido nada no debe tratarse como
+    // confirmación — sólo un "change" real cuenta como tal.
+    let userChanged = false;
     const closeEditor = (accept, move) => {
         if (closed) return;
         closed = true;
         td._conciCloseEditor = null;
         const selected = _conciNormalizeOperationType(select.value);
-        const nextRaw = accept && selected ? selected : fallbackRaw;
+        const nextRaw = accept && userChanged && selected ? selected : fallbackRaw;
         _conciCommitCellRaw(td, nextRaw, move, nextRaw);
     };
     td._conciCloseEditor = closeEditor;
-    select.addEventListener('change', () => closeEditor(true, false));
+    select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
             event.preventDefault();
@@ -22031,21 +22048,21 @@ const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bi
         if (typeValueMatch) {
             const badValue = _conciNormalizeEditableCellText(typeValueMatch[1]).toLowerCase();
             const knownNumCols = ['TOTAL PAX', 'KGS. DE EQUIPAJE', 'HRS. CUMPLIDAS', '# DE VUELO', 'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE CARGA', 'CORREO', 'DIPLOMATICOS', 'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS'];
-            // El valor reportado por Postgres puede ser un carácter genérico
-            // (ej. "-" para "sin dato"), que sería substring de casi cualquier
-            // fecha ("2026-07-27") o texto libre ("Retraso - reprogramado").
-            // Buscarlo por coincidencia de substring en ese caso borraría campos
-            // de texto que nada tienen que ver con el error real. Cuando el
-            // valor es así de corto/ambiguo, se corrige únicamente entre las
-            // columnas que sabemos que son numéricas, nunca en columnas de texto.
-            const isAmbiguousValue = badValue.length <= 2;
+            // Un error de tipo numérico SOLO puede venir de una columna que
+            // realmente sea numérica en la base de datos — nunca de una
+            // columna de texto (AEROLINEA, DESTINO/ORIGEN, OBSERVACIONES...).
+            // Antes se buscaba también por coincidencia de substring del valor
+            // reportado, pero valores como "VB 9999" (# DE VUELO) pueden
+            // aparecer como substring de otra columna de texto no relacionada
+            // (ej. el código "VB" de AEROLINEA), borrándola sin motivo. Ahora
+            // la corrección se limita siempre a las columnas numéricas
+            // conocidas, sin importar el valor reportado.
             Object.keys(currentPayload).forEach(col => {
-                if (isAmbiguousValue && !knownNumCols.some(kc => _conciNormalizedColumnName(kc) === _conciNormalizedColumnName(col))) return;
+                if (!knownNumCols.some(kc => _conciNormalizedColumnName(kc) === _conciNormalizedColumnName(col))) return;
                 const val = currentPayload[col];
                 if (val === null || val === undefined) return;
                 const valNorm = _conciNormalizeEditableCellText(String(val)).toLowerCase();
-                if (!isAmbiguousValue && !valNorm.includes(badValue) && !badValue.includes(valNorm)) return;
-                if (isAmbiguousValue && valNorm !== badValue) return;
+                if (valNorm !== badValue && !valNorm.includes(badValue) && !badValue.includes(valNorm)) return;
 
                 const coerced = _conciCoerceNumberCandidate(val);
                 if (coerced === null || Number.isNaN(coerced)) delete currentPayload[col];
@@ -22143,6 +22160,22 @@ async function _conciAutoSaveRow(tr) {
         return tr._conciAutoSavePromise;
     }
     const cells = Array.from(tr.querySelectorAll('td[data-col]'));
+    // Un editor de alguna celda de esta fila puede seguir abierto sin que el
+    // usuario lo haya tocado — por ejemplo, tras Enter en una celda el foco
+    // avanza y abre automáticamente el editor de la siguiente columna, y
+    // mientras tanto el usuario ya movió su atención (clic) a una tercera
+    // celda, dejando ese editor intermedio abierto y con el foco "activo"
+    // sin que nadie lo haya editado. Los editores tipo <select> (routing,
+    // tipo de manifiesto/operación) muestran una opción ya preseleccionada
+    // (el valor actual) apenas se abren; su propio closeEditor sólo acepta
+    // esa selección si detectó un "change" real (ver userChanged en cada
+    // editor) — así que cerrar aquí CUALQUIER editor que siga abierto con
+    // accept=false es seguro: si el usuario sí lo editó, ese editor ya se
+    // habría cerrado a sí mismo (con accept=true) al disparar su "change",
+    // y no llegaría vivo hasta este punto.
+    cells.forEach(td => {
+        if (typeof td._conciCloseEditor === 'function') td._conciCloseEditor(false, false);
+    });
     const savedCellValues = new Map();
     const payload = {};
     const dirtyCols = new Set();
