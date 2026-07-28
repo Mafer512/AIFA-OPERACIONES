@@ -22196,9 +22196,11 @@ async function _conciAutoSaveRow(tr) {
                 // crear un registro real ahí, no perderse en la fila espejo.
                 const result = await _conciWriteRowSafe(client, payload, null);
                 if (!result.ok) {
-                    tr.title = `Pendiente de guardar: ${result.error?.message || 'error de base de datos'}`;
+                    const msg = result.error?.message || 'error de base de datos';
+                    tr.title = `Pendiente de guardar: ${msg}`;
                     tr.classList.add('table-secondary');
                     console.warn('[Conciliación] fila (Solo Vuelos) pendiente de guardar:', result.error);
+                    if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
                     return;
                 }
                 const inserted = Array.isArray(result.data) ? result.data[0] : result.data;
@@ -22219,9 +22221,11 @@ async function _conciAutoSaveRow(tr) {
             if (!result.ok) {
                 // Conserva la fila y sus valores para que el usuario pueda corregir
                 // el campo que causó el error; nunca se elimina silenciosamente.
-                tr.title = `Pendiente de guardar: ${result.error?.message || 'error de base de datos'}`;
+                const msg = result.error?.message || 'error de base de datos';
+                tr.title = `Pendiente de guardar: ${msg}`;
                 tr.classList.add('table-secondary');
                 console.warn('[Conciliación] fila pendiente de guardar:', result.error);
+                if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
                 return;
             }
             const inserted = Array.isArray(result.data) ? result.data[0] : result.data;
@@ -22245,9 +22249,11 @@ async function _conciAutoSaveRow(tr) {
             tr.classList.remove('table-warning');
             tr.removeAttribute('title');
         } catch (error) {
-            tr.title = `Pendiente de guardar: ${error.message || error}`;
+            const msg = error?.message || String(error);
+            tr.title = `Pendiente de guardar: ${msg}`;
             tr.classList.add('table-secondary');
             console.warn('[Conciliación] error de guardado automático:', error);
+            if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
         } finally {
             const shouldRetry = tr._conciAutoSaveQueued && !!tr.querySelector('td[data-dirty="1"]');
             tr._conciAutoSaveQueued = false;
