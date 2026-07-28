@@ -21985,21 +21985,22 @@ function _conciPrepareValueForDatabase(col, value) {
         const numericMonth = Number(raw);
         if (Number.isInteger(numericMonth) && numericMonth >= 1 && numericMonth <= 12) return numericMonth;
     }
+    // "Conciliación Manifiestos" guarda sus columnas de fecha (FECHA, CIERRE
+    // SUBSECRETARIA) como texto libre en formato "DD/MM/AAAA", no como tipo
+    // date nativo de Postgres — así están almacenadas y así las muestra el
+    // resto de la tabla (render, exportación a Excel). Un valor ya en ese
+    // formato se guarda tal cual, sin convertir a ISO.
     const dateMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/);
-    if (dateMatch) {
-        const [, day, month, year, hour, minute] = dateMatch;
-        const iso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        return hour ? `${iso} ${String(hour).padStart(2, '0')}:${minute}:00` : iso;
-    }
+    if (dateMatch) return raw;
     // Filas sintetizadas desde Itinerario de Vuelos ("Solo Vuelos") traen FECHA
     // como "DD/MM" sin año (el itinerario no lo conserva). Si el usuario nunca
-    // abrió el editor de esa celda, este es el único lugar donde se normaliza
-    // antes de guardar; sin esto, Postgres rechaza el INSERT ("invalid input
-    // syntax for type date"). Usa el año que ya está cargado en la vista.
+    // abrió el editor de esa celda, este es el único lugar donde se completa
+    // antes de guardar. Usa el año que ya está cargado en la vista, manteniendo
+    // el mismo formato "DD/MM/AAAA" que el resto de la tabla.
     const shortDateMatch = raw.match(/^(\d{1,2})\/(\d{1,2})$/);
     if (shortDateMatch && _conciEditFallbackYear) {
         const [, day, month] = shortDateMatch;
-        return `${_conciEditFallbackYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        return `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${_conciEditFallbackYear}`;
     }
     return value;
 }
@@ -22029,20 +22030,31 @@ async function _conciWriteRowSafe(client, payload, rowId) {
 const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bigint|integer|numeric|double precision|real|smallint|decimal):\s*"([^"]+)"/i);
         if (typeValueMatch) {
             const badValue = _conciNormalizeEditableCellText(typeValueMatch[1]).toLowerCase();
+            const knownNumCols = ['TOTAL PAX', 'KGS. DE EQUIPAJE', 'HRS. CUMPLIDAS', '# DE VUELO', 'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE CARGA', 'CORREO', 'DIPLOMATICOS', 'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS'];
+            // El valor reportado por Postgres puede ser un carácter genérico
+            // (ej. "-" para "sin dato"), que sería substring de casi cualquier
+            // fecha ("2026-07-27") o texto libre ("Retraso - reprogramado").
+            // Buscarlo por coincidencia de substring en ese caso borraría campos
+            // de texto que nada tienen que ver con el error real. Cuando el
+            // valor es así de corto/ambiguo, se corrige únicamente entre las
+            // columnas que sabemos que son numéricas, nunca en columnas de texto.
+            const isAmbiguousValue = badValue.length <= 2;
             Object.keys(currentPayload).forEach(col => {
+                if (isAmbiguousValue && !knownNumCols.some(kc => _conciNormalizedColumnName(kc) === _conciNormalizedColumnName(col))) return;
                 const val = currentPayload[col];
                 if (val === null || val === undefined) return;
-                const valNorm = _conciNormalizeEditableCellText(String(val)).toLowerCase();   
-                if (!valNorm.includes(badValue) && !badValue.includes(valNorm)) return;
+                const valNorm = _conciNormalizeEditableCellText(String(val)).toLowerCase();
+                if (!isAmbiguousValue && !valNorm.includes(badValue) && !badValue.includes(valNorm)) return;
+                if (isAmbiguousValue && valNorm !== badValue) return;
 
                 const coerced = _conciCoerceNumberCandidate(val);
                 if (coerced === null || Number.isNaN(coerced)) delete currentPayload[col];
                 else currentPayload[col] = coerced;
                 mutated = true;
             });
-            // Fallback: If STILL not mutated, forcefully remove the exact known columns that are numeric if they somehow received this value
+            // Fallback: si aún no se identificó la columna, elimina las columnas
+            // numéricas conocidas que sigan presentes en el payload.
              if (!mutated) {
-                 const knownNumCols = ['TOTAL PAX', 'KGS. DE EQUIPAJE', 'HRS. CUMPLIDAS', '# DE VUELO', 'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE CARGA', 'CORREO'];
                  knownNumCols.forEach(kc => { if (currentPayload[kc] !== undefined) { delete currentPayload[kc]; mutated = true; } });
              }
         }
@@ -22137,8 +22149,16 @@ async function _conciAutoSaveRow(tr) {
     cells.forEach(td => {
         const col = td.dataset.col;
         const liveInput = td.querySelector('input, textarea, select');
+        // Para la columna de routing (DESTINO/ORIGEN), dataset.raw guarda el
+        // nombre de ciudad ya resuelto para mostrar (ej. "QUITO"); el valor
+        // real a persistir vive en dataset.routeRaw (ej. "MEX-UIO"). Sin este
+        // fallback, cualquier autoguardado de la fila reescribía esa columna
+        // con el nombre de ciudad en vez del código/routing original.
+        const fallbackRaw = _conciIsRoutingColumn(col)
+            ? (td.dataset.routeRaw ?? td.dataset.raw ?? td.textContent)
+            : (td.dataset.raw ?? td.textContent);
         const raw = _conciNormalizeEditableCellText(
-            liveInput ? liveInput.value : (td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent)
+            liveInput ? liveInput.value : (td.dataset.pendingRaw ?? fallbackRaw)
         );
         savedCellValues.set(td, raw);
         if (raw) payload[col] = _conciPrepareValueForDatabase(col, raw);
