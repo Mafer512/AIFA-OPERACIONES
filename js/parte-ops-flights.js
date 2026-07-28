@@ -459,72 +459,97 @@
             const supabase = window.supabaseClient;
             if (!supabase) throw new Error('Cliente Supabase no disponible');
 
-            // 1. Fetch existing flights to check against
-            // We select minimal columns to build signatures
+            // 1. Fetch existing flights to check against. Se traen todas las
+            // columnas de vuelo (no sólo designador+hora) porque un mismo
+            // vuelo puede reimportarse con datos actualizados (stand, gate,
+            // aeronave, etc.) que si coinciden queremos aplicar via UPDATE.
             const { data: existingData, error: fetchError } = await supabase
                 .from(TABLE_NAME)
-                .select('"Status", "[Arr] Flight Designator", "[Arr] SIBT", "[Dep] Flight Designator", "[Dep] SOBT"');
+                .select('id, "Status", "[Arr] Airline code", "[Arr] Flight Designator", "[Arr] SIBT", "[Arr] AIBT", "[Arr] ALDT", "[Arr] Stand", "[Arr] Gates", "[Arr] Boarded", "[Arr] Baggage Belts", "[Arr] Service Type", "Routing", "[Dep] Service Type", "Aircraft type", "Registration", "[Dep] Airline code", "[Dep] Flight Designator", "[Dep] Stand", "[Dep] Gates", "[Dep] Boarded", "[Dep] SOBT", "[Dep] AOBT", "[Dep] ATOT", "[Dep] ATTT"');
 
             if (fetchError) {
                 console.error("Error fetching existing data for duplicate check:", fetchError);
-                // Fallback: warn user but proceed? Or fail? 
+                // Fallback: warn user but proceed? Or fail?
                 // Let's alert failure to be safe.
                 throw new Error("No se pudierón verificar duplicados: " + fetchError.message);
             }
 
-            const existingSignatures = new Set();
+            // Identidad de un vuelo = aerolínea + designador + DÍA (no la hora
+            // exacta). Antes se comparaba la hora completa, así que un vuelo
+            // reimportado con un horario actualizado (retraso, adelanto) no
+            // se reconocía como el mismo vuelo — se insertaba como fila
+            // nueva, duplicando el registro y dejando el viejo obsoleto.
+            const flightIdentityKey = (row) => {
+                const year = lastImportYear || new Date().getFullYear();
+                const aac = (row['[Arr] Airline code'] || '').trim().toUpperCase();
+                const ad = (row['[Arr] Flight Designator'] || '').trim().toUpperCase();
+                const aDay = deriveDateKeyFromValue(row['[Arr] SIBT'], year);
+                const dac = (row['[Dep] Airline code'] || '').trim().toUpperCase();
+                const dd = (row['[Dep] Flight Designator'] || '').trim().toUpperCase();
+                const dDay = deriveDateKeyFromValue(row['[Dep] SOBT'], year);
+                if (!ad && !dd) return '';
+                return `${aac}|${ad}|${aDay}::${dac}|${dd}|${dDay}`;
+            };
+            const rowsAreIdentical = (a, b) => HEADERS.every(h => (a[h] || '').trim() === (b[h] || '').trim());
+
+            const existingByKey = new Map();
             if (existingData) {
                 existingData.forEach(r => {
-                    // Signature format: STRICT COMBINED
-                    // We concatenate Arr|Time|Dep|Time to ensure we only skip EXACT rows.
-                    // This allows "updates" (e.g. same flight, different time) to be inserted as new rows
-                    // (which effectively updates the schedule if the user deletes the old ones, or just adds the version)
-
-                    const ad = (r['[Arr] Flight Designator'] || '').trim();
-                    const at = (r['[Arr] SIBT'] || '').trim();
-                    const dd = (r['[Dep] Flight Designator'] || '').trim();
-                    const dt = (r['[Dep] SOBT'] || '').trim();
-
-                    if (ad || dd) { // Only track if there's at least some flight info
-                        existingSignatures.add(`${ad}|${at}|${dd}|${dt}`);
-                    }
+                    const key = flightIdentityKey(r);
+                    if (key) existingByKey.set(key, r);
                 });
             }
 
-            const uniqueRows = [];
+            const insertRows = [];
+            const updateRows = []; // { id, payload }
             let duplicatesCount = 0;
+            const seenKeysInFile = new Set();
 
-            // 2. Filter new rows
+            // 2. Classify each CSV row: exact duplicate (skip), same flight
+            // with new data (update by id), or a genuinely new flight (insert).
             ordered.forEach(row => {
-                const ad = (row['[Arr] Flight Designator'] || '').trim();
-                const at = (row['[Arr] SIBT'] || '').trim();
-                const dd = (row['[Dep] Flight Designator'] || '').trim();
-                const dt = (row['[Dep] SOBT'] || '').trim();
+                const key = flightIdentityKey(row);
+                if (!key) { insertRows.push(row); return; }
 
-                const rowSig = `${ad}|${at}|${dd}|${dt}`;
-
-                if (existingSignatures.has(rowSig)) {
+                const existing = existingByKey.get(key);
+                if (existing && rowsAreIdentical(row, existing)) {
                     duplicatesCount++;
-                } else {
-                    existingSignatures.add(rowSig); // Add to set to catch duplicates within the CSV itself
-                    uniqueRows.push(row);
+                    return;
                 }
+                if (existing) {
+                    updateRows.push({ id: existing.id, payload: row });
+                    // Ya no debe volver a coincidir con otra fila del mismo
+                    // archivo como si fuera "nueva" — reusa el mismo destino.
+                    existingByKey.set(key, { ...existing, ...row });
+                    return;
+                }
+                if (seenKeysInFile.has(key)) {
+                    // Dos filas del mismo CSV describen el mismo vuelo (ej. el
+                    // export trae el mismo movimiento repetido) — evita
+                    // insertar el mismo vuelo dos veces en una sola carga.
+                    duplicatesCount++;
+                    return;
+                }
+                seenKeysInFile.add(key);
+                insertRows.push(row);
             });
 
-            if (uniqueRows.length === 0) {
+            if (insertRows.length === 0 && updateRows.length === 0) {
                 alert(`Todos los ${ordered.length} registros del CSV ya existen en la base de datos (Duplicados). No se importará nada.`);
                 return;
             }
 
-            const confirmMsg = `Se encontraron ${ordered.length} registros en el archivo.\n` +
-                `- ${duplicatesCount} son duplicados (ya existen o se repiten).\n` +
-                `- ${uniqueRows.length} son nuevos registros.\n\n` +
-                `¿Deseas AGREGAR estos ${uniqueRows.length} nuevos registros?`;
+            const parts = [`Se encontraron ${ordered.length} registros en el archivo.`];
+            if (insertRows.length) parts.push(`- ${insertRows.length} son vuelos nuevos.`);
+            if (updateRows.length) parts.push(`- ${updateRows.length} son vuelos existentes con datos actualizados (se actualizarán).`);
+            if (duplicatesCount) parts.push(`- ${duplicatesCount} son duplicados exactos (se omiten).`);
+            const confirmMsg = parts.join('\n') + `\n\n¿Deseas continuar con la importación?`;
 
             if (!confirm(confirmMsg)) return;
 
             // Pass 'true' to append instead of replace
-            await saveToDatabase(uniqueRows, true);
+            await saveToDatabase(insertRows, true);
+            await updateExistingFlights(updateRows);
             // --- DUPLICATE DETECTION END ---
 
             const modalEl = document.getElementById('uploadOpsCsvModal');
@@ -533,8 +558,13 @@
                 if (modal) modal.hide();
             }
 
-            _flightProbeCache = null; // new rows were inserted — invalidate probe cache
+            _flightProbeCache = null; // new/updated rows — invalidate probe cache
             await loadFlights();
+
+            const resultParts = [];
+            if (insertRows.length) resultParts.push(`${insertRows.length} vuelo(s) nuevo(s) agregado(s)`);
+            if (updateRows.length) resultParts.push(`${updateRows.length} vuelo(s) existente(s) actualizado(s)`);
+            alert(`CSV importado correctamente: ${resultParts.join(', ') || 'sin cambios'}.`);
         } catch (err) {
             console.error(err);
             alert(`Error al importar CSV: ${err.message}`);
@@ -591,8 +621,26 @@
         }
 
         await _mirrorRowsToEditableTables(supabase, insertedWithId);
+    }
 
-        alert('CSV importado correctamente.');
+    // Un vuelo ya existente (misma aerolínea+designador+día) reimportado con
+    // datos distintos (horario, stand, aeronave, etc.) se actualiza por id
+    // en las 3 tablas en vez de crear una fila duplicada. Sólo se escriben
+    // las columnas que trae el CSV — validado/observaciones/validado_por
+    // (que no vienen del CSV) se preservan intactas.
+    async function updateExistingFlights(updateRows) {
+        if (!updateRows.length) return;
+        const supabase = window.supabaseClient;
+        for (const { id, payload } of updateRows) {
+            const results = await Promise.all([
+                supabase.from(TABLE_NAME).update(payload).eq('id', id),
+                supabase.from(EDIT_TABLE_NAME).update(payload).eq('id', id),
+                supabase.from(MANIFIESTOS_MIRROR_TABLE_NAME).update(payload).eq('id', id)
+            ]);
+            results.forEach((r, i) => {
+                if (r.error) console.warn(`[Itinerario] no se pudo actualizar vuelo existente (id=${id}, tabla ${i}):`, r.error);
+            });
+        }
     }
 
     function initColumnVisibility() {
