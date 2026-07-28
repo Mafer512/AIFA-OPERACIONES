@@ -2827,7 +2827,7 @@ function ensureAuthHashes() {
     }
     return authHashesInitPromise;
 }
-let passengerAirlines = ["Viva", "Volaris", "Aeromexico", "Mexicana de Aviación", "Aeurus", "Arajet"];
+let passengerAirlines = ["Viva", "Volaris", "Aeromexico", "Mexicana de Aviación", "Aerus", "Arajet", "Air France", "Qatar Airways", "KLM", "British Airways"];
 let cargoAirlines = ["MasAir", "China Southerrn", "Lufthansa", "Kalitta Air", "Aerounión", "Emirates Airlines", "Atlas Air", "Silk Way West Airlines", "Cathay Pacific", "United Parcel Service", "Turkish Airlines", "Cargojet Airways", "Air Canada", "Cargolux"];
 const airlineColors = { "Viva": "#00b200", "Volaris": "#6f2da8", "Aeromexico": "#00008b", "Mexicana de Aviación": "#a52a2a", "Aerus": "#ff4500", "Arajet": "#00ced1", "MasAir": "#4682b4", "China Southerrn": "#c71585", "Lufthansa": "#ffcc00", "Kalitta Air": "#dc143c", "Aerounión": "#2e8b57", "Emirates Airlines": "#d4af37", "Atlas Air": "#808080", "Silk Way West Airlines": "#f4a460", "Cathay Pacific": "#006400", "United Parcel Service": "#5f4b32", "Turkish Airlines": "#e81123", "Cargojet Airways": "#f0e68c", "Air Canada": "#f00", "Cargolux": "#00a0e2" };
 
@@ -17756,12 +17756,20 @@ async function _ensureConciAirlineCatalog() {
                     .eq('active', true)
                     .limit(1000);
                 (managedAirlines || []).forEach(item => {
+                    const iataUpper = String(item.iata || '').trim().toUpperCase();
+                    // Esta fila puede haberse capturado solo para fijar color/logo,
+                    // sin tocar el tipo (pasajeros/carga). Si "types" viene vacío,
+                    // no debe borrar la clasificación que ya traía el catálogo base
+                    // (data/airlines.json) para esa misma aerolínea — solo la
+                    // reemplaza cuando de verdad especifica un tipo.
+                    const previous = iataUpper ? _conciAirlineCodeMap.get(iataUpper) : null;
+                    const incomingTypes = Array.isArray(item.types) ? item.types.filter(Boolean) : [];
                     const meta = {
                         name: String(item.name || item.iata || '').trim(),
                         color: String(item.color || '#6c757d').trim(),
                         textColor: String(item.text_color || '#ffffff').trim(),
-                        iata: String(item.iata || '').trim().toUpperCase(),
-                        types: Array.isArray(item.types) ? item.types : [],
+                        iata: iataUpper,
+                        types: incomingTypes.length ? incomingTypes : (previous?.types || []),
                         aliases: Array.isArray(item.aliases) ? item.aliases : [],
                     };
                     if (!meta.name) return;
@@ -17815,12 +17823,19 @@ async function _ensureConciAirlineCatalog() {
                 if (scopedError) throw scopedError;
 
                 (scopedAirlines || []).forEach(item => {
+                    const iataUpper = String(item.iata || '').trim().toUpperCase();
+                    // Igual que con la capa de public.airlines: una fila aquí
+                    // capturada solo para color/logo no debe borrar el tipo
+                    // (pasajeros/carga) que ya traía de una capa anterior si
+                    // no especifica ninguno.
+                    const previous = iataUpper ? _conciAirlineCodeMap.get(iataUpper) : null;
+                    const incomingTypes = Array.isArray(item.types) ? item.types.filter(Boolean) : [];
                     const meta = {
                         name: String(item.name || item.iata || '').trim(),
                         color: String(item.color || '#6c757d').trim(),
                         textColor: String(item.text_color || '#ffffff').trim(),
-                        iata: String(item.iata || '').trim().toUpperCase(),
-                        types: Array.isArray(item.types) ? item.types : [],
+                        iata: iataUpper,
+                        types: incomingTypes.length ? incomingTypes : (previous?.types || []),
                         aliases: Array.isArray(item.aliases) ? item.aliases : [],
                     };
                     if (!meta.name) return;
