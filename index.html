@@ -13565,11 +13565,11 @@ FF
 
                         // Orden preferido de columnas
                         const CTBL_COL_ORDER = [
-                            'estatus','Estatus','grado_academico','Grado Académico','sangre','Tipo de sangre',
+                            'estatus','Estatus','sangre','Tipo de sangre',
                             'num_empleado','nombre','puesto','plaza','nivel','turno',
                             'direccion','subdireccion','gerencia','coordinacion',
                             'fecha_ingreso','correo','celular','extension','profesion',
-                            'grado','matricula','cedula',
+                            'grado','matricula','grado_academico','Grado Académico','cedula',
                             'militar','comisionado','ryr','onomastico',
                             'estado_civil','dependientes','nss',
                             'domicilio','rfc','curp','licencia','licencia_tipo',
@@ -13617,11 +13617,17 @@ FF
                             const raw = String(k || '').trim();
                             const n = norm(raw).replace(/[_\-.]+/g, ' ').replace(/\s+/g, ' ').trim();
                             if (n === 'estatus') return 'estatus';
-                            if (n === 'grado academico') return 'grado_academico';
+                            if (n === 'grado academico' || /^grado acad.mico$/i.test(raw)) return 'grado_academico';
                             if (n === 'sangre' || n === 'tipo de sangre') return 'sangre';
                             if (n === 'no empleado' || n === 'num empleado' || n === 'numero empleado') return 'num_empleado';
                             if (n === 'nombre') return 'nombre';
                             return n || raw;
+                        }
+
+                        function ctblLabelCol(k) {
+                            return ctblCanonCol(k) === 'grado_academico'
+                                ? 'Grado Académico'
+                                : (CTBL_COL_LABELS[k] || k);
                         }
 
                         function ctblValorUtil(v) {
@@ -13668,7 +13674,7 @@ FF
                             if (!thead || !ctblCols.length) return;
                             const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
                             const thCols = ctblCols.map(col => {
-                                const label = CTBL_COL_LABELS[col] || col;
+                                const label = ctblLabelCol(col);
                                 const hasF  = _ctblColFilters[col]?.size > 0;
                                 return `<th>
                                     <div class="ctbl-th-inner" onclick="colabTablaOrdenar('${esc(col)}')" title="Ordenar por ${esc(label)}">
@@ -13710,9 +13716,8 @@ FF
                                 const rest = allKeys.filter(k => !preferredCanon.has(ctblCanonCol(k)) && !CTBL_HIDDEN_COLS.has(k));
                                 ctblCols = ctblDeduplicarCols([...preferred, ...rest], ctblAllData);
                                 const estatusKey = ctblCols.find(k => /^estatus$/i.test(k));
-                                const gradoAcadKey = ctblCols.find(k => k === 'grado_academico' || /^grado\s+acad[eé]mico$/i.test(k));
                                 const sangreKey = ctblCols.find(k => k === 'sangre' || /^tipo\s+de\s+sangre$/i.test(k));
-                                const frontKeys = [estatusKey, gradoAcadKey, sangreKey].filter(Boolean);
+                                const frontKeys = [estatusKey, sangreKey].filter(Boolean);
                                 const frontCanon = new Set(frontKeys.map(ctblCanonCol));
                                 ctblCols = [...frontKeys, ...ctblCols.filter(k => !frontCanon.has(ctblCanonCol(k)))];
                                 // Columna de sort inicial: preferir num_empleado
@@ -13819,7 +13824,7 @@ FF
                             const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
                             bar.innerHTML = '<span style="color:#92400e;font-weight:700;flex-shrink:0"><i class="fas fa-filter me-1"></i>Filtros activos:</span>' +
                                 active.map(([col, vals]) => {
-                                    const label = CTBL_COL_LABELS[col] || col;
+                                    const label = ctblLabelCol(col);
                                     const preview = [...vals].slice(0, 3).map(esc).join(', ') + (vals.size > 3 ? `… (+${vals.size-3})` : '');
                                     return `<span class="ctbl-af-tag">${esc(label)}: ${preview}
                                         <button onclick="ctblQuitarFiltroCol('${esc(col)}')" title="Quitar filtro">&times;</button>
@@ -13858,7 +13863,7 @@ FF
                                     return a.localeCompare(b, 'es', {sensitivity:'base'});
                                 });
 
-                            const label = CTBL_COL_LABELS[col] || col;
+                            const label = ctblLabelCol(col);
                             _ctblCFP = {
                                 col,
                                 allVals,
