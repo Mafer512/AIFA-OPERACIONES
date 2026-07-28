@@ -20958,9 +20958,9 @@ function _conciEnsureEditStyles() {
     document.head.appendChild(style);
 }
 
-// ¿La columna es de solo fecha? (ej. "FECHA")
+// ¿La columna es de solo fecha? (ej. "FECHA", "CIERRE SUBSECRETARIA")
 function _conciColIsDate(col) {
-    return /(^|\b)fecha(\b|$)/i.test(String(col || ''));
+    return /(^|\b)fecha(\b|$)/i.test(String(col || '')) || /cierre\s*subsecretar/i.test(String(col || ''));
 }
 
 // ¿La columna es de fecha + hora? (slots, horas de operación/recepción, SIBT, etc.)
@@ -21045,9 +21045,11 @@ function _conciNormalizedColumnName(column) {
         .toLowerCase();
 }
 
-function _conciIsProtectedEditColumn(column) {
-    const key = _conciNormalizedColumnName(column);
-    return key === 'mes' || key === 'fecha';
+// Antes MES/FECHA quedaban bloqueados en toda la tabla (no solo en filas
+// nuevas). El usuario pidió que todos los campos sean editables, así que
+// esta protección queda desactivada.
+function _conciIsProtectedEditColumn(_column) {
+    return false;
 }
 
 function _conciIsManifestTypeColumn(column) {
