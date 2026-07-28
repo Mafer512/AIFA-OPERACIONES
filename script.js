@@ -22031,21 +22031,21 @@ const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bi
         if (typeValueMatch) {
             const badValue = _conciNormalizeEditableCellText(typeValueMatch[1]).toLowerCase();
             const knownNumCols = ['TOTAL PAX', 'KGS. DE EQUIPAJE', 'HRS. CUMPLIDAS', '# DE VUELO', 'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE CARGA', 'CORREO', 'DIPLOMATICOS', 'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS'];
-            // El valor reportado por Postgres puede ser un carácter genérico
-            // (ej. "-" para "sin dato"), que sería substring de casi cualquier
-            // fecha ("2026-07-27") o texto libre ("Retraso - reprogramado").
-            // Buscarlo por coincidencia de substring en ese caso borraría campos
-            // de texto que nada tienen que ver con el error real. Cuando el
-            // valor es así de corto/ambiguo, se corrige únicamente entre las
-            // columnas que sabemos que son numéricas, nunca en columnas de texto.
-            const isAmbiguousValue = badValue.length <= 2;
+            // Un error de tipo numérico SOLO puede venir de una columna que
+            // realmente sea numérica en la base de datos — nunca de una
+            // columna de texto (AEROLINEA, DESTINO/ORIGEN, OBSERVACIONES...).
+            // Antes se buscaba también por coincidencia de substring del valor
+            // reportado, pero valores como "VB 9999" (# DE VUELO) pueden
+            // aparecer como substring de otra columna de texto no relacionada
+            // (ej. el código "VB" de AEROLINEA), borrándola sin motivo. Ahora
+            // la corrección se limita siempre a las columnas numéricas
+            // conocidas, sin importar el valor reportado.
             Object.keys(currentPayload).forEach(col => {
-                if (isAmbiguousValue && !knownNumCols.some(kc => _conciNormalizedColumnName(kc) === _conciNormalizedColumnName(col))) return;
+                if (!knownNumCols.some(kc => _conciNormalizedColumnName(kc) === _conciNormalizedColumnName(col))) return;
                 const val = currentPayload[col];
                 if (val === null || val === undefined) return;
                 const valNorm = _conciNormalizeEditableCellText(String(val)).toLowerCase();
-                if (!isAmbiguousValue && !valNorm.includes(badValue) && !badValue.includes(valNorm)) return;
-                if (isAmbiguousValue && valNorm !== badValue) return;
+                if (valNorm !== badValue && !valNorm.includes(badValue) && !badValue.includes(valNorm)) return;
 
                 const coerced = _conciCoerceNumberCandidate(val);
                 if (coerced === null || Number.isNaN(coerced)) delete currentPayload[col];
