@@ -15,7 +15,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
     SELECT COALESCE((
-        SELECT lower(replace(trim(role), ' ', '_')) = 'colab_editor'
+        SELECT lower(replace(trim(role), ' ', '_')) IN ('admin', 'superadmin', 'colab_editor')
         FROM public.user_roles
         WHERE user_id = auth.uid()
         LIMIT 1
@@ -85,9 +85,11 @@ BEGIN
         EXECUTE 'ALTER TABLE public.colab_historial ENABLE ROW LEVEL SECURITY';
 
         EXECUTE 'DROP POLICY IF EXISTS "colab_historial_select_authenticated" ON public.colab_historial';
+        EXECUTE 'DROP POLICY IF EXISTS "auth_can_read_historial" ON public.colab_historial';
+        EXECUTE 'DROP POLICY IF EXISTS "auth_can_insert_historial" ON public.colab_historial';
         EXECUTE 'DROP POLICY IF EXISTS "colab_historial_insert_colab_editor" ON public.colab_historial';
 
-        EXECUTE 'CREATE POLICY "colab_historial_select_authenticated" ON public.colab_historial FOR SELECT TO authenticated USING (true)';
+        EXECUTE 'CREATE POLICY "colab_historial_select_colab_editor" ON public.colab_historial FOR SELECT TO authenticated USING (public.is_colab_editor())';
         EXECUTE 'CREATE POLICY "colab_historial_insert_colab_editor" ON public.colab_historial FOR INSERT TO authenticated WITH CHECK (public.is_colab_editor())';
     END IF;
 END $$;
@@ -95,6 +97,22 @@ END $$;
 -- Storage: agrega políticas de escritura para buckets usados por colaboradores.
 -- Si existen políticas amplias anteriores en storage.objects, revísalas con la
 -- consulta final y elimínalas manualmente solo si permiten escritura fuera de colab_editor.
+-- change_history: mantener el historial global disponible para otros modulos,
+-- pero restringir filas de Colaboradores a Admin/Superadmin/Colab Editor.
+DO $$
+BEGIN
+    IF to_regclass('public.change_history') IS NOT NULL THEN
+        EXECUTE 'ALTER TABLE public.change_history ENABLE ROW LEVEL SECURITY';
+
+        EXECUTE 'DROP POLICY IF EXISTS "change_history_select_authenticated" ON public.change_history';
+        EXECUTE 'DROP POLICY IF EXISTS "change_history_select_colaboradores_restringido" ON public.change_history';
+        EXECUTE 'DROP POLICY IF EXISTS "change_history_insert_authenticated" ON public.change_history';
+
+        EXECUTE 'CREATE POLICY "change_history_select_colaboradores_restringido" ON public.change_history FOR SELECT TO authenticated USING (entity_type IS DISTINCT FROM ''Colaboradores'' OR public.is_colab_editor())';
+        EXECUTE 'CREATE POLICY "change_history_insert_authenticated" ON public.change_history FOR INSERT TO authenticated WITH CHECK (true)';
+    END IF;
+END $$;
+
 DROP POLICY IF EXISTS "storage_colab_docs_insert_colab_editor" ON storage.objects;
 DROP POLICY IF EXISTS "storage_colab_docs_update_colab_editor" ON storage.objects;
 DROP POLICY IF EXISTS "storage_colab_docs_delete_colab_editor" ON storage.objects;
