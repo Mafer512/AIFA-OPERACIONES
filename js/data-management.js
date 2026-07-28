@@ -3393,13 +3393,13 @@ const loadingMsg = document.createElement('div'); loadingMsg.id = 'deleting-sing
                     const btnEdit = document.createElement('button');
                     btnEdit.className = 'btn btn-sm btn-outline-primary me-1';
                     btnEdit.innerHTML = '<i class="fas fa-edit"></i>';
-                    btnEdit.onclick = () => this.editItem('weekly_frequencies', groupItem);
+                    btnEdit.onclick = () => this.editItem(groupItem._sourceTable || 'weekly_frequencies', groupItem);
                     tdActions.appendChild(btnEdit);
 
                     const btnDelete = document.createElement('button');
                     btnDelete.className = 'btn btn-sm btn-outline-danger';
                     btnDelete.innerHTML = '<i class="fas fa-trash"></i>';
-                    btnDelete.onclick = () => this.deleteItem('weekly_frequencies', groupItem.id);
+                    btnDelete.onclick = () => this.deleteItem(groupItem._sourceTable || 'weekly_frequencies', groupItem.id);
                     tdActions.appendChild(btnDelete);
 
                     tr.appendChild(tdActions);
