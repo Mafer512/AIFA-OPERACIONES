@@ -17867,6 +17867,18 @@ function _conciNormalizeMatricula(value) {
     return String(value || '')
         .replace(/\u00a0/g, ' ')
         .trim()
+        .toUpperCase()
+        // La fuente de vuelos puede traer XA-VXQ, XA VXQ o XAVXQ.
+        // Para validar contra el catálogo todos se comparan como XAVXQ.
+        .replace(/[^A-Z0-9]/g, '');
+}
+
+function _conciFormatMatriculaForCatalog(value) {
+    // Conserva la forma escrita por el usuario en el catálogo (incluido el
+    // guion), mientras _conciNormalizeMatricula se usa únicamente como llave.
+    return String(value || '')
+        .replace(/\u00a0/g, ' ')
+        .trim()
         .toUpperCase();
 }
 
@@ -19389,7 +19401,13 @@ function _conciRowPassesColFilter(tr) {
         let matched = false;
         for (const td of tr.querySelectorAll('td[data-col]')) {
             if (td.dataset.col === col) {
-                matched = (td.dataset.raw || td.textContent || '').toLowerCase().includes(lower);
+                // Algunas columnas (p.ej. AEROLINEA) guardan el código IATA en
+                // data-raw pero muestran el nombre resuelto en pantalla — sin
+                // esto, filtrar por "viva" no encontraba nada porque solo se
+                // comparaba contra "VB". Se revisa contra ambos.
+                const rawVal = (td.dataset.raw || '').toLowerCase();
+                const textVal = (td.textContent || '').toLowerCase();
+                matched = rawVal.includes(lower) || textVal.includes(lower);
                 break;
             }
         }
@@ -20940,9 +20958,9 @@ function _conciEnsureEditStyles() {
     document.head.appendChild(style);
 }
 
-// ¿La columna es de solo fecha? (ej. "FECHA")
+// ¿La columna es de solo fecha? (ej. "FECHA", "CIERRE SUBSECRETARIA")
 function _conciColIsDate(col) {
-    return /(^|\b)fecha(\b|$)/i.test(String(col || ''));
+    return /(^|\b)fecha(\b|$)/i.test(String(col || '')) || /cierre\s*subsecretar/i.test(String(col || ''));
 }
 
 // ¿La columna es de fecha + hora? (slots, horas de operación/recepción, SIBT, etc.)
@@ -21027,9 +21045,11 @@ function _conciNormalizedColumnName(column) {
         .toLowerCase();
 }
 
-function _conciIsProtectedEditColumn(column) {
-    const key = _conciNormalizedColumnName(column);
-    return key === 'mes' || key === 'fecha';
+// Antes MES/FECHA quedaban bloqueados en toda la tabla (no solo en filas
+// nuevas). El usuario pidió que todos los campos sean editables, así que
+// esta protección queda desactivada.
+function _conciIsProtectedEditColumn(_column) {
+    return false;
 }
 
 function _conciIsManifestTypeColumn(column) {
@@ -21902,7 +21922,7 @@ async function _conciSaveScopedCatalog(event, kind) {
             aliases: value('aliases').split(/[\n,]+/).map(v => v.trim()).filter(Boolean), color: value('color') || '#6c757d', text_color: value('text_color') || '#ffffff',
             types: [...form.querySelectorAll('[name="conci-catalog-type"]:checked')].map(input => input.value), active: true,
         } : {
-            matricula: _conciNormalizeMatricula(value('matricula')), aerolinea: value('aerolinea').trim().toUpperCase(), estatus: value('estatus'),
+            matricula: _conciFormatMatriculaForCatalog(value('matricula')), aerolinea: value('aerolinea').trim().toUpperCase(), estatus: value('estatus'),
             tipo_de_aeronave: value('tipo_de_aeronave').trim().toUpperCase() || null, tipo_de_aeronave_2: value('tipo_de_aeronave_2').trim().toUpperCase() || null,
             mlw_ton: value('mlw_ton') === '' ? null : Number(value('mlw_ton')), mtow_ton: value('mtow_ton') === '' ? null : Number(value('mtow_ton')), mzfw_ton: value('mzfw_ton') === '' ? null : Number(value('mzfw_ton')), promedio: value('promedio') === '' ? null : Number(value('promedio')), pasajeros: Number(value('pasajeros') || 0), updated_at: new Date().toISOString(),
         };
@@ -22156,9 +22176,42 @@ async function _conciAutoSaveRow(tr) {
             if (!client) throw new Error('No se pudo inicializar el cliente de Supabase.');
             if (tr.dataset.rowFuente === 'Solo Vuelos') {
                 const airlineEntry = _conciAirlinePayloadEntry(payload);
-                if (!airlineEntry) return;
-                await _conciSaveVirtualAirlineOverride(client, tr, airlineEntry.value);
-                settleSavedCells(new Set([airlineEntry.key]));
+                // Sólo se tocó la aerolínea: es un ajuste ligero sobre el vuelo
+                // (no crea manifiesto — se conserva el comportamiento previo).
+                const onlyAirlineDirty = airlineEntry && dirtyCols.size > 0 &&
+                    [...dirtyCols].every(col => col === airlineEntry.key);
+                if (onlyAirlineDirty) {
+                    await _conciSaveVirtualAirlineOverride(client, tr, airlineEntry.value);
+                    settleSavedCells(new Set([airlineEntry.key]));
+                    tr.classList.remove('table-secondary');
+                    tr.removeAttribute('title');
+                    return;
+                }
+                if (dirtyCols.size === 0) return;
+
+                // El usuario capturó datos de manifiesto reales (matrícula, PAX,
+                // slot coordinado, observaciones, etc.) para un vuelo que todavía
+                // no tenía manifiesto propio: "Conciliación Manifiestos" es una
+                // tabla distinta a la de Itinerario de Vuelos, así que esto debe
+                // crear un registro real ahí, no perderse en la fila espejo.
+                const result = await _conciWriteRowSafe(client, payload, null);
+                if (!result.ok) {
+                    const msg = result.error?.message || 'error de base de datos';
+                    tr.title = `Pendiente de guardar: ${msg}`;
+                    tr.classList.add('table-secondary');
+                    console.warn('[Conciliación] fila (Solo Vuelos) pendiente de guardar:', result.error);
+                    if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
+                    return;
+                }
+                const inserted = Array.isArray(result.data) ? result.data[0] : result.data;
+                if (inserted?.id !== undefined && inserted?.id !== null) {
+                    tr.dataset.rowId = String(inserted.id);
+                    tr.dataset.rowFuente = 'Manifiestos + Vuelos';
+                    tr.classList.remove('conci-missing-manifiesto');
+                    const actionTd = tr.querySelector('td.conci-row-action-col');
+                    if (actionTd) _conciFillRowActionCell(actionTd, String(inserted.id));
+                }
+                settleSavedCells();
                 tr.classList.remove('table-secondary');
                 tr.removeAttribute('title');
                 return;
@@ -22168,9 +22221,11 @@ async function _conciAutoSaveRow(tr) {
             if (!result.ok) {
                 // Conserva la fila y sus valores para que el usuario pueda corregir
                 // el campo que causó el error; nunca se elimina silenciosamente.
-                tr.title = `Pendiente de guardar: ${result.error?.message || 'error de base de datos'}`;
+                const msg = result.error?.message || 'error de base de datos';
+                tr.title = `Pendiente de guardar: ${msg}`;
                 tr.classList.add('table-secondary');
                 console.warn('[Conciliación] fila pendiente de guardar:', result.error);
+                if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
                 return;
             }
             const inserted = Array.isArray(result.data) ? result.data[0] : result.data;
@@ -22194,9 +22249,11 @@ async function _conciAutoSaveRow(tr) {
             tr.classList.remove('table-warning');
             tr.removeAttribute('title');
         } catch (error) {
-            tr.title = `Pendiente de guardar: ${error.message || error}`;
+            const msg = error?.message || String(error);
+            tr.title = `Pendiente de guardar: ${msg}`;
             tr.classList.add('table-secondary');
             console.warn('[Conciliación] error de guardado automático:', error);
+            if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
         } finally {
             const shouldRetry = tr._conciAutoSaveQueued && !!tr.querySelector('td[data-dirty="1"]');
             tr._conciAutoSaveQueued = false;
@@ -22292,7 +22349,11 @@ function _conciAddBlankRow() {
     tbody.appendChild(tr);
     tbody.scrollTop = tbody.scrollHeight;
     _conciBindRowActions();
-    const firstCell = tr.querySelector('td[data-col]');
+    // MES/FECHA quedan bloqueados en una fila nueva (se completan solos con
+    // el filtro de fecha activo al guardar) — activa la primera celda que sí
+    // se pueda escribir, para que "Agregar fila" deje el cursor listo de
+    // inmediato en vez de dejarlo sin foco en un campo bloqueado.
+    const firstCell = tr.querySelector('td[data-col]:not([data-conci-readonly="1"])');
     if (firstCell) _conciActivateCellEditor(firstCell);
 }
 

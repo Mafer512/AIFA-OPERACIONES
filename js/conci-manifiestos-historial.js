@@ -17,6 +17,7 @@
     let _search = '';
     let _dateFrom = '';
     let _dateTo = '';
+    let _flightLabels = new Map(); // manifiesto_id -> "VB 7435 · 25/07/2026"
 
     /* ── DOM helpers ── */
     function modalEl() {
@@ -72,9 +73,26 @@
     }
 
     function opMeta(operacion) {
-        if (operacion === 'INSERT') return { icon: 'fa-plus-circle', label: 'Creó el registro', tone: 'success' };
+        if (operacion === 'INSERT') return { icon: 'fa-circle-plus', label: 'Capturó el registro', tone: 'success' };
         if (operacion === 'DELETE') return { icon: 'fa-trash-alt', label: 'Eliminó el registro', tone: 'danger' };
         return { icon: 'fa-pen', label: 'Modificó campos', tone: 'primary' };
+    }
+
+    // Clasifica cada cambio de campo para que se distinga a simple vista:
+    //   nuevo       → estaba vacío y ahora tiene valor (se capturó por primera vez)
+    //   vaciado     → tenía valor y quedó vacío (se borró el dato de ese campo)
+    //   modificado  → tenía un valor y cambió por otro
+    const FIELD_KIND = {
+        nuevo:      { label: 'Nuevo',       icon: 'fa-circle-plus',  tone: 'nuevo' },
+        vaciado:    { label: 'Borrado',     icon: 'fa-circle-minus', tone: 'vaciado' },
+        modificado: { label: 'Modificado',  icon: 'fa-pen',          tone: 'modificado' },
+    };
+    function classifyField(antes, despues) {
+        const a = (antes ?? '').toString().trim();
+        const d = (despues ?? '').toString().trim();
+        if (!a && d) return 'nuevo';
+        if (a && !d) return 'vaciado';
+        return 'modificado';
     }
 
     function tryParseJson(text) {
@@ -82,13 +100,59 @@
         try { const v = JSON.parse(text); return (v && typeof v === 'object') ? v : null; } catch (_) { return null; }
     }
 
-    function snapshotTable(json) {
-        const entries = Object.entries(json || {})
-            .filter(([k, v]) => k !== 'id' && v !== null && v !== '' && v !== undefined)
-            .slice(0, 40);
-        if (!entries.length) return '<span class="text-muted small">Sin datos capturados.</span>';
+    // Etiqueta legible de a qué vuelo/registro pertenece un evento, ej.
+    // "VB 7435 · 25/07/2026". Para INSERT/DELETE se lee directo del snapshot
+    // capturado en ese momento (preciso incluso si el registro ya no existe);
+    // para UPDATE se usa el catálogo cargado una vez al abrir el historial.
+    function flightLabelFromSnapshot(snapshot) {
+        if (!snapshot) return null;
+        const vuelo = snapshot['# DE VUELO'] || snapshot['#DE VUELO'];
+        const fecha = snapshot['FECHA'];
+        const bits = [vuelo, fecha].filter(Boolean);
+        return bits.length ? bits.join(' · ') : null;
+    }
+    function flightLabel(ev) {
+        if (ev.operacion !== 'UPDATE') {
+            const fromSnap = flightLabelFromSnapshot(ev.snapshot);
+            if (fromSnap) return fromSnap;
+        }
+        if (ev.manifiesto_id && _flightLabels.has(String(ev.manifiesto_id))) {
+            return _flightLabels.get(String(ev.manifiesto_id));
+        }
+        return ev.manifiesto_id ? `Registro #${ev.manifiesto_id}` : 'Registro nuevo';
+    }
+
+    // Trae, en una sola consulta, el vuelo/fecha actual de cada registro que
+    // aparece en el historial cargado — evita mostrar solo un id interno.
+    async function buildFlightLabels(rows) {
+        const ids = [...new Set(rows.map(r => r.manifiesto_id).filter(v => v !== null && v !== undefined))];
+        if (!ids.length) return new Map();
+        try {
+            const sb = window.supabaseClient;
+            if (!sb) return new Map();
+            const { data, error } = await sb.from('Conciliación Manifiestos')
+                .select('id, "# DE VUELO", "FECHA"')
+                .in('id', ids);
+            if (error) throw error;
+            const map = new Map();
+            (data || []).forEach(r => {
+                const bits = [r['# DE VUELO'], r['FECHA']].filter(Boolean);
+                if (bits.length) map.set(String(r.id), bits.join(' · '));
+            });
+            return map;
+        } catch (_) {
+            return new Map();
+        }
+    }
+
+    // Tabla EXHAUSTIVA (incluye columnas vacías/sin capturar) — la opción
+    // "ver registro completo" para quien quiera revisar todo el registro,
+    // separada de la vista rápida con los campos que sí tienen valor.
+    function snapshotTableFull(json) {
+        const entries = Object.entries(json || {}).filter(([k]) => k !== 'id');
+        if (!entries.length) return '<span class="text-muted small">Sin datos.</span>';
         return `<div class="conci-hist-snapshot"><table class="table table-sm mb-0">${
-            entries.map(([k, v]) => `<tr><th class="text-nowrap">${esc(k)}</th><td>${esc(String(v))}</td></tr>`).join('')
+            entries.map(([k, v]) => `<tr><th class="text-nowrap">${esc(k)}</th><td>${(v === null || v === '' || v === undefined) ? '<span class="conci-hist-empty">(vacío)</span>' : esc(String(v))}</td></tr>`).join('')
         }</table></div>`;
     }
 
@@ -126,7 +190,12 @@
             }
             const ev = map.get(key);
             if (r.operacion === 'UPDATE') {
-                ev.campos.push({ columna: r.columna, antes: r.valor_anterior, despues: r.valor_nuevo });
+                ev.campos.push({
+                    columna: r.columna,
+                    antes: r.valor_anterior,
+                    despues: r.valor_nuevo,
+                    kind: classifyField(r.valor_anterior, r.valor_nuevo),
+                });
             } else if (r.operacion === 'INSERT') {
                 ev.snapshot = tryParseJson(r.valor_nuevo);
             } else if (r.operacion === 'DELETE') {
@@ -150,43 +219,131 @@
     }
 
     /* ── Render ── */
+    // Agrupa los campos de un evento por tipo de cambio (nuevo/modificado/
+    // vaciado) en vez de una lista plana — es lo que hace que se distinga a
+    // simple vista qué se capturó por primera vez, qué se corrigió y qué se
+    // borró, en lugar de tener que leer campo por campo.
+    function groupFieldsByKind(campos) {
+        const buckets = { nuevo: [], modificado: [], vaciado: [] };
+        campos.forEach(c => buckets[c.kind].push(c));
+        return buckets;
+    }
+
+    function renderFieldChip(c) {
+        if (c.kind === 'nuevo') {
+            return `<div class="conci-hist-chip conci-hist-chip-nuevo">
+                <span class="conci-hist-chip-field">${esc(c.columna)}</span>
+                <span class="conci-hist-chip-val conci-hist-after">${esc(c.despues)}</span>
+            </div>`;
+        }
+        if (c.kind === 'vaciado') {
+            return `<div class="conci-hist-chip conci-hist-chip-vaciado">
+                <span class="conci-hist-chip-field">${esc(c.columna)}</span>
+                <span class="conci-hist-chip-val conci-hist-before">${esc(c.antes)}</span>
+            </div>`;
+        }
+        return `<div class="conci-hist-chip conci-hist-chip-modificado">
+            <span class="conci-hist-chip-field">${esc(c.columna)}</span>
+            <span class="conci-hist-chip-val">
+                <span class="conci-hist-before">${esc(c.antes)}</span>
+                <i class="fas fa-arrow-right conci-hist-arrow"></i>
+                <span class="conci-hist-after">${esc(c.despues)}</span>
+            </span>
+        </div>`;
+    }
+
+    function renderFieldGroup(kind, campos) {
+        if (!campos.length) return '';
+        const k = FIELD_KIND[kind];
+        return `<div class="conci-hist-group conci-hist-group-${kind}">
+            <div class="conci-hist-group-title"><i class="fas ${k.icon} me-1"></i>${k.label} <span class="conci-hist-group-count">${campos.length}</span></div>
+            <div class="conci-hist-chips">${campos.map(renderFieldChip).join('')}</div>
+        </div>`;
+    }
+
+    // Campos con valor de un snapshot (INSERT/DELETE), listos para mostrar
+    // como chips directamente en la tarjeta — visibles de entrada, sin tener
+    // que abrir nada, igual que los campos "Modificado" de un UPDATE.
+    function snapshotFilledFields(json) {
+        return Object.entries(json || {})
+            .filter(([k, v]) => k !== 'id' && v !== null && v !== '' && v !== undefined)
+            .map(([columna, valor]) => ({ columna, valor }));
+    }
+
+    function renderSnapshotChip(kind, f) {
+        const cls = kind === 'nuevo' ? 'conci-hist-chip-nuevo' : 'conci-hist-chip-vaciado';
+        const valCls = kind === 'nuevo' ? 'conci-hist-after' : 'conci-hist-before';
+        return `<div class="conci-hist-chip ${cls}">
+            <span class="conci-hist-chip-field">${esc(f.columna)}</span>
+            <span class="conci-hist-chip-val ${valCls}">${esc(f.valor)}</span>
+        </div>`;
+    }
+
+    function renderSnapshotBody(ev) {
+        const isInsert = ev.operacion === 'INSERT';
+        const fields = snapshotFilledFields(ev.snapshot);
+        const kind = isInsert ? 'nuevo' : 'vaciado';
+        const k = FIELD_KIND[kind];
+        const chips = fields.length
+            ? `<div class="conci-hist-group conci-hist-group-${kind}">
+                <div class="conci-hist-group-title"><i class="fas ${k.icon} me-1"></i>${isInsert ? 'Capturado' : 'Eliminado'} <span class="conci-hist-group-count">${fields.length}</span></div>
+                <div class="conci-hist-chips">${fields.map(f => renderSnapshotChip(kind, f)).join('')}</div>
+            </div>`
+            : `<div class="text-muted small mt-1">Sin datos ${isInsert ? 'capturados' : 'guardados'} en este evento.</div>`;
+
+        const fullId = `hist-full-${Math.random().toString(36).slice(2)}`;
+        return `${chips}
+            <a href="#" class="conci-hist-toggle-snap small" data-target="${fullId}">
+                <i class="fas fa-chevron-right me-1"></i>Ver registro completo
+            </a>
+            <div id="${fullId}" class="d-none mt-2">${snapshotTableFull(ev.snapshot)}</div>`;
+    }
+
+    function updateSummaryLabel(buckets) {
+        const parts = [];
+        if (buckets.nuevo.length) parts.push(`${buckets.nuevo.length} nuevo${buckets.nuevo.length > 1 ? 's' : ''}`);
+        if (buckets.modificado.length) parts.push(`${buckets.modificado.length} modificado${buckets.modificado.length > 1 ? 's' : ''}`);
+        if (buckets.vaciado.length) parts.push(`${buckets.vaciado.length} borrado${buckets.vaciado.length > 1 ? 's' : ''}`);
+        return parts.join(' · ');
+    }
+
     function renderEventCard(ev) {
         const meta = opMeta(ev.operacion);
         const color = userColor(ev.usuario_id || ev.usuario_nombre);
-        const rowBadge = ev.manifiesto_id
-            ? `<button type="button" class="btn btn-sm btn-outline-secondary conci-hist-scope-btn" data-manifiesto-id="${esc(ev.manifiesto_id)}" title="Ver solo el historial de este registro"><i class="fas fa-crosshairs me-1"></i>#${esc(ev.manifiesto_id)}</button>`
-            : '';
+        const flightBadge = `<button type="button" class="btn btn-sm conci-hist-flight-badge" data-manifiesto-id="${esc(ev.manifiesto_id)}" title="Ver solo el historial de este registro"><i class="fas fa-plane me-1"></i>${esc(flightLabel(ev))}</button>`;
 
+        let opLabel = meta.label;
         let body;
         if (ev.operacion === 'UPDATE') {
-            body = `<div class="conci-hist-fields">${ev.campos.map(c => `
-                <div class="conci-hist-field">
-                    <span class="conci-hist-field-name">${esc(c.columna)}</span>
-                    <span class="conci-hist-field-diff">
-                        <span class="conci-hist-before">${c.antes ? esc(c.antes) : '<span class="conci-hist-empty">(vacío)</span>'}</span>
-                        <i class="fas fa-arrow-right conci-hist-arrow"></i>
-                        <span class="conci-hist-after">${c.despues ? esc(c.despues) : '<span class="conci-hist-empty">(vacío)</span>'}</span>
-                    </span>
-                </div>`).join('')}</div>`;
+            const buckets = groupFieldsByKind(ev.campos);
+            const summary = updateSummaryLabel(buckets);
+            opLabel = summary ? `Actualizó ${ev.campos.length} campo${ev.campos.length > 1 ? 's' : ''} <span class="conci-hist-op-summary">(${summary})</span>` : meta.label;
+            body = [
+                renderFieldGroup('nuevo', buckets.nuevo),
+                renderFieldGroup('modificado', buckets.modificado),
+                renderFieldGroup('vaciado', buckets.vaciado),
+            ].join('');
         } else {
-            const snapId = `hist-snap-${Math.random().toString(36).slice(2)}`;
-            body = `
-                <a href="#" class="conci-hist-toggle-snap small" data-target="${snapId}">
-                    <i class="fas fa-chevron-right me-1"></i>${ev.operacion === 'INSERT' ? 'Ver datos capturados' : 'Ver datos eliminados'}
-                </a>
-                <div id="${snapId}" class="d-none mt-2">${snapshotTable(ev.snapshot)}</div>`;
+            const filledCount = snapshotFilledFields(ev.snapshot).length;
+            if (filledCount) {
+                opLabel = `${meta.label} <span class="conci-hist-op-summary">(${filledCount} campo${filledCount > 1 ? 's' : ''})</span>`;
+            }
+            body = renderSnapshotBody(ev);
         }
 
         return `
         <div class="conci-hist-event conci-hist-tone-${meta.tone}">
-            <div class="conci-hist-avatar" style="background:${color}" title="${esc(ev.usuario_nombre)}">${esc(initials(ev.usuario_nombre))}</div>
-            <div class="conci-hist-main">
+            <div class="conci-hist-rail"><div class="conci-hist-dot"><i class="fas ${meta.icon}"></i></div></div>
+            <div class="conci-hist-card">
                 <div class="conci-hist-headline">
-                    <span class="conci-hist-user">${esc(ev.usuario_nombre)}</span>
-                    <span class="conci-hist-op"><i class="fas ${meta.icon} me-1"></i>${meta.label}</span>
-                    ${rowBadge}
+                    <div class="conci-hist-avatar" style="background:${color}" title="${esc(ev.usuario_nombre)}">${esc(initials(ev.usuario_nombre))}</div>
+                    <div class="conci-hist-who">
+                        <span class="conci-hist-user">${esc(ev.usuario_nombre)}</span>
+                        <span class="conci-hist-op">${opLabel}</span>
+                    </div>
                     <span class="conci-hist-time ms-auto" title="${esc(absoluteTime(ev.creado_en))}">${esc(relativeTime(ev.creado_en))}</span>
                 </div>
+                <div class="conci-hist-flight-row">${flightBadge}</div>
                 ${body}
             </div>
         </div>`;
@@ -216,7 +373,8 @@
         if (scopeBanner) {
             scopeBanner.classList.toggle('d-none', !_scopeRowId);
             if (_scopeRowId) {
-                scopeBanner.querySelector('span').textContent = `Mostrando solo el historial del registro #${_scopeRowId}.`;
+                const label = _flightLabels.get(String(_scopeRowId)) || `registro #${_scopeRowId}`;
+                scopeBanner.querySelector('span').textContent = `Mostrando solo el historial de ${label}.`;
             }
         }
 
@@ -235,7 +393,35 @@
             listEl.innerHTML = `<div class="text-center text-muted py-5"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>Sin cambios registrados${_search || _userFilter || _dateFrom || _dateTo ? ' para este filtro.' : ' todavía.'}</div>`;
             return;
         }
-        listEl.innerHTML = events.map(renderEventCard).join('');
+        listEl.innerHTML = renderTimeline(events);
+    }
+
+    // Inserta separadores "Hoy" / "Ayer" / fecha entre eventos de días
+    // distintos — hace mucho más fácil escanear un historial largo en vez de
+    // una lista continua de tarjetas.
+    function dayLabel(iso) {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return '';
+        const now = new Date();
+        const startOf = (dt) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+        const diffDays = Math.round((startOf(now) - startOf(d)) / 86400000);
+        if (diffDays === 0) return 'Hoy';
+        if (diffDays === 1) return 'Ayer';
+        return d.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+    }
+
+    function renderTimeline(events) {
+        let lastDay = null;
+        const parts = [];
+        events.forEach(ev => {
+            const label = dayLabel(ev.creado_en);
+            if (label !== lastDay) {
+                parts.push(`<div class="conci-hist-day-sep"><span>${esc(label)}</span></div>`);
+                lastDay = label;
+            }
+            parts.push(renderEventCard(ev));
+        });
+        return `<div class="conci-hist-timeline">${parts.join('')}</div>`;
     }
 
     /* ── Modal shell ── */
@@ -299,8 +485,8 @@
                 }
                 return;
             }
-            const scopeBtn = e.target.closest('.conci-hist-scope-btn');
-            if (scopeBtn) {
+            const scopeBtn = e.target.closest('.conci-hist-flight-badge');
+            if (scopeBtn && scopeBtn.dataset.manifiestoId) {
                 _scopeRowId = scopeBtn.dataset.manifiestoId;
                 refresh();
             }
@@ -318,6 +504,7 @@
         if (listEl) listEl.innerHTML = '';
         try {
             _rows = await loadRows();
+            _flightLabels = await buildFlightLabels(_rows);
             render();
         } catch (err) {
             if (errEl) {

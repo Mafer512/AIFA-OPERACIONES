@@ -147,7 +147,7 @@
     <!-- Preload de los 5 scripts mas pesados (descarga en paralelo desde el primer byte del HTML).
          No altera el orden de ejecución: los <script> tags más abajo siguen mandando.
          Los hrefs DEBEN coincidir EXACTAMENTE con el src del script para que el navegador reuse el preload. -->
-    <link rel="preload" as="script" href="script.js?v=20260727-conci-fields-portal-v12" fetchpriority="high">
+    <link rel="preload" as="script" href="script.js?v=20260728-save-error-visible" fetchpriority="high">
     <link rel="preload" as="script" href="js/manifiestos.js">
     <link rel="preload" as="script" href="js/data-management.js">
     <link rel="preload" as="script" href="js/analisis-operaciones.js?v=47">
@@ -791,30 +791,83 @@ FF
         }
         .conci-hist-filters input[type="date"] { max-width: 150px; }
         .conci-hist-filters select { max-width: 220px; }
-        .conci-hist-list { display: flex; flex-direction: column; gap: .7rem; }
-        .conci-hist-event {
-            display: flex; gap: .75rem; padding: .8rem .9rem; border: 1px solid #e2e8f0; border-radius: 12px;
-            background: #fff; border-left: 4px solid #cbd5e1;
+
+        /* Línea de tiempo: riel vertical con un punto por evento, y
+           separadores "Hoy / Ayer / fecha" para escanear rápido un
+           historial largo sin perder de dónde a dónde va cada día. */
+        .conci-hist-timeline { position: relative; display: flex; flex-direction: column; gap: .6rem; }
+        .conci-hist-day-sep {
+            display: flex; align-items: center; gap: .6rem; margin: .4rem 0 .1rem;
+            color: #64748b; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
         }
-        .conci-hist-event.conci-hist-tone-success { border-left-color: #16a34a; }
-        .conci-hist-event.conci-hist-tone-danger  { border-left-color: #dc2626; }
-        .conci-hist-event.conci-hist-tone-primary { border-left-color: #2563eb; }
+        .conci-hist-day-sep::after { content: ''; flex: 1 1 auto; height: 1px; background: #e2e8f0; }
+        .conci-hist-event { display: flex; gap: .6rem; }
+        .conci-hist-rail { flex: 0 0 auto; width: 28px; display: flex; flex-direction: column; align-items: center; }
+        .conci-hist-rail::before {
+            content: ''; width: 2px; flex: 1 1 auto; background: #e2e8f0; margin-top: 2px;
+        }
+        .conci-hist-event:last-child .conci-hist-rail::before { display: none; }
+        .conci-hist-dot {
+            flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; background: #f1f5f9;
+            border: 2px solid #cbd5e1; color: #64748b; display: flex; align-items: center; justify-content: center;
+            font-size: .68rem; z-index: 1;
+        }
+        .conci-hist-tone-success .conci-hist-dot { background: #dcfce7; border-color: #16a34a; color: #15803d; }
+        .conci-hist-tone-danger  .conci-hist-dot { background: #fee2e2; border-color: #dc2626; color: #b91c1c; }
+        .conci-hist-tone-primary .conci-hist-dot { background: #dbeafe; border-color: #2563eb; color: #1d4ed8; }
+
+        .conci-hist-card {
+            flex: 1 1 auto; min-width: 0; padding: .7rem .85rem .8rem; margin-bottom: .35rem;
+            border: 1px solid #e2e8f0; border-radius: 12px; background: #fff;
+        }
+        .conci-hist-headline { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; }
         .conci-hist-avatar {
-            flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; color: #fff; font-weight: 800;
-            font-size: .75rem; display: flex; align-items: center; justify-content: center;
+            flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; color: #fff; font-weight: 800;
+            font-size: .65rem; display: flex; align-items: center; justify-content: center;
         }
-        .conci-hist-main { flex: 1 1 auto; min-width: 0; }
-        .conci-hist-headline { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; font-size: .82rem; }
-        .conci-hist-user { font-weight: 700; color: #0f172a; }
-        .conci-hist-op { color: #475569; }
-        .conci-hist-time { color: #94a3b8; font-size: .74rem; white-space: nowrap; }
-        .conci-hist-fields { margin-top: .5rem; display: flex; flex-direction: column; gap: .3rem; }
-        .conci-hist-field {
+        .conci-hist-who { display: flex; flex-direction: column; line-height: 1.25; }
+        .conci-hist-user { font-weight: 700; color: #0f172a; font-size: .82rem; }
+        .conci-hist-op { color: #64748b; font-size: .74rem; }
+        .conci-hist-op-summary { color: #94a3b8; font-weight: 400; }
+        .conci-hist-time { color: #94a3b8; font-size: .72rem; white-space: nowrap; }
+
+        .conci-hist-flight-row { margin: .5rem 0 .15rem; }
+        .conci-hist-flight-badge {
+            background: #0f172a; color: #fff; font-weight: 700; font-size: .75rem;
+            padding: .28rem .7rem; border-radius: 999px; border: 0;
+        }
+        .conci-hist-flight-badge:hover { background: #1e293b; color: #fff; }
+
+        /* Grupos por tipo de cambio: cada uno con su propio color/ícono para
+           que "nuevo", "modificado" y "borrado" se distingan de un vistazo,
+           sin tener que leer cada campo para saber qué pasó. */
+        .conci-hist-group { margin-top: .55rem; }
+        .conci-hist-group-title {
+            font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+            margin-bottom: .3rem; display: flex; align-items: center; gap: .3rem;
+        }
+        .conci-hist-group-count {
+            background: currentColor; color: #fff !important; border-radius: 999px; font-size: .64rem;
+            min-width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; padding: 0 4px;
+        }
+        .conci-hist-group-nuevo .conci-hist-group-title       { color: #15803d; }
+        .conci-hist-group-modificado .conci-hist-group-title  { color: #1d4ed8; }
+        .conci-hist-group-vaciado .conci-hist-group-title     { color: #b91c1c; }
+        .conci-hist-group-count { color: inherit; }
+        .conci-hist-group-nuevo .conci-hist-group-count      { background: #16a34a; }
+        .conci-hist-group-modificado .conci-hist-group-count { background: #2563eb; }
+        .conci-hist-group-vaciado .conci-hist-group-count    { background: #dc2626; }
+
+        .conci-hist-chips { display: flex; flex-direction: column; gap: .3rem; }
+        .conci-hist-chip {
             display: flex; align-items: baseline; gap: .5rem; flex-wrap: wrap;
-            font-size: .78rem; padding: .3rem .5rem; background: #f8fafc; border-radius: 8px;
+            font-size: .78rem; padding: .35rem .6rem; border-radius: 8px; border-left: 3px solid transparent;
         }
-        .conci-hist-field-name { font-weight: 700; color: #1e3a8a; min-width: 120px; }
-        .conci-hist-field-diff { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+        .conci-hist-chip-nuevo       { background: #f0fdf4; border-left-color: #16a34a; }
+        .conci-hist-chip-modificado  { background: #eff6ff; border-left-color: #2563eb; }
+        .conci-hist-chip-vaciado     { background: #fef2f2; border-left-color: #dc2626; }
+        .conci-hist-chip-field { font-weight: 700; color: #1e293b; min-width: 120px; }
+        .conci-hist-chip-val { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
         .conci-hist-before { color: #b91c1c; text-decoration: line-through; opacity: .75; }
         .conci-hist-after { color: #15803d; font-weight: 600; }
         .conci-hist-empty { color: #94a3b8; font-style: italic; font-weight: 400; text-decoration: none; }
@@ -825,6 +878,7 @@ FF
         @media (max-width: 768px) {
             .conci-hist-filters { flex-direction: column; align-items: stretch; }
             .conci-hist-filters input, .conci-hist-filters select { max-width: none; }
+            .conci-hist-chip-field { min-width: 90px; }
         }
 
         /* Flex wrapper inside each filterable header cell */
@@ -1565,7 +1619,7 @@ FF
                         <i class="fas fa-chart-line si-ico"></i>
                         <span class="si-txt">Comparativa Histórica</span>
                     </a>
-                    <a class="menu-item si-link si-quick si-quick--itin" href="#" data-section="inicio">
+                    <a class="menu-item si-link si-quick si-quick--itin" href="#" data-section="inicio" style="display:none;" aria-hidden="true">
                         <i class="fas fa-calendar-day si-ico"></i>
                         <span class="si-txt">Itinerario Diario</span>
                     </a>
@@ -1573,11 +1627,11 @@ FF
                         <i class="fas fa-route si-ico"></i>
                         <span class="si-txt">Destinos y Frecuencias</span>
                     </a>
-                    <a class="menu-item si-link si-quick si-quick--punc" href="#" data-section="puntualidad-agosto">
+                    <a class="menu-item si-link si-quick si-quick--punc" href="#" data-section="puntualidad-agosto" style="display:none;" aria-hidden="true">
                         <i class="fas fa-stopwatch si-ico"></i>
                         <span class="si-txt">Puntualidad</span>
                     </a>
-                    <a class="menu-item si-link si-quick si-quick--demo" href="#" data-section="demoras">
+                    <a class="menu-item si-link si-quick si-quick--demo" href="#" data-section="demoras" style="display:none;" aria-hidden="true">
                         <i class="fas fa-hourglass-half si-ico"></i>
                         <span class="si-txt">Demoras</span>
                     </a>
@@ -1790,7 +1844,7 @@ FF
                     </div><!-- /SSO -->
 
                     <!-- SSA -->
-                    <div class="si-group si-group--sub si-group--pend si-sub--ssa">
+                    <div class="si-group si-group--sub si-group--pend si-sub--ssa" style="display:none;" aria-hidden="true">
                         <button class="si-grp-btn si-grp-btn--sub collapsed"
                                 data-bs-toggle="collapse" data-bs-target="#sg-ssa" aria-expanded="false">
                             <i class="fas fa-user-shield si-sub-ico"></i>
@@ -20289,7 +20343,12 @@ FF
                                                         <button class="btn btn-sm btn-outline-primary d-none" id="btn-conci-edit-mode" title="Editar toda la tabla">
                                                             <i class="fas fa-edit me-1"></i>Editar
                                                         </button>
-
+                                                        <button class="btn btn-sm btn-outline-success d-none" id="btn-conci-add-row" title="Agregar una fila en blanco para capturar directamente en la tabla">
+                                                            <i class="fas fa-plus me-1"></i>Agregar fila
+                                                        </button>
+                                                        <button class="btn btn-sm btn-success d-none" id="btn-conci-save-mode" title="Guardar cambios de la tabla">
+                                                            <i class="fas fa-save me-1"></i>Guardar
+                                                        </button>
                                                         <button class="btn btn-sm btn-outline-secondary d-none" id="btn-conci-cancel-mode" title="Cancelar edición">
                                                             <i class="fas fa-times me-1"></i>Cancelar
                                                         </button>
@@ -20325,11 +20384,11 @@ FF
                                                                 <i class="fas fa-plus me-1"></i>Capturar Manifiesto
                                                             </button>
                                                             <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="dropdownCapturarManifiestos" style="font-size:0.85rem;">
-                                                                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalManifiestoLlegada"><i class="fas fa-plane-arrival text-primary me-2"></i>Llegada (Pasajeros)</a></li>
-                                                                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalManifiestoSalida"><i class="fas fa-plane-departure text-warning me-2"></i>Salida (Pasajeros)</a></li>
+                                                                <li><a class="dropdown-item" href="#" onclick="window.openConciDigitalManifest &amp;&amp; window.openConciDigitalManifest('llegada', 'Llegada — Pasajeros'); return false;"><i class="fas fa-plane-arrival text-success me-2"></i>Llegada (Pasajeros)</a></li>
+                                                                <li><a class="dropdown-item" href="#" onclick="window.openConciDigitalManifest &amp;&amp; window.openConciDigitalManifest('salida', 'Salida — Pasajeros'); return false;"><i class="fas fa-plane-departure text-warning me-2"></i>Salida (Pasajeros)</a></li>
                                                                 <li><hr class="dropdown-divider"></li>
-                                                                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalManifiestoLlegadaCarga"><i class="fas fa-box-open text-success me-2"></i>Llegada (Carga)</a></li>
-                                                                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalManifiestoSalidaCarga"><i class="fas fa-truck-loading text-info me-2"></i>Salida (Carga)</a></li>
+                                                                <li><a class="dropdown-item" href="#" onclick="window.openConciDigitalManifest &amp;&amp; window.openConciDigitalManifest('llegada-carga', 'Llegada — Carga'); return false;"><i class="fas fa-box-open text-success me-2"></i>Llegada (Carga)</a></li>
+                                                                <li><a class="dropdown-item" href="#" onclick="window.openConciDigitalManifest &amp;&amp; window.openConciDigitalManifest('salida-carga', 'Salida — Carga'); return false;"><i class="fas fa-truck-loading text-warning me-2"></i>Salida (Carga)</a></li>
                                                             </ul>
                                                         </div>
                                                     </div>
@@ -32395,6 +32454,21 @@ FF
         </div>
     </div>
 
+    <!-- Modal: captura digital desde Conciliación -->
+    <div class="modal fade" id="modal-conci-digital-manifest" tabindex="-1" aria-labelledby="modal-conci-digital-manifest-label">
+        <div class="modal-dialog modal-fullscreen m-0">
+            <div class="modal-content border-0 rounded-0 bg-transparent" style="height:100vh">
+                <div class="modal-header d-none">
+                    <h5 class="modal-title" id="modal-conci-digital-manifest-label"><i class="fas fa-file-signature me-2 text-primary"></i>Captura de manifiesto</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body p-0 overflow-hidden bg-transparent">
+                    <iframe id="conci-digital-manifest-frame" title="Formato digital de manifiesto" style="width:100%;height:100%;border:0;background:#fff"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: Consulta de manifiestos resguardados -->
     <div class="modal fade" id="modal-manifest-archive" tabindex="-1" aria-labelledby="modal-manifest-archive-label">
         <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
@@ -34376,7 +34450,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260727-historial-restore" defer></script>
+    <script src="script.js?v=20260728-save-error-visible" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>
@@ -35613,7 +35687,8 @@ FF
 <script src="js/ops-flights-admin.js?v=20260727-tablas-separadas" defer></script>
 <!-- Conciliación Manifiestos table + inline editing -->
 <script src="js/conci-manifiestos-table.js?v=1" defer></script>
-<script src="js/conci-manifiestos-historial.js?v=20260727a" defer></script>
+<script src="js/conci-manifiestos-captura.js?v=20260727-v1" defer></script>
+<script src="js/conci-manifiestos-historial.js?v=20260727-insert-chips" defer></script>
 <!-- Navegación inline del picker de fecha en Itinerario -->
 <script>
 (function () {
