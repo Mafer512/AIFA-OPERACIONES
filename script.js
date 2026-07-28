@@ -22039,6 +22039,12 @@ function _conciPrepareValueForDatabase(col, value) {
 
 async function _conciWriteRowSafe(client, payload, rowId) {
     let currentPayload = { ...payload };
+    // Columnas que el mecanismo de auto-corrección quitó del payload porque
+    // su valor no era compatible con el tipo de la columna en la base de
+    // datos (ej. "# DE VUELO" es bigint pero contiene letras como "VB 9999").
+    // El llamador necesita saber esto explícitamente: un resultado "ok" no
+    // significa que TODO el payload se haya guardado.
+    const droppedColumns = new Set();
 
     const _norm = s => String(s || '')
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -22046,7 +22052,7 @@ async function _conciWriteRowSafe(client, payload, rowId) {
 
     for (let attempt = 0; attempt < 8; attempt++) {
         if (Object.keys(currentPayload).length === 0) {
-            return { ok: false, error: { message: 'Sin campos válidos para guardar.' } };
+            return { ok: false, error: { message: 'Sin campos válidos para guardar.' }, droppedColumns: [...droppedColumns] };
         }
 
         const req = client.from('Conciliación Manifiestos');
@@ -22054,7 +22060,7 @@ async function _conciWriteRowSafe(client, payload, rowId) {
             ? await req.update(currentPayload).eq('id', rowId)
             : await req.insert(currentPayload).select('id').maybeSingle();
 
-        if (!result.error) return { ok: true, adjusted: attempt > 0, data: result.data || null, payload: currentPayload };
+        if (!result.error) return { ok: true, adjusted: attempt > 0, data: result.data || null, payload: currentPayload, droppedColumns: [...droppedColumns] };
 
         const message = String(result.error.message || '');
         let mutated = false;
@@ -22080,14 +22086,14 @@ const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bi
                 if (valNorm !== badValue && !valNorm.includes(badValue) && !badValue.includes(valNorm)) return;
 
                 const coerced = _conciCoerceNumberCandidate(val);
-                if (coerced === null || Number.isNaN(coerced)) delete currentPayload[col];
+                if (coerced === null || Number.isNaN(coerced)) { delete currentPayload[col]; droppedColumns.add(col); }
                 else currentPayload[col] = coerced;
                 mutated = true;
             });
             // Fallback: si aún no se identificó la columna, elimina las columnas
             // numéricas conocidas que sigan presentes en el payload.
              if (!mutated) {
-                 knownNumCols.forEach(kc => { if (currentPayload[kc] !== undefined) { delete currentPayload[kc]; mutated = true; } });
+                 knownNumCols.forEach(kc => { if (currentPayload[kc] !== undefined) { delete currentPayload[kc]; droppedColumns.add(kc); mutated = true; } });
              }
         }
 
@@ -22101,10 +22107,10 @@ const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bi
             }
         }
 
-        if (!mutated) return { ok: false, error: result.error };
+        if (!mutated) return { ok: false, error: result.error, droppedColumns: [...droppedColumns] };
     }
 
-    return { ok: false, error: { message: 'Error desconocido al guardar.' } };
+    return { ok: false, error: { message: 'Error desconocido al guardar.' }, droppedColumns: [...droppedColumns] };
 }
 
 function _conciAirlinePayloadEntry(payload) {
@@ -22279,6 +22285,21 @@ async function _conciAutoSaveRow(tr) {
                     const actionTd = tr.querySelector('td.conci-row-action-col');
                     if (actionTd) _conciFillRowActionCell(actionTd, String(inserted.id));
                 }
+                // Igual que en el guardado normal: una columna que se tuvo que
+                // descartar por su tipo (ej. "# DE VUELO" con letras) no debe
+                // marcarse como guardada.
+                const droppedSetSV = new Set(result.droppedColumns || []);
+                if (droppedSetSV.size) {
+                    const savedOnly = new Set(Object.keys(payload).filter(c => !droppedSetSV.has(c)));
+                    settleSavedCells(savedOnly);
+                    const colList = [...droppedSetSV].join(', ');
+                    tr.title = `No se pudo guardar: ${colList} (valor incompatible con el tipo de columna en la base de datos)`;
+                    tr.classList.add('table-secondary');
+                    if (typeof showNotification === 'function') {
+                        showNotification(`No se guardó "${colList}" en esta fila: el valor no es compatible con el tipo de esa columna en la base de datos.`, 'error');
+                    }
+                    return;
+                }
                 settleSavedCells();
                 tr.classList.remove('table-secondary');
                 tr.removeAttribute('title');
@@ -22308,14 +22329,32 @@ async function _conciAutoSaveRow(tr) {
                     action.dataset.rowId = String(inserted.id);
                 }
             }
+            // Columnas que _conciWriteRowSafe tuvo que descartar del payload
+            // real (ej. "# DE VUELO" con letras rechazado por ser bigint en
+            // la base de datos) NO deben marcarse como guardadas: el resto de
+            // la fila sí se persistió, pero esa celda específica se queda tal
+            // cual estaba antes en la base de datos, y el usuario necesita
+            // saberlo explícitamente en vez de asumir que todo se guardó.
+            const droppedSet = new Set(result.droppedColumns || []);
             cells.forEach(td => {
+                if (droppedSet.has(td.dataset.col)) return;
                 const raw = _conciNormalizeEditableCellText(td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent);
                 td.dataset.origRaw = raw;
                 td.removeAttribute('data-dirty');
             });
-            tr.removeAttribute('data-dirty');
+            if (tr.querySelector('td[data-dirty="1"]')) tr.dataset.dirty = '1';
+            else tr.removeAttribute('data-dirty');
             tr.classList.remove('table-warning');
-            tr.removeAttribute('title');
+            if (droppedSet.size) {
+                const colList = [...droppedSet].join(', ');
+                tr.title = `No se pudo guardar: ${colList} (valor incompatible con el tipo de columna en la base de datos)`;
+                tr.classList.add('table-secondary');
+                if (typeof showNotification === 'function') {
+                    showNotification(`No se guardó "${colList}" en esta fila: el valor no es compatible con el tipo de esa columna en la base de datos.`, 'error');
+                }
+            } else {
+                tr.removeAttribute('title');
+            }
         } catch (error) {
             const msg = error?.message || String(error);
             tr.title = `Pendiente de guardar: ${msg}`;
