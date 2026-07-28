@@ -8733,6 +8733,16 @@ FF
                             transition: border-color .2s;
                         }
                         .ctbl-search-inp:focus { border-color: #1565c0; }
+                        .ctbl-search-status {
+                            display:inline-flex;
+                            align-items:center;
+                            gap:.35rem;
+                            color:#64748b;
+                            font-size:.78rem;
+                            white-space:nowrap;
+                            min-width:110px;
+                        }
+                        .ctbl-search-status.d-none { display:none!important; }
                         .ctbl-select {
                             border: 1.5px solid #c5cfe0;
                             border-radius: 9px;
@@ -10796,7 +10806,8 @@ FF
                                 </div>
                                 <!-- Barra de herramientas: filtros + exportar -->
                                 <div class="ctbl-toolbar">
-                                    <input type="text" class="ctbl-search-inp" id="ctbl-search" placeholder="&#x1F50D; Buscar por nombre, puesto, número…" autocomplete="off" oninput="colabTablaFiltrar()">
+                                    <input type="text" class="ctbl-search-inp" id="ctbl-search" placeholder="&#x1F50D; Buscar por nombre, puesto, número…" autocomplete="off" oninput="colabTablaFiltrarDebounced()">
+                                    <span class="ctbl-search-status d-none" id="ctbl-search-status" aria-live="polite"></span>
                                     <select class="ctbl-select" id="ctbl-dir" onchange="colabTablaFiltrar()" aria-label="Filtrar por direccion">
                                         <option value="">Todas las Direcciones</option>
                                     </select>
@@ -10836,7 +10847,7 @@ FF
                                         <tbody id="ctbl-tbody"></tbody>
                                     </table>
                                     <div class="text-center text-muted p-4 d-none" id="ctbl-empty" style="font-size:.85rem">
-                                        <i class="fas fa-search me-2"></i>Sin resultados para los filtros aplicados.
+                                        <i class="fas fa-search me-2"></i>No se encontraron colaboradores con los criterios de búsqueda seleccionados.
                                     </div>
                                 </div>
                             </div>
@@ -14033,6 +14044,10 @@ FF
                         let ctblSortAsc = true;
                         let ctblCols = [];        // columnas detectadas del primer registro
                         let ctblFilterKeys = { dir: 'direccion', nivel: 'nivel', turno: 'turno' };
+                        let ctblSearchIndex = new WeakMap();
+                        let ctblSearchTimer = null;
+                        let ctblSearchRunId = 0;
+                        let ctblLastFilterMetrics = null;
 
                         // Orden preferido de columnas
                         const CTBL_COL_ORDER = [
@@ -14125,6 +14140,50 @@ FF
                             });
                         }
 
+                        function ctblFindColByCanon(canonName) {
+                            return ctblCols.find(k => ctblCanonCol(k) === canonName) || null;
+                        }
+
+                        function ctblSetSearchStatus(message, loading = false) {
+                            const el = document.getElementById('ctbl-search-status');
+                            if (!el) return;
+                            if (!message) {
+                                el.classList.add('d-none');
+                                el.innerHTML = '';
+                                return;
+                            }
+                            el.classList.remove('d-none');
+                            el.innerHTML = loading
+                                ? `<span class="spinner-border spinner-border-sm text-primary" style="width:.8rem;height:.8rem"></span>${message}`
+                                : message;
+                        }
+
+                        function ctblPrepararIndiceBusqueda() {
+                            ctblSearchIndex = new WeakMap();
+                            const numKey = ctblFindColByCanon('num_empleado') || 'num_empleado';
+                            const nombreKey = ctblFindColByCanon('nombre') || 'nombre';
+                            const puestoKey = ctblFindColByCanon('puesto') || 'puesto';
+                            ctblAllData.forEach(r => {
+                                const texto = [
+                                    r?.[numKey],
+                                    r?.[nombreKey],
+                                    r?.[puestoKey]
+                                ].map(v => String(v ?? '')).join(' ');
+                                ctblSearchIndex.set(r, norm(texto));
+                            });
+                        }
+
+                        function ctblTextoBusqueda(r) {
+                            let txt = ctblSearchIndex.get(r);
+                            if (txt !== undefined) return txt;
+                            const numKey = ctblFindColByCanon('num_empleado') || 'num_empleado';
+                            const nombreKey = ctblFindColByCanon('nombre') || 'nombre';
+                            const puestoKey = ctblFindColByCanon('puesto') || 'puesto';
+                            txt = norm([r?.[numKey], r?.[nombreKey], r?.[puestoKey]].map(v => String(v ?? '')).join(' '));
+                            ctblSearchIndex.set(r, txt);
+                            return txt;
+                        }
+
                         // Columnas de texto largo que necesitan wrap
                         const CTBL_WRAP_COLS = new Set(['nombre','puesto','domicilio','comentarios','amonestaciones','profesion','grado_academico','coordinacion']);
 
@@ -14199,6 +14258,7 @@ FF
                                 const nivelKey = allKeys.find(k => /^nivel$/i.test(k)) || 'nivel';
                                 const turnoKey = allKeys.find(k => /^turno$/i.test(k)) || 'turno';
                                 ctblFilterKeys = { dir: dirKey, nivel: nivelKey, turno: turnoKey };
+                                ctblPrepararIndiceBusqueda();
                             }
 
                             ctblGenerarThead();
@@ -14230,19 +14290,33 @@ FF
                         };
 
                         /** Filtrar tabla por texto, selects y filtros de columna */
+                        window.colabTablaFiltrarDebounced = function() {
+                            const runId = ++ctblSearchRunId;
+                            clearTimeout(ctblSearchTimer);
+                            ctblSetSearchStatus('Buscando...', true);
+                            ctblSearchTimer = setTimeout(() => {
+                                if (runId !== ctblSearchRunId) return;
+                                colabTablaFiltrar();
+                            }, 120);
+                        };
+
                         window.colabTablaFiltrar = function() {
+                            const started = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                            ++ctblSearchRunId;
+                            clearTimeout(ctblSearchTimer);
                             const q     = norm((document.getElementById('ctbl-search')?.value || ''));
                             const dir   = (document.getElementById('ctbl-dir')?.value   || '');
                             const nivel = (document.getElementById('ctbl-nivel')?.value || '');
                             const turno = (document.getElementById('ctbl-turno')?.value || '');
+                            let processed = 0;
 
                             ctblData = ctblAllData.filter(r => {
+                                processed++;
                                 if (dir   && String(r[ctblFilterKeys.dir]   || '').trim() !== dir)   return false;
                                 if (nivel && String(r[ctblFilterKeys.nivel] || '').trim() !== nivel) return false;
                                 if (turno && String(r[ctblFilterKeys.turno] || '').trim() !== turno) return false;
                                 if (q) {
-                                    const hay = Object.values(r).some(v => norm(String(v ?? '')).includes(q));
-                                    if (!hay) return false;
+                                    if (!ctblTextoBusqueda(r).includes(q)) return false;
                                 }
                                 // Filtros por columna individual
                                 for (const [col, vals] of Object.entries(_ctblColFilters)) {
@@ -14277,6 +14351,16 @@ FF
 
                             ctblActualizarBannerFiltros();
                             colabTablaRender();
+                            const elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - started;
+                            ctblLastFilterMetrics = {
+                                query: q,
+                                processed,
+                                results: ctblData.length,
+                                ms: Math.round(elapsed * 10) / 10,
+                                supabaseQueries: 0
+                            };
+                            ctblSetSearchStatus(q ? `${ctblData.length} resultado(s) · ${ctblLastFilterMetrics.ms} ms` : '');
+                            console.debug('[Colaboradores][Tabla] búsqueda local', ctblLastFilterMetrics);
                         };
 
                         /** Actualiza barra de filtros activos */
