@@ -19401,7 +19401,13 @@ function _conciRowPassesColFilter(tr) {
         let matched = false;
         for (const td of tr.querySelectorAll('td[data-col]')) {
             if (td.dataset.col === col) {
-                matched = (td.dataset.raw || td.textContent || '').toLowerCase().includes(lower);
+                // Algunas columnas (p.ej. AEROLINEA) guardan el código IATA en
+                // data-raw pero muestran el nombre resuelto en pantalla — sin
+                // esto, filtrar por "viva" no encontraba nada porque solo se
+                // comparaba contra "VB". Se revisa contra ambos.
+                const rawVal = (td.dataset.raw || '').toLowerCase();
+                const textVal = (td.textContent || '').toLowerCase();
+                matched = rawVal.includes(lower) || textVal.includes(lower);
                 break;
             }
         }
