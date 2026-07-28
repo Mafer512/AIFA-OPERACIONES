@@ -8500,6 +8500,41 @@ FF
                             white-space: nowrap;
                         }
                         .colab-btn-masiva:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(74,20,140,.55); }
+                        .colab-btn-historial {
+                            background: linear-gradient(135deg, #334155, #0f766e);
+                            color: #fff;
+                            border: none;
+                            border-radius: 12px;
+                            padding: .72rem 1.35rem;
+                            font-weight: 700;
+                            font-size: .9rem;
+                            cursor: pointer;
+                            display: flex;
+                            align-items: center;
+                            gap: .45rem;
+                            transition: all .22s ease;
+                            box-shadow: 0 4px 18px rgba(15,118,110,.35);
+                            white-space: nowrap;
+                        }
+                        .colab-btn-historial:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(15,118,110,.48); }
+                        #colabHistorialCambiosModal .modal-header { background: linear-gradient(135deg,#0f172a,#0f766e); }
+                        #colabHistorialCambiosModal .modal-body { background:#f8faff; }
+                        .colab-audit-filter-card { background:#fff; border:1px solid #dbe5f3; border-radius:12px; padding:1rem; box-shadow:0 6px 18px rgba(15,23,42,.06); }
+                        .colab-audit-table th { white-space:nowrap; color:#0b2254; font-size:.76rem; text-transform:uppercase; letter-spacing:.025em; background:#eaf1fb; }
+                        .colab-audit-table td { vertical-align:top; font-size:.82rem; }
+                        .colab-audit-action { display:inline-flex; align-items:center; gap:.35rem; border-radius:999px; padding:.26rem .62rem; font-size:.72rem; font-weight:800; border:1px solid transparent; white-space:nowrap; }
+                        .colab-audit-crear { background:#dcfce7; color:#166534; border-color:#86efac; }
+                        .colab-audit-editar { background:#fef3c7; color:#92400e; border-color:#facc15; }
+                        .colab-audit-baja, .colab-audit-eliminar { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+                        .colab-audit-reactivar { background:#d1fae5; color:#047857; border-color:#6ee7b7; }
+                        .colab-audit-plaza { background:#dbeafe; color:#1d4ed8; border-color:#93c5fd; }
+                        .colab-audit-otro { background:#e5e7eb; color:#374151; border-color:#cbd5e1; }
+                        .colab-audit-detail { display:grid; gap:.18rem; min-width:280px; }
+                        .colab-audit-change { display:flex; flex-wrap:wrap; gap:.35rem; align-items:center; line-height:1.35; }
+                        .colab-audit-field { color:#334155; font-weight:700; min-width:7rem; }
+                        .colab-audit-old { color:#b91c1c; text-decoration:line-through; }
+                        .colab-audit-new { color:#047857; font-weight:700; }
+                        .colab-audit-empty { padding:2rem; text-align:center; color:#64748b; }
 
                         /* ── VACACIONES ───────────────────────────────────────────── */
                         .colab-btn-vac {
@@ -9387,6 +9422,11 @@ FF
                                         onclick="colabMasivaAbrirModal()" aria-label="Asignación masiva de cursos"
                                         title="Asignar cursos a múltiples colaboradores desde una carpeta">
                                     <i class="fas fa-graduation-cap" aria-hidden="true"></i> Asignar Cursos
+                                </button>
+                                <button class="colab-btn-historial d-none" id="colab-btn-historial-cambios"
+                                        onclick="colabAbrirHistorialCambios()" aria-label="Consultar historial de cambios de colaboradores"
+                                        title="Historial de cambios de colaboradores">
+                                    <i class="fas fa-clock-rotate-left" aria-hidden="true"></i> Historial de cambios
                                 </button>
                             </div>
                         </div>
@@ -10466,6 +10506,111 @@ FF
                     </div><!-- /colabEliminarModal -->
 
                     <!-- ----------------------------------------------
+                         MODAL: HISTORIAL DE CAMBIOS DE COLABORADORES
+                    ---------------------------------------------- -->
+                    <div class="modal fade" id="colabHistorialCambiosModal" tabindex="-1" aria-labelledby="colabHistorialCambiosModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-fullscreen-lg-down modal-xl modal-dialog-scrollable">
+                            <div class="modal-content">
+                                <div class="modal-header py-2">
+                                    <div>
+                                        <h5 class="modal-title text-white mb-0" id="colabHistorialCambiosModalLabel">
+                                            <i class="fas fa-clock-rotate-left me-2"></i>Historial de cambios
+                                        </h5>
+                                        <small class="text-white opacity-75">Auditoría del módulo de colaboradores, ordenada del cambio más reciente al más antiguo.</small>
+                                    </div>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="colab-audit-filter-card mb-3">
+                                        <div class="row g-2 align-items-end">
+                                            <div class="col-12 col-md-3">
+                                                <label class="form-label small fw-semibold mb-1">Colaborador</label>
+                                                <input type="text" class="form-control form-control-sm" id="colab-hist-f-nombre" placeholder="Nombre del colaborador">
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                                <label class="form-label small fw-semibold mb-1">No. empleado</label>
+                                                <input type="text" class="form-control form-control-sm" id="colab-hist-f-num" placeholder="Ej. 1541-2">
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                                <label class="form-label small fw-semibold mb-1">Plaza</label>
+                                                <input type="text" class="form-control form-control-sm" id="colab-hist-f-plaza" placeholder="Plaza">
+                                            </div>
+                                            <div class="col-12 col-md-2">
+                                                <label class="form-label small fw-semibold mb-1">Usuario</label>
+                                                <input type="text" class="form-control form-control-sm" id="colab-hist-f-usuario" placeholder="Usuario">
+                                            </div>
+                                            <div class="col-6 col-md-3">
+                                                <label class="form-label small fw-semibold mb-1">Tipo de acción</label>
+                                                <select class="form-select form-select-sm" id="colab-hist-f-accion">
+                                                    <option value="">Todas</option>
+                                                    <option value="crear">Crear</option>
+                                                    <option value="editar">Editar</option>
+                                                    <option value="dar de baja">Dar de baja</option>
+                                                    <option value="reactivar">Reactivar</option>
+                                                    <option value="eliminar">Eliminar</option>
+                                                    <option value="asignar curso">Asignar curso</option>
+                                                    <option value="modificar curso">Modificar curso</option>
+                                                    <option value="documento">Documento</option>
+                                                    <option value="amonestación">Amonestación</option>
+                                                    <option value="vacaciones">Vacaciones</option>
+                                                    <option value="comentario">Comentario</option>
+                                                    <option value="cambiar plaza">Cambiar plaza</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                                <label class="form-label small fw-semibold mb-1">Estatus</label>
+                                                <select class="form-select form-select-sm" id="colab-hist-f-estatus">
+                                                    <option value="">Todos</option>
+                                                    <option value="Activo">Activo</option>
+                                                    <option value="Baja">Baja</option>
+                                                </select>
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                                <label class="form-label small fw-semibold mb-1">Fecha inicial</label>
+                                                <input type="date" class="form-control form-control-sm" id="colab-hist-f-desde">
+                                            </div>
+                                            <div class="col-6 col-md-2">
+                                                <label class="form-label small fw-semibold mb-1">Fecha final</label>
+                                                <input type="date" class="form-control form-control-sm" id="colab-hist-f-hasta">
+                                            </div>
+                                            <div class="col-12 col-md-3 d-flex gap-2 justify-content-md-end">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="colabHistorialLimpiarFiltros()">
+                                                    <i class="fas fa-eraser me-1"></i>Limpiar filtros
+                                                </button>
+                                                <button type="button" class="btn btn-primary btn-sm" onclick="colabHistorialCargar()">
+                                                    <i class="fas fa-sync-alt me-1"></i>Actualizar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="small text-muted" id="colab-hist-total">Sin registros cargados.</span>
+                                        <span class="small text-muted"><i class="fas fa-shield-alt me-1"></i>Disponible solo para Admin y Colab Editor.</span>
+                                    </div>
+                                    <div class="table-responsive bg-white border rounded-3">
+                                        <table class="table table-hover align-middle mb-0 colab-audit-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Fecha / Hora</th>
+                                                    <th>Usuario / Rol</th>
+                                                    <th>Acción</th>
+                                                    <th>Colaborador</th>
+                                                    <th>No. empleado</th>
+                                                    <th>Plaza</th>
+                                                    <th>Detalle completo</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="colab-historial-cambios-body">
+                                                <tr><td colspan="7" class="colab-audit-empty">Presiona Actualizar para consultar el historial.</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div><!-- /colabHistorialCambiosModal -->
+
+                    <!-- ----------------------------------------------
                          MODAL: NUEVO COLABORADOR
                     ---------------------------------------------- -->
                     <div class="modal fade" id="colabNuevoModal" tabindex="-1" aria-labelledby="colabNuevoModalLabel" aria-hidden="true">
@@ -11077,6 +11222,7 @@ FF
                         }
 
                         const COLAB_EDIT_DENIED_MSG = 'No tienes permisos para modificar información de colaboradores.';
+                        const COLAB_HISTORY_DENIED_MSG = 'No tienes permisos para consultar el historial de cambios de colaboradores.';
 
                         function colabRoleActual() {
                             return norm(sessionStorage.getItem('user_role') || '')
@@ -11101,6 +11247,26 @@ FF
                         function colabRequireEdit() {
                             if (colabEsEditor()) return true;
                             alert(COLAB_EDIT_DENIED_MSG);
+                            return false;
+                        }
+
+                        function colabPuedeVerHistorial() {
+                            const role = colabRoleActual();
+                            return [
+                                'admin',
+                                'superadmin',
+                                'colab_editor',
+                                'colabeditor',
+                                'colab_ed',
+                                'colaborador_editor',
+                                'colaborador_ed',
+                                'colaborador_edit'
+                            ].includes(role);
+                        }
+
+                        function colabRequireHistorial() {
+                            if (colabPuedeVerHistorial()) return true;
+                            alert(COLAB_HISTORY_DENIED_MSG);
                             return false;
                         }
 
@@ -12953,6 +13119,311 @@ FF
                             }
                         }
 
+                        /* -- Historial completo del módulo Colaboradores -- */
+                        let colabAuditRaw = [];
+
+                        function colabHistEsc(s) {
+                            return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+                        }
+
+                        function colabHistText(s) {
+                            return String(s ?? '').trim();
+                        }
+
+                        function colabHistPrettyField(field) {
+                            const key = colabHistText(field);
+                            return COLAB_FIELD_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Campo';
+                        }
+
+                        function colabHistFormatValue(v) {
+                            if (v === null || v === undefined || v === '') return '(vacío)';
+                            if (typeof v === 'object') {
+                                try { return JSON.stringify(v); } catch (_) { return String(v); }
+                            }
+                            return String(v);
+                        }
+
+                        function colabHistNormalizeAction(rawAction, details, changes) {
+                            const action = norm(rawAction);
+                            const statusChange = (changes || []).find(c => norm(c.field || c.campo) === 'estatus');
+                            if (statusChange) {
+                                const oldStatus = norm(statusChange.old ?? statusChange.anterior);
+                                const newStatus = norm(statusChange.new ?? statusChange.nuevo);
+                                if (newStatus === 'baja' && oldStatus !== 'baja') return 'Dar de baja';
+                                if (newStatus === 'activo' && oldStatus === 'baja') return 'Reactivar';
+                            }
+                            if ((changes || []).some(c => norm(c.field || c.campo) === 'plaza')) return 'Cambiar plaza';
+                            if (action.includes('crear') || action.includes('agregar') || action.includes('insert')) return 'Crear';
+                            if (action.includes('eliminar') || action.includes('borrar') || action.includes('delete')) return 'Eliminar';
+                            if (action.includes('curso') && action.includes('asign')) return 'Asignar curso';
+                            if (action.includes('curso')) return 'Modificar curso';
+                            if (action.includes('foto')) return 'Cambiar fotografía';
+                            if (action.includes('document')) return 'Agregar documento';
+                            if (action.includes('amonest')) return 'Agregar amonestación';
+                            if (action.includes('vacacion')) return 'Modificar vacaciones';
+                            if (action.includes('coment')) return 'Agregar comentario';
+                            return 'Editar';
+                        }
+
+                        function colabHistActionClass(action) {
+                            const a = norm(action);
+                            if (a.includes('crear')) return 'colab-audit-crear';
+                            if (a.includes('baja') || a.includes('eliminar')) return a.includes('eliminar') ? 'colab-audit-eliminar' : 'colab-audit-baja';
+                            if (a.includes('reactivar')) return 'colab-audit-reactivar';
+                            if (a.includes('plaza')) return 'colab-audit-plaza';
+                            if (a.includes('editar') || a.includes('modificar') || a.includes('cambiar') || a.includes('curso') || a.includes('document') || a.includes('amonest') || a.includes('vacacion') || a.includes('coment')) return 'colab-audit-editar';
+                            return 'colab-audit-otro';
+                        }
+
+                        function colabHistIcon(action) {
+                            const a = norm(action);
+                            if (a.includes('crear')) return 'fa-plus-circle';
+                            if (a.includes('eliminar')) return 'fa-trash-alt';
+                            if (a.includes('baja')) return 'fa-user-slash';
+                            if (a.includes('reactivar')) return 'fa-user-check';
+                            if (a.includes('plaza')) return 'fa-id-badge';
+                            if (a.includes('curso')) return 'fa-graduation-cap';
+                            if (a.includes('document')) return 'fa-file-alt';
+                            if (a.includes('amonest')) return 'fa-exclamation-triangle';
+                            if (a.includes('vacacion')) return 'fa-umbrella-beach';
+                            if (a.includes('coment')) return 'fa-comment';
+                            if (a.includes('foto')) return 'fa-camera';
+                            return 'fa-pencil-alt';
+                        }
+
+                        function colabHistExtractChanges(details) {
+                            const d = details || {};
+                            const raw = Array.isArray(d.changes) ? d.changes : [];
+                            return raw.map(c => ({
+                                field: c.field ?? c.campo ?? c.nombre_campo ?? '',
+                                old: c.old ?? c.anterior ?? c.valor_anterior ?? '',
+                                new: c.new ?? c.nuevo ?? c.valor_nuevo ?? ''
+                            })).filter(c => c.field || c.old || c.new);
+                        }
+
+                        function colabHistDataFromObject(obj, semanticKey) {
+                            if (!obj || typeof obj !== 'object') return '';
+                            const real = colabCols?.[semanticKey];
+                            return obj[real] ?? obj[semanticKey] ?? obj[semanticKey === 'num' ? 'No. Empleado' : ''] ?? '';
+                        }
+
+                        function colabHistBuildDetailHtml(item) {
+                            const changes = item.changes || [];
+                            let html = `<div class="fw-semibold text-dark mb-1">${colabHistEsc(item.summary || item.action)}</div>`;
+                            if (changes.length) {
+                                html += '<div class="colab-audit-detail">';
+                                changes.forEach(c => {
+                                    html += `<div class="colab-audit-change">
+                                        <span class="colab-audit-field">${colabHistEsc(colabHistPrettyField(c.field))}</span>
+                                        <span class="colab-audit-old">${colabHistEsc(colabHistFormatValue(c.old))}</span>
+                                        <i class="fas fa-arrow-right text-muted" style="font-size:.7rem"></i>
+                                        <span class="colab-audit-new">${colabHistEsc(colabHistFormatValue(c.new))}</span>
+                                    </div>`;
+                                });
+                                html += '</div>';
+                            }
+                            if (item.plazaChange) {
+                                html += `<div class="small text-primary fw-semibold mt-1"><i class="fas fa-id-badge me-1"></i>${colabHistEsc(item.plazaChange)}</div>`;
+                            }
+                            return html;
+                        }
+
+                        function colabHistGetFilters() {
+                            return {
+                                nombre: norm(document.getElementById('colab-hist-f-nombre')?.value || ''),
+                                num: norm(document.getElementById('colab-hist-f-num')?.value || ''),
+                                plaza: norm(document.getElementById('colab-hist-f-plaza')?.value || ''),
+                                usuario: norm(document.getElementById('colab-hist-f-usuario')?.value || ''),
+                                accion: norm(document.getElementById('colab-hist-f-accion')?.value || ''),
+                                estatus: norm(document.getElementById('colab-hist-f-estatus')?.value || ''),
+                                desde: document.getElementById('colab-hist-f-desde')?.value || '',
+                                hasta: document.getElementById('colab-hist-f-hasta')?.value || '',
+                            };
+                        }
+
+                        function colabHistApplyFilters(items) {
+                            const f = colabHistGetFilters();
+                            const desde = f.desde ? new Date(f.desde + 'T00:00:00') : null;
+                            const hasta = f.hasta ? new Date(f.hasta + 'T23:59:59') : null;
+                            return items.filter(item => {
+                                const fecha = new Date(item.date);
+                                if (desde && fecha < desde) return false;
+                                if (hasta && fecha > hasta) return false;
+                                if (f.nombre && !norm(item.nombre).includes(f.nombre)) return false;
+                                if (f.num && !norm(item.numEmpleado).includes(f.num)) return false;
+                                if (f.plaza && !norm(item.plaza).includes(f.plaza)) return false;
+                                if (f.usuario && !norm(item.usuario).includes(f.usuario)) return false;
+                                if (f.accion && !norm(item.action).includes(f.accion)) return false;
+                                if (f.estatus) {
+                                    const statusChange = (item.changes || []).find(c => norm(c.field) === 'estatus');
+                                    const est = norm(statusChange?.new || item.estatus || '');
+                                    if (est !== f.estatus) return false;
+                                }
+                                return true;
+                            });
+                        }
+
+                        function colabHistRender(items) {
+                            const body = document.getElementById('colab-historial-cambios-body');
+                            const totalEl = document.getElementById('colab-hist-total');
+                            if (!body) return;
+                            const filtered = colabHistApplyFilters(items).sort((a,b) => new Date(b.date) - new Date(a.date));
+                            if (totalEl) totalEl.textContent = `${filtered.length} movimiento(s) mostrados de ${items.length} cargados.`;
+                            if (!filtered.length) {
+                                body.innerHTML = '<tr><td colspan="7" class="colab-audit-empty"><i class="fas fa-history fa-2x mb-2 d-block"></i>Sin movimientos que coincidan con los filtros.</td></tr>';
+                                return;
+                            }
+                            body.innerHTML = filtered.map(item => {
+                                const d = new Date(item.date);
+                                const fecha = isNaN(d) ? '—' : d.toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
+                                const hora = isNaN(d) ? '—' : d.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
+                                const actionClass = colabHistActionClass(item.action);
+                                const icon = colabHistIcon(item.action);
+                                const rol = item.rol || '—';
+                                return `<tr>
+                                    <td class="text-nowrap"><strong>${colabHistEsc(fecha)}</strong><br><span class="text-muted">${colabHistEsc(hora)}</span></td>
+                                    <td><strong>${colabHistEsc(item.usuario || 'Sistema')}</strong><br><span class="text-muted">${colabHistEsc(rol)}</span></td>
+                                    <td><span class="colab-audit-action ${actionClass}"><i class="fas ${icon}"></i>${colabHistEsc(item.action)}</span></td>
+                                    <td><strong>${colabHistEsc(item.nombre || '—')}</strong></td>
+                                    <td><span class="font-monospace">${colabHistEsc(item.numEmpleado || '—')}</span></td>
+                                    <td>${colabHistEsc(item.plaza || '—')}</td>
+                                    <td>${colabHistBuildDetailHtml(item)}</td>
+                                </tr>`;
+                            }).join('');
+                        }
+
+                        async function colabHistLoadRoleMap(sb, userIds) {
+                            const map = {};
+                            const ids = [...new Set((userIds || []).filter(Boolean))];
+                            if (!ids.length) return map;
+                            try {
+                                const { data, error } = await sb.from('user_roles').select('user_id, role').in('user_id', ids);
+                                if (!error && Array.isArray(data)) data.forEach(r => { map[r.user_id] = r.role; });
+                            } catch (_) { }
+                            return map;
+                        }
+
+                        window.colabHistorialCargar = async function() {
+                            if (!colabRequireHistorial()) return;
+                            const body = document.getElementById('colab-historial-cambios-body');
+                            if (body) body.innerHTML = '<tr><td colspan="7" class="colab-audit-empty"><span class="spinner-border spinner-border-sm me-2"></span>Cargando historial de colaboradores...</td></tr>';
+                            try {
+                                const sb = window.supabaseClient || await window.ensureSupabaseClient?.();
+                                if (!sb) throw new Error('Supabase no disponible');
+                                const colaboradores = await colabCargarTodos();
+                                const byNum = new Map();
+                                colaboradores.forEach(r => {
+                                    const num = colabHistText(gc(r, 'num'));
+                                    if (num) byNum.set(num, r);
+                                });
+
+                                const [histRes, globalRes] = await Promise.all([
+                                    sb.from('colab_historial').select('*').order('fecha', { ascending: false }).limit(1500),
+                                    sb.from('change_history').select('*').eq('entity_type', 'Colaboradores').order('created_at', { ascending: false }).limit(1000)
+                                ]);
+                                if (histRes.error) throw histRes.error;
+                                if (globalRes.error) throw globalRes.error;
+
+                                const userIds = [
+                                    ...(histRes.data || []).map(r => r.usuario_id),
+                                    ...(globalRes.data || []).map(r => r.user_id)
+                                ];
+                                const roleMap = await colabHistLoadRoleMap(sb, userIds);
+
+                                const specificItems = (histRes.data || []).map(h => {
+                                    const num = colabHistText(h.num_empleado);
+                                    const c = byNum.get(num);
+                                    const changes = [{ field: h.campo, old: h.valor_anterior, new: h.valor_nuevo }];
+                                    const action = colabHistNormalizeAction('EDITAR', null, changes);
+                                    const plaza = norm(h.campo) === 'plaza' ? (h.valor_nuevo || h.valor_anterior || '') : colabHistText(gc(c || {}, 'plaza'));
+                                    const oldPuesto = colabHistText(gc(c || {}, 'puesto'));
+                                    const plazaChange = norm(h.campo) === 'plaza'
+                                        ? `La plaza cambió de ${colabHistFormatValue(h.valor_anterior)} a ${colabHistFormatValue(h.valor_nuevo)}${oldPuesto ? ' · Puesto actual: ' + oldPuesto : ''}.`
+                                        : '';
+                                    return {
+                                        source: 'colab_historial',
+                                        date: h.fecha,
+                                        usuario: h.usuario_nombre || 'Sistema',
+                                        rol: roleMap[h.usuario_id] || '—',
+                                        action,
+                                        nombre: colabHistText(gc(c || {}, 'nombre')),
+                                        numEmpleado: num,
+                                        plaza,
+                                        estatus: colabHistText(gc(c || {}, 'estatus')),
+                                        summary: action === 'Cambiar plaza'
+                                            ? `Cambio de plaza del colaborador No. ${num}`
+                                            : `Actualización de ${colabHistPrettyField(h.campo)} del colaborador No. ${num}`,
+                                        changes,
+                                        plazaChange
+                                    };
+                                });
+
+                                const globalItems = (globalRes.data || []).map(g => {
+                                    const details = g.details || {};
+                                    const changes = colabHistExtractChanges(details);
+                                    const oldObj = details.old || {};
+                                    const newObj = details.new || {};
+                                    const num = colabHistText(g.record_id || colabHistDataFromObject(newObj, 'num') || colabHistDataFromObject(oldObj, 'num'));
+                                    const c = byNum.get(num);
+                                    const nombre = colabHistText(colabHistDataFromObject(newObj, 'nombre') || colabHistDataFromObject(oldObj, 'nombre') || gc(c || {}, 'nombre'));
+                                    const plaza = colabHistText(colabHistDataFromObject(newObj, 'plaza') || colabHistDataFromObject(oldObj, 'plaza') || gc(c || {}, 'plaza'));
+                                    const action = colabHistNormalizeAction(g.action_type, details, changes);
+                                    return {
+                                        source: 'change_history',
+                                        date: g.created_at,
+                                        usuario: (g.user_email || '').split('@')[0] || 'Sistema',
+                                        rol: roleMap[g.user_id] || '—',
+                                        action,
+                                        nombre,
+                                        numEmpleado: num,
+                                        plaza,
+                                        estatus: colabHistText(gc(c || {}, 'estatus')),
+                                        summary: details.summary || `${action} en colaboradores`,
+                                        changes,
+                                        plazaChange: ''
+                                    };
+                                });
+
+                                const seen = new Set();
+                                colabAuditRaw = [...specificItems, ...globalItems].filter(item => {
+                                    const key = [item.source, item.date, item.numEmpleado, item.action, item.summary].join('|');
+                                    if (seen.has(key)) return false;
+                                    seen.add(key);
+                                    return true;
+                                });
+                                colabHistRender(colabAuditRaw);
+                            } catch (err) {
+                                console.error('[Colaboradores] Error historial completo:', err);
+                                if (body) body.innerHTML = `<tr><td colspan="7" class="colab-audit-empty text-danger"><i class="fas fa-triangle-exclamation me-1"></i>Error al cargar historial: ${colabHistEsc(err?.message || err)}</td></tr>`;
+                            }
+                        };
+
+                        window.colabHistorialLimpiarFiltros = function() {
+                            ['colab-hist-f-nombre','colab-hist-f-num','colab-hist-f-plaza','colab-hist-f-usuario','colab-hist-f-accion','colab-hist-f-estatus','colab-hist-f-desde','colab-hist-f-hasta'].forEach(id => {
+                                const el = document.getElementById(id);
+                                if (el) el.value = '';
+                            });
+                            colabHistRender(colabAuditRaw);
+                        };
+
+                        window.colabAbrirHistorialCambios = async function() {
+                            if (!colabRequireHistorial()) return;
+                            const modalEl = document.getElementById('colabHistorialCambiosModal');
+                            if (!modalEl) return;
+                            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                            modal.show();
+                            await colabHistorialCargar();
+                        };
+
+                        ['colab-hist-f-nombre','colab-hist-f-num','colab-hist-f-plaza','colab-hist-f-usuario','colab-hist-f-accion','colab-hist-f-estatus','colab-hist-f-desde','colab-hist-f-hasta'].forEach(id => {
+                            document.addEventListener('input', e => {
+                                if (e.target && e.target.id === id) colabHistRender(colabAuditRaw);
+                            });
+                            document.addEventListener('change', e => {
+                                if (e.target && e.target.id === id) colabHistRender(colabAuditRaw);
+                            });
+                        });
+
                         /* -- Abrir modal editor -- */
                         window.colabAbrirEditor = function() {
                             if (!colabCurrentRow) return;
@@ -14309,6 +14780,8 @@ FF
                             if (btnNuevo) btnNuevo.classList.toggle('d-none', !colabCanEdit());
                             const btnMasiva = document.getElementById('colab-btn-masiva-cursos');
                             if (btnMasiva) btnMasiva.classList.toggle('d-none', !colabCanEdit());
+                            const btnHistorial = document.getElementById('colab-btn-historial-cambios');
+                            if (btnHistorial) btnHistorial.classList.toggle('d-none', !colabPuedeVerHistorial());
                         }
 
                         /* ==============================================================
