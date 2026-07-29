@@ -8772,6 +8772,38 @@ FF
                         .ctbl-btn-export.green { color: #1b5e20; border-color: #81c784; }
                         .ctbl-btn-export.green:hover { background: #e8f5e9; border-color: #388e3c; }
                         .ctbl-table-wrap { flex: 1; overflow: auto; min-height: 0; }
+                        .ctbl-pagination {
+                            display:flex;
+                            align-items:center;
+                            justify-content:space-between;
+                            gap:.75rem;
+                            flex-wrap:wrap;
+                            padding:.55rem 1rem;
+                            background:#f8faff;
+                            border-top:1px solid #dde3ef;
+                            color:#334155;
+                            font-size:.8rem;
+                        }
+                        .ctbl-page-actions { display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
+                        .ctbl-page-btn {
+                            border:1px solid #c5cfe0;
+                            background:#fff;
+                            color:#0d2152;
+                            border-radius:7px;
+                            padding:.28rem .65rem;
+                            font-weight:700;
+                            font-size:.78rem;
+                            cursor:pointer;
+                        }
+                        .ctbl-page-btn:hover:not(:disabled) { background:#eef3ff; border-color:#1565c0; }
+                        .ctbl-page-btn:disabled { opacity:.45; cursor:not-allowed; }
+                        .ctbl-page-size {
+                            border:1px solid #c5cfe0;
+                            border-radius:7px;
+                            padding:.25rem .45rem;
+                            background:#fff;
+                            color:#1a2540;
+                        }
                         #colabTablaModal .modal-content { display: flex; flex-direction: column; overflow: hidden; height: 100%; }
                         .ctbl-table {
                             width: 100%; border-collapse: collapse; font-size: .82rem;
@@ -10850,6 +10882,24 @@ FF
                                         <i class="fas fa-search me-2"></i>No se encontraron colaboradores con los criterios de búsqueda seleccionados.
                                     </div>
                                 </div>
+                                <div class="ctbl-pagination" id="ctbl-pagination">
+                                    <div>
+                                        <strong id="ctbl-page-range">—</strong>
+                                        <span class="text-muted" id="ctbl-page-total"></span>
+                                    </div>
+                                    <div class="ctbl-page-actions">
+                                        <label class="text-muted" for="ctbl-page-size">Filas por página</label>
+                                        <select class="ctbl-page-size" id="ctbl-page-size" onchange="ctblCambiarTamanoPagina(this.value)">
+                                            <option value="50">50</option>
+                                            <option value="75" selected>75</option>
+                                            <option value="100">100</option>
+                                            <option value="150">150</option>
+                                        </select>
+                                        <button type="button" class="ctbl-page-btn" id="ctbl-prev-page" onclick="ctblIrPagina(ctblPage - 1)">Anterior</button>
+                                        <span class="fw-semibold" id="ctbl-page-label">Página 1 / 1</span>
+                                        <button type="button" class="ctbl-page-btn" id="ctbl-next-page" onclick="ctblIrPagina(ctblPage + 1)">Siguiente</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div><!-- /colabTablaModal -->
@@ -11223,7 +11273,12 @@ FF
 
                         /* -- Normalizar texto para comparación -- */
                         function norm(s) {
-                            return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+                            return String(s || '')
+                                .normalize('NFD')
+                                .replace(/[\u0300-\u036f]/g, '')
+                                .toLowerCase()
+                                .replace(/\s+/g, ' ')
+                                .trim();
                         }
 
                         /* -- Valor o guion -- */
@@ -14048,6 +14103,9 @@ FF
                         let ctblSearchTimer = null;
                         let ctblSearchRunId = 0;
                         let ctblLastFilterMetrics = null;
+                        let ctblPage = 1;
+                        let ctblPageSize = 75;
+                        let ctblLastRenderMetrics = null;
 
                         // Orden preferido de columnas
                         const CTBL_COL_ORDER = [
@@ -14164,25 +14222,97 @@ FF
                             const nombreKey = ctblFindColByCanon('nombre') || 'nombre';
                             const puestoKey = ctblFindColByCanon('puesto') || 'puesto';
                             ctblAllData.forEach(r => {
-                                const texto = [
-                                    r?.[numKey],
-                                    r?.[nombreKey],
-                                    r?.[puestoKey]
-                                ].map(v => String(v ?? '')).join(' ');
-                                ctblSearchIndex.set(r, norm(texto));
+                                const numero = norm(r?.[numKey]);
+                                const nombre = norm(r?.[nombreKey]);
+                                const puesto = norm(r?.[puestoKey]);
+                                const partesNombre = nombre.split(' ').filter(Boolean);
+                                ctblSearchIndex.set(r, {
+                                    numero,
+                                    nombre,
+                                    puesto,
+                                    primerNombre: partesNombre[0] || '',
+                                    apellidos: partesNombre.slice(1),
+                                    texto: `${numero} ${nombre} ${puesto}`.trim()
+                                });
                             });
                         }
 
                         function ctblTextoBusqueda(r) {
-                            let txt = ctblSearchIndex.get(r);
-                            if (txt !== undefined) return txt;
+                            let indice = ctblSearchIndex.get(r);
+                            if (indice !== undefined) return indice;
                             const numKey = ctblFindColByCanon('num_empleado') || 'num_empleado';
                             const nombreKey = ctblFindColByCanon('nombre') || 'nombre';
                             const puestoKey = ctblFindColByCanon('puesto') || 'puesto';
-                            txt = norm([r?.[numKey], r?.[nombreKey], r?.[puestoKey]].map(v => String(v ?? '')).join(' '));
-                            ctblSearchIndex.set(r, txt);
-                            return txt;
+                            const numero = norm(r?.[numKey]);
+                            const nombre = norm(r?.[nombreKey]);
+                            const puesto = norm(r?.[puestoKey]);
+                            const partesNombre = nombre.split(' ').filter(Boolean);
+                            indice = {
+                                numero,
+                                nombre,
+                                puesto,
+                                primerNombre: partesNombre[0] || '',
+                                apellidos: partesNombre.slice(1),
+                                texto: `${numero} ${nombre} ${puesto}`.trim()
+                            };
+                            ctblSearchIndex.set(r, indice);
+                            return indice;
                         }
+
+                        function ctblRelevanciaBusqueda(indice, q) {
+                            if (!q) return 0;
+                            if (indice.numero === q) return 0;
+                            if (indice.primerNombre.startsWith(q)) return 1;
+                            if (indice.apellidos.some(parte => parte.startsWith(q))) return 2;
+                            if (indice.nombre.includes(q)) return 3;
+                            if (indice.numero.includes(q)) return 4;
+                            if (indice.puesto.includes(q)) return 5;
+                            return Number.POSITIVE_INFINITY;
+                        }
+
+                        function ctblTotalPaginas() {
+                            return Math.max(1, Math.ceil(ctblData.length / ctblPageSize));
+                        }
+
+                        function ctblClampPagina(page) {
+                            const total = ctblTotalPaginas();
+                            return Math.min(Math.max(1, parseInt(page, 10) || 1), total);
+                        }
+
+                        function ctblActualizarPaginacion(renderedRows = 0) {
+                            const pagination = document.getElementById('ctbl-pagination');
+                            const rangeEl = document.getElementById('ctbl-page-range');
+                            const totalEl = document.getElementById('ctbl-page-total');
+                            const labelEl = document.getElementById('ctbl-page-label');
+                            const prevBtn = document.getElementById('ctbl-prev-page');
+                            const nextBtn = document.getElementById('ctbl-next-page');
+                            const sizeEl = document.getElementById('ctbl-page-size');
+                            const totalPages = ctblTotalPaginas();
+                            ctblPage = ctblClampPagina(ctblPage);
+                            if (pagination) pagination.style.display = ctblData.length ? 'flex' : 'none';
+                            const start = ctblData.length ? ((ctblPage - 1) * ctblPageSize) + 1 : 0;
+                            const end = ctblData.length ? Math.min(ctblPage * ctblPageSize, ctblData.length) : 0;
+                            if (rangeEl) rangeEl.textContent = ctblData.length ? `${start}–${end}` : '0';
+                            if (totalEl) totalEl.textContent = ctblData.length ? `de ${ctblData.length} resultado(s) · ${renderedRows} fila(s) renderizada(s)` : 'sin resultados';
+                            if (labelEl) labelEl.textContent = `Página ${ctblPage} / ${totalPages}`;
+                            if (prevBtn) prevBtn.disabled = ctblPage <= 1;
+                            if (nextBtn) nextBtn.disabled = ctblPage >= totalPages;
+                            if (sizeEl && String(sizeEl.value) !== String(ctblPageSize)) sizeEl.value = String(ctblPageSize);
+                        }
+
+                        window.ctblIrPagina = function(page) {
+                            const next = ctblClampPagina(page);
+                            if (next === ctblPage) return;
+                            ctblPage = next;
+                            colabTablaRender();
+                        };
+
+                        window.ctblCambiarTamanoPagina = function(size) {
+                            const n = parseInt(size, 10);
+                            ctblPageSize = [50, 75, 100, 150].includes(n) ? n : 75;
+                            ctblPage = 1;
+                            colabTablaRender();
+                        };
 
                         // Columnas de texto largo que necesitan wrap
                         const CTBL_WRAP_COLS = new Set(['nombre','puesto','domicilio','comentarios','amonestaciones','profesion','grado_academico','coordinacion']);
@@ -14293,11 +14423,10 @@ FF
                         window.colabTablaFiltrarDebounced = function() {
                             const runId = ++ctblSearchRunId;
                             clearTimeout(ctblSearchTimer);
-                            ctblSetSearchStatus('Buscando...', true);
                             ctblSearchTimer = setTimeout(() => {
                                 if (runId !== ctblSearchRunId) return;
                                 colabTablaFiltrar();
-                            }, 120);
+                            }, 100);
                         };
 
                         window.colabTablaFiltrar = function() {
@@ -14309,6 +14438,7 @@ FF
                             const nivel = (document.getElementById('ctbl-nivel')?.value || '');
                             const turno = (document.getElementById('ctbl-turno')?.value || '');
                             let processed = 0;
+                            ctblPage = 1;
 
                             ctblData = ctblAllData.filter(r => {
                                 processed++;
@@ -14316,7 +14446,7 @@ FF
                                 if (nivel && String(r[ctblFilterKeys.nivel] || '').trim() !== nivel) return false;
                                 if (turno && String(r[ctblFilterKeys.turno] || '').trim() !== turno) return false;
                                 if (q) {
-                                    if (!ctblTextoBusqueda(r).includes(q)) return false;
+                                    if (!ctblTextoBusqueda(r).texto.includes(q)) return false;
                                 }
                                 // Filtros por columna individual
                                 for (const [col, vals] of Object.entries(_ctblColFilters)) {
@@ -14337,6 +14467,10 @@ FF
                                 return 1;
                             };
                             ctblData.sort((a, b) => {
+                                if (q) {
+                                    const relevancia = ctblRelevanciaBusqueda(ctblTextoBusqueda(a), q) - ctblRelevanciaBusqueda(ctblTextoBusqueda(b), q);
+                                    if (relevancia) return relevancia;
+                                }
                                 const ea = estatusPeso(a);
                                 const eb = estatusPeso(b);
                                 if (ea !== eb) return ea - eb;
@@ -14350,12 +14484,17 @@ FF
                             });
 
                             ctblActualizarBannerFiltros();
-                            colabTablaRender();
+                            const processElapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - started;
+                            const renderMetrics = colabTablaRender();
                             const elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - started;
                             ctblLastFilterMetrics = {
                                 query: q,
                                 processed,
                                 results: ctblData.length,
+                                renderedRows: renderMetrics?.renderedRows || 0,
+                                domNodes: renderMetrics?.domNodes || 0,
+                                processMs: Math.round(processElapsed * 10) / 10,
+                                renderMs: renderMetrics?.ms || 0,
                                 ms: Math.round(elapsed * 10) / 10,
                                 supabaseQueries: 0
                             };
@@ -14510,6 +14649,7 @@ FF
 
                         /** Renderizar filas de la tabla */
                         function colabTablaRender() {
+                            const renderStart = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                             const tbody   = document.getElementById('ctbl-tbody');
                             const tableEl = document.getElementById('ctbl-table');
                             const emptyEl = document.getElementById('ctbl-empty');
@@ -14520,17 +14660,24 @@ FF
                             if (!ctblData.length) {
                                 if (tableEl) tableEl.classList.add('d-none');
                                 if (emptyEl) emptyEl.classList.remove('d-none');
-                                return;
+                                if (tbody) tbody.innerHTML = '';
+                                ctblActualizarPaginacion(0);
+                                ctblLastRenderMetrics = { renderedRows: 0, domNodes: 0, ms: 0 };
+                                return ctblLastRenderMetrics;
                             }
                             if (emptyEl) emptyEl.classList.add('d-none');
                             if (tableEl) tableEl.classList.remove('d-none');
+                            ctblPage = ctblClampPagina(ctblPage);
 
                             const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
                             // Raw key para número de empleado (para click en fila)
                             const numKey    = ctblCols.find(k => k === 'num_empleado' || k === 'num') || 'num_empleado';
                             const nombreKey = ctblCols.find(k => k === 'nombre') || 'nombre';
+                            const startIdx = (ctblPage - 1) * ctblPageSize;
+                            const visibleRows = ctblData.slice(startIdx, startIdx + ctblPageSize);
 
-                            const html = ctblData.map((r, i) => {
+                            const html = visibleRows.map((r, i) => {
+                                const dataIdx = startIdx + i;
                                 const nombreVal = esc(String(r[nombreKey] ?? '—'));
                                 const raw = String(gc(r,'amonestaciones') ?? r['amonestaciones'] ?? '').trim();
                                 const n   = raw ? raw.split(/\n/).map(l => l.trim()).filter(Boolean).length : 0;
@@ -14552,9 +14699,17 @@ FF
                                 const semTd = `<td class="ctbl-td-conducta">${colabSemaforoHtml(r, true)}</td>`;
                                 const gradoAcadIdx = ctblCols.findIndex(k => k === 'grado_academico' || /^grado\s+acad[eé]mico$/i.test(k));
                                 allTds.splice(gradoAcadIdx >= 0 ? gradoAcadIdx + 1 : 1, 0, semTd);
-                                return `<tr${rowCls} onclick="colabTablaVerFicha(${i})" title="Ver ficha de ${nombreVal}">${allTds.join('')}</tr>`;
+                                return `<tr${rowCls} onclick="colabTablaVerFicha(${dataIdx})" title="Ver ficha de ${nombreVal}">${allTds.join('')}</tr>`;
                             }).join('');
                             if (tbody) tbody.innerHTML = html;
+                            ctblActualizarPaginacion(visibleRows.length);
+                            const renderElapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - renderStart;
+                            ctblLastRenderMetrics = {
+                                renderedRows: visibleRows.length,
+                                domNodes: visibleRows.length * (ctblCols.length + 1),
+                                ms: Math.round(renderElapsed * 10) / 10
+                            };
+                            return ctblLastRenderMetrics;
                         }
 
                         /** Click en fila: cerrar modal y mostrar ficha */
