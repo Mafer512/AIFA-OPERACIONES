@@ -92,14 +92,19 @@ describe('busqueda local de colaboradores', () => {
         expect([...ranks].sort((a, b) => a - b)).toEqual([0, 1, 2, 5]);
     });
 
-    test('el control descarta temporizadores de busquedas anteriores', () => {
+    test('agrupa entradas al siguiente frame y descarta busquedas anteriores', () => {
+        const debounceStart = html.indexOf('window.colabTablaFiltrarDebounced = function()', collaboratorsSection);
+        const debounceEnd = html.indexOf('window.colabTablaFiltrar = function(', debounceStart);
+        const debounceSource = html.slice(debounceStart, debounceEnd);
         expect(html).toContain('const runId = ++ctblSearchRunId;');
         expect(html).toContain('if (runId !== ctblSearchRunId) return;');
-        expect(html).toContain('}, 80);');
+        expect(debounceSource).toContain('requestAnimationFrame(() => {');
+        expect(debounceSource).toContain('cancelAnimationFrame(ctblSearchTimer)');
+        expect(debounceSource).not.toMatch(/setTimeout|},\s*80\s*\);/);
     });
 
     test('la busqueda local no realiza consultas a Supabase', () => {
-        const filterStart = html.indexOf('window.colabTablaFiltrar = function()', collaboratorsSection);
+        const filterStart = html.indexOf('window.colabTablaFiltrar = function(', collaboratorsSection);
         const filterEnd = html.indexOf('/** Actualiza barra de filtros activos */', filterStart);
         const filterSource = html.slice(filterStart, filterEnd);
         expect(filterSource).not.toMatch(/\.from\s*\(|ensureSupabaseClient|await\s+/);
@@ -108,7 +113,7 @@ describe('busqueda local de colaboradores', () => {
 
     test('mantiene la tabla original sin paginacion ni controles adicionales', () => {
         expect(html).not.toMatch(/ctbl-pagination|ctbl-page-size|ctblIrPagina|ctblCambiarTamanoPagina/);
-        expect(html).toContain('const html = ctblData.map(r => ctblRowHtmlCache.get(r)');
+        expect(html).toContain('const desired = ctblData.map(ctblObtenerFilaNode)');
         expect(html).not.toContain('ctblData.slice(startIdx');
     });
 
@@ -116,5 +121,15 @@ describe('busqueda local de colaboradores', () => {
         expect(html).toContain('function ctblPrepararRenderCache()');
         expect(html).toContain('ctblRowHtmlCache.set(r, ctblConstruirFilaHtml(r, index))');
         expect(html).toContain('ctblPrepararRenderCache();');
+    });
+
+    test('reutiliza nodos y mide cada etapa de la busqueda', () => {
+        expect(html).toContain('ctblRowNodeCache.get(r)');
+        expect(html).toContain('tbody.insertBefore(desired[i], tbody.children[i] || null)');
+        expect(html).toContain('inputDelayMs:');
+        expect(html).toContain('filterMs:');
+        expect(html).toContain('sortMs:');
+        expect(html).toContain('renderMs:');
+        expect(html).toContain('totalFromInputMs:');
     });
 });

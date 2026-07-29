@@ -14114,8 +14114,10 @@ FF
                         let ctblFilterKeys = { dir: 'direccion', nivel: 'nivel', turno: 'turno' };
                         let ctblSearchIndex = new WeakMap();
                         let ctblRowHtmlCache = new WeakMap();
+                        let ctblRowNodeCache = new WeakMap();
                         let ctblSearchTimer = null;
                         let ctblSearchRunId = 0;
+                        let ctblSearchQueuedAt = 0;
                         let ctblLastFilterMetrics = null;
 
                         // Orden preferido de columnas
@@ -14418,39 +14420,44 @@ FF
                         /** Filtrar tabla por texto, selects y filtros de columna */
                         window.colabTablaFiltrarDebounced = function() {
                             const runId = ++ctblSearchRunId;
-                            clearTimeout(ctblSearchTimer);
-                            ctblSearchTimer = setTimeout(() => {
+                            ctblSearchQueuedAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+                            if (ctblSearchTimer !== null) cancelAnimationFrame(ctblSearchTimer);
+                            ctblSearchTimer = requestAnimationFrame(() => {
+                                ctblSearchTimer = null;
                                 if (runId !== ctblSearchRunId) return;
-                                colabTablaFiltrar();
-                            }, 80);
+                                colabTablaFiltrar(ctblSearchQueuedAt);
+                            });
                         };
 
-                        window.colabTablaFiltrar = function() {
+                        window.colabTablaFiltrar = function(inputStartedAt = 0) {
                             const started = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                             ++ctblSearchRunId;
-                            clearTimeout(ctblSearchTimer);
+                            if (ctblSearchTimer !== null) cancelAnimationFrame(ctblSearchTimer);
+                            ctblSearchTimer = null;
                             const q     = norm((document.getElementById('ctbl-search')?.value || ''));
                             const dir   = (document.getElementById('ctbl-dir')?.value   || '');
                             const nivel = (document.getElementById('ctbl-nivel')?.value || '');
                             const turno = (document.getElementById('ctbl-turno')?.value || '');
                             let processed = 0;
 
-                            ctblData = ctblAllData.filter(r => {
+                            const matches = [];
+                            for (const r of ctblAllData) {
                                 processed++;
-                                if (dir   && String(r[ctblFilterKeys.dir]   || '').trim() !== dir)   return false;
-                                if (nivel && String(r[ctblFilterKeys.nivel] || '').trim() !== nivel) return false;
-                                if (turno && String(r[ctblFilterKeys.turno] || '').trim() !== turno) return false;
-                                if (q) {
-                                    if (!ctblTextoBusqueda(r).texto.includes(q)) return false;
-                                }
+                                if (dir   && String(r[ctblFilterKeys.dir]   || '').trim() !== dir)   continue;
+                                if (nivel && String(r[ctblFilterKeys.nivel] || '').trim() !== nivel) continue;
+                                if (turno && String(r[ctblFilterKeys.turno] || '').trim() !== turno) continue;
+                                if (q && !ctblTextoBusqueda(r).texto.includes(q)) continue;
                                 // Filtros por columna individual
+                                let accepted = true;
                                 for (const [col, vals] of Object.entries(_ctblColFilters)) {
                                     if (!vals || !vals.size) continue;
                                     const cell = String(r[col] ?? '').trim() || '—';
-                                    if (!vals.has(cell)) return false;
+                                    if (!vals.has(cell)) { accepted = false; break; }
                                 }
-                                return true;
-                            });
+                                if (accepted) matches.push(r);
+                            }
+                            ctblData = matches;
+                            const filterEnded = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
                             // Aplicar orden actual
                             const col = ctblSortCol;
@@ -14477,19 +14484,24 @@ FF
                                 const va = norm(ra), vb = norm(rb);
                                 return ctblSortAsc ? va.localeCompare(vb, 'es') : vb.localeCompare(va, 'es');
                             });
+                            const sortEnded = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
 
                             ctblActualizarBannerFiltros();
-                            colabTablaRender();
+                            const renderMs = colabTablaRender();
                             const elapsed = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - started;
                             ctblLastFilterMetrics = {
                                 query: q,
                                 processed,
                                 results: ctblData.length,
+                                inputDelayMs: Math.round(Math.max(0, started - (inputStartedAt || started)) * 10) / 10,
+                                filterMs: Math.round((filterEnded - started) * 10) / 10,
+                                sortMs: Math.round((sortEnded - filterEnded) * 10) / 10,
+                                renderMs: Math.round(renderMs * 10) / 10,
                                 ms: Math.round(elapsed * 10) / 10,
+                                totalFromInputMs: Math.round(((inputStartedAt ? started - inputStartedAt : 0) + elapsed) * 10) / 10,
                                 supabaseQueries: 0
                             };
                             ctblSetSearchStatus(q ? `${ctblData.length} resultado(s) · ${ctblLastFilterMetrics.ms} ms` : '');
-                            console.debug('[Colaboradores][Tabla] búsqueda local', ctblLastFilterMetrics);
                         };
 
                         /** Actualiza barra de filtros activos */
@@ -14670,11 +14682,23 @@ FF
 
                         function ctblPrepararRenderCache() {
                             ctblRowHtmlCache = new WeakMap();
+                            ctblRowNodeCache = new WeakMap();
                             ctblAllData.forEach((r, index) => ctblRowHtmlCache.set(r, ctblConstruirFilaHtml(r, index)));
+                        }
+
+                        function ctblObtenerFilaNode(r) {
+                            let node = ctblRowNodeCache.get(r);
+                            if (node) return node;
+                            const template = document.createElement('template');
+                            template.innerHTML = ctblRowHtmlCache.get(r) || ctblConstruirFilaHtml(r, ctblAllData.indexOf(r));
+                            node = template.content.firstElementChild;
+                            ctblRowNodeCache.set(r, node);
+                            return node;
                         }
 
                         /** Renderizar filas de la tabla */
                         function colabTablaRender() {
+                            const renderStarted = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
                             const tbody   = document.getElementById('ctbl-tbody');
                             const tableEl = document.getElementById('ctbl-table');
                             const emptyEl = document.getElementById('ctbl-empty');
@@ -14685,13 +14709,20 @@ FF
                             if (!ctblData.length) {
                                 if (tableEl) tableEl.classList.add('d-none');
                                 if (emptyEl) emptyEl.classList.remove('d-none');
-                                return;
+                                if (tbody) tbody.replaceChildren();
+                                return ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - renderStarted;
                             }
                             if (emptyEl) emptyEl.classList.add('d-none');
                             if (tableEl) tableEl.classList.remove('d-none');
 
-                            const html = ctblData.map(r => ctblRowHtmlCache.get(r) || ctblConstruirFilaHtml(r, ctblAllData.indexOf(r))).join('');
-                            if (tbody) tbody.innerHTML = html;
+                            if (tbody) {
+                                const desired = ctblData.map(ctblObtenerFilaNode);
+                                for (let i = 0; i < desired.length; i++) {
+                                    if (tbody.children[i] !== desired[i]) tbody.insertBefore(desired[i], tbody.children[i] || null);
+                                }
+                                while (tbody.children.length > desired.length) tbody.lastElementChild.remove();
+                            }
+                            return ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - renderStarted;
                         }
 
                         /** Click en fila: cerrar modal y mostrar ficha */
