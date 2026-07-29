@@ -56,6 +56,12 @@
         NOV: 10,
         DEC: 11
     };
+    const LOCAL_AIRPORT_CODES = new Set(['NLU', 'MMSM']);
+    const FLIGHT_IDENTITY_COLUMNS = 'id,arr_movement_key,dep_movement_key';
+    const FLIGHT_FULL_SELECT = [
+        'id',
+        ...HEADERS.map(header => `"${header.replace(/"/g, '""')}"`)
+    ].join(',');
 
     const HEADER_CLASSES = {
         'Status': 'col-cvs-status',
@@ -450,96 +456,121 @@
 
             if (mapped.length === 0) throw new Error('No hay filas de datos válidas en el CSV.');
 
-            if (mapped.length === 0) throw new Error('No hay filas de datos válidas en el CSV.');
-
-            // Preserve original CSV row order
-            const ordered = mapped;
-
             // --- DUPLICATE DETECTION START ---
             const supabase = window.supabaseClient;
             if (!supabase) throw new Error('Cliente Supabase no disponible');
 
-            // 1. Fetch existing flights to check against. Se traen todas las
-            // columnas de vuelo (no sólo designador+hora) porque un mismo
-            // vuelo puede reimportarse con datos actualizados (stand, gate,
-            // aeronave, etc.) que si coinciden queremos aplicar via UPDATE.
-            const { data: existingData, error: fetchError } = await supabase
-                .from(TABLE_NAME)
-                .select('id, "Status", "[Arr] Airline code", "[Arr] Flight Designator", "[Arr] SIBT", "[Arr] AIBT", "[Arr] ALDT", "[Arr] Stand", "[Arr] Gates", "[Arr] Boarded", "[Arr] Baggage Belts", "[Arr] Service Type", "Routing", "[Dep] Service Type", "Aircraft type", "Registration", "[Dep] Airline code", "[Dep] Flight Designator", "[Dep] Stand", "[Dep] Gates", "[Dep] Boarded", "[Dep] SOBT", "[Dep] AOBT", "[Dep] ATOT", "[Dep] ATTT"');
-
-            if (fetchError) {
-                console.error("Error fetching existing data for duplicate check:", fetchError);
-                // Fallback: warn user but proceed? Or fail?
-                // Let's alert failure to be safe.
-                throw new Error("No se pudierón verificar duplicados: " + fetchError.message);
+            const referenceDate = inferImportReferenceDate(file);
+            lastImportYear = referenceDate.getFullYear();
+            const preparedRows = mapped.map((row, index) => prepareFlightIdentity(row, referenceDate, index + 2));
+            const invalidMovements = preparedRows.flatMap(item => item.invalidMovements);
+            if (invalidMovements.length) {
+                const sample = invalidMovements.slice(0, 8).join(', ');
+                const extra = invalidMovements.length > 8 ? '…' : '';
+                throw new Error(
+                    `No se pudo construir la llave única de ${sample}${extra}. ` +
+                    'Cada movimiento requiere aerolínea, número de vuelo, fecha programada y Routing.'
+                );
             }
 
-            // Identidad de un vuelo = aerolínea + designador + DÍA (no la hora
-            // exacta). Antes se comparaba la hora completa, así que un vuelo
-            // reimportado con un horario actualizado (retraso, adelanto) no
-            // se reconocía como el mismo vuelo — se insertaba como fila
-            // nueva, duplicando el registro y dejando el viejo obsoleto.
-            const flightIdentityKey = (row) => {
-                const year = lastImportYear || new Date().getFullYear();
-                const aac = (row['[Arr] Airline code'] || '').trim().toUpperCase();
-                const ad = (row['[Arr] Flight Designator'] || '').trim().toUpperCase();
-                const aDay = deriveDateKeyFromValue(row['[Arr] SIBT'], year);
-                const dac = (row['[Dep] Airline code'] || '').trim().toUpperCase();
-                const dd = (row['[Dep] Flight Designator'] || '').trim().toUpperCase();
-                const dDay = deriveDateKeyFromValue(row['[Dep] SOBT'], year);
-                if (!ad && !dd) return '';
-                return `${aac}|${ad}|${aDay}::${dac}|${dd}|${dDay}`;
-            };
-            const rowsAreIdentical = (a, b) => HEADERS.every(h => (a[h] || '').trim() === (b[h] || '').trim());
+            const { data: existingIdentityRows, error: identityError } = await fetchAllFlightIdentityRows(supabase);
+            if (identityError) {
+                throw new Error(
+                    'La protección de duplicados aún no está instalada en Supabase. ' +
+                    'Ejecuta la migración 010_flight_movement_uniqueness.sql antes de importar. ' +
+                    `Detalle: ${identityError.message}`
+                );
+            }
 
-            const existingByKey = new Map();
-            if (existingData) {
-                existingData.forEach(r => {
-                    const key = flightIdentityKey(r);
-                    if (key) existingByKey.set(key, r);
+            const existingIdByMovement = new Map();
+            (existingIdentityRows || []).forEach(row => {
+                [row.arr_movement_key, row.dep_movement_key].filter(Boolean).forEach(key => {
+                    if (!existingIdByMovement.has(key)) existingIdByMovement.set(key, new Set());
+                    existingIdByMovement.get(key).add(String(row.id));
                 });
-            }
-
-            const insertRows = [];
-            const updateRows = []; // { id, payload }
-            let duplicatesCount = 0;
-            const seenKeysInFile = new Set();
-
-            // 2. Classify each CSV row: exact duplicate (skip), same flight
-            // with new data (update by id), or a genuinely new flight (insert).
-            ordered.forEach(row => {
-                const key = flightIdentityKey(row);
-                if (!key) { insertRows.push(row); return; }
-
-                const existing = existingByKey.get(key);
-                if (existing && rowsAreIdentical(row, existing)) {
-                    duplicatesCount++;
-                    return;
-                }
-                if (existing) {
-                    updateRows.push({ id: existing.id, payload: row });
-                    // Ya no debe volver a coincidir con otra fila del mismo
-                    // archivo como si fuera "nueva" — reusa el mismo destino.
-                    existingByKey.set(key, { ...existing, ...row });
-                    return;
-                }
-                if (seenKeysInFile.has(key)) {
-                    // Dos filas del mismo CSV describen el mismo vuelo (ej. el
-                    // export trae el mismo movimiento repetido) — evita
-                    // insertar el mismo vuelo dos veces en una sola carga.
-                    duplicatesCount++;
-                    return;
-                }
-                seenKeysInFile.add(key);
-                insertRows.push(row);
             });
 
+            const uniquePrepared = [];
+            const fileOwnerByMovement = new Map();
+            let duplicatesInFile = 0;
+            preparedRows.forEach(item => {
+                const ownerIndexes = new Set(item.movementKeys
+                    .map(key => fileOwnerByMovement.get(key))
+                    .filter(index => index !== undefined));
+                if (ownerIndexes.size > 1) {
+                    throw new Error(`La fila ${item.sourceRow} enlaza movimientos que pertenecen a turnarounds distintos dentro del archivo.`);
+                }
+                if (ownerIndexes.size === 1) {
+                    const ownerIndex = [...ownerIndexes][0];
+                    const previous = uniquePrepared[ownerIndex];
+                    const sameTurnaround = previous.movementKeys.length === item.movementKeys.length
+                        && previous.movementKeys.every(key => item.movementKeys.includes(key));
+                    if (!sameTurnaround) {
+                        throw new Error(`La fila ${item.sourceRow} reutiliza un movimiento con un enlace de llegada/salida diferente.`);
+                    }
+                    uniquePrepared[ownerIndex] = item;
+                    item.movementKeys.forEach(key => fileOwnerByMovement.set(key, ownerIndex));
+                    duplicatesInFile++;
+                    return;
+                }
+                const newIndex = uniquePrepared.length;
+                uniquePrepared.push(item);
+                item.movementKeys.forEach(key => fileOwnerByMovement.set(key, newIndex));
+            });
+
+            const insertItems = [];
+            const updateItems = [];
+            uniquePrepared.forEach(item => {
+                const matchedIds = new Set();
+                item.movementKeys.forEach(key => {
+                    (existingIdByMovement.get(key) || []).forEach(id => matchedIds.add(id));
+                });
+                if (matchedIds.size > 1) {
+                    throw new Error(
+                        `La fila ${item.sourceRow} coincide con más de un registro existente. ` +
+                        'La base contiene un enlace de turnaround inconsistente que requiere revisión.'
+                    );
+                }
+                if (matchedIds.size === 1) updateItems.push({ id: [...matchedIds][0], ...item });
+                else insertItems.push(item);
+            });
+
+            const existingFullById = new Map();
+            const matchedIds = [...new Set(updateItems.map(item => item.id))];
+            for (const ids of chunkArray(matchedIds, 500)) {
+                const { data, error } = await supabase
+                    .from(TABLE_NAME)
+                    .select(FLIGHT_FULL_SELECT)
+                    .in('id', ids);
+                if (error) throw new Error(`No se pudieron comparar los vuelos existentes: ${error.message}`);
+                (data || []).forEach(row => existingFullById.set(String(row.id), row));
+            }
+
+            const rowsAreIdentical = (a, b) => HEADERS.every(header =>
+                normalizeValue(a?.[header]) === normalizeValue(b?.[header])
+            );
+            const updateRows = [];
+            let exactDuplicates = 0;
+            updateItems.forEach(item => {
+                const existing = existingFullById.get(String(item.id));
+                if (existing && rowsAreIdentical(item.payload, existing)) {
+                    exactDuplicates++;
+                    return;
+                }
+                updateRows.push({ id: item.id, payload: item.payload });
+            });
+            const insertRows = insertItems.map(item => item.payload);
+            const duplicatesCount = duplicatesInFile + exactDuplicates;
+
             if (insertRows.length === 0 && updateRows.length === 0) {
-                alert(`Todos los ${ordered.length} registros del CSV ya existen en la base de datos (Duplicados). No se importará nada.`);
+                alert(`Todos los ${mapped.length} registros del CSV ya existen en la base de datos. No se importará nada.`);
                 return;
             }
 
-            const parts = [`Se encontraron ${ordered.length} registros en el archivo.`];
+            const parts = [
+                `Se encontraron ${mapped.length} registros en el archivo.`,
+                `Fecha de referencia: ${toLocalDateKey(referenceDate)}.`
+            ];
             if (insertRows.length) parts.push(`- ${insertRows.length} son vuelos nuevos.`);
             if (updateRows.length) parts.push(`- ${updateRows.length} son vuelos existentes con datos actualizados (se actualizarán).`);
             if (duplicatesCount) parts.push(`- ${duplicatesCount} son duplicados exactos (se omiten).`);
@@ -550,7 +581,6 @@
             // Pass 'true' to append instead of replace
             await saveToDatabase(insertRows, true);
             await updateExistingFlights(updateRows);
-            // --- DUPLICATE DETECTION END ---
 
             const modalEl = document.getElementById('uploadOpsCsvModal');
             if (modalEl) {
@@ -582,8 +612,8 @@
             const chunks = chunkArray(rowsWithId, 500);
             for (const chunk of chunks) {
                 const [itinRes, manifRes] = await Promise.all([
-                    supabase.from('itinerario_vuelos_editable').insert(chunk),
-                    supabase.from('manifiestos_vuelos_editable').insert(chunk)
+                    supabase.from('itinerario_vuelos_editable').upsert(chunk, { onConflict: 'id' }),
+                    supabase.from('manifiestos_vuelos_editable').upsert(chunk, { onConflict: 'id' })
                 ]);
                 if (itinRes.error) console.warn('[Itinerario] no se pudo copiar a itinerario_vuelos_editable:', itinRes.error);
                 if (manifRes.error) console.warn('[Itinerario] no se pudo copiar a manifiestos_vuelos_editable:', manifRes.error);
@@ -631,15 +661,17 @@
     async function updateExistingFlights(updateRows) {
         if (!updateRows.length) return;
         const supabase = window.supabaseClient;
-        for (const { id, payload } of updateRows) {
+        for (const batch of chunkArray(updateRows, 500)) {
+            const payloads = batch.map(({ id, payload }) => ({ ...payload, id }));
             const results = await Promise.all([
-                supabase.from(TABLE_NAME).update(payload).eq('id', id),
-                supabase.from(EDIT_TABLE_NAME).update(payload).eq('id', id),
-                supabase.from(MANIFIESTOS_MIRROR_TABLE_NAME).update(payload).eq('id', id)
+                supabase.from(TABLE_NAME).upsert(payloads, { onConflict: 'id' }),
+                supabase.from(EDIT_TABLE_NAME).upsert(payloads, { onConflict: 'id' }),
+                supabase.from(MANIFIESTOS_MIRROR_TABLE_NAME).upsert(payloads, { onConflict: 'id' })
             ]);
             results.forEach((r, i) => {
-                if (r.error) console.warn(`[Itinerario] no se pudo actualizar vuelo existente (id=${id}, tabla ${i}):`, r.error);
+                if (r.error) console.warn(`[Itinerario] no se pudo actualizar un lote de vuelos existentes (tabla ${i}):`, r.error);
             });
+            if (results[0].error) throw results[0].error;
         }
     }
 
@@ -1371,12 +1403,137 @@
         return 2000 + year;
     }
 
+    function toLocalDateKey(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function inferImportReferenceDate(file) {
+        const filename = String(file?.name || '').toUpperCase();
+        let match = filename.match(/(\d{1,2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2,4})/);
+        if (match) {
+            const rawYear = parseInt(match[3], 10);
+            const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+            return new Date(year, MONTHS[match[2]], parseInt(match[1], 10), 12, 0, 0, 0);
+        }
+        match = filename.match(/(20\d{2})[-_. ](\d{1,2})[-_. ](\d{1,2})/);
+        if (match) return new Date(parseInt(match[1], 10), parseInt(match[2], 10) - 1, parseInt(match[3], 10), 12, 0, 0, 0);
+        match = filename.match(/(\d{1,2})[-_. ](\d{1,2})[-_. ](20\d{2})/);
+        if (match) return new Date(parseInt(match[3], 10), parseInt(match[2], 10) - 1, parseInt(match[1], 10), 12, 0, 0, 0);
+
+        const modified = Number(file?.lastModified);
+        const fallback = Number.isFinite(modified) && modified > 0 ? new Date(modified) : new Date();
+        return new Date(fallback.getFullYear(), fallback.getMonth(), fallback.getDate(), 12, 0, 0, 0);
+    }
+
+    function scheduledDateKey(value, referenceDate) {
+        const raw = String(value || '').trim().toUpperCase();
+        const match = raw.match(/(\d{1,2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/);
+        if (!match) return '';
+        const day = parseInt(match[1], 10);
+        const month = MONTHS[match[2]];
+        const reference = referenceDate instanceof Date && !Number.isNaN(referenceDate.getTime())
+            ? referenceDate
+            : new Date();
+        const candidates = [reference.getFullYear() - 1, reference.getFullYear(), reference.getFullYear() + 1]
+            .map(year => new Date(year, month, day, 12, 0, 0, 0))
+            .filter(date => date.getMonth() === month && date.getDate() === day);
+        candidates.sort((a, b) => Math.abs(a.getTime() - reference.getTime()) - Math.abs(b.getTime() - reference.getTime()));
+        return candidates.length ? toLocalDateKey(candidates[0]) : '';
+    }
+
+    function normalizeIdentityToken(value) {
+        return String(value || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase()
+            .replace(/[^A-Z0-9]+/g, '');
+    }
+
+    function normalizedFlightNumber(designator, carrierCode) {
+        let designatorKey = normalizeIdentityToken(designator);
+        const carrierKey = normalizeIdentityToken(carrierCode);
+        if (carrierKey && designatorKey.startsWith(carrierKey)) designatorKey = designatorKey.slice(carrierKey.length);
+        const numberMatch = designatorKey.match(/(\d+[A-Z]?)$/);
+        return numberMatch ? numberMatch[1] : designatorKey;
+    }
+
+    function routeEndpoint(routing, direction) {
+        const tokens = String(routing || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase()
+            .split(/[^A-Z0-9]+/)
+            .filter(Boolean);
+        if (!tokens.length) return '';
+        const isArrival = direction === 'A';
+        if (isArrival) {
+            const localIndex = tokens.findIndex(token => LOCAL_AIRPORT_CODES.has(token));
+            return normalizeIdentityToken(localIndex > 0 ? tokens[localIndex - 1] : tokens[0]);
+        }
+        let localIndex = -1;
+        tokens.forEach((token, index) => { if (LOCAL_AIRPORT_CODES.has(token)) localIndex = index; });
+        return normalizeIdentityToken(localIndex >= 0 && localIndex < tokens.length - 1 ? tokens[localIndex + 1] : tokens[tokens.length - 1]);
+    }
+
+    function movementIdentityKey(row, direction, referenceDate) {
+        const isArrival = direction === 'A';
+        const carrier = normalizeIdentityToken(row[isArrival ? '[Arr] Airline code' : '[Dep] Airline code']);
+        const designator = normalizeValue(row[isArrival ? '[Arr] Flight Designator' : '[Dep] Flight Designator']);
+        if (!designator) return '';
+        const flightNumber = normalizedFlightNumber(designator, carrier);
+        const scheduledDate = scheduledDateKey(row[isArrival ? '[Arr] SIBT' : '[Dep] SOBT'], referenceDate);
+        const endpoint = routeEndpoint(row.Routing, direction);
+        if (!carrier || !flightNumber || !scheduledDate || !endpoint) return '';
+        return `${carrier}|${flightNumber}|${scheduledDate}|${direction}|${endpoint}`;
+    }
+
+    function prepareFlightIdentity(row, referenceDate, sourceRow) {
+        const arrDesignator = normalizeValue(row['[Arr] Flight Designator']);
+        const depDesignator = normalizeValue(row['[Dep] Flight Designator']);
+        const arrKey = movementIdentityKey(row, 'A', referenceDate);
+        const depKey = movementIdentityKey(row, 'D', referenceDate);
+        const invalidMovements = [];
+        if (arrDesignator && !arrKey) invalidMovements.push(`fila ${sourceRow} (llegada)`);
+        if (depDesignator && !depKey) invalidMovements.push(`fila ${sourceRow} (salida)`);
+        if (!arrDesignator && !depDesignator) invalidMovements.push(`fila ${sourceRow} (sin movimiento)`);
+        return {
+            sourceRow,
+            invalidMovements,
+            movementKeys: [arrKey, depKey].filter(Boolean),
+            payload: {
+                ...row,
+                import_reference_date: toLocalDateKey(referenceDate),
+                arr_scheduled_date: arrKey ? scheduledDateKey(row['[Arr] SIBT'], referenceDate) : null,
+                dep_scheduled_date: depKey ? scheduledDateKey(row['[Dep] SOBT'], referenceDate) : null
+            }
+        };
+    }
+
     function chunkArray(list, size) {
         const chunks = [];
         for (let i = 0; i < list.length; i += size) {
             chunks.push(list.slice(i, i + size));
         }
         return chunks;
+    }
+
+    async function fetchAllFlightIdentityRows(supabase) {
+        const allRows = [];
+        const batchSize = 5000;
+        for (let from = 0; ; from += batchSize) {
+            const { data, error } = await supabase
+                .from(TABLE_NAME)
+                .select(FLIGHT_IDENTITY_COLUMNS)
+                .order('id', { ascending: true })
+                .range(from, from + batchSize - 1);
+            if (error) return { data: allRows, error };
+            allRows.push(...(data || []));
+            if (!data || data.length < batchSize) break;
+        }
+        return { data: allRows, error: null };
     }
 
     function escapeHtml(str) {

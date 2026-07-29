@@ -148,7 +148,7 @@
     <!-- Preload de los 5 scripts mas pesados (descarga en paralelo desde el primer byte del HTML).
          No altera el orden de ejecución: los <script> tags más abajo siguen mandando.
          Los hrefs DEBEN coincidir EXACTAMENTE con el src del script para que el navegador reuse el preload. -->
-    <link rel="preload" as="script" href="script.js?v=20260728-exclude-calculated-cols" fetchpriority="high">
+    <link rel="preload" as="script" href="script.js?v=20260729-conci-toolbar-v3" fetchpriority="high">
     <link rel="preload" as="script" href="js/manifiestos.js">
     <link rel="preload" as="script" href="js/data-management.js">
     <link rel="preload" as="script" href="js/analisis-operaciones.js?v=47">
@@ -20959,17 +20959,8 @@ FF
                                                         <button class="btn btn-sm btn-outline-secondary d-none" id="btn-conci-historial" title="Ver historial de cambios">
                                                             <i class="fas fa-history me-1"></i>Historial
                                                         </button>
-                                                        <button class="btn btn-sm btn-outline-primary d-none" id="btn-conci-edit-mode" title="Editar toda la tabla">
-                                                            <i class="fas fa-edit me-1"></i>Editar
-                                                        </button>
                                                         <button class="btn btn-sm btn-outline-success d-none" id="btn-conci-add-row" title="Agregar una fila en blanco para capturar directamente en la tabla">
                                                             <i class="fas fa-plus me-1"></i>Agregar fila
-                                                        </button>
-                                                        <button class="btn btn-sm btn-success d-none" id="btn-conci-save-mode" title="Guardar cambios de la tabla">
-                                                            <i class="fas fa-save me-1"></i>Guardar
-                                                        </button>
-                                                        <button class="btn btn-sm btn-outline-secondary d-none" id="btn-conci-cancel-mode" title="Cancelar edición">
-                                                            <i class="fas fa-times me-1"></i>Cancelar
                                                         </button>
                                                         <button class="btn btn-sm btn-outline-secondary d-none" id="btn-conci-undo-mode" title="Deshacer el último cambio">
                                                             <i class="fas fa-undo me-1"></i>Deshacer
@@ -35030,7 +35021,7 @@ FF
     <script src="js/comparativa-historica.js"></script>
     <script src="js/yoy-general.js"></script>
     <script src="js/yoy-cargo.js"></script>
-    <script src="js/parte-ops-flights.js?v=20260728-fix-duplicate-flights"></script>
+    <script src="js/parte-ops-flights.js?v=20260729-flight-movement-keys"></script>
     <!-- Conciliación Board View — extraído a js/conciliacion-board.js (v=20260616m) -->
     <script src="js/conciliacion-board.js?v=20260616m" defer></script>
     <script src="js/analisis-mensual.js?v=1.0"></script>
@@ -35163,7 +35154,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260728-exclude-calculated-cols" defer></script>
+    <script src="script.js?v=20260729-conci-toolbar-v3" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>
