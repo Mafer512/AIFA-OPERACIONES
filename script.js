@@ -2552,6 +2552,14 @@ async function refreshUserPermissionsFromServer() {
             else sessionStorage.removeItem('user_allowed_sections');
             applySectionPermissions(sessionStorage.getItem(SESSION_USER) || name);
         }
+        // El lanzador modal vive fuera de #sidebar-nav y mantiene su propia
+        // visibilidad. Sincronizarlo también cuando los permisos cambian en vivo.
+        try {
+            window.miscelaneaModule?.syncVisibility({
+                role: roleData.role,
+                permissions: roleData.permissions || {}
+            });
+        } catch (_) {}
     } catch (_) {}
 }
 
@@ -17149,12 +17157,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnConciRefresh = document.getElementById('btn-conci-refresh');
     const btnConciImport = document.getElementById('btn-conci-import-file');
     const inputConciImport = document.getElementById('input-conci-import-file');
-    const btnConciEdit = document.getElementById('btn-conci-edit-mode');
     const btnConciAdd = document.getElementById('btn-conci-add-row');
     const btnConciAirlineColors = document.getElementById('btn-conci-airline-colors');
     const btnConciMatriculaCatalog = document.getElementById('btn-conci-matricula-catalog');
-    const btnConciSave = document.getElementById('btn-conci-save-mode');
-    const btnConciCancel = document.getElementById('btn-conci-cancel-mode');
     const btnConciUndo = document.getElementById('btn-conci-undo-mode');
     if (btnConciRefresh) btnConciRefresh.addEventListener('click', () => loadConciliacionManifiestos({ forceRefresh: true }));
     if (btnConciImport) btnConciImport.addEventListener('click', () => {
@@ -17175,12 +17180,9 @@ document.addEventListener('DOMContentLoaded', () => {
             inputConciImport.value = '';
         }
     });
-    if (btnConciEdit) btnConciEdit.addEventListener('click', _conciEnterEditMode);
     if (btnConciAdd) btnConciAdd.addEventListener('click', _conciAddBlankRow);
     if (btnConciAirlineColors) btnConciAirlineColors.addEventListener('click', _conciOpenAirlineColors);
     if (btnConciMatriculaCatalog) btnConciMatriculaCatalog.addEventListener('click', _conciOpenMatriculaCatalog);
-    if (btnConciSave) btnConciSave.addEventListener('click', _conciSaveBulkEdits);
-    if (btnConciCancel) btnConciCancel.addEventListener('click', _conciCancelBulkEdits);
     if (btnConciUndo) btnConciUndo.addEventListener('click', _conciUndoLastChange);
     window.addEventListener('admin-mode-changed', _conciRefreshEditToolbar);
     window.addEventListener('airline-catalog-updated', () => {
@@ -17649,7 +17651,7 @@ let _conciRawCache = null; // { manifestRows, vuelosRows, ts }
 
 // Separate cache for the vuelos table (longer TTL — changes rarely during a session)
 const _CONCI_VUELOS_TTL_MS = 15 * 60 * 1000; // 15 minutes
-let _conciVuelosCache = null; // { rows, ts }
+let _conciVuelosCache = null; // { key, rows, ts }
 
 // Expone invalidación de caché para que parte-ops-flights.js la llame al validar un vuelo.
 window.invalidateConciVuelosCache = function () {
@@ -18080,9 +18082,6 @@ function _conciNormalizeEditableCellText(value) {
 }
 
 function _conciRefreshEditToolbar() {
-    const btnEdit = document.getElementById('btn-conci-edit-mode');
-    const btnSave = document.getElementById('btn-conci-save-mode');
-    const btnCancel = document.getElementById('btn-conci-cancel-mode');
     const btnUndo = document.getElementById('btn-conci-undo-mode');
     const btnAdd = document.getElementById('btn-conci-add-row');
     const btnAirlineColors = document.getElementById('btn-conci-airline-colors');
@@ -18094,18 +18093,6 @@ function _conciRefreshEditToolbar() {
     const daySel = document.getElementById('filter-conci-manifiestos-day');
     const canEdit = _conciCanCurrentUserEdit();
 
-    if (btnEdit) {
-        btnEdit.classList.toggle('d-none', !canEdit || _conciEditMode);
-        btnEdit.disabled = !canEdit;
-    }
-    if (btnSave) {
-        btnSave.classList.toggle('d-none', !canEdit || !_conciEditMode);
-        btnSave.disabled = !canEdit;
-    }
-    if (btnCancel) {
-        btnCancel.classList.toggle('d-none', !canEdit || !_conciEditMode);
-        btnCancel.disabled = !canEdit;
-    }
     if (btnUndo) {
         const canUndo = _conciEditMode && _conciHasUndoHistory();
         btnUndo.classList.toggle('d-none', !canEdit || !_conciEditMode);
@@ -18264,10 +18251,11 @@ async function _concifetchAllRows(client, tableName, options = {}) {
     let from = 0;
     const batch = Number(options.batchSize) > 0 ? Number(options.batchSize) : 5000;
     const orderBy = Array.isArray(options.orderBy) ? options.orderBy : [];
+    const selectColumns = options.select || '*';
     while (true) {
         let query = client
             .from(tableName)
-            .select('*');
+            .select(selectColumns);
 
         orderBy.forEach(item => {
             if (!item || !item.column) return;
@@ -18346,6 +18334,66 @@ function _conciLatestVueloDate(vuelosRows, year) {
         }
     }
     return best ? { month: best.month, day: best.day } : null;
+}
+
+function _conciIsoDateKey(year, month, day) {
+    if (!Number.isFinite(Number(year)) || !Number.isFinite(Number(month)) || !Number.isFinite(Number(day))) return '';
+    return `${Number(year)}-${String(Number(month)).padStart(2, '0')}-${String(Number(day)).padStart(2, '0')}`;
+}
+
+function _conciShiftIsoDate(dateKey, days) {
+    const date = new Date(`${dateKey}T12:00:00`);
+    if (Number.isNaN(date.getTime())) return dateKey;
+    date.setDate(date.getDate() + days);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+async function _conciFetchLatestVueloDateDb(client, year) {
+    const start = `${year}-01-01`;
+    const end = `${year}-12-31`;
+    const fetchLatest = column => client
+        .from('manifiestos_vuelos_editable')
+        .select(column)
+        .gte(column, start)
+        .lte(column, end)
+        .order(column, { ascending: false })
+        .limit(1);
+    const [arrResult, depResult] = await Promise.all([
+        fetchLatest('arr_scheduled_date'),
+        fetchLatest('dep_scheduled_date')
+    ]);
+    const error = arrResult.error || depResult.error;
+    if (error) return { latest: null, error };
+    const values = [arrResult.data?.[0]?.arr_scheduled_date, depResult.data?.[0]?.dep_scheduled_date]
+        .filter(Boolean)
+        .sort();
+    if (!values.length) return { latest: null, error: null };
+    const parts = values[values.length - 1].split('-').map(Number);
+    return { latest: { month: parts[1], day: parts[2] }, error: null };
+}
+
+async function _conciFetchVuelosForWindow(client, startDate, endDate) {
+    if (!startDate) return _concifetchAllRows(client, 'manifiestos_vuelos_editable', { batchSize: 5000 });
+    const low = _conciShiftIsoDate(startDate, -1);
+    const high = _conciShiftIsoDate(endDate || startDate, 1);
+    const filter = [
+        `and(arr_scheduled_date.gte.${low},arr_scheduled_date.lte.${high})`,
+        `and(dep_scheduled_date.gte.${low},dep_scheduled_date.lte.${high})`
+    ].join(',');
+    const rows = [];
+    const batchSize = 5000;
+    for (let from = 0; ; from += batchSize) {
+        const { data, error } = await client
+            .from('manifiestos_vuelos_editable')
+            .select('*')
+            .or(filter)
+            .order('id', { ascending: true })
+            .range(from, from + batchSize - 1);
+        if (error) return { data: rows, error };
+        rows.push(...(data || []));
+        if (!data || data.length < batchSize) break;
+    }
+    return { data: rows, error: null };
 }
 
 // Returns { month, day } for the most recent manifest record in `year`.
@@ -19185,26 +19233,19 @@ async function loadConciliacionManifiestos(options = {}) {
         let manifestRows;
         let vuelosRows;
 
-        // ── Step 1: get vuelos from long-lived cache or fetch once ──────────────
-        const vueolosFresh = _conciVuelosCache && (Date.now() - _conciVuelosCache.ts) < _CONCI_VUELOS_TTL_MS;
-        if (!config.forceRefresh && vueolosFresh) {
-            vuelosRows = _conciVuelosCache.rows;
-        } else {
-            const vResult = await _concifetchAllRows(client, 'manifiestos_vuelos_editable', { batchSize: 5000 });
-            if (requestSeq !== _conciLoadRequestSeq) return;
-            if (vResult.error) throw vResult.error;
-            vuelosRows = vResult.data || [];
-            _conciVuelosCache = { rows: vuelosRows, ts: Date.now() };
-        }
-
-        // ── Step 2: auto-detect the latest date considering BOTH tables ─────────
-        // El feed de vuelos suele estar más actualizado que la captura de
-        // manifiestos, así que el día más reciente se toma como el máximo entre
-        // ambas fuentes para no ocultar los vuelos más nuevos.
+        // ── Step 1: auto-detect the latest date using indexed DATE columns ──────
+        let fallbackAllVuelos = null;
         if (config.autoLatestDate && !month && !day) {
             const latestManifest = await _conciFetchLatestManifestDate(client, year);
             if (requestSeq !== _conciLoadRequestSeq) return;
-            const latestVuelo = _conciLatestVueloDate(vuelosRows, year);
+            const latestDbResult = await _conciFetchLatestVueloDateDb(client, year);
+            let latestVuelo = latestDbResult.latest;
+            if (latestDbResult.error || !latestVuelo) {
+                const fallbackResult = await _concifetchAllRows(client, 'manifiestos_vuelos_editable', { batchSize: 5000 });
+                if (fallbackResult.error) throw fallbackResult.error;
+                fallbackAllVuelos = fallbackResult.data || [];
+                latestVuelo = _conciLatestVueloDate(fallbackAllVuelos, year);
+            }
             const latest = _conciMaxMonthDay(latestManifest, latestVuelo);
             if (latest) {
                 month = latest.month;
@@ -19219,6 +19260,37 @@ async function loadConciliacionManifiestos(options = {}) {
                 dayEnd = null;
                 cacheKey = `${year}|${month}|${day}|0`;
             }
+        }
+
+        // ── Step 2: fetch only the selected scheduled-date window ───────────────
+        // Se amplía un día a cada lado para conservar vuelos que cruzan medianoche;
+        // el filtro fino por hora real se mantiene más abajo sin cambios.
+        const flightStart = desdeEl?.value || (month && day ? _conciIsoDateKey(year, month, day) : '');
+        const flightEnd = hastaEl?.value || (month && dayEnd ? _conciIsoDateKey(year, month, dayEnd) : flightStart);
+        const flightCacheKey = `${flightStart || year}|${flightEnd || 'all'}`;
+        const vuelosFresh = _conciVuelosCache
+            && _conciVuelosCache.key === flightCacheKey
+            && (Date.now() - _conciVuelosCache.ts) < _CONCI_VUELOS_TTL_MS;
+        if (!config.forceRefresh && vuelosFresh) {
+            vuelosRows = _conciVuelosCache.rows;
+        } else if (fallbackAllVuelos && !flightStart) {
+            vuelosRows = fallbackAllVuelos;
+            _conciVuelosCache = { key: flightCacheKey, rows: vuelosRows, ts: Date.now() };
+        } else {
+            let vResult = await _conciFetchVuelosForWindow(client, flightStart, flightEnd);
+            if (vResult.error) {
+                console.warn('[Conciliación] consulta por fecha no disponible; usando lectura completa:', vResult.error);
+                if (fallbackAllVuelos) {
+                    vResult = { data: fallbackAllVuelos, error: null };
+                } else {
+                    const fallbackResult = await _concifetchAllRows(client, 'manifiestos_vuelos_editable', { batchSize: 5000 });
+                    if (fallbackResult.error) throw fallbackResult.error;
+                    vResult = fallbackResult;
+                }
+            }
+            if (requestSeq !== _conciLoadRequestSeq) return;
+            vuelosRows = vResult.data || [];
+            _conciVuelosCache = { key: flightCacheKey, rows: vuelosRows, ts: Date.now() };
         }
 
         // ── Step 3: fetch only the manifests for the selected date (server-side) ─
@@ -19944,7 +20016,7 @@ const _CONCI_IMPORT_FALLBACK_COLUMNS = [
 ];
 const _CONCI_IMPORT_IGNORED_COLUMNS = new Set([
     'id', 'created_at', 'updated_at', '_fuente', '_ispax', '_validadoitinerario',
-    '_validadoporitinerario', '_concivueloid', '_concivuelodireccion'
+    '_validadoporitinerario', '_concivueloid', '_concivuelodireccion', 'movement_key'
 ]);
 const _CONCI_IMPORT_HEADER_ALIASES = {
     datos_subsecretaria: 'cierre_subsecretaria',
@@ -20065,6 +20137,8 @@ function _conciImportFindColumn(columns, kind) {
     if (kind === 'fecha') return items.find(column => /(^|_)fecha($|_)/.test(_conciImportNormalizeHeader(column))) || null;
     if (kind === 'tipo') return items.find(column => /tipo.*manifiest/.test(_conciImportNormalizeHeader(column))) || null;
     if (kind === 'vuelo') return items.find(column => /(?:^|_)(?:de_)?vuelo$|flight.*(?:number|designator)?/.test(_conciImportNormalizeHeader(column))) || null;
+    if (kind === 'aerolinea') return items.find(column => /aerolinea|airline.*code|carrier/.test(_conciImportNormalizeHeader(column))) || null;
+    if (kind === 'ruta') return items.find(column => /destino.*origen|origen.*destino|routing|route/.test(_conciImportNormalizeHeader(column))) || null;
     return null;
 }
 
@@ -20078,12 +20152,22 @@ function _conciImportNormalizeManifestType(value) {
 function _conciImportSignature(row, columns, fallbackYear) {
     const fecha = _conciImportValue(row?.[columns.fecha]);
     const tipo = _conciImportNormalizeManifestType(row?.[columns.tipo]);
-    const vuelo = _conciImportValue(row?.[columns.vuelo]).toUpperCase().replace(/\s+/g, '');
+    const normalizePart = value => _conciImportValue(value)
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase().replace(/[^A-Z0-9]+/g, '');
+    const aerolinea = normalizePart(row?.[columns.aerolinea]);
+    let vuelo = normalizePart(row?.[columns.vuelo]);
+    if (aerolinea && vuelo.startsWith(aerolinea)) vuelo = vuelo.slice(aerolinea.length);
+    const numberMatch = vuelo.match(/(\d+[A-Z]?)$/);
+    if (numberMatch) vuelo = numberMatch[1];
+    const ruta = normalizePart(row?.[columns.ruta]);
     const parts = _conciParseDateTimeParts(fecha, fallbackYear);
-    if (!parts || !Number.isFinite(parts.year) || !Number.isFinite(parts.month) || !Number.isFinite(parts.day) || !tipo || !vuelo) return null;
+    if (!parts || !Number.isFinite(parts.year) || !Number.isFinite(parts.month) || !Number.isFinite(parts.day)
+        || !tipo || !aerolinea || !vuelo || !ruta) return null;
     if (parts.month < 1 || parts.month > 12 || parts.day < 1 || parts.day > 31) return null;
     const dateKey = `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
-    return `${dateKey}|${tipo.toUpperCase()}|${vuelo}`;
+    const direction = tipo === 'Llegada' ? 'A' : 'D';
+    return `${aerolinea}|${vuelo}|${dateKey}|${direction}|${ruta}`;
 }
 
 function _conciImportBuildRows(rawRows, columnMap, identityColumns, fallbackYear) {
@@ -20184,16 +20268,9 @@ async function _conciImportManifiestosFile(file) {
         if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
         if (!client) throw new Error('No se pudo inicializar el cliente de Supabase.');
 
-        // Igual que el validador de la tabla origen, se consultan los registros
-        // existentes antes de escribir para detectar coincidencias reales.
-        const existingResult = await _concifetchAllRows(client, _CONCI_IMPORT_TABLE, {
-            batchSize: 5000,
-            orderBy: [{ column: 'id', ascending: true }]
-        });
-        if (existingResult.error) throw new Error(`No se pudieron verificar duplicados: ${existingResult.error.message}`);
-        const existingRows = existingResult.data || [];
-        const schemaColumns = existingRows.length
-            ? Object.keys(existingRows[0])
+        const columnInfo = await _conciGetManifestColInfo(client);
+        const schemaColumns = columnInfo?.sampleRow
+            ? Object.keys(columnInfo.sampleRow)
             : _CONCI_IMPORT_FALLBACK_COLUMNS;
         const columnMap = _conciImportBuildColumnMap(parsed.headers, schemaColumns);
         if (!columnMap.length) throw new Error('Los encabezados del archivo no coinciden con los campos de Conciliación Manifiestos.');
@@ -20201,18 +20278,32 @@ async function _conciImportManifiestosFile(file) {
         const identityColumns = {
             fecha: _conciImportFindColumn(schemaColumns, 'fecha'),
             tipo: _conciImportFindColumn(schemaColumns, 'tipo'),
-            vuelo: _conciImportFindColumn(schemaColumns, 'vuelo')
+            vuelo: _conciImportFindColumn(schemaColumns, 'vuelo'),
+            aerolinea: _conciImportFindColumn(schemaColumns, 'aerolinea'),
+            ruta: _conciImportFindColumn(schemaColumns, 'ruta')
         };
-        if (!identityColumns.fecha || !identityColumns.tipo || !identityColumns.vuelo) {
-            throw new Error('No se pudo identificar la llave de duplicados (FECHA, TIPO DE MANIFIESTO y # DE VUELO).');
+        if (!identityColumns.fecha || !identityColumns.tipo || !identityColumns.vuelo
+            || !identityColumns.aerolinea || !identityColumns.ruta) {
+            throw new Error('No se pudo identificar la llave compuesta (AEROLINEA, # DE VUELO, FECHA, TIPO DE MANIFIESTO y DESTINO / ORIGEN).');
         }
+
+        const identitySelect = ['id', ...Object.values(identityColumns)]
+            .map(column => column === 'id' ? column : `"${String(column).replace(/"/g, '""')}"`)
+            .join(',');
+        const existingResult = await _concifetchAllRows(client, _CONCI_IMPORT_TABLE, {
+            select: identitySelect,
+            batchSize: 5000,
+            orderBy: [{ column: 'id', ascending: true }]
+        });
+        if (existingResult.error) throw new Error(`No se pudieron verificar duplicados: ${existingResult.error.message}`);
+        const existingRows = existingResult.data || [];
 
         const fallbackYear = Number(document.getElementById('filter-conci-manifiestos-year')?.value) || new Date().getFullYear();
         const prepared = _conciImportBuildRows(parsed.rows, columnMap, identityColumns, fallbackYear);
         if (prepared.invalidRows.length) {
             const sample = prepared.invalidRows.slice(0, 8).join(', ');
             const extra = prepared.invalidRows.length > 8 ? '…' : '';
-            throw new Error(`Las filas ${sample}${extra} no tienen FECHA, TIPO DE MANIFIESTO (Llegada/Salida) y # DE VUELO válidos. Corrige el archivo para poder evitar duplicados.`);
+            throw new Error(`Las filas ${sample}${extra} no tienen una llave completa: AEROLINEA, # DE VUELO, FECHA, TIPO DE MANIFIESTO y DESTINO / ORIGEN. Corrige el archivo para poder evitar duplicados.`);
         }
         if (!prepared.uniqueRows.length) throw new Error('No se encontraron registros válidos para importar.');
 
@@ -23226,6 +23317,7 @@ async function _conciSaveBulkEdits() {
         { key: 'agenda',               label: 'Agenda de Comités',       icon: 'calendar-check',    group: 'Personal' },
         { key: 'biblioteca',           label: 'Biblioteca',              icon: 'book',              group: 'Personal' },
         { key: 'historia',             label: 'Historia',                icon: 'history',           group: 'Personal' },
+        { key: 'miscelanea',           label: 'Miscelánea',             icon: 'toolbox',           group: 'Personal' },
         { key: 'data-management',      label: 'Gestión de Datos',        icon: 'database',          group: 'Personal' },
     ];
 
@@ -23242,6 +23334,15 @@ async function _conciSaveBulkEdits() {
             icon: 'sitemap',
             color: '#1e40af',
             sections: ['colaboradores', 'coord-auditoria', 'agenda']
+        },
+        {
+            key: 'UTIL',
+            label: 'Utilidades de usuario',
+            short: 'Utilidades',
+            desc: 'Herramientas auxiliares',
+            icon: 'toolbox',
+            color: '#7c3aed',
+            sections: ['miscelanea']
         },
         {
             key: 'SSO',

@@ -30,7 +30,10 @@
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.23.1"
+    "jszip": "^3.10.1",
+    "mongoose": "^8.23.1",
+    "multer": "^2.0.2",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "jest": "^29.7.0",

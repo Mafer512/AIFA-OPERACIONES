@@ -4,7 +4,15 @@ const path = require('path');
 const cors = require('cors');
 const fs = require('fs');
 const crypto = require('crypto');
+const multer = require('multer');
 const { createClient } = require('@supabase/supabase-js');
+const {
+  MAX_FILE_BYTES,
+  createWatermarkCode,
+  decryptWatermarkCode,
+  watermarkDocument,
+  sanitizeDocumentName
+} = require('./lib/watermark-service');
 
 const fsp = fs.promises;
 
@@ -149,11 +157,38 @@ async function requireAuth(req, res, next) {
       return res.status(401).json({ error: 'Sesión inválida' });
     }
     req.user = data.user;
+    req.accessToken = token;
     return next();
   } catch (err) {
     console.error('requireAuth failed', err);
     return res.status(401).json({ error: 'No autenticado' });
   }
+}
+
+function getRequesterClient(accessToken) {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${accessToken}` } } });
+}
+async function requireMiscelaneaAccess(req, res, next) {
+  try {
+    const client = getRequesterClient(req.accessToken);
+    const { data, error } = await client.rpc('can_use_miscelanea');
+    if (error) { console.error('can_use_miscelanea failed', error); return res.status(503).json({ error: 'No se pudo comprobar el permiso de Miscelánea. Verifica que la migración esté aplicada.' }); }
+    if (data !== true) return res.status(403).json({ error: 'No tienes acceso a Miscelánea.' });
+    req.supabase = client;
+    return next();
+  } catch (err) { console.error('requireMiscelaneaAccess failed', err); return res.status(403).json({ error: 'No tienes acceso a Miscelánea.' }); }
+}
+const watermarkUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_BYTES, files: 1, fields: 4 } });
+function watermarkUserName(user) {
+  const metadata = user?.user_metadata || {};
+  const name = metadata.full_name || metadata.name || metadata.nombre || user?.email || 'Usuario AIFA';
+  return String(name).trim().slice(0, 140) || 'Usuario AIFA';
+}
+function sendWatermarkError(res, error) {
+  const status = error?.status || (error instanceof multer.MulterError ? 413 : 500);
+  const message = error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE' ? 'El documento excede el límite de 15 MB.' : (error?.message || 'No se pudo procesar el documento.');
+  if (status >= 500) console.error('watermark request failed', error);
+  return res.status(status).json({ error: message, code: error?.code || 'watermark_processing_failed' });
 }
 
 const api = express.Router();
@@ -174,6 +209,45 @@ api.get('/app-version', async (req, res) => {
     console.error('GET /app-version failed', err);
     res.status(500).json({ error: 'No se pudo calcular la version del aplicativo' });
   }
+});
+
+api.post('/miscelanea/marca-agua/process', requireAuth, watermarkUpload.single('document'), requireMiscelaneaAccess, async (req, res) => {
+  try {
+    const issuedAt = new Date().toISOString();
+    const recordId = crypto.randomUUID();
+    const documentName = sanitizeDocumentName(req.file?.originalname);
+    const issuedByName = watermarkUserName(req.user);
+    const payload = { v: 1, recordId, documentName, issuedAt, issuedByName, issuedBy: req.user.id };
+    const watermarkCode = createWatermarkCode(payload, process.env.WATERMARK_ENCRYPTION_KEY);
+    const result = await watermarkDocument(req.file, `AIFA - ${watermarkCode}`);
+    const { error: insertError } = await req.supabase.from('document_watermarks').insert({ id: recordId, watermark_code: watermarkCode, document_name: result.name, document_sha256: result.sourceSha256, source_mime_type: result.mime, output_mime_type: result.outputMime, issued_at: issuedAt, issued_by: req.user.id, issued_by_name: issuedByName, encryption_version: 1 });
+    if (insertError) {
+      console.error('document_watermarks insert failed', insertError);
+      const migrationMissing = /document_watermarks|relation|schema cache/i.test(insertError.message || '');
+      const error = new Error(migrationMissing ? 'Falta aplicar la migración de Marca de agua en Supabase.' : 'No se pudo registrar la marca de agua.');
+      error.status = migrationMissing ? 503 : 500;
+      throw error;
+    }
+    res.setHeader('Content-Type', result.outputMime);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(result.outputName)}`);
+    res.setHeader('X-Watermark-Code', watermarkCode);
+    res.setHeader('X-Watermark-Record-Id', recordId);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(result.output);
+  } catch (error) { return sendWatermarkError(res, error); }
+});
+api.post('/miscelanea/marca-agua/validate', requireAuth, requireMiscelaneaAccess, async (req, res) => {
+  try {
+    let decoded;
+    try { decoded = decryptWatermarkCode(req.body?.code, process.env.WATERMARK_ENCRYPTION_KEY); }
+    catch (error) { return res.json({ valid: false, registered: false, decoded: false, message: error.message }); }
+    const { data, error } = await req.supabase.rpc('validate_document_watermark', { p_code: decoded.code });
+    if (error) { console.error('validate_document_watermark failed', error); throw Object.assign(new Error('No se pudo consultar el registro de la marca. Verifica que la migración esté aplicada.'), { status: 503 }); }
+    const record = Array.isArray(data) ? data[0] : data;
+    const registered = record?.registered === true && record.record_id === decoded.payload.recordId;
+    if (!registered) return res.json({ valid: false, registered: false, decoded: true, details: { documentName: decoded.payload.documentName, issuedAt: decoded.payload.issuedAt, issuedByName: decoded.payload.issuedByName }, message: 'El código se descifró, pero no existe un registro vigente en AIFA Operaciones.' });
+    return res.json({ valid: true, registered: true, decoded: true, details: { documentName: decoded.payload.documentName, issuedAt: decoded.payload.issuedAt, issuedByName: decoded.payload.issuedByName, validations: record.validation_count }, message: 'Marca de agua válida y registrada en AIFA Operaciones.' });
+  } catch (error) { return sendWatermarkError(res, error); }
 });
 
 api.get('/parte-operaciones/custom', requireAuth, async (req, res) => {
