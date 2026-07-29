@@ -21067,6 +21067,19 @@ function _conciIsProtectedEditColumn(_column) {
     return false;
 }
 
+// Columnas que el propio cliente calcula (fórmula) a partir de otras
+// columnas de la misma fila (ver _conciHrsCumplidas, _conciPuntualidad,
+// _conciHrMaximaEntrega). Cuando falta algún insumo de la fórmula, el
+// resultado mostrado es "-" (igual que Excel =SI.ERROR(...,"-")). Ese "-" no
+// es una captura del usuario: es solo lo que se muestra en pantalla. Nunca
+// debe reenviarse al guardar la fila completa (ver _conciAutoSaveRow), o
+// Postgres rechaza el UPDATE si la columna es numérica (ej. "HRS. CUMPLIDAS"
+// es double precision) aunque el usuario no haya tocado ese campo.
+function _conciIsCalculatedColumn(column) {
+    const key = _conciNormalizedColumnName(column);
+    return key === 'hrs. cumplidas' || key === 'puntualidad / cancelacion' || key === 'hr. maxima de entrega';
+}
+
 function _conciIsManifestTypeColumn(column) {
     const key = _conciNormalizedColumnName(column);
     return /^tipo(?: de)? manifiesto$/.test(key);
@@ -22215,8 +22228,15 @@ async function _conciAutoSaveRow(tr) {
             liveInput ? liveInput.value : (td.dataset.pendingRaw ?? fallbackRaw)
         );
         savedCellValues.set(td, raw);
-        if (raw) payload[col] = _conciPrepareValueForDatabase(col, raw);
-        if (td.dataset.dirty === '1') dirtyCols.add(col);
+        // Las columnas calculadas (HRS. CUMPLIDAS, PUNTUALIDAD/CANCELACIÓN,
+        // HR. MÁXIMA DE ENTREGA) muestran "-" cuando falta algún insumo de su
+        // fórmula — eso no es una captura del usuario y nunca debe enviarse
+        // al guardar, salvo que el usuario mismo haya editado esa celda a
+        // mano (dirty). Sin esto, cada autoguardado de la fila reenviaba el
+        // "-" calculado y Postgres lo rechazaba en columnas numéricas.
+        const isDirty = td.dataset.dirty === '1';
+        if (raw && (isDirty || !_conciIsCalculatedColumn(col))) payload[col] = _conciPrepareValueForDatabase(col, raw);
+        if (isDirty) dirtyCols.add(col);
     });
     const settleSavedCells = (savedColumns) => {
         const allowed = savedColumns instanceof Set ? savedColumns : null;
