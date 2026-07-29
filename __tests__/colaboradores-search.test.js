@@ -85,4 +85,10 @@ describe('busqueda local de colaboradores', () => {
         expect(filterSource).not.toMatch(/\.from\s*\(|ensureSupabaseClient|await\s+/);
         expect(filterSource).toContain('supabaseQueries: 0');
     });
+
+    test('mantiene la tabla original sin paginacion ni controles adicionales', () => {
+        expect(html).not.toMatch(/ctbl-pagination|ctbl-page-size|ctblIrPagina|ctblCambiarTamanoPagina/);
+        expect(html).toContain('const html = ctblData.map((r, i) => {');
+        expect(html).not.toContain('ctblData.slice(startIdx');
+    });
 });
