@@ -72,6 +72,21 @@ Cada modulo debe tener un contrato minimo para que humanos e IA puedan modificar
 - Integraciones: WhatsApp, push, Edge Functions.
 - Riesgo: permisos por area y notificaciones.
 
+### Miscelanea
+
+- Seccion: `miscelanea`.
+- DOM host: `#miscelanea-section`.
+- Menu: `.menu-item[data-section="miscelanea"]`.
+- Archivo frontend: `js/miscelanea.js`.
+- Inicializador: `window.miscelaneaModule.init()` (idempotente).
+- Modal: `#miscelanea-modal`, con accesos `directorio` y `marca-agua`.
+- Datos, RPCs, Storage y Realtime: ninguno en la fase de shell.
+- Permisos: `allowed_sections` y `section_levels`; admin/superadmin tienen acceso total.
+- Pruebas: `__tests__/miscelanea.test.js`.
+- Riesgos: Directorio puede contener datos personales y Marca de agua procesara
+  archivos; ambos requieren una especificacion de seguridad independiente antes
+  de implementar su funcionalidad.
+
 ## Regla para nuevos modulos
 
 Ningun modulo nuevo debe agregarse sin:

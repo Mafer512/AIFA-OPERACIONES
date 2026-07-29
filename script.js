@@ -2552,6 +2552,14 @@ async function refreshUserPermissionsFromServer() {
             else sessionStorage.removeItem('user_allowed_sections');
             applySectionPermissions(sessionStorage.getItem(SESSION_USER) || name);
         }
+        // El lanzador modal vive fuera de #sidebar-nav y mantiene su propia
+        // visibilidad. Sincronizarlo también cuando los permisos cambian en vivo.
+        try {
+            window.miscelaneaModule?.syncVisibility({
+                role: roleData.role,
+                permissions: roleData.permissions || {}
+            });
+        } catch (_) {}
     } catch (_) {}
 }
 
@@ -23226,6 +23234,7 @@ async function _conciSaveBulkEdits() {
         { key: 'agenda',               label: 'Agenda de Comités',       icon: 'calendar-check',    group: 'Personal' },
         { key: 'biblioteca',           label: 'Biblioteca',              icon: 'book',              group: 'Personal' },
         { key: 'historia',             label: 'Historia',                icon: 'history',           group: 'Personal' },
+        { key: 'miscelanea',           label: 'Miscelánea',             icon: 'toolbox',           group: 'Personal' },
         { key: 'data-management',      label: 'Gestión de Datos',        icon: 'database',          group: 'Personal' },
     ];
 
@@ -23242,6 +23251,15 @@ async function _conciSaveBulkEdits() {
             icon: 'sitemap',
             color: '#1e40af',
             sections: ['colaboradores', 'coord-auditoria', 'agenda']
+        },
+        {
+            key: 'UTIL',
+            label: 'Utilidades de usuario',
+            short: 'Utilidades',
+            desc: 'Herramientas auxiliares',
+            icon: 'toolbox',
+            color: '#7c3aed',
+            sections: ['miscelanea']
         },
         {
             key: 'SSO',

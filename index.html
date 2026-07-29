@@ -126,6 +126,7 @@
     <link rel="stylesheet" href="style.css?v=20260727S">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
+    <link rel="stylesheet" href="miscelanea.css?v=1">
     <link rel="icon" type="image/png" sizes="192x192" href="images/icons/aifa-app-icon-192.png?v=20251126">
     <link rel="icon" type="image/png" sizes="512x512" href="images/icons/aifa-app-icon-512.png?v=20251126">
     <link rel="apple-touch-icon" sizes="180x180" href="images/icons/aifa-app-icon-512.png?v=20251126">
@@ -2094,6 +2095,9 @@ FF
                     <a class="menu-item si-link d-none" href="#" data-section="historia" id="historia-admin-menu" onclick="event.preventDefault();siUserGoToSection('historia',this);">
                         <i class="fas fa-history si-ico"></i><span class="si-txt">Historia</span>
                     </a>
+                    <a class="menu-item si-link d-none" href="#" data-section="miscelanea" id="miscelanea-menu" aria-haspopup="dialog" aria-controls="miscelanea-modal">
+                        <i class="fas fa-toolbox si-ico"></i><span class="si-txt">Miscelánea</span>
+                    </a>
                     <a class="menu-item si-link d-none" href="#" data-section="data-management" id="data-management-menu" onclick="event.preventDefault();siUserGoToSection('data-management',this);">
                         <i class="fas fa-database si-ico"></i><span class="si-txt">Gestión de Datos</span>
                     </a>
@@ -2983,6 +2987,23 @@ FF
                     </div><!-- end #au-pane-whatsapp -->
 
                     </div><!-- end .tab-content -->
+                </div>
+
+                <!-- Miscelánea mantiene un host formal para navegación por contrato.
+                     El acceso del menú de usuario abre directamente el modal lanzador. -->
+                <div id="miscelanea-section" class="content-section" aria-labelledby="miscelanea-section-title">
+                    <div class="miscelanea-section-shell">
+                        <div class="miscelanea-section-icon" aria-hidden="true">
+                            <i class="fas fa-toolbox"></i>
+                        </div>
+                        <div>
+                            <h2 class="section-heading mb-1" id="miscelanea-section-title">Miscelánea</h2>
+                            <p class="text-muted mb-3">Herramientas auxiliares de Operaciones AIFA.</p>
+                            <button type="button" class="btn btn-primary" data-miscelanea-open>
+                                <i class="fas fa-grip me-2" aria-hidden="true"></i>Abrir herramientas
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="data-management-section" class="content-section">
@@ -33052,6 +33073,98 @@ FF
         </div>
     </div>
 
+    <!-- Miscelánea: lanzador modal de herramientas auxiliares -->
+    <div class="modal fade" id="miscelanea-modal" tabindex="-1" aria-labelledby="miscelanea-modal-title" aria-describedby="miscelanea-modal-description" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content miscelanea-modal-content">
+                <div class="modal-header miscelanea-modal-header">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="miscelanea-modal-emblem" aria-hidden="true">
+                            <i class="fas fa-toolbox"></i>
+                        </span>
+                        <div>
+                            <div class="miscelanea-modal-eyebrow">Herramientas auxiliares</div>
+                            <h5 class="modal-title mb-0" id="miscelanea-modal-title">Miscelánea</h5>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-muted small mb-3" id="miscelanea-modal-description">
+                        Selecciona la herramienta que deseas utilizar.
+                    </p>
+                    <div class="miscelanea-tool-grid" role="group" aria-label="Herramientas de Miscelánea">
+                        <button type="button" class="miscelanea-tool-card" data-miscelanea-tool="directorio" data-tool-label="Directorio">
+                            <span class="miscelanea-tool-icon miscelanea-tool-icon--directory" aria-hidden="true">
+                                <i class="fas fa-address-book"></i>
+                            </span>
+                            <span class="miscelanea-tool-copy">
+                                <strong>Directorio</strong>
+                                <small>Consulta de contactos</small>
+                            </span>
+                            <span class="miscelanea-tool-state">Próximamente</span>
+                        </button>
+                        <button type="button" class="miscelanea-tool-card" data-miscelanea-tool="marca-agua" data-tool-label="Marca de agua">
+                            <span class="miscelanea-tool-icon miscelanea-tool-icon--watermark" aria-hidden="true">
+                                <i class="fas fa-stamp"></i>
+                            </span>
+                            <span class="miscelanea-tool-copy">
+                                <strong>Marca de agua</strong>
+                                <small>PDF y Word verificables</small>
+                            </span>
+                            <span class="miscelanea-tool-state">Disponible</span>
+                        </button>
+                    </div>
+                    <div class="miscelanea-status mt-3" id="miscelanea-status" role="status" aria-live="polite">
+                        Los submódulos se incorporarán en los siguientes pasos.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Miscelánea: Marca de agua verificable -->
+    <div class="modal fade" id="marca-agua-modal" tabindex="-1" aria-labelledby="marca-agua-modal-title" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content marca-agua-modal-content">
+                <div class="modal-header marca-agua-modal-header">
+                    <div><div class="miscelanea-modal-eyebrow">Miscelánea · documentos verificables</div><h5 class="modal-title mb-0" id="marca-agua-modal-title"><i class="fas fa-stamp me-2" aria-hidden="true"></i>Marca de agua</h5></div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="marca-agua-panel">
+                        <h6 class="mb-1">1. Marcar un documento</h6>
+                        <p class="small text-muted mb-3">Carga un PDF o Word (.docx). Se descargará una copia con el código <strong>AIFA-XXXXXXXXXX</strong> repetido cada 4 cm.</p>
+                        <label class="marca-agua-file-picker" for="marca-agua-file"><i class="fas fa-cloud-arrow-up" aria-hidden="true"></i><span><strong>Seleccionar documento</strong><small id="marca-agua-file-name">PDF o Word (.docx), máximo 15 MB.</small></span><input id="marca-agua-file" type="file" accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"></label>
+                        <button type="button" class="btn btn-primary mt-3" id="marca-agua-process"><i class="fas fa-stamp me-1" aria-hidden="true"></i>Generar y descargar</button>
+                        <div id="marca-agua-process-message" class="marca-agua-message mt-3" role="status" aria-live="polite"></div>
+                        <div id="marca-agua-generated" class="marca-agua-code-wrap mt-3" hidden><label for="marca-agua-code" class="form-label small fw-semibold mb-1">Código generado</label><div class="input-group"><input id="marca-agua-code" class="form-control form-control-sm font-monospace" readonly aria-label="Código de marca de agua generado"><button type="button" class="btn btn-outline-primary btn-sm" id="marca-agua-copy"><i class="fas fa-copy me-1" aria-hidden="true"></i>Copiar</button></div></div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0"><button type="button" class="btn btn-outline-primary" id="marca-agua-open-validation"><i class="fas fa-shield-check me-1" aria-hidden="true"></i>Validar documento</button><button type="button" class="btn btn-link text-decoration-none" id="marca-agua-back"><i class="fas fa-arrow-left me-1" aria-hidden="true"></i>Miscelánea</button><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="marca-agua-validation-modal" tabindex="-1" aria-labelledby="marca-agua-validation-modal-title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content marca-agua-modal-content">
+                <div class="modal-header marca-agua-modal-header">
+                    <div><div class="miscelanea-modal-eyebrow">Verificación AIFA</div><h5 class="modal-title mb-0" id="marca-agua-validation-modal-title"><i class="fas fa-shield-check me-2" aria-hidden="true"></i>Validar documento</h5></div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="small text-muted mb-3">Inserta la cadena completa de la marca de agua. Se descifrarán el documento, la fecha y el usuario, y se confirmará su registro.</p>
+                    <label for="marca-agua-validation-code" class="form-label small fw-semibold">Cadena de la marca de agua</label>
+                    <textarea id="marca-agua-validation-code" class="form-control font-monospace" rows="5" placeholder="AIFA-XXXXXXXXXX" autofocus></textarea>
+                    <button type="button" class="btn btn-primary mt-3" id="marca-agua-validate"><i class="fas fa-shield-check me-1" aria-hidden="true"></i>Validar</button>
+                    <div id="marca-agua-validation-result" class="marca-agua-validation-result mt-3" role="status" aria-live="polite" hidden></div>
+                </div>
+                <div class="modal-footer border-0 pt-0"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Modal: captura digital desde Conciliación -->
     <div class="modal fade" id="modal-conci-digital-manifest" tabindex="-1" aria-labelledby="modal-conci-digital-manifest-label">
         <div class="modal-dialog modal-fullscreen m-0">
@@ -34901,6 +35014,8 @@ FF
     <script src="js/capacidad-carga.js?v=4"></script>
     <script src="js/bhs-baggage-stats.js?v=4"></script>
 
+    <script src="js/miscelanea.js?v=1"></script>
+    <script src="js/marca-agua.js?v=1"></script>
     <script src="js/data-manager.js"></script>
     <script src="js/permissions.js"></script>
     <script src="js/admin-ui.js"></script>
