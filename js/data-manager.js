@@ -281,7 +281,43 @@ class DataManager {
         }
         const { data, error } = await query;
         if (error) throw error;
-        return data;
+
+        // ZLO (Manzanillo) es una frecuencia nacional. Durante una carga
+        // anterior quedó en weekly_frequencies_int y se excluye correctamente
+        // de Internacionales, pero eso hacía que desapareciera de Nacionales.
+        // Se incorpora solo en lectura hasta que la fuente histórica se
+        // regularice, sin borrar ni duplicar registros en Supabase.
+        let zloQuery = this.client.from('weekly_frequencies_int')
+            .select('*')
+            .eq('iata', 'ZLO')
+            .order('valid_from', { ascending: false })
+            .order('route_id', { ascending: true })
+            .order('airline', { ascending: true });
+
+        if (weekLabel) {
+            zloQuery = zloQuery.eq('week_label', weekLabel);
+        }
+
+        const { data: zloRows, error: zloError } = await zloQuery;
+        if (zloError) {
+            console.warn('[data-manager] No se pudo incorporar ZLO a Nacionales:', zloError.message);
+            return data || [];
+        }
+
+        const nationalRows = data || [];
+        const keyOf = row => [row.week_label, row.route_id, row.iata, row.airline]
+            .map(value => String(value ?? '').trim().toUpperCase())
+            .join('|');
+        const existing = new Set(nationalRows.map(keyOf));
+        const promotedZlo = (zloRows || [])
+            .filter(row => !existing.has(keyOf(row)))
+            .map(row => ({ ...row, _sourceTable: 'weekly_frequencies_int' }));
+
+        return [...nationalRows, ...promotedZlo].sort((a, b) =>
+            String(b.valid_from || '').localeCompare(String(a.valid_from || '')) ||
+            (Number(a.route_id) || 0) - (Number(b.route_id) || 0) ||
+            String(a.airline || '').localeCompare(String(b.airline || ''))
+        );
     }
 
     async getWeeklyFrequenciesInt(weekLabel) {
