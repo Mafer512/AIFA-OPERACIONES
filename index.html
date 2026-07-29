@@ -11231,6 +11231,36 @@ FF
                                 .trim();
                         }
 
+                        function colabFormatBirthDateDisplay(raw) {
+                            const text = String(raw ?? '').trim();
+                            if (!text || /^(?:sin informaci[oó]n|sin fecha de nacimiento|0|-|—|null)$/i.test(text)) {
+                                return 'Sin información';
+                            }
+                            let year, month, day;
+                            let match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                            if (match) {
+                                [, year, month, day] = match;
+                            } else {
+                                match = text.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                                if (!match) return 'Sin información';
+                                [, day, month, year] = match;
+                            }
+                            const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+                            const valid = date.getUTCFullYear() === Number(year)
+                                && date.getUTCMonth() + 1 === Number(month)
+                                && date.getUTCDate() === Number(day)
+                                && Number(year) >= 1900
+                                && Number(year) <= 2010;
+                            return valid ? `${day}/${month}/${year}` : 'Sin información';
+                        }
+
+                        function colabNormalizeBirthDateStorage(raw) {
+                            const display = colabFormatBirthDateDisplay(raw);
+                            if (display === 'Sin información') return display;
+                            const [day, month, year] = display.split('/');
+                            return `${year}-${month}-${day}`;
+                        }
+
                         /* -- Valor o guion -- */
                         function val(v) {
                             const s = String(v ?? '').trim();
@@ -11608,7 +11638,7 @@ FF
                                     return s; // devolver tal cual si no se reconoce
                                 }
                                 const rawOnom = gc(c, 'onomastico');
-                                fillField('cf-onomastico', formatBirthday(rawOnom) || rawOnom);
+                                fillField('cf-onomastico', colabFormatBirthDateDisplay(rawOnom));
                             })();
                             fillField('cf-celular',       gc(c, 'celular'));
                             fillField('cf-ext',           gc(c, 'extension'));
@@ -13488,7 +13518,11 @@ FF
                             Object.entries(COLAB_EDIT_FIELD_MAP).forEach(([formId, colKey]) => {
                                 const el = document.getElementById(formId);
                                 if (!el) return;
-                                el.value = colKey === 'estatus' ? colabNormalizarEstatus(gc(c, colKey)) : String(gc(c, colKey) ?? '').trim();
+                                el.value = colKey === 'estatus'
+                                    ? colabNormalizarEstatus(gc(c, colKey))
+                                    : colKey === 'onomastico'
+                                        ? colabFormatBirthDateDisplay(gc(c, colKey))
+                                        : String(gc(c, colKey) ?? '').trim();
                             });
 
                             // Resetear al primer tab
@@ -13782,8 +13816,16 @@ FF
                                     if (!realCol) return;
                                     const el = document.getElementById(formId);
                                     if (!el) return;
-                                    const newVal = colKey === 'estatus' ? colabNormalizarEstatus(el.value) : el.value.trim();
-                                    const oldVal = colKey === 'estatus' ? colabNormalizarEstatus(c[realCol]) : String(c[realCol] ?? '').trim();
+                                    const newVal = colKey === 'estatus'
+                                        ? colabNormalizarEstatus(el.value)
+                                        : colKey === 'onomastico'
+                                            ? colabNormalizeBirthDateStorage(el.value)
+                                            : el.value.trim();
+                                    const oldVal = colKey === 'estatus'
+                                        ? colabNormalizarEstatus(c[realCol])
+                                        : colKey === 'onomastico'
+                                            ? colabNormalizeBirthDateStorage(c[realCol])
+                                            : String(c[realCol] ?? '').trim();
                                     if (newVal !== oldVal) {
                                         updatePayload[realCol] = newVal || null;
                                         cambios.push({ campo: colKey, valor_anterior: oldVal || null, valor_nuevo: newVal || null });
@@ -14050,6 +14092,7 @@ FF
                         let ctblCols = [];        // columnas detectadas del primer registro
                         let ctblFilterKeys = { dir: 'direccion', nivel: 'nivel', turno: 'turno' };
                         let ctblSearchIndex = new WeakMap();
+                        let ctblRowHtmlCache = new WeakMap();
                         let ctblSearchTimer = null;
                         let ctblSearchRunId = 0;
                         let ctblLastFilterMetrics = null;
@@ -14168,10 +14211,18 @@ FF
                             const numKey = ctblFindColByCanon('num_empleado') || 'num_empleado';
                             const nombreKey = ctblFindColByCanon('nombre') || 'nombre';
                             const puestoKey = ctblFindColByCanon('puesto') || 'puesto';
+                            const direccionKey = ctblFindColByCanon('direccion') || 'direccion';
+                            const subdireccionKey = ctblFindColByCanon('subdireccion') || 'subdireccion';
+                            const gerenciaKey = ctblFindColByCanon('gerencia') || 'gerencia';
+                            const coordinacionKey = ctblFindColByCanon('coordinacion') || 'coordinacion';
                             ctblAllData.forEach(r => {
                                 const numero = norm(r?.[numKey]);
                                 const nombre = norm(r?.[nombreKey]);
                                 const puesto = norm(r?.[puestoKey]);
+                                const direccion = norm(r?.[direccionKey]);
+                                const subdireccion = norm(r?.[subdireccionKey]);
+                                const gerencia = norm(r?.[gerenciaKey]);
+                                const coordinacion = norm(r?.[coordinacionKey]);
                                 const partesNombre = nombre.split(' ').filter(Boolean);
                                 ctblSearchIndex.set(r, {
                                     numero,
@@ -14179,7 +14230,11 @@ FF
                                     puesto,
                                     primerNombre: partesNombre[0] || '',
                                     apellidos: partesNombre.slice(1),
-                                    texto: `${numero} ${nombre} ${puesto}`.trim()
+                                    direccion,
+                                    subdireccion,
+                                    gerencia,
+                                    coordinacion,
+                                    texto: `${numero} ${nombre} ${puesto} ${direccion} ${subdireccion} ${gerencia} ${coordinacion}`.trim()
                                 });
                             });
                         }
@@ -14190,9 +14245,17 @@ FF
                             const numKey = ctblFindColByCanon('num_empleado') || 'num_empleado';
                             const nombreKey = ctblFindColByCanon('nombre') || 'nombre';
                             const puestoKey = ctblFindColByCanon('puesto') || 'puesto';
+                            const direccionKey = ctblFindColByCanon('direccion') || 'direccion';
+                            const subdireccionKey = ctblFindColByCanon('subdireccion') || 'subdireccion';
+                            const gerenciaKey = ctblFindColByCanon('gerencia') || 'gerencia';
+                            const coordinacionKey = ctblFindColByCanon('coordinacion') || 'coordinacion';
                             const numero = norm(r?.[numKey]);
                             const nombre = norm(r?.[nombreKey]);
                             const puesto = norm(r?.[puestoKey]);
+                            const direccion = norm(r?.[direccionKey]);
+                            const subdireccion = norm(r?.[subdireccionKey]);
+                            const gerencia = norm(r?.[gerenciaKey]);
+                            const coordinacion = norm(r?.[coordinacionKey]);
                             const partesNombre = nombre.split(' ').filter(Boolean);
                             indice = {
                                 numero,
@@ -14200,7 +14263,11 @@ FF
                                 puesto,
                                 primerNombre: partesNombre[0] || '',
                                 apellidos: partesNombre.slice(1),
-                                texto: `${numero} ${nombre} ${puesto}`.trim()
+                                direccion,
+                                subdireccion,
+                                gerencia,
+                                coordinacion,
+                                texto: `${numero} ${nombre} ${puesto} ${direccion} ${subdireccion} ${gerencia} ${coordinacion}`.trim()
                             };
                             ctblSearchIndex.set(r, indice);
                             return indice;
@@ -14214,6 +14281,10 @@ FF
                             if (indice.nombre.includes(q)) return 3;
                             if (indice.numero.includes(q)) return 4;
                             if (indice.puesto.includes(q)) return 5;
+                            if (indice.direccion.includes(q)) return 6;
+                            if (indice.subdireccion.includes(q)) return 7;
+                            if (indice.gerencia.includes(q)) return 8;
+                            if (indice.coordinacion.includes(q)) return 9;
                             return Number.POSITIVE_INFINITY;
                         }
 
@@ -14292,6 +14363,7 @@ FF
                                 const turnoKey = allKeys.find(k => /^turno$/i.test(k)) || 'turno';
                                 ctblFilterKeys = { dir: dirKey, nivel: nivelKey, turno: turnoKey };
                                 ctblPrepararIndiceBusqueda();
+                                ctblPrepararRenderCache();
                             }
 
                             ctblGenerarThead();
@@ -14329,7 +14401,7 @@ FF
                             ctblSearchTimer = setTimeout(() => {
                                 if (runId !== ctblSearchRunId) return;
                                 colabTablaFiltrar();
-                            }, 100);
+                            }, 80);
                         };
 
                         window.colabTablaFiltrar = function() {
@@ -14544,6 +14616,42 @@ FF
                         };
                         /* ------------------------------------------------------ */
 
+                        function ctblConstruirFilaHtml(r, dataIndex) {
+                            const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                            const nombreKey = ctblCols.find(k => k === 'nombre') || 'nombre';
+                            const nombreVal = esc(String(r[nombreKey] ?? '—'));
+                            const raw = String(gc(r,'amonestaciones') ?? r['amonestaciones'] ?? '').trim();
+                            const n = raw ? raw.split(/\n/).map(l => l.trim()).filter(Boolean).length : 0;
+                            const { cls } = semClassify(n);
+                            const rowCls = cls === 'sem-rojo' ? ' class="ctbl-rojo"' : cls === 'sem-amarillo' ? ' class="ctbl-amarillo"' : '';
+                            const statusHtml = value => {
+                                const limpio = String(value || '').trim();
+                                const esBaja = /^baja$/i.test(limpio);
+                                const esActivo = /^activo$/i.test(limpio);
+                                const clsStatus = esBaja ? 'ctbl-status-baja' : esActivo ? 'ctbl-status-activo' : '';
+                                return clsStatus ? `<span class="ctbl-status-badge ${clsStatus}">${esc(limpio)}</span>` : esc(limpio || '—');
+                            };
+                            const allTds = ctblCols.map(col => {
+                                const v = String(r[col] ?? '').trim() || '—';
+                                const style = CTBL_WRAP_COLS.has(col) ? ' style="max-width:200px;white-space:normal"' : '';
+                                const content = /^estatus$/i.test(col)
+                                    ? statusHtml(v)
+                                    : /^fecha\s+de\s+nacimiento$/i.test(col)
+                                        ? esc(colabFormatBirthDateDisplay(v))
+                                        : esc(v);
+                                return `<td${style}>${content}</td>`;
+                            });
+                            const semTd = `<td class="ctbl-td-conducta">${colabSemaforoHtml(r, true)}</td>`;
+                            const gradoAcadIdx = ctblCols.findIndex(k => k === 'grado_academico' || /^grado\s+acad[eé]mico$/i.test(k));
+                            allTds.splice(gradoAcadIdx >= 0 ? gradoAcadIdx + 1 : 1, 0, semTd);
+                            return `<tr${rowCls} onclick="colabTablaVerFichaGlobal(${dataIndex})" title="Ver ficha de ${nombreVal}">${allTds.join('')}</tr>`;
+                        }
+
+                        function ctblPrepararRenderCache() {
+                            ctblRowHtmlCache = new WeakMap();
+                            ctblAllData.forEach((r, index) => ctblRowHtmlCache.set(r, ctblConstruirFilaHtml(r, index)));
+                        }
+
                         /** Renderizar filas de la tabla */
                         function colabTablaRender() {
                             const tbody   = document.getElementById('ctbl-tbody');
@@ -14561,41 +14669,22 @@ FF
                             if (emptyEl) emptyEl.classList.add('d-none');
                             if (tableEl) tableEl.classList.remove('d-none');
 
-                            const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-                            // Raw key para número de empleado (para click en fila)
-                            const numKey    = ctblCols.find(k => k === 'num_empleado' || k === 'num') || 'num_empleado';
-                            const nombreKey = ctblCols.find(k => k === 'nombre') || 'nombre';
-
-                            const html = ctblData.map((r, i) => {
-                                const nombreVal = esc(String(r[nombreKey] ?? '—'));
-                                const raw = String(gc(r,'amonestaciones') ?? r['amonestaciones'] ?? '').trim();
-                                const n   = raw ? raw.split(/\n/).map(l => l.trim()).filter(Boolean).length : 0;
-                                const { cls } = semClassify(n);
-                                const rowCls  = cls === 'sem-rojo' ? ' class="ctbl-rojo"' : cls === 'sem-amarillo' ? ' class="ctbl-amarillo"' : '';
-                                const statusHtml = value => {
-                                    const limpio = String(value || '').trim();
-                                    const esBaja = /^baja$/i.test(limpio);
-                                    const esActivo = /^activo$/i.test(limpio);
-                                    const clsStatus = esBaja ? 'ctbl-status-baja' : esActivo ? 'ctbl-status-activo' : '';
-                                    return clsStatus ? `<span class="ctbl-status-badge ${clsStatus}">${esc(limpio)}</span>` : esc(limpio || '—');
-                                };
-                                const allTds  = ctblCols.map(col => {
-                                    const v = String(r[col] ?? '').trim() || '—';
-                                    const style = CTBL_WRAP_COLS.has(col) ? ' style="max-width:200px;white-space:normal"' : '';
-                                    const content = /^estatus$/i.test(col) ? statusHtml(v) : esc(v);
-                                    return `<td${style}>${content}</td>`;
-                                });
-                                const semTd = `<td class="ctbl-td-conducta">${colabSemaforoHtml(r, true)}</td>`;
-                                const gradoAcadIdx = ctblCols.findIndex(k => k === 'grado_academico' || /^grado\s+acad[eé]mico$/i.test(k));
-                                allTds.splice(gradoAcadIdx >= 0 ? gradoAcadIdx + 1 : 1, 0, semTd);
-                                return `<tr${rowCls} onclick="colabTablaVerFicha(${i})" title="Ver ficha de ${nombreVal}">${allTds.join('')}</tr>`;
-                            }).join('');
+                            const html = ctblData.map(r => ctblRowHtmlCache.get(r) || ctblConstruirFilaHtml(r, ctblAllData.indexOf(r))).join('');
                             if (tbody) tbody.innerHTML = html;
                         }
 
                         /** Click en fila: cerrar modal y mostrar ficha */
                         window.colabTablaVerFicha = function(idx) {
                             const rec = ctblData[idx];
+                            colabTablaMostrarFicha(rec);
+                        };
+
+                        window.colabTablaVerFichaGlobal = function(idx) {
+                            const rec = ctblAllData[idx];
+                            colabTablaMostrarFicha(rec);
+                        };
+
+                        function colabTablaMostrarFicha(rec) {
                             if (!rec) return;
                             bootstrap.Modal.getInstance(document.getElementById('colabTablaModal'))?.hide();
                             // Obtener número de empleado para el input de búsqueda
@@ -14603,7 +14692,7 @@ FF
                             const numInput = document.getElementById('colab-num-input');
                             if (numInput && numEmpl) numInput.value = numEmpl;
                             renderFicha(rec);
-                        };
+                        }
 
                         /** Descargar CSV con todos los campos visibles */
                         window.colabDescargarCSV = function() {

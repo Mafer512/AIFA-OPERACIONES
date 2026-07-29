@@ -48,49 +48,18 @@ function isValidFullDate(parts) {
     return parts && parts.year >= MIN_YEAR && parts.year <= MAX_YEAR && Boolean(isoDate(parts.year, parts.month, parts.day));
 }
 
-function dateFromIdentity(value, expectedMonthDay) {
-    const compact = String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (compact.length < 10) return null;
-    const match = compact.slice(4, 10).match(/^(\d{2})(\d{2})(\d{2})$/);
-    if (!match) return null;
-    const yy = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    const candidates = [1900 + yy, 2000 + yy]
-        .map(year => ({ year, month, day, iso: isoDate(year, month, day) }))
-        .filter(item => item.iso && item.year >= MIN_YEAR && item.year <= MAX_YEAR);
-    const matching = expectedMonthDay
-        ? candidates.filter(item => item.month === expectedMonthDay.month && item.day === expectedMonthDay.day)
-        : candidates;
-    return matching.length === 1 ? matching[0] : null;
-}
-
 function resolveBirthDate(row, columns) {
     const birthday = dateParts(row[columns.birthday]);
-    const birthDate = dateParts(row[columns.birthDate]);
-    const expectedMonthDay = birthday && birthday.month >= 1 && birthday.month <= 12 && birthday.day >= 1 && birthday.day <= 31 && birthday.year !== 1899
-        ? { month: birthday.month, day: birthday.day }
-        : null;
-
     if (isValidFullDate(birthday)) {
         return { iso: isoDate(birthday.year, birthday.month, birthday.day), method: 'cumpleanos_completo' };
     }
-    if (isValidFullDate(birthDate)) {
-        if (!expectedMonthDay || (birthDate.month === expectedMonthDay.month && birthDate.day === expectedMonthDay.day)) {
-            return { iso: isoDate(birthDate.year, birthDate.month, birthDate.day), method: 'cumpleanos_dia_mes_mas_fecha_nacimiento' };
-        }
-    }
-    const identityDate = dateFromIdentity(row[columns.curp], expectedMonthDay) || dateFromIdentity(row[columns.rfc], expectedMonthDay);
-    if (identityDate) return { iso: identityDate.iso, method: 'cumpleanos_dia_mes_mas_curp_rfc' };
-    const rawValues = [row[columns.birthday], row[columns.birthDate], row[columns.curp], row[columns.rfc]]
-        .map(value => String(value ?? '').trim())
-        .filter(value => value && value !== '0');
+    const rawBirthday = String(row[columns.birthday] ?? '').trim();
     return {
-        iso: 'Sin fecha de nacimiento',
+        iso: 'Sin información',
         method: 'sin_fecha_inequivoca',
-        reason: rawValues.length
-            ? 'Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes'
-            : 'No existe una fecha confiable en Cumpleaños, Fecha de nacimiento, CURP ni RFC'
+        reason: rawBirthday
+            ? 'La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable'
+            : 'La columna Cumpleaños está vacía'
     };
 }
 
@@ -108,9 +77,6 @@ const columns = {
     employee: findColumn('No. Empleado'),
     name: findColumn('Nombre'),
     birthday: findColumn('Cumpleaños'),
-    birthDate: findColumn('Fecha de nacimiento'),
-    curp: findColumn('CURP'),
-    rfc: findColumn('RFC')
 };
 
 const auditRows = [];
@@ -130,7 +96,7 @@ for (let index = 2; index < rows.length; index++) {
 }
 
 const duplicateEmployees = [...new Set(auditRows.map(row => row.employee).filter((employee, index, all) => all.indexOf(employee) !== index))];
-const unresolved = auditRows.filter(row => row.birthDate === 'Sin fecha de nacimiento');
+const unresolved = auditRows.filter(row => row.birthDate === 'Sin información');
 if (duplicateEmployees.length) throw new Error(`Numeros de empleado duplicados: ${duplicateEmployees.join(', ')}`);
 
 const methodCounts = auditRows.reduce((counts, row) => {
@@ -160,12 +126,12 @@ const normalizedEmployeeSql = `replace(replace(replace(replace(replace(btrim(a."
 const finalSql = sql
     .replace(
         `fecha_nacimiento text NOT NULL CHECK (fecha_nacimiento ~ '^\\d{4}-\\d{2}-\\d{2}$')`,
-        () => `fecha_nacimiento text NOT NULL CHECK (fecha_nacimiento = 'Sin fecha de nacimiento' OR fecha_nacimiento ~ '^\\d{4}-\\d{2}-\\d{2}$')`
+        () => `fecha_nacimiento text NOT NULL CHECK (fecha_nacimiento = 'Sin información' OR fecha_nacimiento ~ '^\\d{4}-\\d{2}-\\d{2}$')`
     )
     .replaceAll(`replace(replace(replace(btrim(a."No. Empleado"::text), '´', ''''), '’', ''''), ' ', '')`, () => normalizedEmployeeSql)
     .replace(
         `WHERE a."Fecha de nacimiento" !~ '^\\d{4}-\\d{2}-\\d{2}$'\n     OR substring(a."Fecha de nacimiento" from 1 for 4)::integer NOT BETWEEN ${MIN_YEAR} AND ${MAX_YEAR};`,
-        () => `WHERE a."Fecha de nacimiento" <> 'Sin fecha de nacimiento'\n    AND (a."Fecha de nacimiento" !~ '^\\d{4}-\\d{2}-\\d{2}$'\n     OR substring(a."Fecha de nacimiento" from 1 for 4)::integer NOT BETWEEN ${MIN_YEAR} AND ${MAX_YEAR});`
+        () => `WHERE a."Fecha de nacimiento" <> 'Sin información'\n    AND (a."Fecha de nacimiento" !~ '^\\d{4}-\\d{2}-\\d{2}$'\n     OR substring(a."Fecha de nacimiento" from 1 for 4)::integer NOT BETWEEN ${MIN_YEAR} AND ${MAX_YEAR});`
     );
 fs.writeFileSync(SQL_OUTPUT, finalSql, 'utf8');
 

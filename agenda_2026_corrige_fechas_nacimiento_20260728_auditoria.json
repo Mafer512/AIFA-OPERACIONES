@@ -2,134 +2,322 @@
   "source": "Agenda 2026actu.xlsx",
   "sheet": "Activos",
   "officialColumn": "Cumpleaños",
-  "generatedAt": "2026-07-29T00:28:13.479Z",
+  "generatedAt": "2026-07-29T16:07:37.299Z",
   "totalEmployees": 459,
   "uniqueEmployees": 459,
-  "resolvedWithDate": 436,
-  "markedWithoutDate": 23,
+  "resolvedWithDate": 398,
+  "markedWithoutDate": 61,
   "unresolvedEmployees": [
+    {
+      "employee": "1151",
+      "name": "Jessica García Ramírez",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
     {
       "employee": "754-2",
       "name": "Jesús David Valle Muñoz",
-      "reason": "No existe una fecha confiable en Cumpleaños, Fecha de nacimiento, CURP ni RFC"
+      "reason": "La columna Cumpleaños está vacía"
+    },
+    {
+      "employee": "1686",
+      "name": "Jael Pérez Rebollo",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1723",
+      "name": "Michel Ortega Nieto",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1477-2",
+      "name": "Daniela Itzel Zamora Morales",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1639",
+      "name": "Laura Gorety Morales Sánchez",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1504",
+      "name": "Fernando Peña López",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1677-2",
+      "name": "Francisco Xavier López Martínez",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1724",
+      "name": "Issac Meneses Lezáma",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1443",
+      "name": "Gil Juárez ríos",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1531",
+      "name": "Christian Jonathan Moreno Hernandez",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1544-2",
+      "name": "Martín Fernando Juárez González",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1482",
       "name": "Luis Alberto Osorio Romo",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "62-2",
+      "name": "Andrés Sánchez Rodríguez",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1679",
+      "name": "Luis Enrique Sosa Villegas",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1625",
       "name": "Angela Guadalupe Caballero Guevara",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1698",
       "name": "Valderrama Hernández Maldonado",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1725",
       "name": "Jesús Hernández Errasquin",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1603",
       "name": "Delfina Gorras Martínez",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1444",
       "name": "María Guadalupe Duran Valdez",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1691",
       "name": "Samantha Lizbeth Hernández Juárez",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1685",
+      "name": "Sandy Osiris Mendoza Leonidez",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1687",
+      "name": "Guadalupe Xohua Méndez",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1720",
+      "name": "Nina Mayte Soto Díaz",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1683",
+      "name": "Oscar Asbiel Moreno García",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1403-2",
       "name": "Luis Armando Gordillo Ortega",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1665",
+      "name": "Eduardo Moreno Silva",
+      "reason": "La columna Cumpleaños está vacía"
+    },
+    {
+      "employee": "1660-2",
+      "name": "Sharon Airy Cruz Hernández",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1670",
+      "name": "Carlos Renato Juárez Rodríguez",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1647",
+      "name": "David Alejandro Gutiérrez Villa",
+      "reason": "La columna Cumpleaños está vacía"
     },
     {
       "employee": "1699",
       "name": "Valeria Miranda Ruíz García",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1701",
       "name": "Marijose Tinoco Acevedo",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1666",
+      "name": "Carlos Antonio Tesillos Pérez",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1697",
+      "name": "César Alberto Hernández Almanza",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1630-2",
       "name": "Braulio González Morales",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1648",
       "name": "Jocelyn Mariel Terreros Nieto",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1657",
+      "name": "Alberto Bautista Galván",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1696",
+      "name": "Rodrigo Pascual Solis Morales",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1649",
       "name": "Daniela Monserrat Gil Ramos",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1563-2",
+      "name": "Lorenzo Reyna Dimas",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1695",
       "name": "Edher Gambo Pasteleín",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1730",
+      "name": "Raúl Gamaliel Becerra López",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1667",
       "name": "Paula Citlali",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1732",
+      "name": "Maricela Méndez Tomas",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1661",
       "name": "Valery Cordova Temich",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1652",
+      "name": "Juan Manuel Mejía Borges",
+      "reason": "La columna Cumpleaños está vacía"
+    },
+    {
+      "employee": "1731",
+      "name": "Paola Barcenas Mendoza",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1715",
+      "name": "Karen Lizbeth Martínez Macias",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1643",
       "name": "Gabriela Espina",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1663",
+      "name": "Alonso Gil García",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1614-2",
+      "name": "Flor Magaly Pérez Cayetano",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1555-2",
       "name": "Brigido Valerio Vigueras",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1664",
       "name": "Cesar Arturo Garcia Plaza",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1400-2",
       "name": "Benoni Ortega Vial",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1708",
       "name": "Eugenio Alonso",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1719",
+      "name": "Guillermo Jiménez Varela",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1727",
+      "name": "Sammantha Delgado Serrano",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1693",
+      "name": "Alberto Ayotitla Gayoso",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "1205",
+      "name": "Carlos Santiago Tenorio",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "employee": "1590-2",
       "name": "Felipe Márquez Munguía",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
+    },
+    {
+      "employee": "986",
+      "name": "Juan Pablo Cervantes Torres",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     }
   ],
   "duplicateEmployees": [],
   "methodCounts": {
     "cumpleanos_completo": 398,
-    "cumpleanos_dia_mes_mas_fecha_nacimiento": 32,
-    "sin_fecha_inequivoca": 23,
-    "cumpleanos_dia_mes_mas_curp_rfc": 6
+    "sin_fecha_inequivoca": 61
   },
   "onlyDatabaseFieldUpdated": "Fecha de nacimiento",
   "rows": [
@@ -153,17 +341,17 @@
       "excelRow": 8,
       "employee": "1151",
       "name": "Jessica García Ramírez",
-      "birthDate": "1996-09-06",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 9,
       "employee": "754-2",
       "name": "Jesús David Valle Muñoz",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "No existe una fecha confiable en Cumpleaños, Fecha de nacimiento, CURP ni RFC"
+      "reason": "La columna Cumpleaños está vacía"
     },
     {
       "excelRow": 10,
@@ -193,9 +381,9 @@
       "excelRow": 13,
       "employee": "1686",
       "name": "Jael Pérez Rebollo",
-      "birthDate": "1979-12-20",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 14,
@@ -249,9 +437,9 @@
       "excelRow": 20,
       "employee": "1723",
       "name": "Michel Ortega Nieto",
-      "birthDate": "1987-02-15",
-      "method": "cumpleanos_dia_mes_mas_curp_rfc",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 21,
@@ -345,9 +533,9 @@
       "excelRow": 32,
       "employee": "1477-2",
       "name": "Daniela Itzel Zamora Morales",
-      "birthDate": "2002-09-25",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 33,
@@ -905,9 +1093,9 @@
       "excelRow": 102,
       "employee": "1639",
       "name": "Laura Gorety Morales Sánchez",
-      "birthDate": "2002-08-28",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 103,
@@ -985,17 +1173,17 @@
       "excelRow": 112,
       "employee": "1504",
       "name": "Fernando Peña López",
-      "birthDate": "1990-12-03",
-      "method": "cumpleanos_dia_mes_mas_curp_rfc",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 113,
       "employee": "1677-2",
       "name": "Francisco Xavier López Martínez",
-      "birthDate": "2003-03-25",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 114,
@@ -1017,17 +1205,17 @@
       "excelRow": 116,
       "employee": "1724",
       "name": "Issac Meneses Lezáma",
-      "birthDate": "1996-04-11",
-      "method": "cumpleanos_dia_mes_mas_curp_rfc",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 117,
       "employee": "1443",
       "name": "Gil Juárez ríos",
-      "birthDate": "1983-09-01",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 118,
@@ -1113,9 +1301,9 @@
       "excelRow": 128,
       "employee": "1531",
       "name": "Christian Jonathan Moreno Hernandez",
-      "birthDate": "1992-04-09",
-      "method": "cumpleanos_dia_mes_mas_curp_rfc",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 129,
@@ -1193,9 +1381,9 @@
       "excelRow": 138,
       "employee": "1544-2",
       "name": "Martín Fernando Juárez González",
-      "birthDate": "1987-03-24",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 139,
@@ -1217,17 +1405,17 @@
       "excelRow": 141,
       "employee": "1482",
       "name": "Luis Alberto Osorio Romo",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 142,
       "employee": "62-2",
       "name": "Andrés Sánchez Rodríguez",
-      "birthDate": "1995-02-16",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 143,
@@ -1241,9 +1429,9 @@
       "excelRow": 144,
       "employee": "1679",
       "name": "Luis Enrique Sosa Villegas",
-      "birthDate": "2004-08-13",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 145,
@@ -1537,9 +1725,9 @@
       "excelRow": 181,
       "employee": "1625",
       "name": "Angela Guadalupe Caballero Guevara",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 183,
@@ -1593,9 +1781,9 @@
       "excelRow": 189,
       "employee": "1698",
       "name": "Valderrama Hernández Maldonado",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 190,
@@ -1873,9 +2061,9 @@
       "excelRow": 227,
       "employee": "1725",
       "name": "Jesús Hernández Errasquin",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 228,
@@ -1889,17 +2077,17 @@
       "excelRow": 229,
       "employee": "1603",
       "name": "Delfina Gorras Martínez",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 230,
       "employee": "1444",
       "name": "María Guadalupe Duran Valdez",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 231,
@@ -1977,9 +2165,9 @@
       "excelRow": 240,
       "employee": "1691",
       "name": "Samantha Lizbeth Hernández Juárez",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 241,
@@ -2105,9 +2293,9 @@
       "excelRow": 256,
       "employee": "1685",
       "name": "Sandy Osiris Mendoza Leonidez",
-      "birthDate": "1992-08-28",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 257,
@@ -2521,9 +2709,9 @@
       "excelRow": 309,
       "employee": "1687",
       "name": "Guadalupe Xohua Méndez",
-      "birthDate": "1991-12-09",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 310,
@@ -2897,9 +3085,9 @@
       "excelRow": 357,
       "employee": "1720",
       "name": "Nina Mayte Soto Díaz",
-      "birthDate": "2003-05-06",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 358,
@@ -3025,9 +3213,9 @@
       "excelRow": 375,
       "employee": "1683",
       "name": "Oscar Asbiel Moreno García",
-      "birthDate": "1997-04-30",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 376,
@@ -3161,9 +3349,9 @@
       "excelRow": 392,
       "employee": "1403-2",
       "name": "Luis Armando Gordillo Ortega",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 394,
@@ -3257,9 +3445,9 @@
       "excelRow": 405,
       "employee": "1665",
       "name": "Eduardo Moreno Silva",
-      "birthDate": "1994-11-12",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños está vacía"
     },
     {
       "excelRow": 406,
@@ -3289,9 +3477,9 @@
       "excelRow": 410,
       "employee": "1660-2",
       "name": "Sharon Airy Cruz Hernández",
-      "birthDate": "1999-07-02",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 411,
@@ -3345,33 +3533,33 @@
       "excelRow": 417,
       "employee": "1670",
       "name": "Carlos Renato Juárez Rodríguez",
-      "birthDate": "1992-07-10",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 419,
       "employee": "1647",
       "name": "David Alejandro Gutiérrez Villa",
-      "birthDate": "2005-10-03",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños está vacía"
     },
     {
       "excelRow": 420,
       "employee": "1699",
       "name": "Valeria Miranda Ruíz García",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 421,
       "employee": "1701",
       "name": "Marijose Tinoco Acevedo",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 422,
@@ -3385,17 +3573,17 @@
       "excelRow": 423,
       "employee": "1666",
       "name": "Carlos Antonio Tesillos Pérez",
-      "birthDate": "1998-07-03",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 424,
       "employee": "1697",
       "name": "César Alberto Hernández Almanza",
-      "birthDate": "1986-09-21",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 425,
@@ -3409,9 +3597,9 @@
       "excelRow": 426,
       "employee": "1630-2",
       "name": "Braulio González Morales",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 427,
@@ -3433,9 +3621,9 @@
       "excelRow": 429,
       "employee": "1648",
       "name": "Jocelyn Mariel Terreros Nieto",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 430,
@@ -3465,17 +3653,17 @@
       "excelRow": 433,
       "employee": "1657",
       "name": "Alberto Bautista Galván",
-      "birthDate": "1996-05-11",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 434,
       "employee": "1696",
       "name": "Rodrigo Pascual Solis Morales",
-      "birthDate": "1994-10-21",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 435,
@@ -3497,9 +3685,9 @@
       "excelRow": 437,
       "employee": "1649",
       "name": "Daniela Monserrat Gil Ramos",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 438,
@@ -3513,9 +3701,9 @@
       "excelRow": 439,
       "employee": "1563-2",
       "name": "Lorenzo Reyna Dimas",
-      "birthDate": "1973-12-25",
-      "method": "cumpleanos_dia_mes_mas_curp_rfc",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 440,
@@ -3537,9 +3725,9 @@
       "excelRow": 442,
       "employee": "1695",
       "name": "Edher Gambo Pasteleín",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 443,
@@ -3553,25 +3741,25 @@
       "excelRow": 444,
       "employee": "1730",
       "name": "Raúl Gamaliel Becerra López",
-      "birthDate": "2002-03-12",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 445,
       "employee": "1667",
       "name": "Paula Citlali",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 446,
       "employee": "1732",
       "name": "Maricela Méndez Tomas",
-      "birthDate": "1985-09-05",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 447,
@@ -3593,9 +3781,9 @@
       "excelRow": 449,
       "employee": "1661",
       "name": "Valery Cordova Temich",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 450,
@@ -3609,17 +3797,17 @@
       "excelRow": 451,
       "employee": "1652",
       "name": "Juan Manuel Mejía Borges",
-      "birthDate": "1998-04-10",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños está vacía"
     },
     {
       "excelRow": 452,
       "employee": "1731",
       "name": "Paola Barcenas Mendoza",
-      "birthDate": "2000-07-04",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 453,
@@ -3633,9 +3821,9 @@
       "excelRow": 454,
       "employee": "1715",
       "name": "Karen Lizbeth Martínez Macias",
-      "birthDate": "2001-08-29",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 455,
@@ -3649,25 +3837,25 @@
       "excelRow": 456,
       "employee": "1643",
       "name": "Gabriela Espina",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 457,
       "employee": "1663",
       "name": "Alonso Gil García",
-      "birthDate": "2001-10-31",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 459,
       "employee": "1614-2",
       "name": "Flor Magaly Pérez Cayetano",
-      "birthDate": "1991-07-31",
-      "method": "cumpleanos_dia_mes_mas_curp_rfc",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 460,
@@ -3689,9 +3877,9 @@
       "excelRow": 462,
       "employee": "1555-2",
       "name": "Brigido Valerio Vigueras",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 463,
@@ -3713,17 +3901,17 @@
       "excelRow": 465,
       "employee": "1664",
       "name": "Cesar Arturo Garcia Plaza",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 466,
       "employee": "1400-2",
       "name": "Benoni Ortega Vial",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 467,
@@ -3737,25 +3925,25 @@
       "excelRow": 468,
       "employee": "1708",
       "name": "Eugenio Alonso",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 469,
       "employee": "1719",
       "name": "Guillermo Jiménez Varela",
-      "birthDate": "1992-01-26",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 470,
       "employee": "1727",
       "name": "Sammantha Delgado Serrano",
-      "birthDate": "1999-09-25",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 471,
@@ -3769,17 +3957,17 @@
       "excelRow": 472,
       "employee": "1693",
       "name": "Alberto Ayotitla Gayoso",
-      "birthDate": "1995-06-14",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 473,
       "employee": "1205",
       "name": "Carlos Santiago Tenorio",
-      "birthDate": "1991-09-10",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 474,
@@ -3793,17 +3981,17 @@
       "excelRow": 475,
       "employee": "1590-2",
       "name": "Felipe Márquez Munguía",
-      "birthDate": "Sin fecha de nacimiento",
+      "birthDate": "Sin información",
       "method": "sin_fecha_inequivoca",
-      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     },
     {
       "excelRow": 476,
       "employee": "986",
       "name": "Juan Pablo Cervantes Torres",
-      "birthDate": "1999-01-30",
-      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
-      "reason": null
+      "birthDate": "Sin información",
+      "method": "sin_fecha_inequivoca",
+      "reason": "La columna Cumpleaños contiene un valor incompleto, inválido o con año no confiable"
     }
   ]
 }

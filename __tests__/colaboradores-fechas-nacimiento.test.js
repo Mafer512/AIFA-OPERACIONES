@@ -13,18 +13,18 @@ describe('correccion masiva de fechas de nacimiento', () => {
         expect(audit.duplicateEmployees).toEqual([]);
     });
 
-    test('contiene 436 fechas confiables y 23 casos identificados', () => {
-        expect(audit.resolvedWithDate).toBe(436);
-        expect(audit.markedWithoutDate).toBe(23);
-        expect(audit.unresolvedEmployees).toHaveLength(23);
-        expect(audit.rows.filter(row => row.birthDate === 'Sin fecha de nacimiento')).toHaveLength(23);
+    test('contiene 398 fechas oficiales y 61 casos sin informacion', () => {
+        expect(audit.resolvedWithDate).toBe(398);
+        expect(audit.markedWithoutDate).toBe(61);
+        expect(audit.unresolvedEmployees).toHaveLength(61);
+        expect(audit.rows.filter(row => row.birthDate === 'Sin información')).toHaveLength(61);
     });
 
     test('no introduce fechas ficticias ni formatos invalidos', () => {
         const forbidden = new Set(['00/01/1900', '01/01/1900', '1899-12-30', '1/0/00']);
         for (const row of audit.rows) {
             expect(forbidden.has(row.birthDate)).toBe(false);
-            expect(row.birthDate === 'Sin fecha de nacimiento' || /^\d{4}-\d{2}-\d{2}$/.test(row.birthDate)).toBe(true);
+            expect(row.birthDate === 'Sin información' || /^\d{4}-\d{2}-\d{2}$/.test(row.birthDate)).toBe(true);
         }
     });
 
@@ -37,8 +37,16 @@ describe('correccion masiva de fechas de nacimiento', () => {
 
     test('el modulo muestra y edita la misma columna de fecha', () => {
         expect(html).toContain("onomastico:      find('^fecha\\\\s+de\\\\s+nacimiento$'");
-        expect(html).toContain("fillField('cf-onomastico', formatBirthday(rawOnom) || rawOnom)");
+        expect(html).toContain("fillField('cf-onomastico', colabFormatBirthDateDisplay(rawOnom))");
         expect(html).toContain("'ce-onomastico':'onomastico'");
         expect(html).toContain("'onomastico':'Onomástico'");
+    });
+
+    test('presenta fechas uniformes y los faltantes como Sin información', () => {
+        expect(html).toContain('function colabFormatBirthDateDisplay(raw)');
+        expect(html).toContain("? esc(colabFormatBirthDateDisplay(v))");
+        expect(html).toContain("? colabFormatBirthDateDisplay(gc(c, colKey))");
+        expect(sql).not.toContain('Sin fecha de nacimiento');
+        expect(sql).toContain("'Sin información'");
     });
 });

@@ -23,10 +23,14 @@ vm.createContext(context);
 vm.runInContext(extractFunction('norm', html.indexOf('/* -- Normalizar texto')), context);
 vm.runInContext(extractFunction('ctblRelevanciaBusqueda', collaboratorsSection), context);
 
-function indexRecord(numero, nombre, puesto) {
+function indexRecord(numero, nombre, puesto, extra = {}) {
     const normalizedNumber = context.norm(numero);
     const normalizedName = context.norm(nombre);
     const normalizedPosition = context.norm(puesto);
+    const direccion = context.norm(extra.direccion);
+    const subdireccion = context.norm(extra.subdireccion);
+    const gerencia = context.norm(extra.gerencia);
+    const coordinacion = context.norm(extra.coordinacion);
     const nameParts = normalizedName.split(' ').filter(Boolean);
     return {
         numero: normalizedNumber,
@@ -34,7 +38,11 @@ function indexRecord(numero, nombre, puesto) {
         puesto: normalizedPosition,
         primerNombre: nameParts[0] || '',
         apellidos: nameParts.slice(1),
-        texto: `${normalizedNumber} ${normalizedName} ${normalizedPosition}`.trim()
+        direccion,
+        subdireccion,
+        gerencia,
+        coordinacion,
+        texto: `${normalizedNumber} ${normalizedName} ${normalizedPosition} ${direccion} ${subdireccion} ${gerencia} ${coordinacion}`.trim()
     };
 }
 
@@ -59,6 +67,18 @@ describe('busqueda local de colaboradores', () => {
         expect(record.puesto.includes(context.norm('BHS'))).toBe(true);
     });
 
+    test('busca por direccion, subdireccion, gerencia y coordinacion', () => {
+        const record = indexRecord('402', 'Omar Sandoval Flores', 'Operador', {
+            direccion: 'Dirección de Operación',
+            subdireccion: 'Seguridad Operacional',
+            gerencia: 'Operaciones Parte Aeronáutica',
+            coordinacion: 'Abordadores Mecánicos'
+        });
+        for (const query of ['direccion de operacion', 'seguridad operacional', 'aeronautica', 'abordadores mecanicos']) {
+            expect(record.texto.includes(context.norm(query))).toBe(true);
+        }
+    });
+
     test('ordena por numero exacto, nombre, apellido, contenido y puesto', () => {
         const q = context.norm('omar');
         const records = [
@@ -75,7 +95,7 @@ describe('busqueda local de colaboradores', () => {
     test('el control descarta temporizadores de busquedas anteriores', () => {
         expect(html).toContain('const runId = ++ctblSearchRunId;');
         expect(html).toContain('if (runId !== ctblSearchRunId) return;');
-        expect(html).toContain('}, 100);');
+        expect(html).toContain('}, 80);');
     });
 
     test('la busqueda local no realiza consultas a Supabase', () => {
@@ -88,7 +108,13 @@ describe('busqueda local de colaboradores', () => {
 
     test('mantiene la tabla original sin paginacion ni controles adicionales', () => {
         expect(html).not.toMatch(/ctbl-pagination|ctbl-page-size|ctblIrPagina|ctblCambiarTamanoPagina/);
-        expect(html).toContain('const html = ctblData.map((r, i) => {');
+        expect(html).toContain('const html = ctblData.map(r => ctblRowHtmlCache.get(r)');
         expect(html).not.toContain('ctblData.slice(startIdx');
+    });
+
+    test('precalcula filas y no reconstruye sus celdas en cada busqueda', () => {
+        expect(html).toContain('function ctblPrepararRenderCache()');
+        expect(html).toContain('ctblRowHtmlCache.set(r, ctblConstruirFilaHtml(r, index))');
+        expect(html).toContain('ctblPrepararRenderCache();');
     });
 });
