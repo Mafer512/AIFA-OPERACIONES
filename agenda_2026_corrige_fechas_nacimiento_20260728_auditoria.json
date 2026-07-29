@@ -1,0 +1,3809 @@
+{
+  "source": "Agenda 2026actu.xlsx",
+  "sheet": "Activos",
+  "officialColumn": "Cumpleaños",
+  "generatedAt": "2026-07-29T00:28:13.479Z",
+  "totalEmployees": 459,
+  "uniqueEmployees": 459,
+  "resolvedWithDate": 436,
+  "markedWithoutDate": 23,
+  "unresolvedEmployees": [
+    {
+      "employee": "754-2",
+      "name": "Jesús David Valle Muñoz",
+      "reason": "No existe una fecha confiable en Cumpleaños, Fecha de nacimiento, CURP ni RFC"
+    },
+    {
+      "employee": "1482",
+      "name": "Luis Alberto Osorio Romo",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1625",
+      "name": "Angela Guadalupe Caballero Guevara",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1698",
+      "name": "Valderrama Hernández Maldonado",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1725",
+      "name": "Jesús Hernández Errasquin",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1603",
+      "name": "Delfina Gorras Martínez",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1444",
+      "name": "María Guadalupe Duran Valdez",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1691",
+      "name": "Samantha Lizbeth Hernández Juárez",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1403-2",
+      "name": "Luis Armando Gordillo Ortega",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1699",
+      "name": "Valeria Miranda Ruíz García",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1701",
+      "name": "Marijose Tinoco Acevedo",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1630-2",
+      "name": "Braulio González Morales",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1648",
+      "name": "Jocelyn Mariel Terreros Nieto",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1649",
+      "name": "Daniela Monserrat Gil Ramos",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1695",
+      "name": "Edher Gambo Pasteleín",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1667",
+      "name": "Paula Citlali",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1661",
+      "name": "Valery Cordova Temich",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1643",
+      "name": "Gabriela Espina",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1555-2",
+      "name": "Brigido Valerio Vigueras",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1664",
+      "name": "Cesar Arturo Garcia Plaza",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1400-2",
+      "name": "Benoni Ortega Vial",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1708",
+      "name": "Eugenio Alonso",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "employee": "1590-2",
+      "name": "Felipe Márquez Munguía",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    }
+  ],
+  "duplicateEmployees": [],
+  "methodCounts": {
+    "cumpleanos_completo": 398,
+    "cumpleanos_dia_mes_mas_fecha_nacimiento": 32,
+    "sin_fecha_inequivoca": 23,
+    "cumpleanos_dia_mes_mas_curp_rfc": 6
+  },
+  "onlyDatabaseFieldUpdated": "Fecha de nacimiento",
+  "rows": [
+    {
+      "excelRow": 6,
+      "employee": "320",
+      "name": "Ana Karen Tovar Aguilar",
+      "birthDate": "1997-05-11",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 7,
+      "employee": "1602",
+      "name": "Irma Karina Vargas García",
+      "birthDate": "1998-12-24",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 8,
+      "employee": "1151",
+      "name": "Jessica García Ramírez",
+      "birthDate": "1996-09-06",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 9,
+      "employee": "754-2",
+      "name": "Jesús David Valle Muñoz",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "No existe una fecha confiable en Cumpleaños, Fecha de nacimiento, CURP ni RFC"
+    },
+    {
+      "excelRow": 10,
+      "employee": "1020",
+      "name": "Gonzalo Sandoval González",
+      "birthDate": "1986-03-10",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 11,
+      "employee": "222",
+      "name": "Roberto Yair González Robledo",
+      "birthDate": "1994-11-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 12,
+      "employee": "990",
+      "name": "Fabiola Abril Vivar Cruz",
+      "birthDate": "1988-10-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 13,
+      "employee": "1686",
+      "name": "Jael Pérez Rebollo",
+      "birthDate": "1979-12-20",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 14,
+      "employee": "1305",
+      "name": "Sandra del Ángel García",
+      "birthDate": "1986-02-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 15,
+      "employee": "1537-2",
+      "name": "Emily Beltrán García",
+      "birthDate": "1999-07-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 16,
+      "employee": "1224",
+      "name": "Brenda Irineo Antonio",
+      "birthDate": "1993-06-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 17,
+      "employee": "1064-2",
+      "name": "José Juan Maturano Pineda",
+      "birthDate": "1968-08-24",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 18,
+      "employee": "1135",
+      "name": "Yesenia Martínez Moreno",
+      "birthDate": "1992-11-19",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 19,
+      "employee": "676",
+      "name": "Sandra Rosales Enciso",
+      "birthDate": "1987-10-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 20,
+      "employee": "1723",
+      "name": "Michel Ortega Nieto",
+      "birthDate": "1987-02-15",
+      "method": "cumpleanos_dia_mes_mas_curp_rfc",
+      "reason": null
+    },
+    {
+      "excelRow": 21,
+      "employee": "95-2",
+      "name": "Laila Brigitte Camacho González",
+      "birthDate": "1995-04-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 22,
+      "employee": "12-2",
+      "name": "Erick Oswaldo Barrios Santillán",
+      "birthDate": "1995-06-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 23,
+      "employee": "319-2",
+      "name": "Pedro Eduardo Cruz Flores",
+      "birthDate": "1986-10-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 24,
+      "employee": "1501",
+      "name": "Evelyn Arcelia Vázquez Montalvo",
+      "birthDate": "2003-06-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 25,
+      "employee": "654",
+      "name": "Edgar Balderas Medina",
+      "birthDate": "1976-03-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 26,
+      "employee": "1369",
+      "name": "Avelardo León Ramírez",
+      "birthDate": "1972-04-19",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 27,
+      "employee": "678",
+      "name": "Raúl Ignacio Rodríguez García",
+      "birthDate": "1973-02-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 28,
+      "employee": "52",
+      "name": "José Luis García Mateos",
+      "birthDate": "1988-12-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 29,
+      "employee": "574",
+      "name": "Rogelio Viveros Jasso",
+      "birthDate": "1968-07-01",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 30,
+      "employee": "1502",
+      "name": "Fernanda Itzel Valderrama Huidobro",
+      "birthDate": "1999-11-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 31,
+      "employee": "713",
+      "name": "Héctor Martín Zequera Brito",
+      "birthDate": "1980-03-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 32,
+      "employee": "1477-2",
+      "name": "Daniela Itzel Zamora Morales",
+      "birthDate": "2002-09-25",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 33,
+      "employee": "1468-2",
+      "name": "Mauro Michel Hernandez Rosales",
+      "birthDate": "1992-07-14",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 34,
+      "employee": "471",
+      "name": "Carlos Héctor Santos Paramo",
+      "birthDate": "1981-03-19",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 35,
+      "employee": "206",
+      "name": "Luis Fernando Gutiérrez Hernández",
+      "birthDate": "1996-05-15",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 36,
+      "employee": "642",
+      "name": "Adolfo Jair Pérez Espino",
+      "birthDate": "1995-07-15",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 37,
+      "employee": "18",
+      "name": "Ignacio Clemente Marín",
+      "birthDate": "1988-05-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 38,
+      "employee": "32",
+      "name": "Jesús Vázquez Rodríguez",
+      "birthDate": "1994-08-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 39,
+      "employee": "1593",
+      "name": "Daniel Javier Tello Ballinas",
+      "birthDate": "1970-10-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 40,
+      "employee": "1442",
+      "name": "Enrique Jair Manriquez Guzman",
+      "birthDate": "1999-08-25",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 41,
+      "employee": "1610",
+      "name": "Pablo Davila Yacotu",
+      "birthDate": "2002-07-18",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 42,
+      "employee": "245",
+      "name": "Luis Fernando Mayoral Santos",
+      "birthDate": "1975-03-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 43,
+      "employee": "1559",
+      "name": "Leonardo Trejo Gaona",
+      "birthDate": "2000-01-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 44,
+      "employee": "1067",
+      "name": "Ricardo Domingo de la Cruz",
+      "birthDate": "1995-01-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 45,
+      "employee": "884",
+      "name": "Fernando Viveros Arellano",
+      "birthDate": "1998-05-01",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 46,
+      "employee": "1213",
+      "name": "Netzahualcoyotl Estrada Torres",
+      "birthDate": "1967-11-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 47,
+      "employee": "847",
+      "name": "Gustavo Daniel Rubio Martínez",
+      "birthDate": "1998-06-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 48,
+      "employee": "402",
+      "name": "Omar Sandoval Flores",
+      "birthDate": "1989-09-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 49,
+      "employee": "525",
+      "name": "Francisco Alberto Gutiérrez Rivas",
+      "birthDate": "1994-06-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 50,
+      "employee": "575",
+      "name": "Jesús Mendoza García",
+      "birthDate": "1990-01-14",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 51,
+      "employee": "48",
+      "name": "Ángel de Jesús Pino Zavala",
+      "birthDate": "1992-02-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 52,
+      "employee": "576",
+      "name": "Sergio Arce Montaño",
+      "birthDate": "1996-11-14",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 53,
+      "employee": "1260",
+      "name": "José Alfredo Pérez Hernández",
+      "birthDate": "1974-02-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 54,
+      "employee": "655",
+      "name": "Martin Martínez Mauricio",
+      "birthDate": "1988-11-11",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 55,
+      "employee": "537",
+      "name": "José Luis Agustín Gómez Becerra",
+      "birthDate": "1967-02-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 56,
+      "employee": "1130",
+      "name": "Álvaro Pacheco Alemán",
+      "birthDate": "1981-06-08",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 57,
+      "employee": "23",
+      "name": "Marcos Morales Cuevas",
+      "birthDate": "1991-09-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 58,
+      "employee": "24",
+      "name": "Jorge Mosso Hernández",
+      "birthDate": "1989-06-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 59,
+      "employee": "1394-3",
+      "name": "Marco Antonio Ruíz Mejía",
+      "birthDate": "1991-04-24",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 60,
+      "employee": "26",
+      "name": "Rafael Noe Porcayo Carreto",
+      "birthDate": "1985-06-15",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 61,
+      "employee": "266",
+      "name": "Mariano Contreras García",
+      "birthDate": "1974-01-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 62,
+      "employee": "1484",
+      "name": "Lidia Elibeth Hernández Martínez",
+      "birthDate": "1998-11-10",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 63,
+      "employee": "543",
+      "name": "Blanca Estela Pacheco Aranda",
+      "birthDate": "1984-05-31",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 64,
+      "employee": "33",
+      "name": "Darwin Yañez Cala",
+      "birthDate": "1992-06-15",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 65,
+      "employee": "944",
+      "name": "Nayeli Aketzalli Delgado Rosas",
+      "birthDate": "2000-02-07",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 66,
+      "employee": "1043",
+      "name": "Diego Manuel Cortés Fuentes",
+      "birthDate": "2000-06-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 67,
+      "employee": "1411-2",
+      "name": "Yahir de Jesús Téllez Carbajal",
+      "birthDate": "2003-08-30",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 68,
+      "employee": "274",
+      "name": "Jordán Ramírez Lara",
+      "birthDate": "1979-03-11",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 69,
+      "employee": "1139",
+      "name": "Juan Oscar Camacho Martínez",
+      "birthDate": "1975-01-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 70,
+      "employee": "674",
+      "name": "Marco Antonio Ventura Lachino",
+      "birthDate": "1979-08-15",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 71,
+      "employee": "1466-3",
+      "name": "Aniceto García Cuevas",
+      "birthDate": "1985-04-16",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 72,
+      "employee": "1551",
+      "name": "Isaac Azhael López Cancino",
+      "birthDate": "2003-05-18",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 73,
+      "employee": "56-2",
+      "name": "Edhel Rodolfo Cruz Hernández",
+      "birthDate": "1997-06-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 74,
+      "employee": "1161",
+      "name": "Armando Chávez Suarez",
+      "birthDate": "2000-08-04",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 75,
+      "employee": "669",
+      "name": "Arturo Chávez Gómez",
+      "birthDate": "1987-08-14",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 76,
+      "employee": "902",
+      "name": "José Nery García García",
+      "birthDate": "1990-07-11",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 77,
+      "employee": "1519",
+      "name": "Ángel Ariel Quintana Chávez",
+      "birthDate": "1997-11-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 78,
+      "employee": "1203",
+      "name": "Miguel Díaz Montoya",
+      "birthDate": "1976-10-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 79,
+      "employee": "31",
+      "name": "David Jesús Pacheco Ángel",
+      "birthDate": "1991-03-14",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 80,
+      "employee": "34",
+      "name": "Ricardo Manuel Cabrera Ojeda",
+      "birthDate": "1973-08-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 81,
+      "employee": "35",
+      "name": "Jorge Alberto Moreno Romero",
+      "birthDate": "1976-05-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 82,
+      "employee": "17",
+      "name": "Isaac Hernández Hernández",
+      "birthDate": "1991-06-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 83,
+      "employee": "1202",
+      "name": "Jesús Espitia Elizalde",
+      "birthDate": "1973-06-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 84,
+      "employee": "1001",
+      "name": "Eduardo Guerrero Cruz",
+      "birthDate": "1971-06-14",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 85,
+      "employee": "538",
+      "name": "Ulises López Ibares",
+      "birthDate": "1991-05-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 86,
+      "employee": "40",
+      "name": "Octavio Antonio Gutiérrez Rivas",
+      "birthDate": "1991-09-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 87,
+      "employee": "41",
+      "name": "Omar López Salinas",
+      "birthDate": "1990-07-14",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 88,
+      "employee": "1254",
+      "name": "Luis Eduardo Díaz Sánchez",
+      "birthDate": "1997-08-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 89,
+      "employee": "43",
+      "name": "Daniel Hernández Hernández",
+      "birthDate": "1993-07-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 90,
+      "employee": "289",
+      "name": "Luis Uziel Bautista Chávez",
+      "birthDate": "1973-10-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 91,
+      "employee": "577",
+      "name": "Miguel Ángel Aceves Romero",
+      "birthDate": "1988-07-16",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 92,
+      "employee": "927",
+      "name": "José Manuel Picazo Castillo",
+      "birthDate": "1983-12-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 93,
+      "employee": "526",
+      "name": "Javier Camacho Flores",
+      "birthDate": "1970-12-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 94,
+      "employee": "1154",
+      "name": "Israel Hernández Jiménez",
+      "birthDate": "1982-11-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 95,
+      "employee": "204",
+      "name": "Oscar Rodríguez Hernández",
+      "birthDate": "1975-04-10",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 96,
+      "employee": "675",
+      "name": "David Mata Alcántara",
+      "birthDate": "1969-12-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 97,
+      "employee": "579",
+      "name": "Eduardo Vargas Huidobro",
+      "birthDate": "1984-01-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 98,
+      "employee": "44",
+      "name": "Tonatiuh López Ibares",
+      "birthDate": "1987-09-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 99,
+      "employee": "1405",
+      "name": "Brandon Miguel Chávez Cortés",
+      "birthDate": "1995-01-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 100,
+      "employee": "46",
+      "name": "Mucio Misael Chávez Ibarra",
+      "birthDate": "1991-03-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 101,
+      "employee": "1600",
+      "name": "Miguel Ángel Arellano Garcia",
+      "birthDate": "2001-01-05",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 102,
+      "employee": "1639",
+      "name": "Laura Gorety Morales Sánchez",
+      "birthDate": "2002-08-28",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 103,
+      "employee": "1503",
+      "name": "Mariano Flores González",
+      "birthDate": "1989-08-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 104,
+      "employee": "569",
+      "name": "Juan de Dios Bartolo Zárate",
+      "birthDate": "1984-03-07",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 105,
+      "employee": "51",
+      "name": "Joel Bernal Leonardo",
+      "birthDate": "1986-05-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 106,
+      "employee": "1467-3",
+      "name": "José Luis Abundis Durán",
+      "birthDate": "1988-05-08",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 107,
+      "employee": "194",
+      "name": "José Luis Cruz Zongua",
+      "birthDate": "1992-01-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 108,
+      "employee": "565",
+      "name": "Carlos Rodríguez Arias",
+      "birthDate": "1992-01-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 109,
+      "employee": "1486",
+      "name": "Jorge Alberto Roque Ramos",
+      "birthDate": "1977-02-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 110,
+      "employee": "1304",
+      "name": "Noe Chávez Sánchez",
+      "birthDate": "1971-11-10",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 111,
+      "employee": "1320",
+      "name": "Brandon Eduardo Sánchez Cid",
+      "birthDate": "2001-03-25",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 112,
+      "employee": "1504",
+      "name": "Fernando Peña López",
+      "birthDate": "1990-12-03",
+      "method": "cumpleanos_dia_mes_mas_curp_rfc",
+      "reason": null
+    },
+    {
+      "excelRow": 113,
+      "employee": "1677-2",
+      "name": "Francisco Xavier López Martínez",
+      "birthDate": "2003-03-25",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 114,
+      "employee": "1606",
+      "name": "Gabriel Guadalupe Hernández Sánchez",
+      "birthDate": "1983-12-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 115,
+      "employee": "1289",
+      "name": "Israel Olivo Ordoñez",
+      "birthDate": "1988-08-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 116,
+      "employee": "1724",
+      "name": "Issac Meneses Lezáma",
+      "birthDate": "1996-04-11",
+      "method": "cumpleanos_dia_mes_mas_curp_rfc",
+      "reason": null
+    },
+    {
+      "excelRow": 117,
+      "employee": "1443",
+      "name": "Gil Juárez ríos",
+      "birthDate": "1983-09-01",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 118,
+      "employee": "36",
+      "name": "Pedro Garcés Martínez",
+      "birthDate": "1990-10-18",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 119,
+      "employee": "1014",
+      "name": "César Cisneros Moreno",
+      "birthDate": "1993-09-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 120,
+      "employee": "916",
+      "name": "Daniel Ernesto Mejía Sevilla",
+      "birthDate": "1990-08-08",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 121,
+      "employee": "466",
+      "name": "Daniela Hernández López",
+      "birthDate": "1998-04-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 122,
+      "employee": "1230",
+      "name": "Ana Karen Esteban García",
+      "birthDate": "1996-10-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 123,
+      "employee": "261",
+      "name": "Juan Carlos Cruz Cruz",
+      "birthDate": "1982-07-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 124,
+      "employee": "59",
+      "name": "Baltasar Alarcón Calderón",
+      "birthDate": "1985-01-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 125,
+      "employee": "663",
+      "name": "Daniel Morales Cuevas",
+      "birthDate": "1992-11-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 126,
+      "employee": "1255",
+      "name": "Israel Alberto Montes Sarabia",
+      "birthDate": "1976-01-15",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 127,
+      "employee": "58",
+      "name": "Kepler Hernández García",
+      "birthDate": "1993-08-15",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 128,
+      "employee": "1531",
+      "name": "Christian Jonathan Moreno Hernandez",
+      "birthDate": "1992-04-09",
+      "method": "cumpleanos_dia_mes_mas_curp_rfc",
+      "reason": null
+    },
+    {
+      "excelRow": 129,
+      "employee": "1397-3",
+      "name": "Julio Cesár Uribe Juárez",
+      "birthDate": "1989-12-04",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 130,
+      "employee": "61",
+      "name": "Raúl Alberto Montaño Quevedo",
+      "birthDate": "1988-07-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 131,
+      "employee": "891",
+      "name": "José Armando Flores Sánchez",
+      "birthDate": "1994-08-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 132,
+      "employee": "20",
+      "name": "Jonathan Raúl Casasola Arrieta",
+      "birthDate": "1985-04-26",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 133,
+      "employee": "64",
+      "name": "Mauricio León Neos",
+      "birthDate": "1991-04-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 134,
+      "employee": "946",
+      "name": "Jorge Alfredo Sánchez Soria",
+      "birthDate": "1973-10-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 135,
+      "employee": "905",
+      "name": "Jesús Antonio Quevedo Martínez",
+      "birthDate": "1971-12-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 136,
+      "employee": "1529",
+      "name": "Jonathán Edgardo Ávila Ponce",
+      "birthDate": "1991-01-16",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 137,
+      "employee": "1155",
+      "name": "Raymundo Alvarado Hernández",
+      "birthDate": "1979-06-19",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 138,
+      "employee": "1544-2",
+      "name": "Martín Fernando Juárez González",
+      "birthDate": "1987-03-24",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 139,
+      "employee": "1091",
+      "name": "David González Vega",
+      "birthDate": "1975-10-19",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 140,
+      "employee": "1290",
+      "name": "David Emmanuel Avalos Santiago",
+      "birthDate": "2000-09-26",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 141,
+      "employee": "1482",
+      "name": "Luis Alberto Osorio Romo",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 142,
+      "employee": "62-2",
+      "name": "Andrés Sánchez Rodríguez",
+      "birthDate": "1995-02-16",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 143,
+      "employee": "1558",
+      "name": "Gustavo Aldair Maciel Anica",
+      "birthDate": "1999-03-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 144,
+      "employee": "1679",
+      "name": "Luis Enrique Sosa Villegas",
+      "birthDate": "2004-08-13",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 145,
+      "employee": "978",
+      "name": "Norberto Fernández Majin",
+      "birthDate": "1977-06-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 146,
+      "employee": "1489-3",
+      "name": "Irving Cortes Flores",
+      "birthDate": "2001-06-01",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 147,
+      "employee": "22",
+      "name": "Isaac Azael Martínez Gómez",
+      "birthDate": "1998-03-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 148,
+      "employee": "1015",
+      "name": "Antonio de Jesús Maciel Anica",
+      "birthDate": "1993-12-01",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 149,
+      "employee": "488",
+      "name": "Bryan Jesús López Moreno",
+      "birthDate": "1998-04-30",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 150,
+      "employee": "57",
+      "name": "Diego Alberto Tamayo Sánchez",
+      "birthDate": "1991-02-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 151,
+      "employee": "666",
+      "name": "Eloy Morales Chamu",
+      "birthDate": "1984-09-19",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 152,
+      "employee": "1357",
+      "name": "Manuel Enrique Cano Chávez",
+      "birthDate": "1998-07-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 153,
+      "employee": "1358",
+      "name": "Alejandro Hilario Rubio",
+      "birthDate": "1983-08-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 154,
+      "employee": "1414-2",
+      "name": "Angel Azael Bernal Valadez",
+      "birthDate": "2005-10-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 155,
+      "employee": "49",
+      "name": "Roberto Hilarión Cano Malpica",
+      "birthDate": "1985-10-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 156,
+      "employee": "71",
+      "name": "Jorge Meléndez Meléndez",
+      "birthDate": "1980-07-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 157,
+      "employee": "72",
+      "name": "Héctor Antonio Atanacio Hernández",
+      "birthDate": "1984-04-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 158,
+      "employee": "73",
+      "name": "Hugo Morales Morales",
+      "birthDate": "1983-01-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 159,
+      "employee": "582",
+      "name": "Kevin Antonio Zarate González",
+      "birthDate": "1997-07-05",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 160,
+      "employee": "428",
+      "name": "Ulises Alejandro Casasola Arrieta",
+      "birthDate": "1991-11-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 161,
+      "employee": "521",
+      "name": "Brayan Diaz Quintero",
+      "birthDate": "1992-12-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 162,
+      "employee": "910",
+      "name": "José Luis García Peñaloza",
+      "birthDate": "1989-09-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 163,
+      "employee": "1375-2",
+      "name": "Luis Jordan Reyes de la Rosa",
+      "birthDate": "2001-07-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 164,
+      "employee": "429",
+      "name": "Ángel de Jesús Hernández Flores",
+      "birthDate": "2001-02-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 165,
+      "employee": "1370",
+      "name": "José Manuel Santiago Herrera",
+      "birthDate": "2004-08-10",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 166,
+      "employee": "452",
+      "name": "Alan Michael Moreno Arenas",
+      "birthDate": "1997-09-16",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 167,
+      "employee": "493",
+      "name": "Mauricio García Cruz",
+      "birthDate": "1980-09-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 168,
+      "employee": "1157",
+      "name": "Julio Alberto Oliva Reyes",
+      "birthDate": "1979-11-05",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 169,
+      "employee": "1081",
+      "name": "Arturo Erik Tovar Almanza",
+      "birthDate": "1990-05-10",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 170,
+      "employee": "290",
+      "name": "Cutberto Rivera Casarrubias",
+      "birthDate": "1980-03-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 171,
+      "employee": "1306",
+      "name": "Miguel Ángel Ameneyro Reyes",
+      "birthDate": "1981-05-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 172,
+      "employee": "504",
+      "name": "Gustavo Daniel Arizaga Trejo",
+      "birthDate": "1996-05-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 173,
+      "employee": "1460",
+      "name": "Brayan Rojas García",
+      "birthDate": "1996-09-26",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 174,
+      "employee": "1376-2",
+      "name": "Ricardo Villalpando Ortega",
+      "birthDate": "1994-10-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 175,
+      "employee": "494",
+      "name": "Fabian Flores Benítez",
+      "birthDate": "1985-11-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 176,
+      "employee": "1310",
+      "name": "María Fernanda López Ficachi",
+      "birthDate": "1995-12-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 177,
+      "employee": "688",
+      "name": "Linda María Monroy Sandoval",
+      "birthDate": "1991-11-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 178,
+      "employee": "686",
+      "name": "German Núñez Hernández",
+      "birthDate": "1976-09-30",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 179,
+      "employee": "1051",
+      "name": "Sabino Reducindo Ramírez",
+      "birthDate": "1966-08-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 180,
+      "employee": "1434",
+      "name": "Andrea Itzel García Cano",
+      "birthDate": "1999-10-26",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 181,
+      "employee": "1625",
+      "name": "Angela Guadalupe Caballero Guevara",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 183,
+      "employee": "257",
+      "name": "Yanirah González Rodríguez",
+      "birthDate": "1986-07-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 184,
+      "employee": "947",
+      "name": "Marco Antonio Bautista Aguilar",
+      "birthDate": "1995-06-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 185,
+      "employee": "197",
+      "name": "José Alejandro Maldonado Hernández",
+      "birthDate": "1973-04-24",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 186,
+      "employee": "1588",
+      "name": "Tristian Daniel Sánchez Fragoso",
+      "birthDate": "2004-05-07",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 187,
+      "employee": "1229",
+      "name": "Gabriela Neri Vilchis",
+      "birthDate": "1987-05-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 188,
+      "employee": "1123",
+      "name": "Diego Gael Castro Chávez",
+      "birthDate": "2002-11-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 189,
+      "employee": "1698",
+      "name": "Valderrama Hernández Maldonado",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 190,
+      "employee": "284",
+      "name": "Mario Ramírez Ocotitla",
+      "birthDate": "1968-09-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 191,
+      "employee": "207",
+      "name": "Erik Rodrigo Romero Cruz",
+      "birthDate": "1979-09-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 192,
+      "employee": "463",
+      "name": "Oscar Alberto Garduño Serrato",
+      "birthDate": "1974-07-30",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 193,
+      "employee": "764",
+      "name": "Xóchitl Márquez García",
+      "birthDate": "1995-11-16",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 194,
+      "employee": "81",
+      "name": "Miguel Ángel García Linares",
+      "birthDate": "1983-01-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 195,
+      "employee": "510",
+      "name": "Mario Cristóbal López Pallares",
+      "birthDate": "1991-07-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 196,
+      "employee": "502",
+      "name": "Diana Monserrat Cortés Vidal",
+      "birthDate": "1995-03-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 198,
+      "employee": "1163",
+      "name": "Yerson Jael Loza Martínez",
+      "birthDate": "1996-11-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 199,
+      "employee": "724",
+      "name": "Mario Olague López",
+      "birthDate": "1970-12-05",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 200,
+      "employee": "85",
+      "name": "Francisco Méndez Salazar",
+      "birthDate": "1984-10-04",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 201,
+      "employee": "755-2",
+      "name": "Álvaro Efraín Camacho Villanueva",
+      "birthDate": "1995-07-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 202,
+      "employee": "458",
+      "name": "Edgar Melo Duarte",
+      "birthDate": "1973-03-08",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 203,
+      "employee": "477",
+      "name": "Jonathan Colin Flores",
+      "birthDate": "1985-12-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 204,
+      "employee": "753",
+      "name": "Guadalupe Jiménez Ochoa",
+      "birthDate": "1986-01-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 205,
+      "employee": "250",
+      "name": "Bulmaro Clemente Marín",
+      "birthDate": "1992-10-11",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 206,
+      "employee": "512",
+      "name": "Erick Guzmán Plaza",
+      "birthDate": "1985-05-11",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 207,
+      "employee": "932",
+      "name": "Diego Armando Cuenca Araiza",
+      "birthDate": "1997-12-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 208,
+      "employee": "573",
+      "name": "Gaspar Casiano Peralta",
+      "birthDate": "1969-01-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 209,
+      "employee": "751",
+      "name": "María Dolores Valdés Mejía",
+      "birthDate": "1983-11-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 210,
+      "employee": "794",
+      "name": "Nayeli Aidée Urbano Ramírez",
+      "birthDate": "1979-05-18",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 212,
+      "employee": "1164",
+      "name": "Eduardo Escobar Sánchez",
+      "birthDate": "1993-10-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 213,
+      "employee": "487",
+      "name": "Francisco Hernán Cortes Santos",
+      "birthDate": "1971-12-31",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 214,
+      "employee": "632",
+      "name": "Jorge Guzmán Aguilar",
+      "birthDate": "1976-04-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 215,
+      "employee": "408",
+      "name": "Mara Atzin Soto Enríquez",
+      "birthDate": "1997-04-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 216,
+      "employee": "200-3",
+      "name": "Arturo Javier Hernández Osorio",
+      "birthDate": "1983-08-05",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 217,
+      "employee": "677",
+      "name": "José Manuel Niño Sotelo",
+      "birthDate": "1981-11-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 219,
+      "employee": "643",
+      "name": "Víctor Jesús Olea Hernández",
+      "birthDate": "1990-05-19",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 220,
+      "employee": "1133",
+      "name": "Alison Montserrat Juárez Figueroa",
+      "birthDate": "2003-01-15",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 221,
+      "employee": "1364",
+      "name": "July Guadalupe Huerta Barradas",
+      "birthDate": "2002-09-10",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 222,
+      "employee": "953",
+      "name": "Gabriela Itzel Martínez Mejía",
+      "birthDate": "1995-09-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 223,
+      "employee": "1106",
+      "name": "Angélica Gaytán Eguiza",
+      "birthDate": "1995-02-04",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 224,
+      "employee": "547",
+      "name": "Luisa María Chávez Zavala",
+      "birthDate": "1991-01-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 225,
+      "employee": "1248",
+      "name": "Susana Sánchez Guzmán",
+      "birthDate": "1984-05-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 226,
+      "employee": "1267",
+      "name": "Daniel Alberto Estrada Nolasco",
+      "birthDate": "1989-05-24",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 227,
+      "employee": "1725",
+      "name": "Jesús Hernández Errasquin",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 228,
+      "employee": "513",
+      "name": "Gabriela Libertad Nájera Higuera",
+      "birthDate": "1995-06-05",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 229,
+      "employee": "1603",
+      "name": "Delfina Gorras Martínez",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 230,
+      "employee": "1444",
+      "name": "María Guadalupe Duran Valdez",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 231,
+      "employee": "1612",
+      "name": "Luis Diego Montes Sanchez",
+      "birthDate": "2002-07-31",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 232,
+      "employee": "544",
+      "name": "Jesús Castillo Ángeles",
+      "birthDate": "1973-03-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 233,
+      "employee": "1268",
+      "name": "Jesús David Hernández Escudero",
+      "birthDate": "2001-11-24",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 234,
+      "employee": "249",
+      "name": "Octavio Jaime Sánchez Lázaro",
+      "birthDate": "1974-01-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 235,
+      "employee": "1092",
+      "name": "Omar Cano Méndez",
+      "birthDate": "1973-07-26",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 236,
+      "employee": "1398-2",
+      "name": "Marcos Gree López Elizalde",
+      "birthDate": "1974-03-07",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 237,
+      "employee": "1441",
+      "name": "Juan Carlos Ramirez Cruz",
+      "birthDate": "1979-04-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 238,
+      "employee": "292",
+      "name": "Carlos Amador López Antón",
+      "birthDate": "1985-12-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 239,
+      "employee": "1321",
+      "name": "Luis Daniel López Rodríguez",
+      "birthDate": "2002-02-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 240,
+      "employee": "1691",
+      "name": "Samantha Lizbeth Hernández Juárez",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 241,
+      "employee": "1200",
+      "name": "Alfonso Ochoa Acosta",
+      "birthDate": "1979-06-11",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 242,
+      "employee": "583-2",
+      "name": "Jorge Luis López Zavala",
+      "birthDate": "1996-11-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 243,
+      "employee": "1615",
+      "name": "Elizabeth Diaz Gomez",
+      "birthDate": "1992-01-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 244,
+      "employee": "823",
+      "name": "Samuel Gómez Carrada",
+      "birthDate": "1993-12-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 245,
+      "employee": "1059",
+      "name": "Gilberto Ayala Ramírez",
+      "birthDate": "1970-10-30",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 246,
+      "employee": "1279",
+      "name": "Esmeralda Emily Rodríguez Martínez",
+      "birthDate": "1998-04-01",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 247,
+      "employee": "744",
+      "name": "Lilian Elizabeth Pérez González",
+      "birthDate": "1989-11-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 248,
+      "employee": "467",
+      "name": "Adriana Pérez Maldonado",
+      "birthDate": "1989-02-05",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 249,
+      "employee": "1226",
+      "name": "Efrain Joshua Téllez Dimas",
+      "birthDate": "1995-08-11",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 250,
+      "employee": "363",
+      "name": "Daniela Elizabeth Mercado Islas",
+      "birthDate": "1987-02-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 251,
+      "employee": "1322",
+      "name": "Monserrat Alonso Martínez",
+      "birthDate": "1997-08-05",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 252,
+      "employee": "1237",
+      "name": "José Joaquín Chávez Hernández",
+      "birthDate": "1997-02-04",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 253,
+      "employee": "1147-2",
+      "name": "Karen Paulina Melo López",
+      "birthDate": "1996-11-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 254,
+      "employee": "1227",
+      "name": "Perla Noheli Sosa Medina",
+      "birthDate": "1998-06-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 255,
+      "employee": "1057",
+      "name": "Martha Castelán García",
+      "birthDate": "1994-06-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 256,
+      "employee": "1685",
+      "name": "Sandy Osiris Mendoza Leonidez",
+      "birthDate": "1992-08-28",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 257,
+      "employee": "987",
+      "name": "Jonathan Brandon Torres Ortíz",
+      "birthDate": "1995-10-05",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 258,
+      "employee": "1225",
+      "name": "Edgar Nájera Escobedo",
+      "birthDate": "1995-02-07",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 259,
+      "employee": "1008",
+      "name": "Jukari Ávila Mendoza",
+      "birthDate": "1997-02-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 260,
+      "employee": "461",
+      "name": "Araceli Esmeralda Sánchez Torres",
+      "birthDate": "1996-02-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 261,
+      "employee": "219",
+      "name": "Juan Carlos Vázquez Mendoza",
+      "birthDate": "1986-03-07",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 262,
+      "employee": "1250",
+      "name": "Dayren Floricela de León González",
+      "birthDate": "1995-02-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 263,
+      "employee": "991",
+      "name": "Diego Armando Gutiérrez Pérez",
+      "birthDate": "1998-05-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 265,
+      "employee": "1204",
+      "name": "César Sanchéz Resendiz",
+      "birthDate": "1971-03-31",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 266,
+      "employee": "1607",
+      "name": "Karla Ninel Zavaleta Macías",
+      "birthDate": "1992-05-11",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 267,
+      "employee": "1483",
+      "name": "Italhivi López Bárcenas",
+      "birthDate": "1997-09-05",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 268,
+      "employee": "635",
+      "name": "Ricardo Ochoa Araujo",
+      "birthDate": "1997-03-26",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 269,
+      "employee": "255",
+      "name": "Héctor Eduardo Pérez Anzures",
+      "birthDate": "1982-04-26",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 270,
+      "employee": "1118",
+      "name": "Alan Ramírez Villarreal",
+      "birthDate": "1989-06-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 271,
+      "employee": "935",
+      "name": "Guillermo Vargas Noguez",
+      "birthDate": "1993-06-25",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 272,
+      "employee": "660",
+      "name": "Carlos Luna Luna",
+      "birthDate": "1989-05-25",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 273,
+      "employee": "1292",
+      "name": "Andrea  Mariel Cruz Quiroz",
+      "birthDate": "2002-03-16",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 274,
+      "employee": "650",
+      "name": "José Antonio Torres Salgado",
+      "birthDate": "1990-04-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 275,
+      "employee": "943",
+      "name": "Areli Dayan Tapia Carrillo",
+      "birthDate": "1996-08-24",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 276,
+      "employee": "1044",
+      "name": "Lucinda Alejandra Hernández Gamboa",
+      "birthDate": "1997-05-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 277,
+      "employee": "651",
+      "name": "Omar Ferrer Arguello",
+      "birthDate": "1979-12-07",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 278,
+      "employee": "518",
+      "name": "Luis Javier Coronado Lazcano",
+      "birthDate": "1996-10-07",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 279,
+      "employee": "968",
+      "name": "Mariana Duarte García",
+      "birthDate": "1983-05-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 280,
+      "employee": "1108",
+      "name": "Alan Uriel González Coyotzi",
+      "birthDate": "1991-11-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 281,
+      "employee": "1071",
+      "name": "Rodrigo Misael Domingo de la Cruz",
+      "birthDate": "1998-10-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 282,
+      "employee": "1299-2",
+      "name": "Heder Alan Cruz Piliado",
+      "birthDate": "1990-09-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 283,
+      "employee": "359",
+      "name": "Claudio Rafael Suarez Castelán",
+      "birthDate": "1988-10-24",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 284,
+      "employee": "364",
+      "name": "Ulises Arias Belman",
+      "birthDate": "1973-07-30",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 285,
+      "employee": "1115-2",
+      "name": "Josué Norberto Castillo Bárcenas",
+      "birthDate": "1981-03-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 286,
+      "employee": "963",
+      "name": "Miguel Ángel Batalla Diaz",
+      "birthDate": "1997-10-10",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 287,
+      "employee": "472",
+      "name": "Alejandra Celina García Martínez",
+      "birthDate": "1995-04-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 288,
+      "employee": "1399-2",
+      "name": "Uriel Rodrigo Orrala Mendoza",
+      "birthDate": "1998-07-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 289,
+      "employee": "976",
+      "name": "Jesús Israel Reynoso Coronel",
+      "birthDate": "1991-12-16",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 290,
+      "employee": "974",
+      "name": "Juan Ramírez Páez",
+      "birthDate": "1962-01-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 291,
+      "employee": "801",
+      "name": "Yazmin Quiroga Sánchez",
+      "birthDate": "1992-01-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 292,
+      "employee": "484",
+      "name": "César Abraham Marmolejo Contreras",
+      "birthDate": "1984-03-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 293,
+      "employee": "710",
+      "name": "Cristhian Ortega García",
+      "birthDate": "1992-07-24",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 294,
+      "employee": "268",
+      "name": "Tanya Yvette Pérez Montes",
+      "birthDate": "1992-02-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 295,
+      "employee": "302",
+      "name": "Diana Laura Osuna Coronado",
+      "birthDate": "1996-12-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 296,
+      "employee": "1435",
+      "name": "Alma Leticia Pacheco Aranda",
+      "birthDate": "1990-07-04",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 297,
+      "employee": "639",
+      "name": "Angelica Lizbeth Alcántara Sánchez",
+      "birthDate": "1994-10-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 298,
+      "employee": "609",
+      "name": "Arnulfo Hernández García",
+      "birthDate": "1980-04-25",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 299,
+      "employee": "641",
+      "name": "Gerardo Isidro Casas",
+      "birthDate": "1985-05-04",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 300,
+      "employee": "1242",
+      "name": "Alejandro Talavera Castillo",
+      "birthDate": "2000-02-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 301,
+      "employee": "659-3",
+      "name": "Hansel Martínez Álvarez",
+      "birthDate": "1995-05-08",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 302,
+      "employee": "432-2",
+      "name": "Edwin Ezequiel Rodríguez Sánchez",
+      "birthDate": "1997-11-11",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 303,
+      "employee": "1448",
+      "name": "Irma Moncerrat Rodriguez Vivia",
+      "birthDate": "1996-12-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 304,
+      "employee": "491",
+      "name": "Luis Fernando Contreras Cerda",
+      "birthDate": "1991-12-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 305,
+      "employee": "90",
+      "name": "Eugenio Cazarez Cimé",
+      "birthDate": "1988-09-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 306,
+      "employee": "1160",
+      "name": "Jorge Ismael Castillo Morales",
+      "birthDate": "1978-07-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 307,
+      "employee": "456",
+      "name": "Pedro Hugo Rebollar Flores",
+      "birthDate": "1986-06-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 308,
+      "employee": "379",
+      "name": "Edwin Alan Segovia Rivera",
+      "birthDate": "1995-06-30",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 309,
+      "employee": "1687",
+      "name": "Guadalupe Xohua Méndez",
+      "birthDate": "1991-12-09",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 310,
+      "employee": "1138",
+      "name": "Alberto López Núñez",
+      "birthDate": "1995-07-25",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 311,
+      "employee": "873",
+      "name": "José Antonio Zamora Rodríguez",
+      "birthDate": "1992-05-01",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 312,
+      "employee": "1635",
+      "name": "Diego Akeen Calva Cifuentes",
+      "birthDate": "1998-05-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 313,
+      "employee": "903",
+      "name": "Eduardo Daniel Ruiz Aguilar",
+      "birthDate": "1996-11-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 314,
+      "employee": "942",
+      "name": "Marco Antonio Reséndiz Lovato",
+      "birthDate": "1988-11-30",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 315,
+      "employee": "936",
+      "name": "Gustavo Nayib Adán Ayala",
+      "birthDate": "1997-08-04",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 316,
+      "employee": "696",
+      "name": "Nidia Elizabeth Martínez Arenas",
+      "birthDate": "1985-11-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 317,
+      "employee": "1378-2",
+      "name": "Luis Ernesto Rodríguez Silva",
+      "birthDate": "1987-09-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 318,
+      "employee": "516",
+      "name": "Abraham Pacheco Castillo",
+      "birthDate": "1996-05-31",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 319,
+      "employee": "819",
+      "name": "Juan Santiago Hernández",
+      "birthDate": "1977-10-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 320,
+      "employee": "1295",
+      "name": "José Luis Lara Reyes",
+      "birthDate": "1991-01-14",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 321,
+      "employee": "1452",
+      "name": "Elihu Olvera Santos",
+      "birthDate": "1992-01-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 322,
+      "employee": "839",
+      "name": "Arcelia Palma Romero",
+      "birthDate": "1991-08-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 323,
+      "employee": "1462",
+      "name": "Brenda Scarlet Ruiz Paredes",
+      "birthDate": "1994-04-10",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 324,
+      "employee": "478",
+      "name": "Juan Carlos Martínez Ríos",
+      "birthDate": "1981-04-10",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 325,
+      "employee": "1712",
+      "name": "Juan Flores Ramírez",
+      "birthDate": "1998-05-12",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 326,
+      "employee": "1011",
+      "name": "Nathanael Escobar Ríos",
+      "birthDate": "1995-03-04",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 327,
+      "employee": "806",
+      "name": "Luis Daniel Castellanos Martínez",
+      "birthDate": "1992-08-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 328,
+      "employee": "804",
+      "name": "Fernando Santillán Rodríguez",
+      "birthDate": "1975-05-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 329,
+      "employee": "814",
+      "name": "Rogelio González Reyes",
+      "birthDate": "1996-11-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 330,
+      "employee": "1169",
+      "name": "Marcos René Rodríguez Rodríguez",
+      "birthDate": "1977-04-25",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 331,
+      "employee": "959",
+      "name": "Juan José González Galindo",
+      "birthDate": "1985-03-19",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 332,
+      "employee": "365",
+      "name": "Rafael Hored Castilla Ruíz",
+      "birthDate": "1989-03-08",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 334,
+      "employee": "247",
+      "name": "Miguel Ángel Heredia Serrano",
+      "birthDate": "1994-05-07",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 335,
+      "employee": "293",
+      "name": "Jessica Guadalupe López Salinas",
+      "birthDate": "1996-07-24",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 336,
+      "employee": "1187",
+      "name": "Juan Rodríguez Castillo",
+      "birthDate": "1981-09-18",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 337,
+      "employee": "515",
+      "name": "Marlon Kadhir Castro Mayoral",
+      "birthDate": "1998-02-04",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 338,
+      "employee": "1617",
+      "name": "Gerardo Arturo Sánchez Rivas",
+      "birthDate": "2000-04-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 339,
+      "employee": "1506",
+      "name": "Angel Isaac Villalobos Zarazua",
+      "birthDate": "2001-05-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 340,
+      "employee": "469",
+      "name": "José Juan Cruz Hernández",
+      "birthDate": "1993-12-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 341,
+      "employee": "728",
+      "name": "Andrea Guadalupe Arrieta Guzmán",
+      "birthDate": "1998-06-14",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 342,
+      "employee": "1211",
+      "name": "Alan Uriel Rosas Sánchez Armas",
+      "birthDate": "2002-08-19",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 343,
+      "employee": "585",
+      "name": "Madelein Edith Martínez Flores",
+      "birthDate": "1998-08-26",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 344,
+      "employee": "809",
+      "name": "Isaías Pineda Aguilar",
+      "birthDate": "1989-07-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 345,
+      "employee": "1522",
+      "name": "Diego Angel Alvarez Rea",
+      "birthDate": "1994-08-04",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 346,
+      "employee": "318",
+      "name": "Juan Carlos Gallardo Arteaga",
+      "birthDate": "1989-11-04",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 347,
+      "employee": "1023",
+      "name": "Armando Velazco Jiménez",
+      "birthDate": "1979-06-18",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 348,
+      "employee": "1199",
+      "name": "Jessica Yael Rojas García",
+      "birthDate": "2001-04-11",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 349,
+      "employee": "539",
+      "name": "Carlos Alberto Ruiz Narváez",
+      "birthDate": "1984-09-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 350,
+      "employee": "668",
+      "name": "Sebastián Contreras Gracidas",
+      "birthDate": "1997-05-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 351,
+      "employee": "981",
+      "name": "Ignacio Jiménez Ortega",
+      "birthDate": "1991-06-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 352,
+      "employee": "739",
+      "name": "José Miguel Velázquez Aguirre",
+      "birthDate": "1984-01-29",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 353,
+      "employee": "1315",
+      "name": "Rosa de Lourdes Novelo Gutiérrez",
+      "birthDate": "1996-12-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 354,
+      "employee": "1223",
+      "name": "Aldo Enrique Lemus Montoya",
+      "birthDate": "1986-06-11",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 355,
+      "employee": "94",
+      "name": "Armando Vilchis Ramos",
+      "birthDate": "1983-09-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 356,
+      "employee": "778",
+      "name": "Getzemany Díaz Gres",
+      "birthDate": "2000-06-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 357,
+      "employee": "1720",
+      "name": "Nina Mayte Soto Díaz",
+      "birthDate": "2003-05-06",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 358,
+      "employee": "55",
+      "name": "Guillermo Armando Mercado Estrada",
+      "birthDate": "1985-10-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 359,
+      "employee": "581",
+      "name": "Guillermo Berea Estrada",
+      "birthDate": "1968-11-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 360,
+      "employee": "1252",
+      "name": "Uzias Martínez González",
+      "birthDate": "1978-04-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 361,
+      "employee": "1312",
+      "name": "Víctor Alfredo Nieto Trejo",
+      "birthDate": "2001-09-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 362,
+      "employee": "54",
+      "name": "Miguel Antonio Méndez Ibarra",
+      "birthDate": "1988-10-19",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 363,
+      "employee": "745",
+      "name": "Ivan Vázquez Martínez",
+      "birthDate": "1990-06-08",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 364,
+      "employee": "1599",
+      "name": "Aylin Paola Zarate Hernandez",
+      "birthDate": "1996-06-07",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 365,
+      "employee": "1022",
+      "name": "Juan Carlos Rojano Ruiz",
+      "birthDate": "1990-08-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 367,
+      "employee": "1078",
+      "name": "María Marlene Garcés Martínez",
+      "birthDate": "1997-04-09",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 368,
+      "employee": "1288",
+      "name": "Víctor Geovanni Águilar Hernández",
+      "birthDate": "1992-11-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 369,
+      "employee": "227",
+      "name": "Guadalupe Fernanda De Los Santos Miguel",
+      "birthDate": "1997-01-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 371,
+      "employee": "91-3",
+      "name": "Esteban González Palacios",
+      "birthDate": "1992-04-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 372,
+      "employee": "1351-2",
+      "name": "Ulises Molina Cardona",
+      "birthDate": "2000-02-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 373,
+      "employee": "1353-2",
+      "name": "Ximena Guadalupe Martínez Martínez",
+      "birthDate": "2003-11-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 374,
+      "employee": "1572-2",
+      "name": "Alan Gil García",
+      "birthDate": "1974-05-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 375,
+      "employee": "1683",
+      "name": "Oscar Asbiel Moreno García",
+      "birthDate": "1997-04-30",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 376,
+      "employee": "1333-2",
+      "name": "José Manuel Romero Hernández",
+      "birthDate": "1997-04-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 377,
+      "employee": "1331-2",
+      "name": "José Alberto Salas Vélez",
+      "birthDate": "2000-07-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 378,
+      "employee": "1332-2",
+      "name": "Jamil Zahid de Jesús Mapel Hernández",
+      "birthDate": "2000-05-14",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 379,
+      "employee": "1343-2",
+      "name": "Erick Francisco Avilés Méndez",
+      "birthDate": "1989-12-16",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 380,
+      "employee": "1327-2",
+      "name": "Miguel Ángel Flores Armenta",
+      "birthDate": "1970-11-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 381,
+      "employee": "1334-2",
+      "name": "Pedro César Torres Rubio",
+      "birthDate": "1998-09-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 382,
+      "employee": "1346-2",
+      "name": "Leslie Itzel Ruiz Negrete",
+      "birthDate": "2001-03-14",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 383,
+      "employee": "1389-2",
+      "name": "Federico López Verona",
+      "birthDate": "2000-06-21",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 384,
+      "employee": "1335-2",
+      "name": "Pablo Israel Alvarez Caballero",
+      "birthDate": "1994-03-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 385,
+      "employee": "1354-2",
+      "name": "Misael Beltran Chávez",
+      "birthDate": "2000-01-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 386,
+      "employee": "1328-2",
+      "name": "Luis Fernando Martínez Matías",
+      "birthDate": "1996-09-08",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 387,
+      "employee": "1336-2",
+      "name": "Daniel Mena Corona",
+      "birthDate": "1997-01-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 388,
+      "employee": "1350-2",
+      "name": "Rolando Romo Monzalvo",
+      "birthDate": "1998-04-11",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 389,
+      "employee": "1337-2",
+      "name": "Jonathan Morales Jaimes",
+      "birthDate": "1995-08-31",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 390,
+      "employee": "1344-2",
+      "name": "Erika Ortiz Castañeda",
+      "birthDate": "1997-09-18",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 391,
+      "employee": "1348-3",
+      "name": "Enrique Arroyo Nava",
+      "birthDate": "1977-08-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 392,
+      "employee": "1403-2",
+      "name": "Luis Armando Gordillo Ortega",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 394,
+      "employee": "1352-2",
+      "name": "Alexis Martínez Alvarez",
+      "birthDate": "1997-10-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 395,
+      "employee": "1330-2",
+      "name": "Hugo Enrique Arguelles Guerrero",
+      "birthDate": "1979-07-15",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 396,
+      "employee": "1338-2",
+      "name": "César Alejandro Aguilar Sauza",
+      "birthDate": "1994-03-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 397,
+      "employee": "1345-2",
+      "name": "Edgar Jesús Cortés Cruz",
+      "birthDate": "1999-08-26",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 398,
+      "employee": "1339-2",
+      "name": "Eduardo Manuel Soto Mc. Naught",
+      "birthDate": "1988-07-16",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 399,
+      "employee": "1349-2",
+      "name": "Octavio Didier Castañeda Sánchez",
+      "birthDate": "1998-07-01",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 400,
+      "employee": "1329-2",
+      "name": "Rogelio Baez Ponce",
+      "birthDate": "1998-05-15",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 401,
+      "employee": "1340-2",
+      "name": "Israel Burgos Espinosa",
+      "birthDate": "1995-09-07",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 402,
+      "employee": "1341-2",
+      "name": "Fernando Borjon Vargas",
+      "birthDate": "1983-01-20",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 403,
+      "employee": "1342-2",
+      "name": "Jonathan Nuñez Mena",
+      "birthDate": "1999-09-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 404,
+      "employee": "60-2",
+      "name": "Cristian Monzón López",
+      "birthDate": "1994-12-31",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 405,
+      "employee": "1665",
+      "name": "Eduardo Moreno Silva",
+      "birthDate": "1994-11-12",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 406,
+      "employee": "1553-2",
+      "name": "Lizbeth Sarahi Castillo Ortiz",
+      "birthDate": "2003-07-14",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 408,
+      "employee": "1457-2",
+      "name": "Daniela Ceron Maldonado",
+      "birthDate": "2000-02-16",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 409,
+      "employee": "1459-2",
+      "name": "Luis Enrique de la Fuente Maldonado",
+      "birthDate": "1993-07-15",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 410,
+      "employee": "1660-2",
+      "name": "Sharon Airy Cruz Hernández",
+      "birthDate": "1999-07-02",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 411,
+      "employee": "1541-2",
+      "name": "Omar Fabrizio Pizano Jaramillo",
+      "birthDate": "2000-10-16",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 412,
+      "employee": "1542-2",
+      "name": "Jaime Barojas Gonzalez",
+      "birthDate": "1973-10-25",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 413,
+      "employee": "1526-2",
+      "name": "Ángel Everardo Rodriguez Ortíz",
+      "birthDate": "1998-10-31",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 414,
+      "employee": "1417-2",
+      "name": "Javier López Nuñez",
+      "birthDate": "1991-12-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 415,
+      "employee": "1413-2",
+      "name": "Antonio Medina Ortega",
+      "birthDate": "1997-11-08",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 416,
+      "employee": "1440-2",
+      "name": "Jesús Eduardo Arias Rosas",
+      "birthDate": "2001-02-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 417,
+      "employee": "1670",
+      "name": "Carlos Renato Juárez Rodríguez",
+      "birthDate": "1992-07-10",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 419,
+      "employee": "1647",
+      "name": "David Alejandro Gutiérrez Villa",
+      "birthDate": "2005-10-03",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 420,
+      "employee": "1699",
+      "name": "Valeria Miranda Ruíz García",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 421,
+      "employee": "1701",
+      "name": "Marijose Tinoco Acevedo",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 422,
+      "employee": "1706",
+      "name": "Evelin Tlateshi Peña Juárez",
+      "birthDate": "1989-04-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 423,
+      "employee": "1666",
+      "name": "Carlos Antonio Tesillos Pérez",
+      "birthDate": "1998-07-03",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 424,
+      "employee": "1697",
+      "name": "César Alberto Hernández Almanza",
+      "birthDate": "1986-09-21",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 425,
+      "employee": "1451-2",
+      "name": "Jesús Sánchez Vázquez",
+      "birthDate": "2000-12-24",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 426,
+      "employee": "1630-2",
+      "name": "Braulio González Morales",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 427,
+      "employee": "1415-2",
+      "name": "Sergio Contreras Montes",
+      "birthDate": "2002-07-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 428,
+      "employee": "1525-2",
+      "name": "Javier Flores Martínez",
+      "birthDate": "1993-07-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 429,
+      "employee": "1648",
+      "name": "Jocelyn Mariel Terreros Nieto",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 430,
+      "employee": "288-2",
+      "name": "Sebastian Macias Valle",
+      "birthDate": "1997-05-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 431,
+      "employee": "1395-3",
+      "name": "Alan Giovani Del Ángel Antonio",
+      "birthDate": "2000-03-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 432,
+      "employee": "1418-3",
+      "name": "Marcos Alejandro Ruvalcaba García",
+      "birthDate": "2001-01-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 433,
+      "employee": "1657",
+      "name": "Alberto Bautista Galván",
+      "birthDate": "1996-05-11",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 434,
+      "employee": "1696",
+      "name": "Rodrigo Pascual Solis Morales",
+      "birthDate": "1994-10-21",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 435,
+      "employee": "703-3",
+      "name": "Ángel Eduardo Huizar Urbina",
+      "birthDate": "1988-10-02",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 436,
+      "employee": "1212-2",
+      "name": "Carolina Hernández Luna",
+      "birthDate": "1997-12-25",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 437,
+      "employee": "1649",
+      "name": "Daniela Monserrat Gil Ramos",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 438,
+      "employee": "1621-2",
+      "name": "Daniela Estefania Aguilar Martinez",
+      "birthDate": "1999-11-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 439,
+      "employee": "1563-2",
+      "name": "Lorenzo Reyna Dimas",
+      "birthDate": "1973-12-25",
+      "method": "cumpleanos_dia_mes_mas_curp_rfc",
+      "reason": null
+    },
+    {
+      "excelRow": 440,
+      "employee": "1564-2",
+      "name": "Alma Gabriela Paz Balderas",
+      "birthDate": "1990-07-15",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 441,
+      "employee": "1565-2",
+      "name": "Jesús Moreno Arista",
+      "birthDate": "1995-12-01",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 442,
+      "employee": "1695",
+      "name": "Edher Gambo Pasteleín",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 443,
+      "employee": "1377-2",
+      "name": "Jesús Antonio Muñoz Ramírez",
+      "birthDate": "2000-06-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 444,
+      "employee": "1730",
+      "name": "Raúl Gamaliel Becerra López",
+      "birthDate": "2002-03-12",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 445,
+      "employee": "1667",
+      "name": "Paula Citlali",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 446,
+      "employee": "1732",
+      "name": "Maricela Méndez Tomas",
+      "birthDate": "1985-09-05",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 447,
+      "employee": "1469-2",
+      "name": "Sebastian Rafael Calvario Muñoz",
+      "birthDate": "2002-03-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 448,
+      "employee": "1470-2",
+      "name": "Erick Malanco Contreras",
+      "birthDate": "1989-06-23",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 449,
+      "employee": "1661",
+      "name": "Valery Cordova Temich",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 450,
+      "employee": "1580-2",
+      "name": "Paola Betzabe García García",
+      "birthDate": "2001-10-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 451,
+      "employee": "1652",
+      "name": "Juan Manuel Mejía Borges",
+      "birthDate": "1998-04-10",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 452,
+      "employee": "1731",
+      "name": "Paola Barcenas Mendoza",
+      "birthDate": "2000-07-04",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 453,
+      "employee": "1439-2",
+      "name": "Abdiel Jesús Villalobos García",
+      "birthDate": "2000-10-27",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 454,
+      "employee": "1715",
+      "name": "Karen Lizbeth Martínez Macias",
+      "birthDate": "2001-08-29",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 455,
+      "employee": "1618-2",
+      "name": "Ana Karen Verde Rojas",
+      "birthDate": "2002-04-26",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 456,
+      "employee": "1643",
+      "name": "Gabriela Espina",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 457,
+      "employee": "1663",
+      "name": "Alonso Gil García",
+      "birthDate": "2001-10-31",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 459,
+      "employee": "1614-2",
+      "name": "Flor Magaly Pérez Cayetano",
+      "birthDate": "1991-07-31",
+      "method": "cumpleanos_dia_mes_mas_curp_rfc",
+      "reason": null
+    },
+    {
+      "excelRow": 460,
+      "employee": "1436-2",
+      "name": "Ramsés Domínguez Morales",
+      "birthDate": "1996-02-03",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 461,
+      "employee": "1458-2",
+      "name": "Ricardo Gabriel Mendoza Jiménez",
+      "birthDate": "1977-02-22",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 462,
+      "employee": "1555-2",
+      "name": "Brigido Valerio Vigueras",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 463,
+      "employee": "1510-2",
+      "name": "Eric Yopihua Martinez",
+      "birthDate": "1997-08-28",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 464,
+      "employee": "1543-2",
+      "name": "Patricia Córdova Mendoza",
+      "birthDate": "1997-09-06",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 465,
+      "employee": "1664",
+      "name": "Cesar Arturo Garcia Plaza",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 466,
+      "employee": "1400-2",
+      "name": "Benoni Ortega Vial",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 467,
+      "employee": "1396-3",
+      "name": "Alejandro Navarrete Jiménez",
+      "birthDate": "1990-08-17",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 468,
+      "employee": "1708",
+      "name": "Eugenio Alonso",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 469,
+      "employee": "1719",
+      "name": "Guillermo Jiménez Varela",
+      "birthDate": "1992-01-26",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 470,
+      "employee": "1727",
+      "name": "Sammantha Delgado Serrano",
+      "birthDate": "1999-09-25",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 471,
+      "employee": "590",
+      "name": "Paola Ochoa Alcantara",
+      "birthDate": "2001-03-13",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 472,
+      "employee": "1693",
+      "name": "Alberto Ayotitla Gayoso",
+      "birthDate": "1995-06-14",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 473,
+      "employee": "1205",
+      "name": "Carlos Santiago Tenorio",
+      "birthDate": "1991-09-10",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    },
+    {
+      "excelRow": 474,
+      "employee": "1412-2",
+      "name": "Ricardo Alexis García Escobar",
+      "birthDate": "1995-11-25",
+      "method": "cumpleanos_completo",
+      "reason": null
+    },
+    {
+      "excelRow": 475,
+      "employee": "1590-2",
+      "name": "Felipe Márquez Munguía",
+      "birthDate": "Sin fecha de nacimiento",
+      "method": "sin_fecha_inequivoca",
+      "reason": "Los valores de Cumpleaños, Fecha de nacimiento, CURP o RFC son inválidos o inconsistentes"
+    },
+    {
+      "excelRow": 476,
+      "employee": "986",
+      "name": "Juan Pablo Cervantes Torres",
+      "birthDate": "1999-01-30",
+      "method": "cumpleanos_dia_mes_mas_fecha_nacimiento",
+      "reason": null
+    }
+  ]
+}
