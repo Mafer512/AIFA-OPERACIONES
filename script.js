@@ -7393,6 +7393,19 @@ function handleNavigation(e) {
         if (section === 'conciliacion') {
             try {
                 if (window.opsFlights && typeof window.opsFlights.loadFlights === 'function') {
+                    // El filtro de Itinerario debe apuntar al día calendario
+                    // anterior al actual (nunca "el más reciente con datos")
+                    // — solo se fija si el usuario no había elegido ya otra
+                    // fecha durante la sesión.
+                    const itinPicker = document.getElementById('conci-date-picker');
+                    if (itinPicker && !itinPicker.value) {
+                        const yesterday = new Date();
+                        yesterday.setDate(yesterday.getDate() - 1);
+                        const y = yesterday.getFullYear();
+                        const m = String(yesterday.getMonth() + 1).padStart(2, '0');
+                        const d = String(yesterday.getDate()).padStart(2, '0');
+                        itinPicker.value = `${y}-${m}-${d}`;
+                    }
                     // Cargar vuelos al entrar a la sección
                     setTimeout(() => window.opsFlights.loadFlights(), 50);
                 }
@@ -19214,16 +19227,29 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
     return { rows: enrichedRows, columns: outputCols };
 }
 
-// Resets the Año/Mes/Día filter dropdowns to the current year with no
-// month/day filter so that loadConciliacionManifiestos({ autoLatestDate:true })
-// can detect and display the most recent day that has records.
+// Fija los filtros Año/Mes/Día (y el selector de fecha visible) al día
+// calendario ANTERIOR al actual — nunca "el más reciente con datos". El
+// personal captura manifiestos del día que acaba de cerrar, así que al
+// entrar a la pestaña el filtro debe apuntar directo a ayer, sin importar
+// qué otros días tengan registros cargados.
 function _conciApplyTodayFilters() {
     const yearEl  = document.getElementById('filter-conci-manifiestos-year');
     const monthEl = document.getElementById('filter-conci-manifiestos-month');
     const dayEl   = document.getElementById('filter-conci-manifiestos-day');
-    if (yearEl)  yearEl.value  = new Date().getFullYear();
-    if (monthEl) monthEl.value = '';   // cleared — autoLatestDate will find the right month
-    if (dayEl)   dayEl.value   = '';   // cleared — autoLatestDate will find the right day
+    const desdeEl = document.getElementById('filter-conci-fecha-desde');
+    const hastaEl = document.getElementById('filter-conci-fecha-hasta');
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const y = yesterday.getFullYear();
+    const m = yesterday.getMonth() + 1;
+    const d = yesterday.getDate();
+
+    if (yearEl)  yearEl.value  = y;
+    if (monthEl) monthEl.value = m;
+    if (dayEl)   dayEl.value   = d;
+    if (desdeEl) desdeEl.value = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    if (hastaEl) hastaEl.value = '';
 }
 
 async function loadConciliacionManifiestos(options = {}) {
