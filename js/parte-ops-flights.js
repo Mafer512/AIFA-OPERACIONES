@@ -503,6 +503,7 @@
             const uniquePrepared = [];
             const fileOwnerByMovement = new Map();
             let duplicatesInFile = 0;
+            let resolvedCancelledInFile = 0;
             preparedRows.forEach(item => {
                 const ownerIndexes = new Set(item.movementKeys
                     .map(key => fileOwnerByMovement.get(key))
@@ -521,7 +522,7 @@
                         if (itemCancelled && !previousCancelled) {
                             // La fila nueva está cancelada/no-operando: se
                             // descarta y se conserva la ya vigente.
-                            duplicatesInFile++;
+                            resolvedCancelledInFile++;
                             return;
                         }
                         if (previousCancelled && !itemCancelled) {
@@ -529,7 +530,7 @@
                             // cancelada/no-operando: la reemplaza la vigente.
                             uniquePrepared[ownerIndex] = item;
                             item.movementKeys.forEach(key => fileOwnerByMovement.set(key, ownerIndex));
-                            duplicatesInFile++;
+                            resolvedCancelledInFile++;
                             return;
                         }
                         throw new Error(`La fila ${item.sourceRow} reutiliza un movimiento con un enlace de llegada/salida diferente.`);
@@ -600,6 +601,9 @@
             if (insertRows.length) parts.push(`- ${insertRows.length} son vuelos nuevos.`);
             if (updateRows.length) parts.push(`- ${updateRows.length} son vuelos existentes con datos actualizados (se actualizarán).`);
             if (duplicatesCount) parts.push(`- ${duplicatesCount} son duplicados exactos (se omiten).`);
+            if (resolvedCancelledInFile) {
+                parts.push(`- ${resolvedCancelledInFile} vuelo(s) tenían un registro cancelado/no-operando duplicado en el archivo (se omitió el cancelado, se conservó el vigente).`);
+            }
             const confirmMsg = parts.join('\n') + `\n\n¿Deseas continuar con la importación?`;
 
             if (!confirm(confirmMsg)) return;
