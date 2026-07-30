@@ -21,25 +21,44 @@ window.opsFlightsAdmin = (function () {
     // de las 3 a la vez.
     var FLIGHT_TABLES = ['vuelos_parte_operaciones_csv', 'itinerario_vuelos_editable', 'manifiestos_vuelos_editable'];
 
+    // Un .in('id', ids) con miles de ids genera una URL demasiado larga
+    // (PostgREST codifica cada id en la query string) y el navegador la
+    // rechaza antes de siquiera enviarla ("TypeError: Failed to fetch",
+    // sin ningún detalle útil del servidor). Se parte en lotes chicos.
+    var DELETE_CHUNK_SIZE = 200;
+    function chunkIds(ids) {
+        var chunks = [];
+        for (var i = 0; i < ids.length; i += DELETE_CHUNK_SIZE) {
+            chunks.push(ids.slice(i, i + DELETE_CHUNK_SIZE));
+        }
+        return chunks;
+    }
+
     async function deleteFromAllFlightTables(ids) {
         var sb = window.supabaseClient;
         if (!sb) throw new Error('Supabase no disponible');
-        var results = await Promise.all(
-            FLIGHT_TABLES.map(function (table) { return sb.from(table).delete().in('id', ids); })
-        );
-        var firstError = null;
-        results.forEach(function (r, i) {
-            if (r.error) {
-                console.warn('[Conciliación Admin] error al eliminar de ' + FLIGHT_TABLES[i] + ':', r.error);
-                if (!firstError) firstError = r.error;
-            }
-        });
-        // itinerario_vuelos_editable es la tabla que este panel muestra: si
-        // falla justo ahí, se lo reporta al usuario. Las otras dos son
-        // best-effort (ya se advirtió en consola) para no bloquear el
-        // borrado principal por un problema en una tabla secundaria.
         var mainIndex = FLIGHT_TABLES.indexOf('itinerario_vuelos_editable');
-        if (results[mainIndex].error) throw results[mainIndex].error;
+        var firstError = null;
+        var batches = chunkIds(ids);
+
+        for (var c = 0; c < batches.length; c++) {
+            var batch = batches[c];
+            var results = await Promise.all(
+                FLIGHT_TABLES.map(function (table) { return sb.from(table).delete().in('id', batch); })
+            );
+            results.forEach(function (r, i) {
+                if (r.error) {
+                    console.warn('[Conciliación Admin] error al eliminar de ' + FLIGHT_TABLES[i] + ':', r.error);
+                    if (!firstError) firstError = r.error;
+                }
+            });
+            // itinerario_vuelos_editable es la tabla que este panel muestra: si
+            // falla justo ahí, se detiene y se reporta al usuario de inmediato
+            // (los lotes ya aplicados no se revierten). Las otras dos tablas
+            // son best-effort (ya se advirtió en consola) para no bloquear el
+            // borrado principal por un problema en una tabla secundaria.
+            if (results[mainIndex].error) throw results[mainIndex].error;
+        }
         return firstError;
     }
 
