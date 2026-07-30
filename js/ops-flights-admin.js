@@ -9,6 +9,40 @@ window.opsFlightsAdmin = (function () {
     var adminData = [];
     var adminFilters = {};
 
+    // Un vuelo importado vive con el MISMO id en 3 tablas:
+    //   vuelos_parte_operaciones_csv   (bitácora cruda de la importación)
+    //   itinerario_vuelos_editable     (esta pestaña de administración)
+    //   manifiestos_vuelos_editable    (lado "vuelos" del cruce en Conciliación)
+    // Borrar solo de itinerario_vuelos_editable dejaba las otras dos
+    // huérfanas: la cruda seguía teniendo la fila (así que reimportar el
+    // mismo CSV la detectaba como "ya existe" por movement_key y no la
+    // volvía a insertar), y manifiestos_vuelos_editable seguía mostrando el
+    // vuelo fantasma del lado de Conciliación. Ahora cada eliminación borra
+    // de las 3 a la vez.
+    var FLIGHT_TABLES = ['vuelos_parte_operaciones_csv', 'itinerario_vuelos_editable', 'manifiestos_vuelos_editable'];
+
+    async function deleteFromAllFlightTables(ids) {
+        var sb = window.supabaseClient;
+        if (!sb) throw new Error('Supabase no disponible');
+        var results = await Promise.all(
+            FLIGHT_TABLES.map(function (table) { return sb.from(table).delete().in('id', ids); })
+        );
+        var firstError = null;
+        results.forEach(function (r, i) {
+            if (r.error) {
+                console.warn('[Conciliación Admin] error al eliminar de ' + FLIGHT_TABLES[i] + ':', r.error);
+                if (!firstError) firstError = r.error;
+            }
+        });
+        // itinerario_vuelos_editable es la tabla que este panel muestra: si
+        // falla justo ahí, se lo reporta al usuario. Las otras dos son
+        // best-effort (ya se advirtió en consola) para no bloquear el
+        // borrado principal por un problema en una tabla secundaria.
+        var mainIndex = FLIGHT_TABLES.indexOf('itinerario_vuelos_editable');
+        if (results[mainIndex].error) throw results[mainIndex].error;
+        return firstError;
+    }
+
     function getEl(id) { return document.getElementById(id); }
 
     function updateBadge() {
@@ -318,10 +352,8 @@ window.opsFlightsAdmin = (function () {
             vuelos.length + ' registro(s) seran eliminados.\n\nEsta accion NO se puede deshacer.');
         if (!ok) return;
         try {
-            var sb = window.supabaseClient;
-            var result = await sb.from('itinerario_vuelos_editable').delete().in('id', ids);
-            if (result.error) throw result.error;
-            showStatus('Vuelos del dia ' + dayPrefix + ' eliminados correctamente (' + ids.length + ' registros).', 'success');
+            await deleteFromAllFlightTables(ids);
+            showStatus('Vuelos del dia ' + dayPrefix + ' eliminados correctamente (' + ids.length + ' registros) de las 3 tablas.', 'success');
             adminData = adminData.filter(function (r) { return !ids.includes(r.id); });
             renderTable();
         } catch (e) {
@@ -400,10 +432,8 @@ window.opsFlightsAdmin = (function () {
         if (!ok) return;
         var ids = vuelos.map(function (r) { return r.id; });
         try {
-            var sb = window.supabaseClient;
-            var result = await sb.from('itinerario_vuelos_editable').delete().in('id', ids);
-            if (result.error) throw result.error;
-            showStatus('Eliminados ' + ids.length + ' vuelo(s) del rango ' + startPfx + ' - ' + endPfx + '.', 'success');
+            await deleteFromAllFlightTables(ids);
+            showStatus('Eliminados ' + ids.length + ' vuelo(s) del rango ' + startPfx + ' - ' + endPfx + ' de las 3 tablas.', 'success');
             adminData = adminData.filter(function (r) { return !ids.includes(r.id); });
             var badge = getEl('admin-range-preview');
             if (badge) badge.classList.add('d-none');
@@ -418,12 +448,10 @@ window.opsFlightsAdmin = (function () {
         var ok = confirm('Eliminar este vuelo (ID: ' + id + ')?\n\nEsta accion NO se puede deshacer.');
         if (!ok) return;
         try {
-            var sb = window.supabaseClient;
-            var result = await sb.from('itinerario_vuelos_editable').delete().eq('id', id);
-            if (result.error) throw result.error;
+            await deleteFromAllFlightTables([id]);
             adminData = adminData.filter(function (r) { return r.id !== id; });
             renderTable();
-            showStatus('Vuelo eliminado.', 'success');
+            showStatus('Vuelo eliminado de las 3 tablas.', 'success');
         } catch (e) {
             showStatus('Error al eliminar: ' + (e.message || e), 'danger');
         }
@@ -436,12 +464,10 @@ window.opsFlightsAdmin = (function () {
         var ok = confirm('Eliminar ' + ids.length + ' vuelo(s) seleccionado(s)?\n\nEsta accion NO se puede deshacer.');
         if (!ok) return;
         try {
-            var sb = window.supabaseClient;
-            var result = await sb.from('itinerario_vuelos_editable').delete().in('id', ids);
-            if (result.error) throw result.error;
+            await deleteFromAllFlightTables(ids);
             adminData = adminData.filter(function (r) { return !ids.includes(r.id); });
             renderTable();
-            showStatus('Se eliminaron ' + ids.length + ' vuelo(s).', 'success');
+            showStatus('Se eliminaron ' + ids.length + ' vuelo(s) de las 3 tablas.', 'success');
         } catch (e) {
             showStatus('Error al eliminar: ' + (e.message || e), 'danger');
         }
