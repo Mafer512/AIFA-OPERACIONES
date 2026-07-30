@@ -37,6 +37,7 @@ function loadDateTimeEditor(commitCell) {
     'window', 'document', '_conciIsValidCalendarDate', '_conciIsValidIsoDateInput',
     '_conciNormalizeTimeInput', '_conciNormalizeEditableCellText',
     '_conciCommitCellRaw', '_conciUpdateSummaryLiveCell', '_conciPad2',
+    '_conciRefreshCalculatedCellsForRow',
     editorSnippet + '; return _conciActivateDateTimeEditor;'
   );
   return factory(
@@ -46,7 +47,8 @@ function loadDateTimeEditor(commitCell) {
     validators._conciNormalizeTimeInput,
     value => String(value || '').trim(),
     commitCell, jest.fn(),
-    value => String(value).padStart(2, '0')
+    value => String(value).padStart(2, '0'),
+    jest.fn()
   );
 }
 
@@ -148,5 +150,23 @@ describe('validacion de fecha y hora en Conciliacion > Manifiestos', () => {
     expect(td._conciCloseEditor(true, false)).toBe(false);
     expect(commitCell).not.toHaveBeenCalled();
     expect(dateInput.classList.contains('is-invalid')).toBe(true);
+  });
+
+  test('conserva el anio visible al avanzar con Tab sin editar', () => {
+    const commitCell = jest.fn();
+    const activateEditor = loadDateTimeEditor(commitCell);
+    const td = createCell('29JUL 00:32');
+    td.textContent = '29/07/2026 00:32';
+
+    activateEditor(td, {
+      withTime: true,
+      parts: { year: 2026, month: 7, day: 29, hour: 0, minute: 32 },
+      currentRaw: '29JUL 00:32',
+    });
+
+    expect(td._conciCloseEditor(true, 'next')).toBe(true);
+    expect(commitCell).toHaveBeenCalledWith(
+      td, '29JUL 00:32', 'next', '29/07/2026 00:32'
+    );
   });
 });

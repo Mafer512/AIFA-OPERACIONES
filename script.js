@@ -18655,6 +18655,60 @@ function _conciPuntualidad(slotRaw, opRaw, fallbackYear) {
 // P = HR. DE OPERACIÓN. En Excel 1 = 1 día, así que 30/24 equivale a 30 horas; la
 // hora máxima de entrega es la hora de operación + 30 horas. Si la hora no es una
 // fecha/hora válida, devuelve "-".
+// Render calculated values consistently during initial load and live editing.
+function _conciRenderHrsCumplidasCell(td, value) {
+    if (!td) return;
+    const hrs = String(value ?? '-');
+    td.textContent = hrs;
+    td.dataset.raw = hrs;
+    td.dataset.pendingRaw = hrs;
+    td.removeAttribute('data-dirty');
+    td.style.removeProperty('font-weight');
+    td.style.removeProperty('color');
+    td.style.removeProperty('background-color');
+
+    const hours = parseFloat(hrs);
+    if (!Number.isFinite(hours)) return;
+    td.style.fontWeight = '700';
+    if (hours < 30) {
+        td.style.color = '#2e7d32';
+        td.style.backgroundColor = '#e8f5e9';
+    } else if (hours > 30) {
+        td.style.color = '#c62828';
+        td.style.backgroundColor = '#ffebee';
+    }
+}
+
+function _conciRenderPuntualidadCell(td, value) {
+    if (!td) return;
+    const estado = String(value || '-').trim() || '-';
+    td.textContent = '';
+    td.dataset.raw = estado;
+    td.dataset.pendingRaw = estado;
+    td.removeAttribute('data-dirty');
+    if (estado === '-') {
+        td.textContent = '-';
+        return;
+    }
+
+    const styleMap = {
+        'en tiempo': ['#e8f5e9', '#8bc34a', '#2e7d32', 'fa-check'],
+        'antes': ['#e8f5e9', '#8bc34a', '#2e7d32', 'fa-arrow-left'],
+        'anticipado': ['#e3f2fd', '#64b5f6', '#1565c0', 'fa-forward'],
+        'despues': ['#fff8e1', '#ffb300', '#ef6c00', 'fa-clock'],
+        'demora': ['#ffebee', '#e57373', '#c62828', 'fa-exclamation-triangle'],
+    };
+    const key = estado.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const [bg, border, color, iconName] = styleMap[key] || ['#eceff1', '#b0bec5', '#455a64', 'fa-circle-info'];
+    const badge = document.createElement('span');
+    badge.style.cssText = `display:inline-block;padding:2px 10px;border-radius:999px;font-size:0.72rem;font-weight:700;line-height:1.2;border:1px solid ${border};background:${bg};color:${color};`;
+    const icon = document.createElement('i');
+    icon.className = `fas ${iconName} me-1`;
+    badge.append(icon, document.createTextNode(estado));
+    td.appendChild(badge);
+}
+
+// HR. MAXIMA DE ENTREGA: operation time plus 30 hours.
 function _conciHrMaximaEntrega(opRaw, row, fechaCol, fallbackYear) {
     let opDate = _conciPartsToDate(_conciParseDateTimeParts(opRaw, fallbackYear));
     if (!opDate) {
@@ -20823,6 +20877,10 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                 td.dataset.conciColumnKey = c;
                 if (_conciHiddenColumns.has(c)) td.classList.add('d-none');
                 td.dataset.col = c;
+                if (_conciIsCalculatedColumn(c)) {
+                    td.dataset.conciReadonly = '1';
+                    td.title = 'Campo calculado: no se puede modificar.';
+                }
                 const val = row[c];
                 const rawStr = String(val !== null && val !== undefined ? val : '').trim();
                 td.dataset.raw = rawStr;
@@ -20869,19 +20927,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                     const opRaw = _hrOperacionCol ? row[_hrOperacionCol] : '';
                     const recRaw = _hrRecepcionCol ? row[_hrRecepcionCol] : '';
                     const hrs = _conciHrsCumplidas(opRaw, recRaw, fallbackYear);
-                    td.textContent = hrs;
-                    td.dataset.raw = hrs;
-                    const hrsNum = parseFloat(hrs);
-                    if (Number.isFinite(hrsNum)) {
-                        td.style.fontWeight = '700';
-                        if (hrsNum < 30) {
-                            td.style.color = '#2e7d32';
-                            td.style.backgroundColor = '#e8f5e9';
-                        } else if (hrsNum > 30) {
-                            td.style.color = '#c62828';
-                            td.style.backgroundColor = '#ffebee';
-                        }
-                    }
+                    _conciRenderHrsCumplidasCell(td, hrs);
                 } else if (meta.isPuntualidad) {
                     const slotRaw = _slotAsignadoCol ? row[_slotAsignadoCol] : '';
                     const opRaw = _hrOperacionCol ? row[_hrOperacionCol] : '';
@@ -20938,6 +20984,9 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
 
                 tr.appendChild(td);
             });
+
+            // Recalcula las formulas tanto al cargar como durante la captura.
+            _conciRefreshCalculatedCellsForRow(tr);
 
             // ── Celda de validación Itinerario ─────────────────────────────────
             {
@@ -21226,7 +21275,79 @@ function _conciIsProtectedEditColumn(_column) {
 // es double precision) aunque el usuario no haya tocado ese campo.
 function _conciIsCalculatedColumn(column) {
     const key = _conciNormalizedColumnName(column);
-    return key === 'hrs. cumplidas' || key === 'puntualidad / cancelacion' || key === 'hr. maxima de entrega';
+    return /hrs?\.?\s*cumplidas/.test(key)
+        || /puntualidad|cancelacion/.test(key)
+        || /hr\.?\s*maxima\s*de\s*entrega/.test(key)
+        || /^total\s+exentos$/.test(key)
+        || /^pax\s+que\s+pagan\s+tua$/.test(key);
+}
+
+function _conciShouldPersistCalculatedColumn(column) {
+    const key = _conciNormalizedColumnName(column);
+    return /^total\s+exentos$/.test(key) || /^pax\s+que\s+pagan\s+tua$/.test(key);
+}
+
+function _conciRefreshCalculatedCellsForRow(tr, changedValues = {}) {
+    if (!tr) return;
+    const cells = Array.from(tr.querySelectorAll('td[data-col]'));
+    const findCell = pattern => cells.find(td => pattern.test(_conciNormalizedColumnName(td.dataset.col)));
+    const readCell = (td) => {
+        if (!td) return '';
+        const col = td.dataset.col;
+        if (Object.prototype.hasOwnProperty.call(changedValues, col)) return changedValues[col];
+        return td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent ?? '';
+    };
+    const readNumber = (td) => {
+        const raw = String(readCell(td) ?? '').trim().replace(/,/g, '');
+        if (!raw) return 0;
+        const number = Number(raw.replace(/[^0-9.-]/g, ''));
+        return Number.isFinite(number) ? number : 0;
+    };
+    const renderNumber = (td, value) => {
+        if (!td) return;
+        const rounded = Number.isInteger(value) ? value : Number(value.toFixed(2));
+        const text = String(rounded);
+        td.textContent = text;
+        td.dataset.raw = text;
+        td.dataset.pendingRaw = text;
+        td.removeAttribute('data-dirty');
+    };
+
+    const operationCell = findCell(/hr\.?\s*de\s*oper/);
+    const receptionCell = findCell(/hr\.?\s*de\s*recep/);
+    const slotCell = findCell(/slot\s*asignad/);
+    const hoursCell = findCell(/hrs?\.?\s*cumplidas/);
+    const statusCell = findCell(/puntualidad|cancelacion/);
+    const diplomaticosCell = findCell(/^diplomaticos$/);
+    const comisionCell = findCell(/^en\s+comision$/);
+    const infantesCell = findCell(/^infantes$/);
+    const transitosCell = findCell(/^transitos$/);
+    const conexionesCell = findCell(/^conexiones$/);
+    const otrosExentosCell = findCell(/^otros\s+exentos$/);
+    const totalExentosCell = findCell(/^total\s+exentos$/);
+    const totalPaxCell = findCell(/^total\s+pax$/);
+    const paxTuaCell = findCell(/^pax\s+que\s+pagan\s+tua$/);
+    const operationRaw = readCell(operationCell);
+
+    if (hoursCell) {
+        const hours = _conciHrsCumplidas(operationRaw, readCell(receptionCell), _conciEditFallbackYear);
+        _conciRenderHrsCumplidasCell(hoursCell, hours);
+    }
+    if (statusCell) {
+        const status = _conciPuntualidad(readCell(slotCell), operationRaw, _conciEditFallbackYear);
+        _conciRenderPuntualidadCell(statusCell, status);
+    }
+
+    const totalExentos = [
+        diplomaticosCell,
+        comisionCell,
+        infantesCell,
+        transitosCell,
+        conexionesCell,
+        otrosExentosCell,
+    ].reduce((sum, cell) => sum + readNumber(cell), 0);
+    if (totalExentosCell) renderNumber(totalExentosCell, totalExentos);
+    if (paxTuaCell) renderNumber(paxTuaCell, readNumber(totalPaxCell) - totalExentos);
 }
 
 function _conciIsManifestTypeColumn(column) {
@@ -21309,6 +21430,9 @@ function _conciActivateRoutingEditor(td, currentRaw) {
     const fallbackRaw = _conciNormalizeEditableCellText(
         td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.routeRaw ?? td.dataset.raw ?? '')
     );
+    const fallbackDisplay = _conciNormalizeEditableCellText(
+        td.textContent || td.dataset.raw || fallbackRaw
+    );
     const placeholder = document.createElement('option');
     placeholder.value = '';
     placeholder.textContent = operationType
@@ -21318,7 +21442,10 @@ function _conciActivateRoutingEditor(td, currentRaw) {
     placeholder.hidden = true;
     select.appendChild(placeholder);
 
-    const currentOptionValue = _conciNormalizeEditableCellText(currentRaw);
+    // La celda muestra la ciudad del extremo relevante, mientras routeRaw
+    // conserva la ruta completa. Al entrar con Tab, el selector debe mantener
+    // ese texto visible y no sustituirlo por la ruta interna.
+    const currentOptionValue = fallbackDisplay || _conciNormalizeEditableCellText(currentRaw);
     const currentAirport = airports.find(airport => _conciAirportMatchesValue(airport, currentOptionValue));
     const selectedCity = currentAirport ? _conciAirportStoredValue(currentAirport) : currentOptionValue;
     if (currentOptionValue && !currentAirport) {
@@ -21353,7 +21480,12 @@ function _conciActivateRoutingEditor(td, currentRaw) {
         td._conciCloseEditor = null;
         const selected = _conciNormalizeEditableCellText(select.value);
         const shouldAccept = accept && userChanged && selected;
-        _conciCommitCellRaw(td, shouldAccept ? selected : fallbackRaw, move, shouldAccept ? selected : fallbackRaw);
+        _conciCommitCellRaw(
+            td,
+            shouldAccept ? selected : fallbackRaw,
+            move,
+            shouldAccept ? selected : fallbackDisplay
+        );
     };
     td._conciCloseEditor = closeEditor;
     select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
@@ -21533,7 +21665,7 @@ function _conciActivateCellEditor(td) {
     if (!td || td.querySelector('.conci-cell-input, .conci-cell-dt')) return;
 
     const col = td.dataset.col || '';
-    if (_conciIsMatriculaStatusColumn(col) || _conciIsProtectedEditColumn(col)) return;
+    if (_conciIsMatriculaStatusColumn(col) || _conciIsProtectedEditColumn(col) || _conciIsCalculatedColumn(col)) return;
     const currentRaw = _conciNormalizeEditableCellText(
         td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
     );
@@ -21603,6 +21735,7 @@ function _conciActivateCellEditor(td) {
         if (isAirlineCol) _conciApplyAirlineCellPreview(td, input.value);
         _conciRefreshMatriculaValidationForRow(td.closest('tr'));
         _conciUpdateSummaryLiveCell(td, input.value);
+        _conciRefreshCalculatedCellsForRow(td.closest('tr'), { [col]: input.value });
     });
     input.addEventListener('blur', () => closeEditor(true, false));
 
@@ -21657,6 +21790,7 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     }
     td.title = 'Clic para editar';
     _conciRefreshMatriculaValidationForRow(tr);
+    _conciRefreshCalculatedCellsForRow(tr);
 
     // Guardado tipo Excel: al salir de una celda se persiste la fila sin esperar
     // un botón global de Guardar.
@@ -21682,6 +21816,7 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
 
 // Editor de fecha (calendario nativo) + hora en formato 24h ("HH:MM").
 function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) {
+    const originalDisplay = td.textContent;
     const wrap = document.createElement('span');
     wrap.className = 'conci-cell-dt';
 
@@ -21778,15 +21913,17 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
             td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
         );
         let nextRaw = fallbackRaw;
+        let nextDisplay = originalDisplay || fallbackRaw;
         if (accept && touched) {
             const validation = buildValidatedRaw();
             if (!validation.ok) return false;
             nextRaw = validation.raw;
+            nextDisplay = validation.raw;
         }
 
         closed = true;
         td._conciCloseEditor = null;
-        _conciCommitCellRaw(td, nextRaw, move, nextRaw);
+        _conciCommitCellRaw(td, nextRaw, move, nextDisplay);
         return true;
     };
     td._conciCloseEditor = closeEditor;
@@ -21826,7 +21963,10 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
         touched = true;
         clearInvalidState(dateInput);
         const preview = buildValidatedRaw(false);
-        if (preview.ok) _conciUpdateSummaryLiveCell(td, preview.raw);
+        if (preview.ok) {
+            _conciUpdateSummaryLiveCell(td, preview.raw);
+            _conciRefreshCalculatedCellsForRow(td.closest('tr'), { [td.dataset.col]: preview.raw });
+        }
     });
     if (timeInput) {
         timeInput.addEventListener('keydown', onKeydown);
@@ -21835,7 +21975,10 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
             touched = true;
             clearInvalidState(timeInput);
             const preview = buildValidatedRaw(false);
-            if (preview.ok) _conciUpdateSummaryLiveCell(td, preview.raw);
+            if (preview.ok) {
+                _conciUpdateSummaryLiveCell(td, preview.raw);
+                _conciRefreshCalculatedCellsForRow(td.closest('tr'), { [td.dataset.col]: preview.raw });
+            }
         });
     }
 
@@ -21896,7 +22039,8 @@ function _conciSetTableEditableState(enabled) {
 
         tbody.querySelectorAll('td[data-col]').forEach(td => {
             const isProtected = _conciIsProtectedEditColumn(td.dataset.col);
-            const isReadOnly = isProtected || _conciIsMatriculaStatusColumn(td.dataset.col);
+            const isCalculated = _conciIsCalculatedColumn(td.dataset.col);
+            const isReadOnly = isProtected || isCalculated || _conciIsMatriculaStatusColumn(td.dataset.col);
             const editableRaw = _conciIsRoutingColumn(td.dataset.col) ? (td.dataset.routeRaw || td.dataset.raw || '') : (td.dataset.raw || '');
             td.dataset.origRaw = editableRaw;
             td.dataset.pendingRaw = editableRaw;
@@ -22443,7 +22587,10 @@ async function _conciAutoSaveRow(tr) {
         // mano (dirty). Sin esto, cada autoguardado de la fila reenviaba el
         // "-" calculado y Postgres lo rechazaba en columnas numéricas.
         const isDirty = td.dataset.dirty === '1';
-        if (raw && (isDirty || !_conciIsCalculatedColumn(col))) payload[col] = _conciPrepareValueForDatabase(col, raw);
+        const shouldPersistFormula = _conciShouldPersistCalculatedColumn(col);
+        if (raw && (isDirty || !_conciIsCalculatedColumn(col) || shouldPersistFormula)) {
+            payload[col] = _conciPrepareValueForDatabase(col, raw);
+        }
         if (isDirty) dirtyCols.add(col);
     });
     const settleSavedCells = (savedColumns) => {
@@ -22663,9 +22810,11 @@ function _conciAddBlankRow() {
         td.dataset.raw = '';
         td.dataset.origRaw = '';
         td.dataset.pendingRaw = '';
-        if (_conciIsProtectedEditColumn(col) || _conciIsMatriculaStatusColumn(col)) {
+        if (_conciIsProtectedEditColumn(col) || _conciIsMatriculaStatusColumn(col) || _conciIsCalculatedColumn(col)) {
             td.dataset.conciReadonly = '1';
-            td.title = 'Campo bloqueado: no se puede modificar.';
+            td.title = _conciIsCalculatedColumn(col)
+                ? 'Campo calculado: no se puede modificar.'
+                : 'Campo bloqueado: no se puede modificar.';
         } else {
             td.title = 'Clic para editar';
         }
