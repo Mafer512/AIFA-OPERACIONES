@@ -490,6 +490,16 @@
                 });
             });
 
+            // El mismo software AODB a veces deja en el export dos registros
+            // para el mismo movimiento (misma aerolínea+vuelo+fecha+dirección)
+            // con un turnaround distinto enlazado — típicamente porque uno de
+            // los dos ya fue cancelado/reemplazado y el otro es el vigente
+            // (ej. un vuelo se reprograma con otra hora y queda un registro
+            // "Cancelled" viejo junto al real). Cuando eso pasa, se conserva
+            // la fila con estado activo y se descarta la cancelada/no-operando
+            // en vez de abortar toda la importación.
+            const isExcludedStatus = row => _EXCLUDED_STATUS_RE.test(String(row?.Status || '').trim());
+
             const uniquePrepared = [];
             const fileOwnerByMovement = new Map();
             let duplicatesInFile = 0;
@@ -506,6 +516,22 @@
                     const sameTurnaround = previous.movementKeys.length === item.movementKeys.length
                         && previous.movementKeys.every(key => item.movementKeys.includes(key));
                     if (!sameTurnaround) {
+                        const itemCancelled = isExcludedStatus(item.payload);
+                        const previousCancelled = isExcludedStatus(previous.payload);
+                        if (itemCancelled && !previousCancelled) {
+                            // La fila nueva está cancelada/no-operando: se
+                            // descarta y se conserva la ya vigente.
+                            duplicatesInFile++;
+                            return;
+                        }
+                        if (previousCancelled && !itemCancelled) {
+                            // La fila que ya estaba guardada era la
+                            // cancelada/no-operando: la reemplaza la vigente.
+                            uniquePrepared[ownerIndex] = item;
+                            item.movementKeys.forEach(key => fileOwnerByMovement.set(key, ownerIndex));
+                            duplicatesInFile++;
+                            return;
+                        }
                         throw new Error(`La fila ${item.sourceRow} reutiliza un movimiento con un enlace de llegada/salida diferente.`);
                     }
                     uniquePrepared[ownerIndex] = item;
