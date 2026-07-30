@@ -21079,15 +21079,43 @@ function _conciColIsDateTime(col) {
 function _conciNormalizeTimeInput(value) {
     const raw = String(value || '').trim();
     if (!raw) return '';
-    const digits = raw.replace(/[^\d]/g, '');
-    if (!digits) return '';
     let h, m;
-    if (digits.length <= 2) { h = parseInt(digits, 10); m = 0; }
-    else if (digits.length === 3) { h = parseInt(digits.slice(0, 1), 10); m = parseInt(digits.slice(1), 10); }
-    else if (digits.length === 4) { h = parseInt(digits.slice(0, 2), 10); m = parseInt(digits.slice(2), 10); }
-    else return '';
-    if (!Number.isFinite(h) || !Number.isFinite(m) || h > 23 || m > 59) return '';
+    const separated = raw.match(/^(\d{1,2}):(\d{2})$/);
+    if (separated) {
+        h = parseInt(separated[1], 10);
+        m = parseInt(separated[2], 10);
+    } else if (/^\d{1,2}$/.test(raw)) {
+        h = parseInt(raw, 10);
+        m = 0;
+    } else if (/^\d{3}$/.test(raw)) {
+        h = parseInt(raw.slice(0, 1), 10);
+        m = parseInt(raw.slice(1), 10);
+    } else if (/^\d{4}$/.test(raw)) {
+        h = parseInt(raw.slice(0, 2), 10);
+        m = parseInt(raw.slice(2), 10);
+    } else {
+        return '';
+    }
+    if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) return '';
     return `${_conciPad2(h)}:${_conciPad2(m)}`;
+}
+
+function _conciIsValidCalendarDate(year, month, day) {
+    if (![year, month, day].every(Number.isInteger)) return false;
+    // El aÃ±o debe tener cuatro dÃ­gitos; evita capturas parciales como 193.
+    if (year < 1000 || year > 9999 || month < 1 || month > 12 || day < 1) return false;
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return day <= daysInMonth;
+}
+
+function _conciIsValidIsoDateInput(value) {
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return false;
+    return _conciIsValidCalendarDate(
+        parseInt(match[1], 10),
+        parseInt(match[2], 10),
+        parseInt(match[3], 10)
+    );
 }
 
 function _conciGetNextEditableCell(td) {
@@ -21496,11 +21524,8 @@ function _conciActivateCellEditor(td) {
     const isDateTimeCol = !isDateCol && _conciColIsDateTime(col);
     if (isDateCol || isDateTimeCol) {
         const parts = currentRaw ? _conciParseDateTimeParts(currentRaw, _conciEditFallbackYear) : null;
-        const parseOk = !currentRaw || (parts && Number.isFinite(parts.day) && Number.isFinite(parts.month) && Number.isFinite(parts.year));
-        if (parseOk) {
-            _conciActivateDateTimeEditor(td, { withTime: isDateTimeCol, parts });
-            return;
-        }
+        _conciActivateDateTimeEditor(td, { withTime: isDateTimeCol, parts, currentRaw });
+        return;
     }
 
     const input = document.createElement('input');
@@ -21626,14 +21651,16 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
 }
 
 // Editor de fecha (calendario nativo) + hora en formato 24h ("HH:MM").
-function _conciActivateDateTimeEditor(td, { withTime, parts }) {
+function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) {
     const wrap = document.createElement('span');
     wrap.className = 'conci-cell-dt';
 
     const dateInput = document.createElement('input');
     dateInput.type = 'date';
     dateInput.className = 'conci-dt-date';
-    if (parts && Number.isFinite(parts.day) && Number.isFinite(parts.month) && Number.isFinite(parts.year)) {
+    dateInput.min = '1000-01-01';
+    dateInput.max = '9999-12-31';
+    if (parts && _conciIsValidCalendarDate(parts.year, parts.month, parts.day)) {
         dateInput.value = `${parts.year}-${_conciPad2(parts.month)}-${_conciPad2(parts.day)}`;
     }
     wrap.appendChild(dateInput);
@@ -21648,6 +21675,11 @@ function _conciActivateDateTimeEditor(td, { withTime, parts }) {
         timeInput.placeholder = 'HH:MM';
         if (parts && Number.isFinite(parts.hour) && Number.isFinite(parts.minute)) {
             timeInput.value = `${_conciPad2(parts.hour)}:${_conciPad2(parts.minute)}`;
+        } else {
+            // Conserva visible una hora invÃ¡lida preexistente para que el
+            // usuario pueda corregirla; nunca se descarta silenciosamente.
+            const rawTime = String(currentRaw || '').match(/(?:[T\s])(\S+)\s*$/);
+            if (rawTime) timeInput.value = rawTime[1];
         }
         wrap.appendChild(timeInput);
     }
@@ -21656,31 +21688,76 @@ function _conciActivateDateTimeEditor(td, { withTime, parts }) {
     td.textContent = '';
     td.appendChild(wrap);
 
-    const buildRaw = () => {
+    const clearInvalidState = (input) => {
+        if (!input) return;
+        input.setCustomValidity('');
+        input.classList.remove('is-invalid');
+        input.removeAttribute('aria-invalid');
+    };
+    const rejectInvalidInput = (input, message) => {
+        if (!input) return false;
+        input.setCustomValidity(message);
+        input.classList.add('is-invalid');
+        input.setAttribute('aria-invalid', 'true');
+        if (typeof input.reportValidity === 'function') input.reportValidity();
+        window.setTimeout(() => {
+            if (document.contains(input)) {
+                input.focus();
+                if (typeof input.select === 'function') input.select();
+            }
+        }, 0);
+        return false;
+    };
+    const buildValidatedRaw = (reportErrors = true) => {
         const dv = dateInput.value;
+        const rawTime = withTime && timeInput ? String(timeInput.value || '').trim() : '';
+        clearInvalidState(dateInput);
+        clearInvalidState(timeInput);
+
+        const reject = (input, message) => ({
+            ok: reportErrors ? rejectInvalidInput(input, message) : false
+        });
+
+        if (dateInput.validity.badInput || dateInput.validity.rangeUnderflow
+            || dateInput.validity.rangeOverflow || (dv && !_conciIsValidIsoDateInput(dv))) {
+            return reject(dateInput, 'Fecha inv\u00e1lida. Captura una fecha real con a\u00f1o de 4 d\u00edgitos.');
+        }
+        if (rawTime && !dv) {
+            return reject(dateInput, 'Captura una fecha v\u00e1lida antes de indicar la hora.');
+        }
+
+        const normalizedTime = rawTime ? _conciNormalizeTimeInput(rawTime) : '';
+        if (rawTime && !normalizedTime) {
+            return reject(timeInput, 'Hora inv\u00e1lida. Usa HH:MM, de 00:00 a 23:59.');
+        }
+
         let out = '';
         if (dv) {
             const [y, mo, da] = dv.split('-');
             out = `${da}/${mo}/${y}`;
         }
-        if (withTime && timeInput) {
-            const tv = _conciNormalizeTimeInput(timeInput.value);
-            if (tv && out) out += ` ${tv}`;
-        }
-        return out;
+        if (normalizedTime && out) out += ` ${normalizedTime}`;
+        return { ok: true, raw: out };
     };
 
     let closed = false;
+    let touched = false;
     const closeEditor = (accept, move) => {
-        if (closed) return;
-        closed = true;
-        td._conciCloseEditor = null;
-
+        if (closed) return true;
         const fallbackRaw = _conciNormalizeEditableCellText(
             td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
         );
-        const nextRaw = accept ? buildRaw() : fallbackRaw;
+        let nextRaw = fallbackRaw;
+        if (accept && touched) {
+            const validation = buildValidatedRaw();
+            if (!validation.ok) return false;
+            nextRaw = validation.raw;
+        }
+
+        closed = true;
+        td._conciCloseEditor = null;
         _conciCommitCellRaw(td, nextRaw, move, nextRaw);
+        return true;
     };
     td._conciCloseEditor = closeEditor;
 
@@ -21715,11 +21792,21 @@ function _conciActivateDateTimeEditor(td, { withTime, parts }) {
 
     dateInput.addEventListener('keydown', onKeydown);
     dateInput.addEventListener('blur', onBlur);
-    dateInput.addEventListener('input', () => _conciUpdateSummaryLiveCell(td, buildRaw()));
+    dateInput.addEventListener('input', () => {
+        touched = true;
+        clearInvalidState(dateInput);
+        const preview = buildValidatedRaw(false);
+        if (preview.ok) _conciUpdateSummaryLiveCell(td, preview.raw);
+    });
     if (timeInput) {
         timeInput.addEventListener('keydown', onKeydown);
         timeInput.addEventListener('blur', onBlur);
-        timeInput.addEventListener('input', () => _conciUpdateSummaryLiveCell(td, buildRaw()));
+        timeInput.addEventListener('input', () => {
+            touched = true;
+            clearInvalidState(timeInput);
+            const preview = buildValidatedRaw(false);
+            if (preview.ok) _conciUpdateSummaryLiveCell(td, preview.raw);
+        });
     }
 
     // Enfoca hora si la fecha ya está puesta (caso típico: solo ajustar la hora).
@@ -22631,10 +22718,15 @@ async function _conciSaveBulkEdits() {
         const tbody = table ? table.querySelector('tbody') : null;
         if (!tbody) throw new Error('No se encontró la tabla de conciliación.');
 
-        // Commit active editor before collecting changes
-        tbody.querySelectorAll('td[data-col]').forEach(td => {
-            if (typeof td._conciCloseEditor === 'function') td._conciCloseEditor(true, false);
-        });
+        // Commit active editor before collecting changes. Keep an invalid date
+        // or time open and stop the save until the user corrects it.
+        for (const td of tbody.querySelectorAll('td[data-col]')) {
+            if (typeof td._conciCloseEditor !== 'function') continue;
+            const committed = td._conciCloseEditor(true, false);
+            if (committed === false) {
+                throw new Error('Corrige la fecha u hora marcada antes de guardar.');
+            }
+        }
 
         const updates = [];
         const inserts = [];
