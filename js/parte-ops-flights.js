@@ -1285,15 +1285,43 @@
         return str;
     }
 
-    // Priority order for sort: SIBT (scheduled arrival) → SOBT (scheduled departure) → any other field.
-    // This matches operational convention: flights are listed by when they were scheduled to arrive/depart.
-    // Statuses considered "active" — they go in the first block.
-    // Everything else (Cancelled, Not operating, etc.) goes in the second block.
-    const ACTIVE_STATUSES = new Set(['billing validated', 'closed', 'take off', 'in block', 'flight activated']);
+    // Orden de estatus tal como lo agrupa AODB (Amadeus) en su vista de
+    // filtro de vuelos: sigue el ciclo de vida operativo real de un vuelo,
+    // desde su programación hasta su cierre — con Cancelled/Not operating
+    // siempre al final, sin importar la hora. Cualquier estatus que no esté
+    // en esta lista (dato nuevo/no contemplado) se ordena junto a los
+    // activos, justo antes de Cancelled/Not operating, para no perderlo de
+    // vista entre los vuelos que sí importan operativamente.
+    const STATUS_ORDER = [
+        'flight scheduled',
+        'flight activated',
+        'departed from previous airport',
+        'local radar update',
+        'final approach',
+        'landed',
+        'ground return',
+        'in block',
+        'first bag',
+        'last bag',
+        'aircraft left previous stand',
+        'gate occupied',
+        'waiting for tobt',
+        'tobt confirmation',
+        'boarding starts',
+        'off block',
+        'take off',
+        'closed',
+        'billing validated',
+        'cancelled',
+        'not operating'
+    ];
+    const STATUS_ORDER_INDEX = new Map(STATUS_ORDER.map((s, i) => [s, i]));
+    const STATUS_ORDER_UNKNOWN = STATUS_ORDER_INDEX.get('billing validated') + 0.5; // justo antes de Cancelled
 
     function statusGroup(row) {
         const s = String(row['Status'] || '').toLowerCase().trim();
-        return ACTIVE_STATUSES.has(s) ? 0 : 1;
+        const idx = STATUS_ORDER_INDEX.get(s);
+        return idx !== undefined ? idx : STATUS_ORDER_UNKNOWN;
     }
 
     function sortRows(rows, dateFilter) {
@@ -1302,7 +1330,8 @@
             : (lastImportYear || new Date().getFullYear());
 
         return [...rows].sort((a, b) => {
-            // Level 1: active flights before cancelled/not-operating
+            // Level 1: agrupa por Status siguiendo el orden de ciclo de vida
+            // de AODB (STATUS_ORDER) — Cancelled/Not operating siempre al final.
             const ga = statusGroup(a);
             const gb = statusGroup(b);
             if (ga !== gb) return ga - gb;

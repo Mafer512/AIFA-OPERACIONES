@@ -18721,6 +18721,32 @@ function _conciFormatDisplayValue(columnName, value, row, fechaCol, fallbackYear
     return raw;
 }
 
+// Mismo orden de estatus AODB (Amadeus) que Itinerario de Vuelos
+// (js/parte-ops-flights.js, STATUS_ORDER) — el usuario pidió que Manifiestos
+// se vea en el mismo orden en que aparecen los vuelos en Itinerario, aunque
+// aquí no siempre haya una columna de Status capturada (filas "Solo
+// Manifiestos" sin vuelo vinculado). Cancelled/Not operating siempre al final.
+const _CONCI_STATUS_ORDER = [
+    'flight scheduled', 'flight activated', 'departed from previous airport',
+    'local radar update', 'final approach', 'landed', 'ground return', 'in block',
+    'first bag', 'last bag', 'aircraft left previous stand', 'gate occupied',
+    'waiting for tobt', 'tobt confirmation', 'boarding starts', 'off block',
+    'take off', 'closed', 'billing validated', 'cancelled', 'not operating'
+];
+const _CONCI_STATUS_ORDER_INDEX = new Map(_CONCI_STATUS_ORDER.map((s, i) => [s, i]));
+// Sin Status capturado (manifiesto puro, sin vuelo vinculado): se ordena
+// junto a los estatus operativos activos, antes de Cancelled/Not operating.
+const _CONCI_STATUS_ORDER_UNKNOWN = _CONCI_STATUS_ORDER_INDEX.get('billing validated') + 0.5;
+
+function _conciStatusGroup(row, columns) {
+    const keys = Array.isArray(columns) && columns.length ? columns : Object.keys(row || {});
+    const statusCol = keys.find(c => /^status$/i.test(c));
+    const raw = statusCol ? String(row?.[statusCol] || '').toLowerCase().trim() : '';
+    if (!raw) return _CONCI_STATUS_ORDER_UNKNOWN;
+    const idx = _CONCI_STATUS_ORDER_INDEX.get(raw);
+    return idx !== undefined ? idx : _CONCI_STATUS_ORDER_UNKNOWN;
+}
+
 function _conciBuildSortDate(row, columns, fallbackYear) {
     const keys = Array.isArray(columns) && columns.length ? columns : Object.keys(row || {});
     const fechaCol = keys.find(c => /(^|\b)fecha(\b|$)/i.test(c)) || null;
@@ -19371,11 +19397,15 @@ async function loadConciliacionManifiestos(options = {}) {
             : rows;
 
         // Decorate-sort-undecorate: compute sort key once per row instead of n·log(n) times.
+        // Mismo criterio que Itinerario de Vuelos: agrupa por Status (orden
+        // de ciclo de vida AODB, Cancelled/Not operating siempre al final) y
+        // dentro de cada grupo ordena cronológicamente.
         const decorated = dayFilteredRows.map((r) => {
             const d = _conciBuildSortDate(r, columns, year);
-            return { r, t: d ? d.getTime() : Number.MAX_SAFE_INTEGER };
+            return { r, g: _conciStatusGroup(r, columns), t: d ? d.getTime() : Number.MAX_SAFE_INTEGER };
         });
         decorated.sort((a, b) => {
+            if (a.g !== b.g) return a.g - b.g;
             if (a.t !== b.t) return a.t - b.t;
             const ida = Number(a.r?.id);
             const idb = Number(b.r?.id);
