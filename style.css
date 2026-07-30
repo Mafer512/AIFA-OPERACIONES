@@ -15626,6 +15626,7 @@ body.navdeck-mode .si-nav > a.si-link.si-quick--itin { --qc: #0ea5e9; --qcb: rgb
 body.navdeck-mode .si-nav > a.si-link.si-quick--frec { --qc: #a855f7; --qcb: rgba(168, 85, 247, .16); }
 body.navdeck-mode .si-nav > a.si-link.si-quick--punc { --qc: #22c55e; --qcb: rgba(34, 197, 94, .16); }
 body.navdeck-mode .si-nav > a.si-link.si-quick--demo { --qc: #ef4444; --qcb: rgba(239, 68, 68, .16); }
+body.navdeck-mode .si-nav > a.si-link.si-quick--conci { --qc: #f97316; --qcb: rgba(249, 115, 22, .16); }
 
 /* Accesos rápidos deshabilitados temporalmente. El !important es necesario
    porque el modo navdeck fuerza .si-link a display:flex !important. */
