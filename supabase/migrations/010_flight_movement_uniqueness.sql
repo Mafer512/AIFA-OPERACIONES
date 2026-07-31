@@ -501,6 +501,7 @@ WITH ranked AS (
 DELETE FROM public."Conciliación Manifiestos" source USING ranked
 WHERE source.id = ranked.id AND ranked.rn > 1;
 
+
 -- El id SMALLINT se agotaría en 32,767 filas; se amplía junto con su secuencia.
 ALTER TABLE public."Conciliación Manifiestos" ALTER COLUMN id TYPE bigint;
 ALTER TABLE public.conciliacion_manifiestos_duplicates_backup_20260729 ALTER COLUMN id TYPE bigint;

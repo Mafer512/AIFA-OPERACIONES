@@ -17716,6 +17716,61 @@ body.dark-mode #conci-column-visibility-menu .conci-column-visibility-item:hover
    background: #c8e6c9 !important;
 }
 
+/* La validación de fechas sólo colorea las dos celdas involucradas para no
+   competir con las reglas que ya asignan color al renglón completo. */
+#table-conci-manifiestos tbody tr > td.conci-date-order-valid-cell,
+#table-conci-manifiestos tbody tr:hover > td.conci-date-order-valid-cell,
+#table-conci-manifiestos tbody tr.conci-row-selected > td.conci-date-order-valid-cell {
+   background: #e7f1ff !important;
+   color: #0b3d75 !important;
+   box-shadow: inset 0 0 0 1px #90caf9;
+}
+
+#table-conci-manifiestos tbody tr > td.conci-date-order-error-cell,
+#table-conci-manifiestos tbody tr:hover > td.conci-date-order-error-cell,
+#table-conci-manifiestos tbody tr.conci-row-selected > td.conci-date-order-error-cell {
+   position: relative;
+   background: #ffdede !important;
+   box-shadow: inset 0 0 0 1px #ef9a9a;
+   padding-right: 25px;
+}
+
+#table-conci-manifiestos td.conci-date-order-error-cell::after {
+   content: '!';
+   position: absolute;
+   top: 50%;
+   right: 6px;
+   transform: translateY(-50%);
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   width: 16px;
+   height: 16px;
+   border-radius: 50%;
+   background: #c62828;
+   color: #fff;
+   font-size: 11px;
+   font-weight: 800;
+   line-height: 1;
+   pointer-events: none;
+   z-index: 2;
+}
+
+body.dark-mode #table-conci-manifiestos tbody tr > td.conci-date-order-valid-cell,
+body.dark-mode #table-conci-manifiestos tbody tr:hover > td.conci-date-order-valid-cell,
+body.dark-mode #table-conci-manifiestos tbody tr.conci-row-selected > td.conci-date-order-valid-cell {
+   background: rgba(30, 136, 229, .26) !important;
+   color: #dbeafe !important;
+   box-shadow: inset 0 0 0 1px rgba(144, 202, 249, .75);
+}
+
+body.dark-mode #table-conci-manifiestos tbody tr > td.conci-date-order-error-cell,
+body.dark-mode #table-conci-manifiestos tbody tr:hover > td.conci-date-order-error-cell,
+body.dark-mode #table-conci-manifiestos tbody tr.conci-row-selected > td.conci-date-order-error-cell {
+   background: rgba(198, 40, 40, .3) !important;
+   box-shadow: inset 0 0 0 1px rgba(239, 154, 154, .75);
+}
+
 /* Fila de vuelo sin manifiesto (Solo Vuelos + validado): borde naranja, fondo verde del validated-itinerario */
 #table-conci-manifiestos tr.conci-missing-manifiesto>td:first-child {
    border-left: 4px solid #f9a825 !important;
