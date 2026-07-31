@@ -17721,6 +17721,26 @@ body.dark-mode #conci-column-visibility-menu .conci-column-visibility-item:hover
    border-left: 4px solid #f9a825 !important;
 }
 
+/* Fila con sobrecupo: pasajeros capturados superan la capacidad máxima de la aeronave */
+#table-conci-manifiestos tr.conci-row-overcapacity>td {
+   background: #fdecea !important;
+}
+#table-conci-manifiestos tr.conci-row-overcapacity>td:first-child {
+   border-left: 4px solid #d32f2f !important;
+}
+body.dark-mode #table-conci-manifiestos tr.conci-row-overcapacity>td {
+   background: rgba(211, 47, 47, .22) !important;
+}
+
+/* Pill "Sobrecupo": parpadeo suave para llamar la atención cuando hay alertas activas */
+@keyframes conciSobrecupoPulse {
+   0%, 100% { box-shadow: 0 0 0 0 rgba(211, 47, 47, .45); }
+   50% { box-shadow: 0 0 0 5px rgba(211, 47, 47, 0); }
+}
+.conci-pill-sobrecupo-alert {
+   animation: conciSobrecupoPulse 1.8s ease-in-out infinite;
+}
+
 /* Excel-style filter funnel button on each header cell */
 #table-conci-manifiestos thead th.conci-th .conci-ef-btn {
    background: none;

@@ -17949,7 +17949,7 @@ async function _ensureConciMatriculaCatalog() {
         const sb = window.supabaseClient || (window.ensureSupabaseClient && await window.ensureSupabaseClient());
         if (!sb) throw new Error('Cliente Supabase no disponible.');
         const { data, error } = await sb.from('matriculas_manifiestos')
-            .select('matricula, aerolinea, estatus')
+            .select('matricula, aerolinea, estatus, pasajeros')
             .limit(5000);
         if (error) throw error;
         (data || []).forEach(item => {
@@ -17958,6 +17958,7 @@ async function _ensureConciMatriculaCatalog() {
                 matricula: key,
                 aerolinea: String(item.aerolinea || '').trim(),
                 estatus: String(item.estatus || '').trim().toUpperCase(),
+                pasajeros: item.pasajeros === null || item.pasajeros === undefined || item.pasajeros === '' ? null : Number(item.pasajeros),
             });
         });
     } catch (error) {
@@ -17972,16 +17973,40 @@ function _conciApplyMatriculaCatalogValidation(rows, columns) {
     const matriculaCol = cols.find(col => _conciSummaryColumnKey(col) === 'MATRICULA') || null;
     const statusCol = cols.find(col => /estatus.*matr/i.test(String(col)) || /status.*matr/i.test(String(col))) || null;
     const airlineCol = cols.find(col => /aerol[ií]nea|airline/i.test(String(col))) || null;
-    if (!matriculaCol || !statusCol) return;
+    const capacidadCol = cols.find(col => /capacidad.*m[aá]xima/i.test(String(col))) || null;
+    const totalPaxCol = cols.find(col => /^total\s*pax$/i.test(String(col).trim())) || null;
+    const factorCol = cols.find(col => /factor.*ocupaci[oó]n/i.test(String(col))) || null;
+    if (!matriculaCol || (!statusCol && !capacidadCol)) return;
 
     (rows || []).forEach(row => {
         const matricula = _conciNormalizeMatricula(row[matriculaCol]);
         const catalogEntry = matricula ? _conciMatriculaCatalogMap.get(matricula) : null;
-        row[statusCol] = catalogEntry ? 'ACTIVA' : 'NO IDENTIFICADA';
+        if (statusCol) row[statusCol] = catalogEntry ? 'ACTIVA' : 'NO IDENTIFICADA';
         row._conci_matricula_mismatch = false;
         row._conci_matricula_catalog_airline = catalogEntry?.aerolinea || '';
-        if (catalogEntry && airlineCol) {
+        if (catalogEntry && airlineCol && statusCol) {
             row._conci_matricula_mismatch = !_conciAirlinesMatch(row[airlineCol], catalogEntry.aerolinea);
+        }
+        const capacidad = (catalogEntry && Number.isFinite(catalogEntry.pasajeros)) ? catalogEntry.pasajeros : null;
+        if (capacidadCol) {
+            row[capacidadCol] = capacidad !== null ? capacidad : '';
+        }
+        row._conci_overcapacity = false;
+        row._conci_overcapacity_diff = 0;
+        row._conci_factor_ocupacion = null;
+        if (factorCol) {
+            const paxNum = totalPaxCol ? Number(String(row[totalPaxCol] ?? '').replace(/,/g, '').trim()) : NaN;
+            if (capacidad && capacidad > 0 && Number.isFinite(paxNum)) {
+                const factor = paxNum / capacidad * 100;
+                row[factorCol] = `${factor.toFixed(1)}%`;
+                row._conci_factor_ocupacion = factor;
+                if (paxNum > capacidad) {
+                    row._conci_overcapacity = true;
+                    row._conci_overcapacity_diff = paxNum - capacidad;
+                }
+            } else {
+                row[factorCol] = '';
+            }
         }
     });
 }
@@ -18692,6 +18717,103 @@ function _conciRenderHrsCumplidasCell(td, value) {
     }
 }
 
+function _conciRenderFactorOcupacionCell(td, factorText, isOvercapacity, diff) {
+    if (!td) return;
+    const text = String(factorText || '').trim();
+    td.dataset.raw = text;
+    td.dataset.pendingRaw = text;
+    td.removeAttribute('data-dirty');
+    if (!text) {
+        td.textContent = '-';
+        td.title = 'Sin capacidad o pasajeros capturados para calcular el factor.';
+        return;
+    }
+    const factor = parseFloat(text);
+    let style;
+    if (isOvercapacity) {
+        style = { bg: '#ffebee', bd: '#e57373', fg: '#c62828', icon: 'fa-triangle-exclamation' };
+    } else if (Number.isFinite(factor) && factor >= 90) {
+        style = { bg: '#fff8e1', bd: '#ffb300', fg: '#ef6c00', icon: 'fa-circle-exclamation' };
+    } else {
+        style = { bg: '#e8f5e9', bd: '#8bc34a', fg: '#2e7d32', icon: 'fa-circle-check' };
+    }
+    const badge = document.createElement('span');
+    badge.style.cssText = `display:inline-block;padding:2px 10px;border-radius:999px;font-size:0.72rem;font-weight:700;line-height:1.2;border:1px solid ${style.bd};background:${style.bg};color:${style.fg};`;
+    badge.innerHTML = `<i class="fas ${style.icon} me-1"></i>${escapeHTML(text)}`;
+    td.innerHTML = '';
+    td.appendChild(badge);
+    td.title = isOvercapacity
+        ? `Sobrecupo: ${diff} pasajero(s) por encima de la capacidad máxima de la aeronave.`
+        : 'Factor de ocupación = Total PAX ÷ Capacidad máxima.';
+}
+
+// Nombre del usuario en sesión, tal como quedó guardado al iniciar sesión.
+// Hoy es el nombre completo (o el correo si aún no hay nombre configurado);
+// cuando el catálogo de usuarios tenga "usuario corto" definido, este es el
+// único punto que habría que cambiar para usarlo en vez del nombre completo.
+function _conciCurrentUserDisplayName() {
+    try {
+        const name = sessionStorage.getItem('user_fullname') || sessionStorage.getItem(SESSION_USER) || '';
+        return String(name || '').trim();
+    } catch (_) {
+        return '';
+    }
+}
+
+// Deriva iniciales (máx. 2-3 letras) de un nombre. Si ya es corto (ej. "JP",
+// "MGR" capturado a mano antes de este cambio), se conserva tal cual.
+function _conciInitialsFromName(name) {
+    const clean = String(name || '').trim();
+    if (!clean) return '';
+    if (clean.includes('@')) return clean.split('@')[0].slice(0, 2).toUpperCase();
+    const words = clean.split(/\s+/).filter(Boolean);
+    if (words.length === 1) {
+        return words[0].length <= 4 ? words[0].toUpperCase() : words[0].slice(0, 2).toUpperCase();
+    }
+    // Nombre completo: una inicial por cada palabra (ej. "Isaac Azhael López
+    // Cancino" → "IALC"), tal como se usa aquí. Se limita a 5 letras para que
+    // siga cabiendo en el avatar en el caso poco común de nombres muy largos.
+    return words.slice(0, 5).map(w => w[0] || '').join('').toUpperCase();
+}
+
+// Tono de color determinístico a partir del nombre, para que cada capturista
+// tenga siempre el mismo color de avatar (más fácil de reconocer de un vistazo).
+function _conciNameHue(name) {
+    let hash = 0;
+    const str = String(name || '');
+    for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+    return hash % 360;
+}
+
+// Celda "CAPTURÓ": muestra un avatar circular con las iniciales de quien
+// capturó la fila; el nombre completo aparece al pasar el ratón (tooltip).
+function _conciRenderCapturoCell(td, rawValue) {
+    if (!td) return;
+    const raw = String(rawValue || '').trim();
+    td.dataset.raw = raw;
+    td.dataset.pendingRaw = raw;
+    td.removeAttribute('data-dirty');
+    td.innerHTML = '';
+    td.style.textAlign = 'center';
+    if (!raw) {
+        td.title = 'Se completa solo con el nombre de quien capture el primer dato de esta fila.';
+        return;
+    }
+    const initials = _conciInitialsFromName(raw);
+    const hue = _conciNameHue(raw);
+    // Círculo perfecto para 2 letras; para nombres con más iniciales (ej.
+    // "IALC") se vuelve una píldora ovalada para que el texto siempre quepa.
+    const isCircle = initials.length <= 2;
+    const shape = isCircle
+        ? 'width:26px;height:26px;border-radius:50%;'
+        : 'min-width:26px;height:26px;padding:0 7px;border-radius:13px;';
+    const avatar = document.createElement('span');
+    avatar.style.cssText = `display:inline-flex;align-items:center;justify-content:center;${shape}background:linear-gradient(135deg, hsl(${hue},70%,50%), hsl(${(hue + 35) % 360},70%,40%));color:#fff;font-size:.68rem;font-weight:800;letter-spacing:.3px;box-shadow:0 1px 3px rgba(0,0,0,.3);border:2px solid #fff;`;
+    avatar.textContent = initials;
+    td.appendChild(avatar);
+    td.title = raw;
+}
+
 function _conciRenderPuntualidadCell(td, value) {
     if (!td) return;
     const estado = String(value || '-').trim() || '-';
@@ -19038,7 +19160,7 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
             "HRS. CUMPLIDAS", "PUNTUALIDAD / CANCELACIÓN", "TOTAL PAX", "DIPLOMATICOS", "EN COMISION",
             "INFANTES", "TRANSITOS", "CONEXIONES", "OTROS EXENTOS", "TOTAL EXENTOS", "PAX QUE PAGAN TUA",
             "KGS. DE EQUIPAJE", "KGS. DE CARGA", "CORREO", "DEMORA +- 15 MIN.", "CÓDIGO DEMORA",
-            "OBSERVACIONES", "CAPTURÓ", "id", "EVIDENCIA", "Hora y Fecha Generación", "_fuente"
+            "OBSERVACIONES", "CAPTURÓ", "CAPACIDAD MÁXIMA", "FACTOR DE OCUPACIÓN", "id", "EVIDENCIA", "Hora y Fecha Generación", "_fuente"
         ];
         if (!outputCols.includes('Hora y Fecha Generación')) outputCols.push('Hora y Fecha Generación');
         if (!outputCols.includes('_fuente')) outputCols.push('_fuente');
@@ -19051,7 +19173,7 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
             "HRS. CUMPLIDAS", "PUNTUALIDAD / CANCELACIÓN", "TOTAL PAX", "DIPLOMATICOS", "EN COMISION",
             "INFANTES", "TRANSITOS", "CONEXIONES", "OTROS EXENTOS", "TOTAL EXENTOS", "PAX QUE PAGAN TUA",
             "KGS. DE EQUIPAJE", "KGS. DE CARGA", "CORREO", "DEMORA +- 15 MIN.", "CDIGO DEMORA",
-            "OBSERVACIONES", "CAPTURÓ", "id", "EVIDENCIA", "Hora y Fecha Generación", "_fuente"
+            "OBSERVACIONES", "CAPTURÓ", "CAPACIDAD MÁXIMA", "FACTOR DE OCUPACIÓN", "id", "EVIDENCIA", "Hora y Fecha Generación", "_fuente"
         ];
     }
 
@@ -19505,6 +19627,7 @@ async function loadConciliacionManifiestos(options = {}) {
 
         _conciRenderedKey = cacheKey;
         _renderConciManifiestosTable(chronoRows, columns, year);
+        _conciNotifyOvercapacity(chronoRows);
 
     } catch (err) {
         if (requestSeq !== _conciLoadRequestSeq) return;
@@ -19523,6 +19646,7 @@ function _conciUpdateResumen(data, columns) {
     let empate = 0, soloManifiesto = 0, soloVuelos = 0;
     let llegadas = 0, salidas = 0, pax = 0, carga = 0;
     let paxArr = 0, paxDep = 0, cargaArr = 0, cargaDep = 0;
+    let sobrecupo = 0;
     const cols = (Array.isArray(columns) && columns.length)
         ? columns
         : (data && data.length ? Object.keys(data[0]) : []);
@@ -19547,6 +19671,7 @@ function _conciUpdateResumen(data, columns) {
             pax++;
             if (isArr) paxArr++; else if (isDep) paxDep++;
         }
+        if (r && r._conci_overcapacity) sobrecupo++;
     }
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = String(val); };
     set('conci-resumen-empate', empate);
@@ -19560,13 +19685,99 @@ function _conciUpdateResumen(data, columns) {
     set('conci-count-pax-dep', paxDep);
     set('conci-count-carga-arr', cargaArr);
     set('conci-count-carga-dep', cargaDep);
+    set('conci-count-sobrecupo', sobrecupo);
+    const sobrecupoPill = document.getElementById('conci-pill-sobrecupo');
+    if (sobrecupoPill) sobrecupoPill.classList.toggle('d-none', sobrecupo === 0);
+    if (sobrecupo === 0 && _conciOvercapFilter) {
+        _conciOvercapFilter = false;
+    }
     _conciCountBreakdown = { paxArr, paxDep, cargaArr, cargaDep };
+}
+
+// Muestra una alerta emergente (toast) cuando una carga fresca de datos detecta
+// vuelos con más pasajeros capturados que la capacidad máxima de la aeronave.
+// Se deduplica por conjunto de vuelos afectados para no repetir el aviso si el
+// usuario solo cambia de pestaña o vuelve a renderizar desde caché.
+let _conciLastOvercapToastKey = '';
+function _conciNotifyOvercapacity(rows) {
+    const overRows = (rows || []).filter(r => r && r._conci_overcapacity);
+    if (!overRows.length) { _conciLastOvercapToastKey = ''; return; }
+
+    const cols = rows && rows.length ? Object.keys(rows[0]) : [];
+    const vueloCol = cols.find(c => /#.*vuelo|n[oú]?\.?\s*vuelo/i.test(c)) || null;
+    const matriculaCol = cols.find(c => /matr[ií]cula/i.test(c)) || null;
+
+    const key = overRows.map(r => `${vueloCol ? r[vueloCol] : ''}|${matriculaCol ? r[matriculaCol] : ''}|${r._conci_overcapacity_diff}`).sort().join(';');
+    if (key === _conciLastOvercapToastKey) return;
+    _conciLastOvercapToastKey = key;
+
+    const totalExceso = overRows.reduce((sum, r) => sum + (Number(r._conci_overcapacity_diff) || 0), 0);
+    const sampleList = overRows.slice(0, 3).map(r => {
+        const vuelo = vueloCol ? String(r[vueloCol] || '').trim() : '';
+        const matricula = matriculaCol ? String(r[matriculaCol] || '').trim() : '';
+        const diff = r._conci_overcapacity_diff || 0;
+        return `<li>${escapeHTML(vuelo || 'Vuelo s/n')} · ${escapeHTML(matricula || 'S/matrícula')} — <strong>+${diff} pax</strong></li>`;
+    }).join('');
+    const moreText = overRows.length > 3 ? `<div class="small" style="opacity:.85">+${overRows.length - 3} más…</div>` : '';
+
+    document.querySelectorAll('.conci-overcap-toast-wrap').forEach(el => el.remove());
+
+    const wrap = document.createElement('div');
+    wrap.className = 'conci-overcap-toast-wrap position-fixed bottom-0 end-0 p-3';
+    wrap.style.zIndex = '999999';
+    wrap.innerHTML = `
+        <div class="toast align-items-center text-white border-0 show" role="alert" aria-live="assertive" aria-atomic="true" style="background:#c62828;min-width:320px;box-shadow:0 6px 20px rgba(0,0,0,.3);">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <i class="fas fa-triangle-exclamation"></i>
+                        <strong>Sobrecupo detectado</strong>
+                    </div>
+                    <div>${overRows.length} vuelo(s) con más pasajeros capturados que la capacidad máxima de la aeronave (+${totalExceso} pax en total).</div>
+                    <ul class="mb-1 ps-3 mt-2" style="font-size:.8rem;">${sampleList}</ul>
+                    ${moreText}
+                    <button type="button" class="btn btn-sm btn-light mt-2 conci-overcap-toast-btn"><i class="fas fa-magnifying-glass me-1"></i>Ver vuelos</button>
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button>
+            </div>
+        </div>`;
+    document.body.appendChild(wrap);
+
+    const toastEl = wrap.querySelector('.toast');
+    const btn = wrap.querySelector('.conci-overcap-toast-btn');
+    const closeToast = () => {
+        if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+            try { bootstrap.Toast.getOrCreateInstance(toastEl).hide(); return; } catch (_) { /* fallthrough */ }
+        }
+        wrap.remove();
+    };
+    if (btn) {
+        btn.addEventListener('click', () => {
+            _conciOvercapFilter = true;
+            _conciApplyPillFilter();
+            const table = document.getElementById('table-conci-manifiestos');
+            if (table) table.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            closeToast();
+        });
+    }
+    if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+        try {
+            const t = new bootstrap.Toast(toastEl, { delay: 12000 });
+            t.show();
+            toastEl.addEventListener('hidden.bs.toast', () => wrap.remove());
+        } catch (e) {
+            setTimeout(() => wrap.remove(), 12000);
+        }
+    } else {
+        setTimeout(() => wrap.remove(), 12000);
+    }
 }
 
 // Estado de los filtros por pill (clase pax/carga y dirección arr/dep). Se aplican
 // de forma independiente y combinada (AND) sobre las filas visibles de la tabla.
 let _conciClassFilter = null; // 'pax' | 'carga' | null
 let _conciDirFilter = null;   // 'arr' | 'dep' | null
+let _conciOvercapFilter = false; // true = mostrar solo vuelos con sobrecupo
 let _conciCountBreakdown = { paxArr: 0, paxDep: 0, cargaArr: 0, cargaDep: 0 };
 // Filtros de texto por columna (se aplican junto con los filtros por pill).
 let _conciColFilters = {};          // { colName: searchTerm }
@@ -19585,6 +19796,9 @@ function _conciRowPassesPillFilter(tr) {
     }
     if (_conciDirFilter) {
         if (tr.dataset.rowDir !== _conciDirFilter) return false;
+    }
+    if (_conciOvercapFilter) {
+        if (tr.dataset.rowOvercap !== '1') return false;
     }
     return true;
 }
@@ -19635,7 +19849,7 @@ function _conciApplyPillFilter() {
         if (ok) visible++;
     });
     let emptyRow = tbody.querySelector('tr.conci-filter-empty');
-    const anyFilter = !!(_conciClassFilter || _conciDirFilter || Object.values(_conciColFilters).some(v => v && v.trim()) || Object.keys(_conciExcelFilters).length > 0);
+    const anyFilter = !!(_conciClassFilter || _conciDirFilter || _conciOvercapFilter || Object.values(_conciColFilters).some(v => v && v.trim()) || Object.keys(_conciExcelFilters).length > 0);
     if (anyFilter && visible === 0) {
         if (!emptyRow) {
             emptyRow = document.createElement('tr');
@@ -19778,6 +19992,7 @@ function _conciUpdatePillActiveStyles() {
         'conci-pill-salidas':  _conciDirFilter === 'dep',
         'conci-pill-pax':      _conciClassFilter === 'pax',
         'conci-pill-carga':    _conciClassFilter === 'carga',
+        'conci-pill-sobrecupo': _conciOvercapFilter,
     };
     Object.keys(map).forEach((id) => {
         const el = document.getElementById(id);
@@ -19830,6 +20045,10 @@ function _conciBindCountPills() {
     });
     bind('conci-pill-salidas', () => {
         _conciDirFilter = (_conciDirFilter === 'dep') ? null : 'dep';
+        _conciApplyPillFilter();
+    });
+    bind('conci-pill-sobrecupo', () => {
+        _conciOvercapFilter = !_conciOvercapFilter;
         _conciApplyPillFilter();
     });
 }
@@ -20663,6 +20882,10 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     const _slotAsignadoCol = displayCols.find(c => /slot\s*asignad/i.test(c)) || null;
     const _puntualidadCol  = displayCols.find(c => /puntualidad|cancelaci/i.test(c)) || null;
     const _hrMaxEntregaCol = displayCols.find(c => /hr\.?\s*m[aá]xima\s*de\s*entrega/i.test(c)) || null;
+    // Columna "FACTOR DE OCUPACIÓN": pax/capacidad — se resalta en rojo cuando hay sobrecupo.
+    const _factorOcupacionCol = displayCols.find(c => /factor.*ocupaci[oó]n/i.test(c)) || null;
+    // Columna "CAPTURÓ": se muestra como avatar con iniciales (nombre completo al pasar el ratón).
+    const _capturoCol = displayCols.find(c => /^captur[oó]$/i.test(c.trim())) || null;
     // Columna "MES": muestra el nombre del mes en español en vez del número (1-12).
     const _mesCol = displayCols.find(c => /^mes$/i.test(c)) || null;
     const _fechaCol   = displayCols.find(c => /(^|\b)fecha(\b|$)/i.test(c)) || null;
@@ -20849,6 +21072,8 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         isHrMaxEntrega: c === _hrMaxEntregaCol && !!_hrOperacionCol,
         isMes: c === _mesCol,
         isEvidencia: /evidencia/i.test(c),
+        isFactorOcupacion: c === _factorOcupacionCol,
+        isCapturo: c === _capturoCol,
     }));
 
     // Extrae el código IATA del extremo relevante (origen si es llegada, destino si
@@ -20895,6 +21120,11 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
             const _tipoRaw = _tipoCol ? String(row[_tipoCol] || '').toLowerCase() : '';
             tr.dataset.rowDir = /lleg|arr/.test(_tipoRaw) ? 'arr' : (/sal|dep/.test(_tipoRaw) ? 'dep' : '');
             tr.dataset.rowCargo = _conciRowIsCargo(row, _optypeCol, _airlineCol) ? '1' : '0';
+            tr.dataset.rowOvercap = row._conci_overcapacity ? '1' : '0';
+            if (row._conci_overcapacity) {
+                tr.classList.add('conci-row-overcapacity');
+                tr.title = `Sobrecupo: ${row._conci_overcapacity_diff} pasajero(s) por encima de la capacidad máxima de la aeronave.`;
+            }
 
             displayCols.forEach((c, ci) => {
                 const meta = colMeta[ci];
@@ -21002,6 +21232,10 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                     } else {
                         td.textContent = rawStr;
                     }
+                } else if (meta.isFactorOcupacion) {
+                    _conciRenderFactorOcupacionCell(td, rawStr, !!row._conci_overcapacity, row._conci_overcapacity_diff || 0);
+                } else if (meta.isCapturo) {
+                    _conciRenderCapturoCell(td, rawStr);
                 } else {
                     const displayValue = formatDisplay(c, val, row);
                     td.textContent = displayValue;
@@ -21048,7 +21282,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         tbody.appendChild(frag);
 
         // Re-aplica todos los filtros activos (pill + columna) a las filas recién agregadas.
-        if (_conciClassFilter || _conciDirFilter || Object.values(_conciColFilters).some(v => v && v.trim())) _conciApplyPillFilter();
+        if (_conciClassFilter || _conciDirFilter || _conciOvercapFilter || Object.values(_conciColFilters).some(v => v && v.trim())) _conciApplyPillFilter();
 
         if (idx >= data.length) {
             if (scrollWrap && scrollWrap._conciLazyHandler) {
@@ -21305,7 +21539,10 @@ function _conciIsCalculatedColumn(column) {
         || /puntualidad|cancelacion/.test(key)
         || /hr\.?\s*maxima\s*de\s*entrega/.test(key)
         || /^total\s+exentos$/.test(key)
-        || /^pax\s+que\s+pagan\s+tua$/.test(key);
+        || /^pax\s+que\s+pagan\s+tua$/.test(key)
+        || /capacidad.*maxima/.test(key)
+        || /factor.*ocupacion/.test(key)
+        || /^capturo$/.test(key);
 }
 
 function _conciShouldPersistCalculatedColumn(column) {
@@ -22641,6 +22878,30 @@ async function _conciAutoSaveRow(tr) {
         const month = Number(document.getElementById('filter-conci-manifiestos-month')?.value);
         const day = Number(document.getElementById('filter-conci-manifiestos-day')?.value);
         if (year && month && day) payload.FECHA = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    // Autocompleta CAPTURÓ con el usuario en sesión la primera vez que esta
+    // fila recibe una captura real — así siempre se sabe quién capturó los
+    // datos sin depender de que alguien lo escriba a mano. No aplica al
+    // ajuste trivial de aerolínea sobre una fila "Solo Vuelos" (no crea
+    // manifiesto), y nunca sobreescribe un capturista ya asignado.
+    if (Object.keys(payload).length) {
+        const airlineEntryForCapturo = _conciAirlinePayloadEntry(payload);
+        const onlyAirlineDirtyForCapturo = tr.dataset.rowFuente === 'Solo Vuelos' && airlineEntryForCapturo
+            && dirtyCols.size > 0 && [...dirtyCols].every(col => col === airlineEntryForCapturo.key);
+        if (!onlyAirlineDirtyForCapturo) {
+            const capturoTd = cells.find(td => td.dataset.col === 'CAPTURÓ');
+            if (capturoTd) {
+                const currentCapturo = _conciNormalizeEditableCellText(capturoTd.dataset.raw || capturoTd.dataset.pendingRaw || '');
+                if (!currentCapturo) {
+                    const displayName = _conciCurrentUserDisplayName();
+                    if (displayName) {
+                        _conciRenderCapturoCell(capturoTd, displayName);
+                        payload['CAPTURÓ'] = _conciPrepareValueForDatabase('CAPTURÓ', displayName);
+                        savedCellValues.set(capturoTd, displayName);
+                    }
+                }
+            }
+        }
     }
     if (!Object.keys(payload).length) return;
 
