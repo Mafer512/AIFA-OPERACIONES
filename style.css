@@ -17793,6 +17793,35 @@ body.dark-mode #table-conci-manifiestos tr.conci-row-overcapacity>td {
    border-left: 4px solid #1976d2 !important;
 }
 
+/* Colaboración en vivo: celda que otro usuario conectado tiene abierta ahora
+   mismo (color por usuario vía --conci-remote-color). El pequeño pill con su
+   nombre queda flotando en la esquina para no desplazar el contenido. */
+#table-conci-manifiestos tbody td.conci-cell-remote-editing {
+   position: relative;
+   outline: 2px solid var(--conci-remote-color, #1976d2);
+   outline-offset: -2px;
+   background: color-mix(in srgb, var(--conci-remote-color, #1976d2) 12%, transparent) !important;
+   animation: conciRemoteEditPulse 1.6s ease-in-out infinite;
+}
+@keyframes conciRemoteEditPulse {
+   0%, 100% { outline-color: var(--conci-remote-color, #1976d2); }
+   50% { outline-color: color-mix(in srgb, var(--conci-remote-color, #1976d2) 45%, transparent); }
+}
+#table-conci-manifiestos tbody td.conci-cell-remote-editing .conci-remote-badge {
+   position: absolute;
+   top: -9px;
+   left: 2px;
+   font-size: .6rem;
+   line-height: 1;
+   color: #fff;
+   padding: 2px 5px;
+   border-radius: 999px;
+   white-space: nowrap;
+   box-shadow: 0 1px 3px rgba(0,0,0,.35);
+   z-index: 2;
+   pointer-events: none;
+}
+
 /* Pill "Sobrecupo": parpadeo suave para llamar la atención cuando hay alertas activas */
 @keyframes conciSobrecupoPulse {
    0%, 100% { box-shadow: 0 0 0 0 rgba(211, 47, 47, .45); }

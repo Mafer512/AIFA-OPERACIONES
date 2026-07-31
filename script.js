@@ -17154,6 +17154,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tabConciComercial.addEventListener('shown.bs.tab', () => {
             _conciApplyTodayFilters();
             loadConciliacionManifiestos({ autoLatestDate: true });
+            _conciInitLiveCollab();
         });
         // Hook on legacy filter changes
         ['filter-conci-manifiestos-year', 'filter-conci-manifiestos-month', 'filter-conci-manifiestos-day'].forEach(id => {
@@ -17236,6 +17237,22 @@ let _conciEditFallbackYear = null;   // cached for post-save formatting
 let _conciEditFechaCol     = null;   // cached fecha column name for formatting
 let _conciEditMode         = false;  // global edit mode for the whole table
 let _conciPendingAutoSaveCount = 0;  // guardados de fila en curso (no confirmados aún por Supabase)
+let _conciPendingRemoteRefresh = false; // true cuando llegó un cambio remoto pero hay un editor local abierto
+
+// ─── Colaboración en vivo: presencia + preview de captura entre compañeros ──
+let _conciLiveChannel = null;       // canal de Supabase Realtime (presence + broadcast)
+let _conciLiveReady = false;
+let _conciLiveClientId = '';        // id aleatorio de esta pestaña/sesión
+let _conciLiveDisplayName = '';
+let _conciLiveColor = '';
+let _conciRemotePresenceByCell = new Map(); // "rowId|col" -> [{user,color,clientId}]
+const _CONCI_LIVE_COLORS = ['#e53935', '#8e24aa', '#3949ab', '#00897b', '#43a047', '#fb8c00', '#6d4c41', '#00acc1'];
+function _conciColorForUser(name) {
+    const s = String(name || '');
+    let hash = 0;
+    for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
+    return _CONCI_LIVE_COLORS[hash % _CONCI_LIVE_COLORS.length];
+}
 let _conciCellClickHandler = null;   // delegated click handler for edit-mode cells
 let _conciTabNavigationHandler = null; // captura Tab para navegación horizontal
 let _conciAirlineCatalogLoaded = false;
@@ -21308,6 +21325,9 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         }
 
         tbody.appendChild(frag);
+        // Resalta en las filas recién insertadas las celdas que otros usuarios
+        // conectados tengan abiertas ahora mismo (carga inicial y scroll perezoso).
+        _conciApplyRemotePresenceHighlights();
 
         // Re-aplica todos los filtros activos (pill + columna) a las filas recién agregadas.
         if (_conciClassFilter || _conciDirFilter || _conciOvercapFilter || Object.values(_conciColFilters).some(v => v && v.trim())) _conciApplyPillFilter();
@@ -22036,6 +22056,200 @@ function _conciActivateOperationTypeEditor(td, currentRaw) {
     select.addEventListener('blur', () => closeEditor(true, false));
     select.focus();
 }
+// Abre (una sola vez) el canal de presencia + broadcast de Conciliación
+// Manifiestos: permite ver en vivo en qué celda está capturando cada
+// compañero (presence) y, para el editor de texto libre, un preview de lo
+// que va escribiendo antes de que guarde (broadcast). No persiste nada en
+// la base de datos por sí mismo — es sólo señalización efímera entre
+// pestañas conectadas; el guardado real sigue siendo el autoguardado por
+// celda de siempre.
+async function _conciInitLiveCollab() {
+    if (_conciLiveChannel) return;
+    let client = window.supabaseClient;
+    if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
+    if (!client) { setTimeout(_conciInitLiveCollab, 1500); return; }
+
+    _conciLiveClientId = _conciLiveClientId || (
+        (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
+    );
+    _conciLiveDisplayName = _conciCurrentUserDisplayName() || 'Usuario';
+    _conciLiveColor = _conciColorForUser(_conciLiveDisplayName);
+
+    const channel = client.channel('conci-manifiestos-live', {
+        config: { presence: { key: _conciLiveClientId }, broadcast: { self: false, ack: false } }
+    });
+    _conciLiveChannel = channel;
+
+    channel.on('presence', { event: 'sync' }, _conciHandlePresenceSync);
+    channel.on('broadcast', { event: 'cell-input' }, ({ payload }) => _conciHandleRemoteCellInput(payload));
+    channel.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+            _conciLiveReady = true;
+            try {
+                await channel.track({ user: _conciLiveDisplayName, color: _conciLiveColor, rowId: null, col: null });
+            } catch (_) { /* ignora: sólo afecta la señalización en vivo, no el guardado real */ }
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            _conciLiveReady = false;
+        }
+    });
+}
+
+// Anuncia (o limpia, con rowId/col null) la celda que este usuario tiene
+// abierta ahora mismo, para que el resto de pestañas conectadas la resalten.
+function _conciSetPresenceCell(rowId, col) {
+    if (!_conciLiveChannel || !_conciLiveReady) return;
+    try {
+        _conciLiveChannel.track({
+            user: _conciLiveDisplayName,
+            color: _conciLiveColor,
+            rowId: rowId || null,
+            col: col || null
+        });
+    } catch (_) { /* señalización en vivo, no crítica */ }
+}
+
+// Punto único de entrada: se llama justo antes de abrir cualquier tipo de
+// editor de celda (texto, select, fecha, routing). Las filas nuevas sin
+// guardar aún no tienen id real, así que no hay nada que resaltar en las
+// pantallas de otros usuarios todavía.
+function _conciBeginCellPresence(td) {
+    const tr = td.closest('tr');
+    const rowId = tr ? String(tr.dataset.rowId || '').trim() : '';
+    if (!rowId) return;
+    _conciSetPresenceCell(rowId, td.dataset.col || '');
+}
+
+// Transmite (con throttle) el valor que el usuario va escribiendo en el
+// editor de texto libre, para que los demás vean la captura en vivo, no
+// sólo hasta que se guarde.
+function _conciBroadcastCellInput(td, value) {
+    if (!_conciLiveChannel || !_conciLiveReady) return;
+    const tr = td.closest('tr');
+    const rowId = tr ? String(tr.dataset.rowId || '').trim() : '';
+    if (!rowId) return;
+    const now = Date.now();
+    if (td._conciLastBroadcast && (now - td._conciLastBroadcast) < 250) {
+        clearTimeout(td._conciBroadcastTimer);
+        td._conciBroadcastTimer = setTimeout(() => _conciBroadcastCellInput(td, value), 250);
+        return;
+    }
+    td._conciLastBroadcast = now;
+    try {
+        _conciLiveChannel.send({
+            type: 'broadcast',
+            event: 'cell-input',
+            payload: { rowId, col: td.dataset.col || '', value: String(value ?? ''), user: _conciLiveDisplayName }
+        });
+    } catch (_) { /* señalización en vivo, no crítica */ }
+}
+
+function _conciHandlePresenceSync() {
+    if (!_conciLiveChannel) return;
+    let state = {};
+    try { state = _conciLiveChannel.presenceState() || {}; } catch (_) { return; }
+    const map = new Map();
+    Object.keys(state).forEach(key => {
+        if (key === _conciLiveClientId) return; // nunca resaltar la propia captura
+        (state[key] || []).forEach(entry => {
+            if (!entry || !entry.rowId || !entry.col) return;
+            const cellKey = `${entry.rowId}|${entry.col}`;
+            if (!map.has(cellKey)) map.set(cellKey, []);
+            map.get(cellKey).push(entry);
+        });
+    });
+    _conciRemotePresenceByCell = map;
+    _conciApplyRemotePresenceHighlights();
+}
+
+// Recorre la tabla visible y marca/desmarca las celdas que otros usuarios
+// tienen abiertas ahora mismo. Se re-ejecuta en cada sync de presencia y
+// también tras cada lote de filas renderizadas (scroll perezoso).
+function _conciApplyRemotePresenceHighlights() {
+    const table = document.getElementById('table-conci-manifiestos');
+    if (!table) return;
+    table.querySelectorAll('td.conci-cell-remote-editing').forEach(td => {
+        if (!_conciRemotePresenceByCell.size || !_conciCellStillClaimed(td)) {
+            td.classList.remove('conci-cell-remote-editing');
+            td.style.removeProperty('--conci-remote-color');
+            td.removeAttribute('title');
+            const badge = td.querySelector('.conci-remote-badge');
+            if (badge) badge.remove();
+            // Si había un preview de texto en vivo, restaura el valor real guardado.
+            if (td.dataset.conciLivePreviewOrig !== undefined) {
+                td.textContent = td.dataset.conciLivePreviewOrig;
+                delete td.dataset.conciLivePreviewOrig;
+            }
+        }
+    });
+    if (!_conciRemotePresenceByCell.size) return;
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+    _conciRemotePresenceByCell.forEach((entries, cellKey) => {
+        const sep = cellKey.indexOf('|');
+        const rowId = cellKey.slice(0, sep);
+        const col = cellKey.slice(sep + 1);
+        const tr = tbody.querySelector(`tr[data-row-id="${rowId}"]`);
+        if (!tr) return; // fila aún no cargada en esta pantalla (scroll perezoso)
+        const td = tr.querySelector(`td[data-col="${col}"]`);
+        if (!td || td.classList.contains('conci-cell-active')) return; // no pisar un editor propio abierto
+        const entry = entries[0];
+        td.classList.add('conci-cell-remote-editing');
+        td.style.setProperty('--conci-remote-color', entry.color || '#1976d2');
+        const names = entries.map(e => e.user || 'Usuario').join(', ');
+        td.title = `Capturando ahora: ${names}`;
+        if (!td.querySelector('.conci-remote-badge')) {
+            const badge = document.createElement('span');
+            badge.className = 'conci-remote-badge';
+            badge.style.background = entry.color || '#1976d2';
+            badge.textContent = String(entry.user || 'U').trim().split(/\s+/)[0];
+            td.appendChild(badge);
+        }
+    });
+}
+
+function _conciCellStillClaimed(td) {
+    const tr = td.closest('tr');
+    const rowId = tr ? String(tr.dataset.rowId || '').trim() : '';
+    if (!rowId) return false;
+    return _conciRemotePresenceByCell.has(`${rowId}|${td.dataset.col || ''}`);
+}
+
+// Preview en vivo de lo que un compañero está tecleando en el editor de
+// texto libre (columnas sin select/fecha/routing dedicados). No toca
+// dataset.raw/pendingRaw — es puramente visual hasta que él guarde de verdad.
+function _conciHandleRemoteCellInput(payload) {
+    if (!payload || !payload.rowId || !payload.col) return;
+    const table = document.getElementById('table-conci-manifiestos');
+    if (!table) return;
+    const tr = table.querySelector(`tbody tr[data-row-id="${payload.rowId}"]`);
+    if (!tr) return;
+    const td = tr.querySelector(`td[data-col="${payload.col}"]`);
+    if (!td || td.classList.contains('conci-cell-active')) return;
+    if (td.dataset.conciLivePreviewOrig === undefined) td.dataset.conciLivePreviewOrig = td.textContent;
+    td.textContent = payload.value;
+}
+
+// Llamado cuando llega un cambio confirmado (INSERT/UPDATE/DELETE) en
+// "Conciliación Manifiestos" vía Supabase Realtime — propio o de un
+// compañero. Si hay un editor de celda abierto ahora mismo, difiere el
+// refresco para no interrumpir la captura en curso; se reintenta al cerrar
+// esa celda (ver _conciCommitCellRaw / _conciAutoSaveRow).
+function _conciHandleRemoteTableChange() {
+    if (!document.getElementById('table-conci-manifiestos')) return;
+    _conciPendingRemoteRefresh = true;
+    _conciMaybeApplyDeferredRemoteRefresh();
+}
+
+function _conciMaybeApplyDeferredRemoteRefresh() {
+    if (!_conciPendingRemoteRefresh) return;
+    if (document.querySelector('#table-conci-manifiestos td.conci-cell-active')) return;
+    if (_conciPendingAutoSaveCount > 0) return;
+    _conciPendingRemoteRefresh = false;
+    _conciRenderCache.clear();
+    _conciRenderedKey = '';
+    loadConciliacionManifiestos({ forceRefresh: true });
+}
+
 function _conciActivateCellEditor(td) {
     if (!td || td.querySelector('.conci-cell-input, .conci-cell-dt')) return;
 
@@ -22044,6 +22258,7 @@ function _conciActivateCellEditor(td) {
     const currentRaw = _conciNormalizeEditableCellText(
         td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
     );
+    _conciBeginCellPresence(td);
     if (_conciIsOperationTypeColumn(col)) {
         _conciActivateOperationTypeEditor(td, currentRaw);
         return;
@@ -22111,6 +22326,7 @@ function _conciActivateCellEditor(td) {
         _conciRefreshMatriculaValidationForRow(td.closest('tr'));
         _conciUpdateSummaryLiveCell(td, input.value);
         _conciRefreshCalculatedCellsForRow(td.closest('tr'), { [col]: input.value });
+        _conciBroadcastCellInput(td, input.value);
     });
     input.addEventListener('blur', () => closeEditor(true, false));
 
@@ -22172,6 +22388,11 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     if (tr && _conciEditMode) {
         _conciAutoSaveRow(tr);
     }
+    // Deja de anunciar esta celda como "en captura" para el resto de usuarios
+    // conectados, y aplica cualquier cambio remoto que haya quedado en espera
+    // mientras este editor estaba abierto.
+    _conciSetPresenceCell(null, null);
+    _conciMaybeApplyDeferredRemoteRefresh();
     if (move === 'next') {
         const nextCell = _conciGetNextEditableCell(td);
         if (nextCell) {
@@ -23171,6 +23392,7 @@ async function _conciAutoSaveRow(tr) {
             tr._conciAutoSaveQueued = false;
             tr._conciAutoSavePromise = null;
             if (shouldRetry) _conciAutoSaveRow(tr);
+            else _conciMaybeApplyDeferredRemoteRefresh();
         }
     })();
     return tr._conciAutoSavePromise;

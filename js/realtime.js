@@ -148,6 +148,11 @@
             'Base de Datos Manifiestos Febrero 2026'
         ], _lazy('manifiestoReload'));
 
+        // ── Conciliación Manifiestos: sincroniza la tabla al instante cuando
+        //    cualquier usuario (uno mismo u otro capturista) guarda una fila,
+        //    para que nadie vea una foto vieja mientras captura en paralelo.
+        rm.watch(['Conciliación Manifiestos'], _lazy('_conciHandleRemoteTableChange'));
+
         // ── Manifiestos carga ────────────────────────────────────
         rm.watch(['Base de Manifiestos Carga Febrero 2026'], _lazy('cargaReload'));
 
