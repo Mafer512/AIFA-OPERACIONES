@@ -17787,6 +17787,12 @@ body.dark-mode #table-conci-manifiestos tr.conci-row-overcapacity>td {
    background: rgba(211, 47, 47, .22) !important;
 }
 
+/* Fila con autoguardado en curso: feedback visual mientras Supabase confirma
+   el insert/update, para que el usuario sepa que aún no debe recargar/salir. */
+#table-conci-manifiestos tr.conci-row-saving>td:first-child {
+   border-left: 4px solid #1976d2 !important;
+}
+
 /* Pill "Sobrecupo": parpadeo suave para llamar la atención cuando hay alertas activas */
 @keyframes conciSobrecupoPulse {
    0%, 100% { box-shadow: 0 0 0 0 rgba(211, 47, 47, .45); }

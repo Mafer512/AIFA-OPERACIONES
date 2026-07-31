@@ -17195,6 +17195,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     if (btnConciAdd) btnConciAdd.addEventListener('click', _conciAddBlankRow);
+    // El autoguardado por celda dispara un insert/update a Supabase sin esperar
+    // (ver _conciAutoSaveRow) para que capturar se sienta como Excel. Si el
+    // usuario recarga o cierra la pestaña mientras esas escrituras siguen en
+    // vuelo, el navegador las cancela y la fila se pierde sin ningún error
+    // visible. Este guard evita justo eso: avisa antes de dejar la página si
+    // hay guardados de Conciliación Manifiestos todavía pendientes.
+    window.addEventListener('beforeunload', (e) => {
+        if (_conciPendingAutoSaveCount > 0) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
     if (btnConciAirlineColors) btnConciAirlineColors.addEventListener('click', _conciOpenAirlineColors);
     if (btnConciMatriculaCatalog) btnConciMatriculaCatalog.addEventListener('click', _conciOpenMatriculaCatalog);
     if (btnConciUndo) btnConciUndo.addEventListener('click', _conciUndoLastChange);
@@ -17223,6 +17235,7 @@ let _conciManifiestosDataTable = null;
 let _conciEditFallbackYear = null;   // cached for post-save formatting
 let _conciEditFechaCol     = null;   // cached fecha column name for formatting
 let _conciEditMode         = false;  // global edit mode for the whole table
+let _conciPendingAutoSaveCount = 0;  // guardados de fila en curso (no confirmados aún por Supabase)
 let _conciCellClickHandler = null;   // delegated click handler for edit-mode cells
 let _conciTabNavigationHandler = null; // captura Tab para navegación horizontal
 let _conciAirlineCatalogLoaded = false;
@@ -19714,33 +19727,22 @@ function _conciNotifyOvercapacity(rows) {
     _conciLastOvercapToastKey = key;
 
     const totalExceso = overRows.reduce((sum, r) => sum + (Number(r._conci_overcapacity_diff) || 0), 0);
-    const sampleList = overRows.slice(0, 3).map(r => {
-        const vuelo = vueloCol ? String(r[vueloCol] || '').trim() : '';
-        const matricula = matriculaCol ? String(r[matriculaCol] || '').trim() : '';
-        const diff = r._conci_overcapacity_diff || 0;
-        return `<li>${escapeHTML(vuelo || 'Vuelo s/n')} · ${escapeHTML(matricula || 'S/matrícula')} — <strong>+${diff} pax</strong></li>`;
-    }).join('');
-    const moreText = overRows.length > 3 ? `<div class="small" style="opacity:.85">+${overRows.length - 3} más…</div>` : '';
 
     document.querySelectorAll('.conci-overcap-toast-wrap').forEach(el => el.remove());
 
     const wrap = document.createElement('div');
-    wrap.className = 'conci-overcap-toast-wrap position-fixed bottom-0 end-0 p-3';
-    wrap.style.zIndex = '999999';
+    wrap.className = 'conci-overcap-toast-wrap position-fixed top-0 start-50 translate-middle-x p-2';
+    wrap.style.zIndex = '1080';
+    wrap.style.marginTop = '.5rem';
     wrap.innerHTML = `
-        <div class="toast align-items-center text-white border-0 show" role="alert" aria-live="assertive" aria-atomic="true" style="background:#c62828;min-width:320px;box-shadow:0 6px 20px rgba(0,0,0,.3);">
-            <div class="d-flex">
-                <div class="toast-body">
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                        <i class="fas fa-triangle-exclamation"></i>
-                        <strong>Sobrecupo detectado</strong>
-                    </div>
-                    <div>${overRows.length} vuelo(s) con más pasajeros capturados que la capacidad máxima de la aeronave (+${totalExceso} pax en total).</div>
-                    <ul class="mb-1 ps-3 mt-2" style="font-size:.8rem;">${sampleList}</ul>
-                    ${moreText}
-                    <button type="button" class="btn btn-sm btn-light mt-2 conci-overcap-toast-btn"><i class="fas fa-magnifying-glass me-1"></i>Ver vuelos</button>
+        <div class="toast align-items-center border-0 show" role="status" aria-live="polite" aria-atomic="true" style="background:#fff3cd;color:#664d03;min-width:280px;max-width:420px;box-shadow:0 2px 10px rgba(0,0,0,.18);border-radius:.5rem;">
+            <div class="d-flex align-items-center py-1 px-2">
+                <i class="fas fa-triangle-exclamation me-2" style="font-size:.85rem;"></i>
+                <div class="toast-body p-0 flex-grow-1" style="font-size:.82rem;line-height:1.3;">
+                    <strong>Sobrecupo:</strong> ${overRows.length} vuelo(s), +${totalExceso} pax
+                    <button type="button" class="btn btn-sm btn-link p-0 ms-1 align-baseline conci-overcap-toast-btn" style="font-size:.82rem;text-decoration:underline;">ver</button>
                 </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button>
+                <button type="button" class="btn-close ms-2" data-bs-dismiss="toast" aria-label="Cerrar" style="font-size:.65rem;"></button>
             </div>
         </div>`;
     document.body.appendChild(wrap);
@@ -19764,14 +19766,14 @@ function _conciNotifyOvercapacity(rows) {
     }
     if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
         try {
-            const t = new bootstrap.Toast(toastEl, { delay: 12000 });
+            const t = new bootstrap.Toast(toastEl, { delay: 8000 });
             t.show();
             toastEl.addEventListener('hidden.bs.toast', () => wrap.remove());
         } catch (e) {
-            setTimeout(() => wrap.remove(), 12000);
+            setTimeout(() => wrap.remove(), 8000);
         }
     } else {
-        setTimeout(() => wrap.remove(), 12000);
+        setTimeout(() => wrap.remove(), 8000);
     }
 }
 
@@ -23027,6 +23029,9 @@ async function _conciAutoSaveRow(tr) {
     }
     if (!Object.keys(payload).length) return;
 
+    _conciPendingAutoSaveCount++;
+    tr.classList.add('conci-row-saving');
+    let didWriteSuccessfully = false;
     tr._conciAutoSavePromise = (async () => {
         try {
             let client = window.supabaseClient;
@@ -23040,6 +23045,7 @@ async function _conciAutoSaveRow(tr) {
                     [...dirtyCols].every(col => col === airlineEntry.key);
                 if (onlyAirlineDirty) {
                     await _conciSaveVirtualAirlineOverride(client, tr, airlineEntry.value);
+                    didWriteSuccessfully = true;
                     settleSavedCells(new Set([airlineEntry.key]));
                     tr.classList.remove('table-secondary');
                     tr.removeAttribute('title');
@@ -23061,6 +23067,7 @@ async function _conciAutoSaveRow(tr) {
                     if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
                     return;
                 }
+                didWriteSuccessfully = true;
                 const inserted = Array.isArray(result.data) ? result.data[0] : result.data;
                 if (inserted?.id !== undefined && inserted?.id !== null) {
                     tr.dataset.rowId = String(inserted.id);
@@ -23101,6 +23108,7 @@ async function _conciAutoSaveRow(tr) {
                 if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
                 return;
             }
+            didWriteSuccessfully = true;
             const inserted = Array.isArray(result.data) ? result.data[0] : result.data;
             if (!rowId && inserted?.id !== undefined && inserted?.id !== null) {
                 tr.dataset.rowId = String(inserted.id);
@@ -23146,6 +23154,19 @@ async function _conciAutoSaveRow(tr) {
             console.warn('[Conciliación] error de guardado automático:', error);
             if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
         } finally {
+            tr.classList.remove('conci-row-saving');
+            _conciPendingAutoSaveCount--;
+            // El render-cache guarda una foto de las filas por rango de fecha para
+            // que cambiar de pestaña y volver sea instantáneo. Si no se invalida
+            // tras un guardado real, volver a esta pestaña (o re-filtrar la misma
+            // fecha) muestra esa foto vieja sin la fila recién capturada — se ve
+            // igual que "se perdió la captura" aunque en la base de datos sí quedó
+            // guardada. Invalidar aquí garantiza que la próxima vista siempre
+            // consulte el estado real, nunca una copia obsoleta.
+            if (didWriteSuccessfully) {
+                _conciRenderCache.clear();
+                _conciRenderedKey = '';
+            }
             const shouldRetry = tr._conciAutoSaveQueued && !!tr.querySelector('td[data-dirty="1"]');
             tr._conciAutoSaveQueued = false;
             tr._conciAutoSavePromise = null;
