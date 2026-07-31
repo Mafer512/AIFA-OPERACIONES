@@ -17174,6 +17174,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnConciAirlineColors = document.getElementById('btn-conci-airline-colors');
     const btnConciMatriculaCatalog = document.getElementById('btn-conci-matricula-catalog');
     const btnConciUndo = document.getElementById('btn-conci-undo-mode');
+    const btnConciClearFilters = document.getElementById('btn-conci-clear-filters');
     if (btnConciRefresh) btnConciRefresh.addEventListener('click', () => loadConciliacionManifiestos({ forceRefresh: true }));
     if (btnConciImport) btnConciImport.addEventListener('click', () => {
         if (!_conciCanCurrentUserEdit()) {
@@ -17197,6 +17198,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnConciAirlineColors) btnConciAirlineColors.addEventListener('click', _conciOpenAirlineColors);
     if (btnConciMatriculaCatalog) btnConciMatriculaCatalog.addEventListener('click', _conciOpenMatriculaCatalog);
     if (btnConciUndo) btnConciUndo.addEventListener('click', _conciUndoLastChange);
+    if (btnConciClearFilters) btnConciClearFilters.addEventListener('click', _conciClearAllTableFilters);
     window.addEventListener('admin-mode-changed', _conciRefreshEditToolbar);
     window.addEventListener('airline-catalog-updated', () => {
         _conciAirlineCatalogLoaded = false;
@@ -19869,6 +19871,30 @@ function _conciApplyPillFilter() {
 }
 
 // ── Filtro desplegable estilo Excel para columnas de manifiestos ──────────────────
+function _conciClearAllTableFilters() {
+    if (_conciColFilterDebounce) {
+        clearTimeout(_conciColFilterDebounce);
+        _conciColFilterDebounce = null;
+    }
+    _conciClassFilter = null;
+    _conciDirFilter = null;
+    _conciColFilters = {};
+    _conciExcelFilters = {};
+
+    document.querySelectorAll('#table-conci-manifiestos .conci-col-filter').forEach(input => {
+        input.value = '';
+    });
+    document.querySelectorAll('.conci-excel-dropdown').forEach(menu => menu.remove());
+    ['conci-count-pax-detail', 'conci-count-carga-detail'].forEach(id => {
+        const detail = document.getElementById(id);
+        if (detail) detail.classList.add('d-none');
+    });
+
+    _updateConciExcelFilterIcons();
+    _conciUpdatePillActiveStyles();
+    _conciApplyPillFilter();
+}
+
 function _showConciExcelFilter(col, triggerEl) {
     document.querySelectorAll('.conci-excel-dropdown').forEach(el => el.remove());
 
@@ -21550,6 +21576,89 @@ function _conciShouldPersistCalculatedColumn(column) {
     return /^total\s+exentos$/.test(key) || /^pax\s+que\s+pagan\s+tua$/.test(key);
 }
 
+function _conciValidatedDateTime(rawValue, fallbackYear) {
+    const parts = _conciParseDateTimeParts(rawValue, fallbackYear);
+    if (!parts || !_conciIsValidCalendarDate(parts.year, parts.month, parts.day)) return null;
+    if (!Number.isInteger(parts.hour) || parts.hour < 0 || parts.hour > 23) return null;
+    if (!Number.isInteger(parts.minute) || parts.minute < 0 || parts.minute > 59) return null;
+    return _conciPartsToDate(parts);
+}
+
+function _conciRefreshManifestDateOrderValidation(tr, changedValues = {}) {
+    if (!tr) return false;
+    const cells = Array.from(tr.querySelectorAll('td[data-col]'));
+    const findCell = pattern => cells.find(td => pattern.test(_conciNormalizedColumnName(td.dataset.col)));
+    const manifestCell = findCell(/^tipo(?:\s+de)?\s+manifiesto$/);
+    const boardingCell = findCell(/^hr\.?\s*de\s*embarque\s*o\s*desembarque$/);
+    const operationCell = findCell(/^hr\.?\s*de\s*operacion$/);
+    const alertMessage = 'Revisa las fechas/horas de embarque o desembarque y de operación.';
+    const toggleCellAlert = (td, active) => {
+        if (!td) return;
+        td.classList.toggle('conci-date-order-error-cell', active);
+        if (active) {
+            if (td.dataset.conciPreviousTitle === undefined) {
+                td.dataset.conciPreviousTitle = td.getAttribute('title') || '';
+            }
+            td.dataset.conciDateOrderAlert = alertMessage;
+            td.setAttribute('aria-invalid', 'true');
+            td.title = alertMessage;
+        } else {
+            delete td.dataset.conciDateOrderAlert;
+            td.removeAttribute('aria-invalid');
+            if (td.dataset.conciPreviousTitle !== undefined) {
+                const previousTitle = td.dataset.conciPreviousTitle;
+                delete td.dataset.conciPreviousTitle;
+                if (typeof _conciEditMode !== 'undefined' && _conciEditMode) td.title = 'Clic para editar';
+                else if (previousTitle) td.title = previousTitle;
+                else td.removeAttribute('title');
+            }
+        }
+    };
+    if (!manifestCell || !boardingCell || !operationCell) {
+        tr.classList.remove('conci-date-order-valid');
+        tr.classList.remove('conci-date-order-error');
+        delete tr.dataset.conciDateOrderValid;
+        delete tr.dataset.conciDateOrderError;
+        if (boardingCell) boardingCell.classList.remove('conci-date-order-valid-cell');
+        if (operationCell) operationCell.classList.remove('conci-date-order-valid-cell');
+        toggleCellAlert(boardingCell, false);
+        toggleCellAlert(operationCell, false);
+        return false;
+    }
+    const readCell = td => {
+        if (!td) return '';
+        if (Object.prototype.hasOwnProperty.call(changedValues, td.dataset.col)) {
+            return changedValues[td.dataset.col];
+        }
+        return td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent ?? '';
+    };
+
+    const manifestType = _conciNormalizedColumnName(readCell(manifestCell));
+    const boardingRaw = String(readCell(boardingCell) ?? '').trim();
+    const operationRaw = String(readCell(operationCell) ?? '').trim();
+    const hasRequiredValues = !!(boardingRaw && operationRaw);
+    const boardingDate = _conciValidatedDateTime(boardingRaw, _conciEditFallbackYear);
+    const operationDate = _conciValidatedDateTime(operationRaw, _conciEditFallbackYear);
+    const valid = !!(hasRequiredValues && boardingDate && operationDate && (
+        (manifestType === 'llegada' && boardingDate.getTime() > operationDate.getTime())
+        || (manifestType === 'salida' && boardingDate.getTime() < operationDate.getTime())
+    ));
+    const invalid = hasRequiredValues && !valid;
+
+    tr.classList.toggle('conci-date-order-valid', valid);
+    tr.classList.toggle('conci-date-order-error', invalid);
+    if (valid) tr.dataset.conciDateOrderValid = '1';
+    else delete tr.dataset.conciDateOrderValid;
+    if (invalid) tr.dataset.conciDateOrderError = '1';
+    else delete tr.dataset.conciDateOrderError;
+    [boardingCell, operationCell].forEach(td => {
+        td.classList.toggle('conci-date-order-valid-cell', valid);
+    });
+    toggleCellAlert(boardingCell, invalid);
+    toggleCellAlert(operationCell, invalid);
+    return valid;
+}
+
 function _conciRefreshCalculatedCellsForRow(tr, changedValues = {}) {
     if (!tr) return;
     const cells = Array.from(tr.querySelectorAll('td[data-col]'));
@@ -21611,6 +21720,7 @@ function _conciRefreshCalculatedCellsForRow(tr, changedValues = {}) {
     ].reduce((sum, cell) => sum + readNumber(cell), 0);
     if (totalExentosCell) renderNumber(totalExentosCell, totalExentos);
     if (paxTuaCell) renderNumber(paxTuaCell, readNumber(totalPaxCell) - totalExentos);
+    _conciRefreshManifestDateOrderValidation(tr, changedValues);
 }
 
 function _conciIsManifestTypeColumn(column) {
@@ -22219,6 +22329,10 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
         if (e.relatedTarget && td.contains(e.relatedTarget)) return;
         closeEditor(true, false);
     };
+    const liveUnvalidatedRaw = () => [
+        String(dateInput.value || '').trim(),
+        timeInput ? String(timeInput.value || '').trim() : '',
+    ].filter(Boolean).join(' ');
 
     dateInput.addEventListener('keydown', onKeydown);
     dateInput.addEventListener('blur', onBlur);
@@ -22229,6 +22343,10 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
         if (preview.ok) {
             _conciUpdateSummaryLiveCell(td, preview.raw);
             _conciRefreshCalculatedCellsForRow(td.closest('tr'), { [td.dataset.col]: preview.raw });
+        } else {
+            _conciRefreshManifestDateOrderValidation(td.closest('tr'), {
+                [td.dataset.col]: liveUnvalidatedRaw(),
+            });
         }
     });
     if (timeInput) {
@@ -22241,6 +22359,10 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
             if (preview.ok) {
                 _conciUpdateSummaryLiveCell(td, preview.raw);
                 _conciRefreshCalculatedCellsForRow(td.closest('tr'), { [td.dataset.col]: preview.raw });
+            } else {
+                _conciRefreshManifestDateOrderValidation(td.closest('tr'), {
+                    [td.dataset.col]: liveUnvalidatedRaw(),
+                });
             }
         });
     }

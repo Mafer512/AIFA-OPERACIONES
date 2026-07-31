@@ -37,7 +37,7 @@ function loadDateTimeEditor(commitCell) {
     'window', 'document', '_conciIsValidCalendarDate', '_conciIsValidIsoDateInput',
     '_conciNormalizeTimeInput', '_conciNormalizeEditableCellText',
     '_conciCommitCellRaw', '_conciUpdateSummaryLiveCell', '_conciPad2',
-    '_conciRefreshCalculatedCellsForRow',
+    '_conciRefreshCalculatedCellsForRow', '_conciRefreshManifestDateOrderValidation',
     editorSnippet + '; return _conciActivateDateTimeEditor;'
   );
   return factory(
@@ -48,6 +48,7 @@ function loadDateTimeEditor(commitCell) {
     value => String(value || '').trim(),
     commitCell, jest.fn(),
     value => String(value).padStart(2, '0'),
+    jest.fn(),
     jest.fn()
   );
 }
