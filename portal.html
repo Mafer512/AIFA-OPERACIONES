@@ -700,6 +700,40 @@
   .airport-suggestion:hover { background:#fff3b0; }
   .airport-suggestion small { color:#64748b; display:block; }
   #manifest-print-host { display:none; }
+  /* Formularios de manifiesto: legibles y navegables en pantallas pequeñas. */
+  .portal-manifest .modal-dialog { max-width:min(1140px,calc(100vw - 1.5rem)); }
+  .portal-manifest .modal-content { max-height:calc(100dvh - 1.5rem); }
+  .portal-manifest .modal-body { overflow-x:auto; }
+  .portal-manifest .manifest-container { min-width:0; }
+  @media (max-width:767.98px) {
+    #portal-nav { padding:.65rem .85rem; gap:.65rem; flex-wrap:wrap; }
+    .nav-brand-name { font-size:.9rem; }
+    .nav-user { max-width:110px; }
+    .nav-right { margin-left:auto; gap:.4rem; }
+    .btn-nav { min-height:38px; padding:.35rem .6rem; }
+    .portal-manifest .modal-dialog { margin:.35rem; max-width:calc(100vw - .7rem); }
+    .portal-manifest .modal-header,
+    .portal-manifest .modal-footer { padding:.7rem .85rem; }
+    .portal-manifest .modal-title { font-size:1rem; }
+    .portal-manifest .modal-body { padding:.5rem; }
+    .portal-manifest .manifest-container { padding:.85rem; border-radius:6px; }
+    .portal-manifest .manifest-container .header-title { font-size:1.15rem; }
+    .portal-manifest .manifest-container .section-box { padding:.6rem; border-radius:14px !important; }
+    .portal-manifest .manifest-container .signature-box { height:110px; }
+    .portal-manifest .manifest-container .form-control { min-height:28px; font-size:.88rem; }
+    .portal-manifest .manifest-container .form-label { font-size:.64rem; }
+    .portal-manifest .manifest-container .sub-label { font-size:.52rem; }
+    .manifest-salida-pax .embark-table { min-width:540px; }
+    .manifest-salida-pax .section-box:has(.embark-table) { overflow-x:auto; }
+    .portal-manifest .modal-footer { gap:.45rem; flex-wrap:wrap; }
+    .portal-manifest .modal-footer .btn { flex:1 1 125px; min-height:42px; }
+  }
+  @media (max-width:390px) {
+    .nav-badge,.nav-user { display:none; }
+    .portal-manifest .manifest-container { padding:.6rem; }
+    .portal-manifest .manifest-container .header-title { font-size:1rem; }
+    .portal-manifest .manifest-container .section-box { padding:.45rem; }
+  }
   @media print {
     @page { size:letter portrait; margin:0; }
     html,body { margin:0 !important; padding:0 !important; background:#fff !important; }
