@@ -19416,6 +19416,15 @@ async function loadConciliacionManifiestos(options = {}) {
     const errorEl = document.getElementById('conci-manifiestos-error');
     const badge   = document.getElementById('badge-conci-manifiestos-count');
     const config = (typeof Event !== 'undefined' && options instanceof Event) ? {} : (options || {});
+    // Un refresco disparado por un cambio remoto (colaboración en vivo) nunca
+    // debe arrancarse si justo en ese instante el usuario tiene una celda
+    // propia abierta — reemplazar el tbody a media captura le borraría lo que
+    // está escribiendo. Se reintenta solo (ver _conciMaybeApplyDeferredRemoteRefresh)
+    // en cuanto cierre esa celda.
+    if (config.fromRemoteSync && document.querySelector('#table-conci-manifiestos td.conci-cell-active')) {
+        _conciPendingRemoteRefresh = true;
+        return;
+    }
     const requestSeq = ++_conciLoadRequestSeq;
 
     let year, month, day, dayEnd = null;
@@ -22247,7 +22256,7 @@ function _conciMaybeApplyDeferredRemoteRefresh() {
     _conciPendingRemoteRefresh = false;
     _conciRenderCache.clear();
     _conciRenderedKey = '';
-    loadConciliacionManifiestos({ forceRefresh: true });
+    loadConciliacionManifiestos({ forceRefresh: true, fromRemoteSync: true });
 }
 
 function _conciActivateCellEditor(td) {
