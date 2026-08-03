@@ -18256,6 +18256,39 @@ async function _ensureIataCityMap() {
     }
 }
 
+// Catálogo de tipos de aeronave (data/master/aircraft type.csv): código IATA/ICAO -> nombre.
+// Se usa para mostrar el nombre del modelo en la columna AERONAVE en vez del código crudo,
+// y para poblar el combo del editor de esa columna.
+// Se recarga desde el servidor en cada refresco de la tabla (sin caché de navegador ni
+// de sesión) para que los cambios al CSV se reflejen de inmediato.
+let _conciAircraftTypeByCode = new Map();
+let _conciAircraftTypeOptions = []; // [{ code, name }] únicos por código IATA, ordenados por nombre
+
+async function _ensureConciAircraftTypeMap() {
+    try {
+        const res = await fetch(`data/master/aircraft type.csv?t=${Date.now()}`, { cache: 'no-store' });
+        const text = await res.text();
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        const byCode = new Map();
+        const options = [];
+        for (let i = 1; i < lines.length; i++) {
+            const parts = lines[i].split(',');
+            if (parts.length < 3) continue;
+            const iata = (parts[0] || '').trim().toUpperCase();
+            const icao = (parts[1] || '').trim().toUpperCase();
+            const name = (parts[2] || '').trim().replace(/^"|"$/g, '');
+            if (!name) continue;
+            if (iata) { byCode.set(iata, name); options.push({ code: iata, name }); }
+            if (icao) byCode.set(icao, name);
+        }
+        options.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        _conciAircraftTypeByCode = byCode;
+        _conciAircraftTypeOptions = options;
+    } catch (e) {
+        console.warn('[Conciliación] No se pudo cargar aircraft type.csv', e);
+    }
+}
+
 // Países por IATA provenientes de public.catalogo_aeropuertos. Se conserva en
 // memoria durante la sesión y se usa antes que el CSV local para clasificar rutas.
 let _conciAirportCountryByIata = new Map();
@@ -19615,6 +19648,7 @@ async function loadConciliacionManifiestos(options = {}) {
             _ensureConciAirlineCatalog(),
             _ensureConciAirlineOverrides(),
             _ensureConciMatriculaCatalog(),
+            _ensureConciAircraftTypeMap(),
         ]);
 
         if (requestSeq !== _conciLoadRequestSeq) return;
@@ -20118,7 +20152,7 @@ const _CONCI_EXPORT_COLS_PAX = [
     { h: 'TIPO DE MANIFIESTO', t: 'text', a: ['TIPO DE MANIFIESTO'] },
     { h: 'AEROLINEA', t: 'airline', a: ['AEROLINEA', 'AEROLÍNEA'] },
     { h: 'TIPO DE OPERACIÓN', t: 'optype', a: [] },
-    { h: 'AERONAVE', t: 'text', a: ['AERONAVE'] },
+    { h: 'AERONAVE', t: 'aircraft', a: ['AERONAVE'] },
     { h: 'MATRÍCULA', t: 'text', a: ['MATRÍCULA', 'MATRICULA'] },
     { h: 'ESTATUS MATRÍCULA', t: 'text', a: ['ESTATUS MATRÍCULA', 'ESTATUS MATRICULA'] },
     { h: '# DE VUELO', t: 'text', a: ['# DE VUELO'] },
@@ -20156,7 +20190,7 @@ const _CONCI_EXPORT_COLS_CARGA = [
     { h: 'TIPO DE MANIFIESTO', t: 'text', a: ['TIPO DE MANIFIESTO'] },
     { h: 'TIPO DE OPERACIÓN', t: 'optype', a: [] },
     { h: 'AEROLINEA', t: 'airline', a: ['AEROLINEA', 'AEROLÍNEA'] },
-    { h: 'AERONAVE', t: 'text', a: ['AERONAVE'] },
+    { h: 'AERONAVE', t: 'aircraft', a: ['AERONAVE'] },
     { h: 'MATRÍCULA', t: 'text', a: ['MATRÍCULA', 'MATRICULA'] },
     { h: '# DE VUELO', t: 'text', a: ['# DE VUELO'] },
     { h: 'ORIGEN', t: 'codecity', a: ['ORIGEN'] },
@@ -20274,6 +20308,11 @@ async function _conciExportToExcel(kind) {
                     };
                 }
                 return { value: String(rawVal || '') };
+            }
+            case 'aircraft': {
+                const code = String(rawVal || '').trim().toUpperCase();
+                const name = code ? _conciAircraftTypeByCode.get(code) : '';
+                return { value: name || String(rawVal || '') };
             }
             case 'optype': {
                 let code = '';
@@ -20924,6 +20963,8 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     const _tipoCol    = displayCols.find(c => /tipo.*(manif)/i.test(c)) || null;
     const _airlineCol = displayCols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
     const _matriculaStatusCol = displayCols.find(c => /estatus.*matr[ií]cula|status.*matr[ií]cula/i.test(c)) || null;
+    // Columna "AERONAVE": muestra el nombre del modelo (catálogo aircraft type.csv) en vez del código IATA/ICAO crudo.
+    const _aeronaveCol = displayCols.find(c => /^aeronave$/i.test(c.trim())) || null;
     // Match columns named exactly 'Routing' OR containing 'origen' or 'destino' (e.g. 'DESTINO / ORIGEN')
     const _routingCol = displayCols.find(c => /^routing$/i.test(c) || /origen|destino.*origen|routing/i.test(c)) || null;
     // Columna "TIPO DE OPERACIÓN": se muestra como Nacional / Internacional según el
@@ -21119,6 +21160,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         c,
         isAirline:   c === _airlineCol,
         isMatriculaStatus: c === _matriculaStatusCol,
+        isAeronave:  c === _aeronaveCol,
         isRouting:   c === _routingCol && (hasIataMap || hasAirportCatalog),
         isOptype:    c === _optypeCol,
         isHrsCumplidas: c === _hrsCumplidasCol && !!_hrOperacionCol && !!_hrRecepcionCol,
@@ -21213,6 +21255,11 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                     } else {
                         td.textContent = rawStr;
                     }
+                } else if (meta.isAeronave) {
+                    const code = rawStr.toUpperCase();
+                    const name = code ? _conciAircraftTypeByCode.get(code) : '';
+                    td.textContent = name || rawStr;
+                    if (name && name.toUpperCase() !== rawStr.toUpperCase()) td.title = rawStr;
                 } else if (meta.isRouting) {
                     const tipo = _tipoCol ? String(row[_tipoCol] || '') : '';
                     const isArr = /lleg|arr/i.test(tipo);
@@ -21456,6 +21503,82 @@ function _conciEnsureEditStyles() {
         }
         #table-conci-manifiestos .conci-row-action-col { display: none; }
         #table-conci-manifiestos.conci-edit-mode .conci-row-action-col { display: table-cell; }
+
+        .conci-aeronave-suggest {
+            position: fixed;
+            z-index: 3000;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 16px 32px rgba(15, 23, 42, 0.16), 0 3px 8px rgba(15, 23, 42, 0.08);
+            max-height: 280px;
+            overflow-y: auto;
+            padding: 6px;
+        }
+        .conci-aeronave-suggest.d-none { display: none; }
+        .conci-aeronave-suggest-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.82rem;
+            color: #1e293b;
+        }
+        .conci-aeronave-suggest-item .conci-aeronave-suggest-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            background: #eef4ff;
+            color: #0d6efd;
+            font-size: 0.68rem;
+            flex: none;
+        }
+        .conci-aeronave-suggest-name {
+            flex: 1;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .conci-aeronave-suggest-name mark {
+            background: transparent;
+            color: #0d6efd;
+            font-weight: 800;
+            padding: 0;
+        }
+        .conci-aeronave-suggest-code {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            color: #475569;
+            background: #eef2f7;
+            border-radius: 999px;
+            padding: 2px 9px;
+            flex: none;
+        }
+        .conci-aeronave-suggest-item:hover,
+        .conci-aeronave-suggest-item.conci-aeronave-suggest-active {
+            background: #e7f1ff;
+        }
+        .conci-aeronave-suggest-item.conci-aeronave-suggest-active .conci-aeronave-suggest-icon {
+            background: #0d6efd;
+            color: #ffffff;
+        }
+        .conci-aeronave-suggest-item.conci-aeronave-suggest-active .conci-aeronave-suggest-code {
+            background: #0d6efd;
+            color: #ffffff;
+        }
+        .conci-aeronave-suggest-empty {
+            padding: 14px 10px;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.8rem;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -21765,6 +21888,10 @@ function _conciIsRoutingColumn(column) {
         || /destino.*origen|origen.*destino/.test(key);
 }
 
+function _conciIsAeronaveColumn(column) {
+    return _conciNormalizedColumnName(column) === 'aeronave';
+}
+
 function _conciNormalizeManifestType(value) {
     const key = _conciNormalizedColumnName(value);
     if (/lleg|arr/.test(key)) return 'Llegada';
@@ -21901,6 +22028,199 @@ function _conciActivateRoutingEditor(td, currentRaw) {
     select.addEventListener('blur', () => closeEditor(true, false));
     select.focus();
 }
+
+// Resuelve lo escrito/elegido en el editor de AERONAVE a { code, name }.
+// Acepta la etiqueta completa "Nombre (CODIGO)" (lo que deja el datalist al dar
+// clic en una sugerencia), un código suelto (IATA o ICAO) o un nombre exacto.
+function _conciResolveAeronaveInput(raw) {
+    const text = String(raw || '').trim();
+    if (!text) return { code: '', name: '' };
+    const m = text.match(/\(([A-Za-z0-9]{2,4})\)\s*$/);
+    if (m) {
+        const c = m[1].toUpperCase();
+        const n = _conciAircraftTypeByCode.get(c);
+        if (n) return { code: c, name: n };
+    }
+    const upper = text.toUpperCase();
+    if (_conciAircraftTypeByCode.has(upper)) return { code: upper, name: _conciAircraftTypeByCode.get(upper) };
+    const byName = _conciAircraftTypeOptions.find(o => o.name.toLowerCase() === text.toLowerCase());
+    if (byName) return { code: byName.code, name: byName.name };
+    // Sin coincidencia: se conserva tal cual lo escribió (no se pierde información).
+    return { code: text, name: '' };
+}
+
+// Panel flotante (reutilizado entre aperturas) que muestra las sugerencias del
+// editor de AERONAVE. Es un elemento propio (no un <datalist> nativo) para poder
+// darle estilo: tarjeta con sombra, ícono, resaltado del texto buscado, etc.
+function _conciAeronaveSuggestEl() {
+    let el = document.getElementById('conci-aeronave-suggest');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'conci-aeronave-suggest';
+        el.className = 'conci-aeronave-suggest d-none';
+        document.body.appendChild(el);
+    }
+    return el;
+}
+
+function _conciAeronaveHighlight(text, query) {
+    if (!query) return _conciCatalogEsc(text);
+    const idx = text.toLowerCase().indexOf(query.toLowerCase());
+    if (idx === -1) return _conciCatalogEsc(text);
+    const before = text.slice(0, idx);
+    const match = text.slice(idx, idx + query.length);
+    const after = text.slice(idx + query.length);
+    return `${_conciCatalogEsc(before)}<mark>${_conciCatalogEsc(match)}</mark>${_conciCatalogEsc(after)}`;
+}
+
+// Resuelve lo escrito/elegido en el editor de AERONAVE a { code, name }.
+// Acepta la etiqueta completa "Nombre (CODIGO)" (lo que deja la sugerencia al dar
+// clic), un código suelto (IATA o ICAO) o un nombre exacto.
+function _conciResolveAeronaveInput(raw) {
+    const text = String(raw || '').trim();
+    if (!text) return { code: '', name: '' };
+    const m = text.match(/\(([A-Za-z0-9]{2,4})\)\s*$/);
+    if (m) {
+        const c = m[1].toUpperCase();
+        const n = _conciAircraftTypeByCode.get(c);
+        if (n) return { code: c, name: n };
+    }
+    const upper = text.toUpperCase();
+    if (_conciAircraftTypeByCode.has(upper)) return { code: upper, name: _conciAircraftTypeByCode.get(upper) };
+    const byName = _conciAircraftTypeOptions.find(o => o.name.toLowerCase() === text.toLowerCase());
+    if (byName) return { code: byName.code, name: byName.name };
+    // Sin coincidencia: se conserva tal cual lo escribió (no se pierde información).
+    return { code: text, name: '' };
+}
+
+// Editor de la columna AERONAVE: campo de texto con un panel de sugerencias propio
+// (con ícono, resaltado y hover) que permite escribir para filtrar el modelo por
+// nombre y darle clic para elegirlo rápido, en vez de mostrar/editar el código
+// IATA crudo. Se guarda el código IATA (lo que ya usa el resto del sistema), pero
+// se escribe/muestra por nombre.
+function _conciActivateAeronaveEditor(td, currentRaw) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-control form-control-sm conci-cell-input';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.placeholder = 'Escribe para buscar…';
+
+    const code = String(currentRaw || '').trim().toUpperCase();
+    const currentName = code ? _conciAircraftTypeByCode.get(code) : '';
+    input.value = currentName ? `${currentName} (${code})` : code;
+
+    td.classList.add('conci-cell-active');
+    td.textContent = '';
+    td.appendChild(input);
+
+    const suggest = _conciAeronaveSuggestEl();
+    let activeIndex = -1;
+    let currentMatches = [];
+
+    const positionSuggest = () => {
+        const r = input.getBoundingClientRect();
+        suggest.style.left = `${Math.round(r.left)}px`;
+        suggest.style.top = `${Math.round(r.bottom + 4)}px`;
+        suggest.style.width = `${Math.max(Math.round(r.width), 240)}px`;
+    };
+
+    const closeSuggest = () => {
+        suggest.classList.add('d-none');
+        suggest.innerHTML = '';
+        activeIndex = -1;
+        currentMatches = [];
+        window.removeEventListener('scroll', positionSuggest, true);
+        window.removeEventListener('resize', positionSuggest);
+    };
+
+    const setActive = (idx) => {
+        const items = suggest.querySelectorAll('.conci-aeronave-suggest-item');
+        items.forEach(it => it.classList.remove('conci-aeronave-suggest-active'));
+        activeIndex = idx;
+        if (idx >= 0 && items[idx]) {
+            items[idx].classList.add('conci-aeronave-suggest-active');
+            items[idx].scrollIntoView({ block: 'nearest' });
+        }
+    };
+
+    const renderSuggest = (query) => {
+        const q = query.trim().toLowerCase();
+        const matches = (q
+            ? _conciAircraftTypeOptions.filter(o => o.name.toLowerCase().includes(q) || o.code.toLowerCase().includes(q))
+            : _conciAircraftTypeOptions
+        ).slice(0, 40);
+        currentMatches = matches;
+
+        suggest.innerHTML = matches.length ? matches.map((opt, i) => `
+            <div class="conci-aeronave-suggest-item" data-idx="${i}">
+                <span class="conci-aeronave-suggest-icon"><i class="fas fa-plane"></i></span>
+                <span class="conci-aeronave-suggest-name">${_conciAeronaveHighlight(opt.name, q)}</span>
+                <span class="conci-aeronave-suggest-code">${_conciCatalogEsc(opt.code)}</span>
+            </div>`).join('') : '<div class="conci-aeronave-suggest-empty">Sin coincidencias</div>';
+
+        positionSuggest();
+        suggest.classList.remove('d-none');
+        setActive(-1);
+        window.addEventListener('scroll', positionSuggest, true);
+        window.addEventListener('resize', positionSuggest);
+    };
+
+    const pickMatch = (opt) => { input.value = `${opt.name} (${opt.code})`; };
+
+    suggest.addEventListener('mousedown', (e) => {
+        const item = e.target.closest('.conci-aeronave-suggest-item');
+        if (!item) return;
+        e.preventDefault(); // evita que el input pierda foco (blur) antes del clic
+        const opt = currentMatches[parseInt(item.dataset.idx, 10)];
+        if (opt) { pickMatch(opt); closeEditor(true, false); }
+    });
+
+    let closed = false;
+    const closeEditor = (accept, move) => {
+        if (closed) return;
+        closed = true;
+        td._conciCloseEditor = null;
+        closeSuggest();
+        if (!accept) {
+            _conciCommitCellRaw(td, code, move, currentName || code);
+            return;
+        }
+        const resolved = _conciResolveAeronaveInput(input.value);
+        const finalCode = resolved.code || code;
+        const finalName = resolved.name || (finalCode ? (_conciAircraftTypeByCode.get(finalCode) || finalCode) : '');
+        _conciCommitCellRaw(td, finalCode, move, finalName);
+    };
+    td._conciCloseEditor = closeEditor;
+
+    input.addEventListener('input', () => renderSuggest(input.value));
+    input.addEventListener('focus', () => { renderSuggest(''); input.select(); });
+    input.addEventListener('keydown', event => {
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            if (suggest.classList.contains('d-none')) renderSuggest(input.value);
+            else setActive(Math.min(activeIndex + 1, currentMatches.length - 1));
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            setActive(Math.max(activeIndex - 1, 0));
+        } else if (event.key === 'Enter') {
+            event.preventDefault();
+            if (activeIndex >= 0 && currentMatches[activeIndex]) pickMatch(currentMatches[activeIndex]);
+            closeEditor(true, 'next');
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            closeEditor(false, false);
+        } else if (event.key === 'Tab') {
+            event.preventDefault();
+            if (activeIndex >= 0 && currentMatches[activeIndex]) pickMatch(currentMatches[activeIndex]);
+            closeEditor(true, event.shiftKey ? 'prev' : 'next');
+        }
+    });
+    input.addEventListener('blur', () => closeEditor(true, false));
+
+    input.focus();
+}
+
 function _conciIsOperationTypeColumn(column) {
     const key = _conciNormalizedColumnName(column);
     return key === 'tipo de operacion' || key === 'tipo operacion' || key === 'service type';
@@ -22278,6 +22598,10 @@ function _conciActivateCellEditor(td) {
     }
     if (_conciIsRoutingColumn(col)) {
         _conciActivateRoutingEditor(td, currentRaw);
+        return;
+    }
+    if (_conciIsAeronaveColumn(col)) {
+        _conciActivateAeronaveEditor(td, currentRaw);
         return;
     }
     // Editor amigable para columnas de fecha / fecha+hora: calendario + hora 24h.
