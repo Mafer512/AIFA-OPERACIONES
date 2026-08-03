@@ -4,6 +4,7 @@
     const SECTION = 'muebles-bienes';
     const BUCKET = 'muebles-bienes-documentos';
     const MAX_PDF = 10 * 1024 * 1024;
+    const LOAD_TIMEOUT_MS = 20000;
     const THUMBNAIL_STYLE = 'header-v3';
     const THUMBNAIL_CROP = Object.freeze({ left: .10, top: .085, width: .80, height: .115 });
     const state = { all: [], filtered: [], docs: new Map(), docsLoaded: new Set(), loaded: false, loading: false, view: 'grid', editingId: null, replacingDocId: null, raf: 0, signedUrls: new Map(), validatedPdfs: new WeakSet(), thumbnailCache: new Map(), thumbnailJobs: new Map(), thumbnailQueue: [], thumbnailQueued: new Set(), thumbnailActive: 0, thumbnailObserver: null, previewBienId: null, previewIndex: 0, previewCloseTimer: 0, previewRequest: 0, viewerDoc: null, viewerBienId: null, viewerOpening: null, viewerRequest: 0, viewerPdf: null, viewerRenderTask: null, viewerRenderRequest: 0, viewerResizeTimer: 0, viewerPage: 1, viewerPages: null, viewerScale: 1, viewerFitMode: 'page', uploading: false, duplicateResolver: null, quickBienId: null, quickUploads: new Set(), quickSuccess: new Set(), quickTimers: new Map() };
@@ -63,6 +64,7 @@
             <button class="btn btn-sm btn-outline-success rounded-pill" onclick="mueblesBienesModule.exportCSV()"><i class="fas fa-file-csv me-1"></i>CSV</button>
           </div></div>
           <div id="mb-loading" class="text-center py-5"><div class="spinner-border text-primary"></div><p class="text-muted mt-2">Cargando inventario…</p></div>
+          <div id="mb-load-error" class="alert alert-danger text-center d-none" role="alert"><div id="mb-load-error-text">No se pudo cargar el inventario.</div><button type="button" class="btn btn-sm btn-outline-danger mt-2" onclick="mueblesBienesModule.reload()"><i class="fas fa-rotate-right me-1"></i>Reintentar</button></div>
           <div id="mb-empty" class="text-center py-5 d-none"><i class="fas fa-box-open fa-3x text-muted"></i><p class="mt-3">No se encontraron bienes con los criterios seleccionados.</p></div>
           <div id="mb-grid" class="row g-4"></div>
           <div id="mb-table-wrap" class="card border-0 shadow-sm rounded-4 d-none"><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead class="table-dark"><tr><th>Equipo</th><th>Serie / lote</th><th>Cantidad</th><th>Área responsable</th><th>Resguardo</th><th>Responsable</th><th>Documentación</th><th></th></tr></thead><tbody id="mb-tbody"></tbody></table></div></div>
@@ -115,16 +117,24 @@
         window.addEventListener('resize', () => { clearTimeout(state.viewerResizeTimer);state.viewerResizeTimer=setTimeout(() => { if(state.viewerPdf&&$('mb-pdf-modal')?.classList.contains('show'))refreshViewer(Boolean(state.viewerFitMode)).catch(showActiveViewerError); },150); });
     }
 
+    function withTimeout(promise, timeoutMs = LOAD_TIMEOUT_MS, message = 'La consulta tardó demasiado. Revisa la conexión e intenta nuevamente.') {
+        let timer;
+        const timeout = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), timeoutMs); });
+        return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    }
+
     async function load(force = false) {
         ensureUI();
         if (state.loading || (state.loaded && !force)) { if (state.loaded) applyFilters(); return; }
-        state.loading = true; $('mb-loading')?.classList.remove('d-none');
+        state.loading = true;
+        $('mb-loading')?.classList.remove('d-none');
+        $('mb-load-error')?.classList.add('d-none');
         try {
-            const sb = await window.ensureSupabaseClient();
-            const [goodsRes, linksRes] = await Promise.all([
+            const sb = await withTimeout(window.ensureSupabaseClient(), LOAD_TIMEOUT_MS, 'No se pudo iniciar la conexión con Supabase.');
+            const [goodsRes, linksRes] = await withTimeout(Promise.all([
                 sb.from('muebles_bienes').select('*').order('familia').order('numero_serie'),
                 sb.from('muebles_bienes_documentos').select('bien_id,documento_id')
-            ]);
+            ]));
             if (goodsRes.error) throw goodsRes.error;
             if (linksRes.error) throw linksRes.error;
             state.all = (goodsRes.data || []).map(row => ({ ...row, _search: norm([row.familia,row.descripcion,row.numero_serie,row.numero_control,row.area_responsable,row.numero_economico,row.resguardo_folio,row.responsable,row.vehiculo_ubicacion,row.observaciones].join(' ')) }));
@@ -137,8 +147,18 @@
             $('mb-recent-history')?.classList.toggle('d-none', !canViewHistory());
             applyFilters();
         } catch (error) {
-            console.error('[muebles-bienes] load', error); toast(`No se pudo cargar el inventario: ${error.message}`, 'danger');
+            const message=error?.message||'Error desconocido al consultar el inventario.';
+            console.error('[muebles-bienes] load', error);
+            const errorBox=$('mb-load-error'),errorText=$('mb-load-error-text');
+            if(errorText)errorText.textContent=`No se pudo cargar el inventario: ${message}`;
+            errorBox?.classList.remove('d-none');
+            toast(`No se pudo cargar el inventario: ${message}`, 'danger');
         } finally { state.loading = false; $('mb-loading')?.classList.add('d-none'); }
+    }
+
+    function activateOnEntry() {
+        const section=$('muebles-bienes-section');
+        if(location.hash==='#muebles-bienes'||section?.classList.contains('active'))load();
     }
 
     function populateFilters() {
@@ -761,4 +781,6 @@
 
     window.mueblesBienesModule={init:()=>load(),reload:()=>load(true),setView,openDetail,openForm,openDocument,chooseQuickDocument,openPDF,openDocuments,deleteDocument,reclassifyDocument,reassignDocument,previewDocuments,selectPreview,schedulePreviewClose,cancelPreviewClose,closePreview,openViewer,viewerPage,viewerZoom,viewerFit,viewerFitPage,viewerReset,viewerOpenTab,viewerDownload,openRecentHistory,exportCSV,bulkImportDocuments};
     ensureUI();
+    if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activateOnEntry,{once:true});
+    else queueMicrotask(activateOnEntry);
 })();

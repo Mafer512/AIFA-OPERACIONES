@@ -26,6 +26,29 @@ describe('modulo Muebles y Bienes', () => {
     expect(moduleSource).toContain("const SECTION = 'muebles-bienes'");
     expect(moduleSource).toContain(".from('muebles_bienes')");
   });
+  test('inicia el inventario al entrar directamente por hash o restaurar la sección activa', () => {
+    expect(html).toContain('js/muebles-bienes.js?v=4');
+    expect(moduleSource).toContain("document.addEventListener('DOMContentLoaded',activateOnEntry,{once:true})");
+    const start=moduleSource.indexOf('function activateOnEntry()');
+    const end=moduleSource.indexOf('function populateFilters()',start);
+    const build=new Function('$','location','load',`${moduleSource.slice(start,end)}; return activateOnEntry;`);
+    let calls=0;
+    build(()=>({classList:{contains:()=>false}}),{hash:'#muebles-bienes'},()=>{calls++;})();
+    build(()=>({classList:{contains:()=>true}}),{hash:'#otra'},()=>{calls++;})();
+    build(()=>({classList:{contains:()=>false}}),{hash:'#otra'},()=>{calls++;})();
+    expect(calls).toBe(2);
+  });
+  test('limita la espera de Supabase y ofrece reintento en lugar de dejar el spinner permanente', async () => {
+    expect(moduleSource).toContain('id="mb-load-error"');
+    expect(moduleSource).toContain('mueblesBienesModule.reload()');
+    expect(moduleSource).toContain('await withTimeout(window.ensureSupabaseClient()');
+    expect(moduleSource).toContain('await withTimeout(Promise.all([');
+    const start=moduleSource.indexOf('function withTimeout(');
+    const end=moduleSource.indexOf('async function load(',start);
+    const withTimeout=new Function('LOAD_TIMEOUT_MS',`${moduleSource.slice(start,end)}; return withTimeout;`)(20);
+    await expect(withTimeout(new Promise(()=>{}),5,'Tiempo agotado')).rejects.toThrow('Tiempo agotado');
+    await expect(withTimeout(Promise.resolve('ok'),50)).resolves.toBe('ok');
+  });
   test('filtra localmente desde memoria y no consulta Supabase por tecla', () => {
     const start=moduleSource.indexOf('function applyFilters()');
     const end=moduleSource.indexOf('function updateKPIs()',start);
