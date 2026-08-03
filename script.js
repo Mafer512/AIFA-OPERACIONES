@@ -22028,7 +22028,10 @@ function _conciActivateRoutingEditor(td, currentRaw) {
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
         else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
-        else if (event.key === 'Tab') { event.preventDefault(); closeEditor(true, event.shiftKey ? 'prev' : 'next'); }
+        else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+            event.preventDefault();
+            closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
+        }
     });
     select.addEventListener('blur', () => closeEditor(true, false));
     select.focus();
@@ -22215,10 +22218,13 @@ function _conciActivateAeronaveEditor(td, currentRaw) {
         } else if (event.key === 'Escape') {
             event.preventDefault();
             closeEditor(false, false);
-        } else if (event.key === 'Tab') {
+        } else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+            // →/← se comportan igual que Tab/Shift+Tab: confirman la sugerencia
+            // activa (si hay) y pasan de campo siempre, sin condición de cursor.
             event.preventDefault();
-            if (activeIndex >= 0 && currentMatches[activeIndex]) pickMatch(currentMatches[activeIndex]);
-            closeEditor(true, event.shiftKey ? 'prev' : 'next');
+            const goingBack = event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey);
+            if (!goingBack && activeIndex >= 0 && currentMatches[activeIndex]) pickMatch(currentMatches[activeIndex]);
+            closeEditor(true, goingBack ? 'prev' : 'next');
         }
     });
     input.addEventListener('blur', () => closeEditor(true, false));
@@ -22331,7 +22337,10 @@ function _conciActivateManifestTypeEditor(td, currentRaw) {
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
         else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
-        else if (event.key === 'Tab') { event.preventDefault(); closeEditor(true, event.shiftKey ? 'prev' : 'next'); }
+        else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+            event.preventDefault();
+            closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
+        }
     });
     select.addEventListener('blur', () => closeEditor(true, false));
     select.focus();
@@ -22382,9 +22391,9 @@ function _conciActivateOperationTypeEditor(td, currentRaw) {
         } else if (event.key === 'Escape') {
             event.preventDefault();
             closeEditor(false, false);
-        } else if (event.key === 'Tab') {
+        } else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
-            closeEditor(true, event.shiftKey ? 'prev' : 'next');
+            closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
         }
     });
     select.addEventListener('blur', () => closeEditor(true, false));
@@ -22653,10 +22662,11 @@ function _conciActivateCellEditor(td) {
         } else if (e.key === 'Escape') {
             e.preventDefault();
             closeEditor(false, false);
-        } else if (e.key === 'Tab') {
-            // Tab avanza al siguiente campo editable de la fila/tabla; Shift+Tab retrocede.
+        } else if (e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+            // →/← se comportan igual que Tab/Shift+Tab: pasan de campo siempre,
+            // sin importar en qué posición esté el cursor dentro del texto.
             e.preventDefault();
-            closeEditor(true, e.shiftKey ? 'prev' : 'next');
+            closeEditor(true, (e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey)) ? 'prev' : 'next');
         }
     });
     input.addEventListener('input', () => {
@@ -22862,6 +22872,12 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
     };
     td._conciCloseEditor = closeEditor;
 
+    // La flecha derecha se comporta igual que Tab (avanza) y la izquierda igual
+    // que Shift+Tab (retrocede), sin condiciones: no importa si hay texto
+    // seleccionado o el campo está vacío. Se prioriza pasar de campo rápido por
+    // encima de usar esas flechas para moverse entre los segmentos día/mes/año
+    // del selector de fecha nativo (para eso ya sirve escribir los números,
+    // que avanzan de segmento solos).
     const onKeydown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -22869,16 +22885,23 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
         } else if (e.key === 'Escape') {
             e.preventDefault();
             closeEditor(false, false);
-        } else if (e.key === 'Tab') {
-            if (e.shiftKey) {
+        } else if (e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+            const goingBack = e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey);
+            if (goingBack) {
                 if (e.target === dateInput) {
                     // Ya está en el primer campo de la celda: retrocede a la celda anterior.
                     e.preventDefault();
                     closeEditor(true, 'prev');
+                } else {
+                    // Desde la hora, retrocede a la fecha (misma celda).
+                    e.preventDefault();
+                    dateInput.focus();
                 }
-                // Desde la hora, Shift+Tab regresa de forma nativa a la fecha (misma celda).
             } else if (withTime && e.target === dateInput) {
-                // Tab nativo: de la fecha pasa a la hora dentro de la misma celda.
+                // De la fecha pasa a la hora dentro de la misma celda.
+                e.preventDefault();
+                timeInput.focus();
+                timeInput.select();
             } else {
                 e.preventDefault();
                 closeEditor(true, 'next');
