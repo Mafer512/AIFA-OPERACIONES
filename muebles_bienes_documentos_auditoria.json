@@ -1,0 +1,447 @@
+{
+  "physicalFiles": 49,
+  "uniqueFiles": 46,
+  "exactDuplicates": [
+    {
+      "sha256": "199609c56c913b383bc0ed00de5e81860863d0d768dc6d723f987d04a9f68770",
+      "names": [
+        "259AD0FB-F2C8-473A-9536-0BE78A8A7208DO-CA-055 DIR. ADMÓN. (GERENCIA DE SVS. GENERALES) (1).pdf",
+        "259AD0FB-F2C8-473A-9536-0BE78A8A7208DO-CA-055 DIR. ADMÓN. (GERENCIA DE SVS. GENERALES).pdf"
+      ]
+    },
+    {
+      "sha256": "e0d9c368483241c4c0027abdbc8c9ef185d7a291c5e6d95966ad438698544ce4",
+      "names": [
+        "B1A34A30-030B-4C74-92D5-0AF9C9B1EE32DO-CA-0742 DIRECTOR DE OPERACION (1).pdf",
+        "B1A34A30-030B-4C74-92D5-0AF9C9B1EE32DO-CA-0742 DIRECTOR DE OPERACION.pdf"
+      ]
+    },
+    {
+      "sha256": "64f95cb310b46a421e4496fe1b2dcd9e42779f2b1080e05d9e7f9d883be27728",
+      "names": [
+        "C7B68471-6164-4D16-BA81-E7D1E48FCDDEDO-CA-086 GERENCIA DE CARGA (1).pdf",
+        "C7B68471-6164-4D16-BA81-E7D1E48FCDDEDO-CA-086 GERENCIA DE CARGA.pdf"
+      ]
+    }
+  ],
+  "exactFolioFiles": 36,
+  "exactSerialFiles": 1,
+  "pendingFiles": 9,
+  "goodsCoveredByExactFolios": 240,
+  "files": [
+    {
+      "name": "087C1211-F514-4DB4-ADA7-899A2A99A21E3 BASES DE CARGA ING. GALLARDO.pdf",
+      "size": 185316,
+      "sha256": "fc59fff486451ed061bd775174a97e065ccf3310fb251a9ecf9ab8940a95630f",
+      "folio": null,
+      "serial": null,
+      "association": "pending",
+      "matchedGoods": 0
+    },
+    {
+      "name": "0EC33599-E9C3-49DE-BF26-E38F243019ECDO-CA-098 GERENCIA DE INGENIERIA ELECTROMECANICA.pdf",
+      "size": 222232,
+      "sha256": "9de0d744abec517ce2a4897e7b142575b8c85c49bdda81e155ef716b85f7a347",
+      "folio": "DO/CA/098",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 1
+    },
+    {
+      "name": "1517190A-9F68-46D6-8341-D439C1A13524DO-CA-054 16 BATALLON DE SVS. ESPLS. P.M.pdf",
+      "size": 216731,
+      "sha256": "416b3f2cc1bf4f515f8823eee3b13bcb280a1715019f1cc128265cbfde5a9a0e",
+      "folio": "DO/CA/054",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 2
+    },
+    {
+      "name": "259AD0FB-F2C8-473A-9536-0BE78A8A7208DO-CA-055 DIR. ADMÓN. (GERENCIA DE SVS. GENERALES) (1).pdf",
+      "size": 223827,
+      "sha256": "199609c56c913b383bc0ed00de5e81860863d0d768dc6d723f987d04a9f68770",
+      "folio": "DO/CA/055",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 3
+    },
+    {
+      "name": "27D58156-CFD7-4D34-91AB-56524B843A17DO-CA-0753 GERENCIA DE SMS.pdf",
+      "size": 429832,
+      "sha256": "b73a135c68799dafdb272cbd95b583454248ea5bf3de3f9870012c63ba218fdf",
+      "folio": "DO/CA/0753",
+      "serial": null,
+      "association": "pending",
+      "matchedGoods": 0
+    },
+    {
+      "name": "2C76CB67-95DA-4D71-B0E9-94081E48D02CDO-CA-034 CENTRO DE OPS. AEROPORTUARIAS 1 EQ..pdf",
+      "size": 217533,
+      "sha256": "c1577f557f590ba16b818a70faf1f302a250e60e83b51dab0f14d93c0e026931",
+      "folio": "DO/CA/034",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 1
+    },
+    {
+      "name": "333A2329-BC54-40FD-BA0C-CCC3404C187FDO-CA-058 GERENCIA DE SEGURIDAD OPERACIONAL.pdf",
+      "size": 214886,
+      "sha256": "ff09cba00fbfdfbd4851c32e9f914eea3447e160bb0ca6a7e7b6cd84b90048d4",
+      "folio": "DO/CA/058",
+      "serial": null,
+      "association": "pending",
+      "matchedGoods": 0
+    },
+    {
+      "name": "4126DB27-A861-4A4B-995C-543EA8FBA5AFDO-CA-0710 SUBDIRECCIÓN DE GESTION ENERGETICA 29 JUN 2026.pdf",
+      "size": 454190,
+      "sha256": "eb9006b6ab80cde394a6849cd5193fa1012ef791d5168e40a44f55a83471bf37",
+      "folio": "DO/CA/0710",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 12
+    },
+    {
+      "name": "46139C58-BD2C-40A8-B167-D6AB70BDDF0DDO-CA-0738 SEG. AVN. JEFE SABINO.pdf",
+      "size": 855623,
+      "sha256": "4572969bfca5662a75c67d44b8daf00cb29ec8927cf0cac3068cc83d14d66df5",
+      "folio": "DO/CA/0738",
+      "serial": null,
+      "association": "pending",
+      "matchedGoods": 0
+    },
+    {
+      "name": "465A270E-6B19-4F19-9DCD-D02F64ACA9DBCA-EC-914 COORDINACION DE AUDITORIA.pdf",
+      "size": 238164,
+      "sha256": "a790b953cc28827317316a8ff2b9b6920ef402b19594a5e1cec41e12e87e1322",
+      "folio": "CA/EC/914",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 9
+    },
+    {
+      "name": "4777EA99-D3E4-4B32-9210-BC5E584C2464DO-CA-076 SUBDIRECCIÓN DE TIC.pdf",
+      "size": 35361,
+      "sha256": "ee268e623bc86d669aa3f43d63a0f3d37e8c4525e79ee7675627eb626eba87c4",
+      "folio": "DO/CA/076",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 1
+    },
+    {
+      "name": "659FB309-3E11-49D9-8EA7-C1C99F3C88FBDO-CA-0795 S.E.I. 11 EQUIPOS COM MOVIL.pdf",
+      "size": 542616,
+      "sha256": "67519c5db957b0543de4d167c109100748b4819d4e3d34a60ea033ee9c49a849",
+      "folio": "DO/CA/0795",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 13
+    },
+    {
+      "name": "6A0E293E-2A7A-457F-A9E3-5EF4D76E77C9DO-CA-051 SERVICIOS CONEXOS ENE. 2025.pdf",
+      "size": 227240,
+      "sha256": "26e4f6554d11258819b31549e6d0feb4482ddb258d3352ae605e7c7f7ab4184f",
+      "folio": "DO/CA/051",
+      "serial": null,
+      "association": "pending",
+      "matchedGoods": 0
+    },
+    {
+      "name": "730F87BA-9839-42C7-BB24-4EF5F684E8AEDO-CA-037 DIRECCION COMERCIAL Y DE SVS 5 EQPOS..pdf",
+      "size": 227943,
+      "sha256": "0e22880d8aab29580cdcaf6e597ed3a8b56b89f5cd169bb49d77a0b8c51d7add",
+      "folio": "DO/CA/037",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 5
+    },
+    {
+      "name": "751AF328-A0C9-4478-851B-87907A72746ADO-CA-0790 SUBDIR. SEG. OPNL. 68 EQPOS..pdf",
+      "size": 687016,
+      "sha256": "d8b786a580667a504e8446780577bd7f92af123774b078475440b8bf3b7bee3f",
+      "folio": "DO/CA/0790",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 68
+    },
+    {
+      "name": "75FAF339-B435-4205-BCBF-8381DEE00C1EDO-CA-063 DIRECCIÓN COMERCIAL Y DE SERVICIOS.pdf",
+      "size": 222901,
+      "sha256": "9f051c0e64f1fad25ffaf93ceb45cb0aa8dda3ab4c2829429eca4ce80f8668d4",
+      "folio": "DO/CA/063",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 1
+    },
+    {
+      "name": "782E12A2-0A75-42BE-8AC9-4926BAFE35E3DO-CA-0789 SUBDIR. SVS. CONEXOS 19 EQPOS..pdf",
+      "size": 977305,
+      "sha256": "d4bcba08a84f372b95e6eab6483c8aa5cd1a23ec3d12a1b8faf5aa5a022b905a",
+      "folio": "DO/CA/0789",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 19
+    },
+    {
+      "name": "7A0A8776-C1ED-4154-9340-914493BC072EDO-CA-048 TORRE DE CONTROL SENEAM.pdf",
+      "size": 220302,
+      "sha256": "7978a9fe4640bd17f00d4c90e42cb4d4d3dd5afc3646cdf8030fbb5ea8bfb8cc",
+      "folio": "DO/CA/048",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 1
+    },
+    {
+      "name": "7A5E7884-066C-4A94-A916-EEADE7E7895ADO-CA-0739 GERENCIA DE SVS MEDICOS 3 EQUIPOS 2026.pdf",
+      "size": 418819,
+      "sha256": "6954da13ed8822967113a8d9dd4337b778c69df37644fd62a2bbdf6f62043b67",
+      "folio": "DO/CA/0739",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 3
+    },
+    {
+      "name": "7DCE0827-061E-41A7-8D2C-12AB6E536691DO-CA-0799 SUBDIR. SEG. AVN..pdf",
+      "size": 437662,
+      "sha256": "3a0a9a00bda4b73c765122bd27627f25fbff9eb0e5cb65bb7f93a2eae826127c",
+      "folio": "DO/CA/0799",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 6
+    },
+    {
+      "name": "84ABC48C-3E23-4087-95CE-BEC4B1389846DO-CA-0584 GERENCIA DE SEG. OPNAL. (S.E.I.) 7 EQPOS. 2026.pdf",
+      "size": 448195,
+      "sha256": "62f2fe2c2dcfc826f01ad9418cb00339dbde1c891bf54a91f66660ff3738645f",
+      "folio": "DO/CA/0584",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 7
+    },
+    {
+      "name": "88FB7388-B4C0-474D-95EF-AF0A4D02B6B3DO-CA-038 T.C.T.A. (SENEAM) 3 EQPOS..pdf",
+      "size": 217860,
+      "sha256": "e274ddd7b832113b03159eb514326b78f47846d91d9228cf5040b938a55f61c5",
+      "folio": "DO/CA/038",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 3
+    },
+    {
+      "name": "8C322B19-1306-4C73-831B-23EDBEE38481DO-CA-074 SUBDIR. SEG. AVN. 11 EQPS..pdf",
+      "size": 551989,
+      "sha256": "dee21815b048371bebacb4b8f72d7a3dcb97c7c05c777af8ab432afe6ea0cdc4",
+      "folio": "DO/CA/074",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 11
+    },
+    {
+      "name": "8D8777BA-6F42-41B1-AFC2-B30A6B51A33FDO-CA-383 SUBDIRECCION DE SERVICIOS CONEXOS 31 MAR. 2026.pdf",
+      "size": 239851,
+      "sha256": "2529b1312f4933722177ec4ca703fd638a8f579f7ced64f414ca5d46db72f22e",
+      "folio": "DO/CA/383",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 2
+    },
+    {
+      "name": "8E807CA8-5D56-4D52-A1CB-515162FE2FCBDO-CA-083 GERENCIA DE AVIACION GENERAL ESCORCIA.pdf",
+      "size": 32168,
+      "sha256": "d9b073537b384723f5efd2644e8b1aa89456afb380694758d05c8565f5cb6a14",
+      "folio": "DO/CA/083",
+      "serial": null,
+      "association": "pending",
+      "matchedGoods": 0
+    },
+    {
+      "name": "8F62D0F9-96E9-4019-B29A-EE067023CB56DO-CA-064 GERENCIA DE RELACIONES PUBLICAS.pdf",
+      "size": 216714,
+      "sha256": "faacb259048e80c38f7f242ccce4bad126e7eb1dacd845fa4339e2ec335fc445",
+      "folio": "DO/CA/064",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 1
+    },
+    {
+      "name": "9571EA47-AB69-4915-89BB-85E6B9264E3FDO-CA-382 GERENCIA DE AVIACIÓN GENERAL CAP. GARCES.pdf",
+      "size": 434230,
+      "sha256": "045797d830214385d9c207f549d0dd7c19e7a19617831ee659efc27fc78b8a60",
+      "folio": "DO/CA/382",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 1
+    },
+    {
+      "name": "9D14B849-D7B5-4789-BAB9-62E25D6F41BADO-CA-0741 COORDINACION DE AUDITORIA 4 EQPS..pdf",
+      "size": 413965,
+      "sha256": "6cbb9dcbb6ab4f5cc40ff62c7ba5e38ae49218b7a7ce498c61d6d464c4331c9a",
+      "folio": "DO/CA/0741",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 4
+    },
+    {
+      "name": "9D3E0E06-AF50-4B4B-89E4-5901965188BADO-CA-075 GRUPO DE TECNOLOGIA DE LA SEGURIDAD.pdf",
+      "size": 33768,
+      "sha256": "71a7c110aa94d163e32659fe3418c555e89d5044916c3984c9ce0c68036388b8",
+      "folio": "DO/CA/075",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 1
+    },
+    {
+      "name": "9DA1DEBC-9CEA-4C29-94BB-041F505BFB04DO-CA-095 DIRECCIÓN GENERAL DEL AIFA.pdf",
+      "size": 225881,
+      "sha256": "353cdc644afa4d8430812042abfdd45d03d3cc8e236d07545efa8d4d19ff1e65",
+      "folio": "DO/CA/095",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 2
+    },
+    {
+      "name": "A7F78A63-A12A-4C3B-9C34-D03F53098C3ACA-EC-0703 TICs.pdf",
+      "size": 246100,
+      "sha256": "bd6e45b61d8b4d7d1d93dbfa8253bbb75eaaf91b8fb7952e8b3abcf510538b58",
+      "folio": "CA/EC/0703",
+      "serial": null,
+      "association": "pending",
+      "matchedGoods": 0
+    },
+    {
+      "name": "AFCD5051-CBD0-43F0-AA38-847B61B88F5ADO-CA-0740 GPO. TEC. SEG. 3 EQUIPOS 2026.pdf",
+      "size": 426320,
+      "sha256": "382514139104fd3ace2e08efd5cdf899ef79724d975075fd84fc27c2674daa84",
+      "folio": "DO/CA/0740",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 3
+    },
+    {
+      "name": "B12BD70A-E598-46ED-BD2B-094724D40200DO-CA-0704 GERENCIA DE SEGURIDAD OPERACIONAL 29 JUN. 2026.pdf",
+      "size": 471354,
+      "sha256": "902fddde76f04a7863f0f79aaf828c90129e1f7307eddf0e68e5df4044b90c40",
+      "folio": "DO/CA/0704",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 8
+    },
+    {
+      "name": "B1A34A30-030B-4C74-92D5-0AF9C9B1EE32DO-CA-0742 DIRECTOR DE OPERACION (1).pdf",
+      "size": 394970,
+      "sha256": "e0d9c368483241c4c0027abdbc8c9ef185d7a291c5e6d95966ad438698544ce4",
+      "folio": "DO/CA/0742",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 1
+    },
+    {
+      "name": "B4AE9DA3-319A-4396-916B-A5CD204638EEDO-CA-096 DIRECCIÓN DE OPERACION.pdf",
+      "size": 215390,
+      "sha256": "ee48a048d1d1b072933054a5b61762c1da1e1dfb9cf64f4c4868840121d970de",
+      "folio": "DO/CA/096",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 1
+    },
+    {
+      "name": "B836B7E0-9A97-4D89-A129-FC018F196673DO-CA-0736 6 ICOM GPO. MUNDO MAYA 06 JUL 2026.pdf",
+      "size": 448530,
+      "sha256": "1c0b4fa82fc5721915670a1063bf27ca8d29140299694505e53b853ef9530151",
+      "folio": "DO/CA/0736",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 6
+    },
+    {
+      "name": "C7B68471-6164-4D16-BA81-E7D1E48FCDDEDO-CA-086 GERENCIA DE CARGA (1).pdf",
+      "size": 31333,
+      "sha256": "64f95cb310b46a421e4496fe1b2dcd9e42779f2b1080e05d9e7f9d883be27728",
+      "folio": "DO/CA/086",
+      "serial": null,
+      "association": "pending",
+      "matchedGoods": 0
+    },
+    {
+      "name": "CB8EE1F1-15B1-46D9-B74F-D448DA6FD903CA-EC-027 DIRECCION GENERAL AIFA 2 EQPOS..pdf",
+      "size": 212264,
+      "sha256": "20e9a20d1b59ece4263e54b76e7932b743e8ab7f2227ccfc4df23dae107abb5b",
+      "folio": "CA/EC/027",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 2
+    },
+    {
+      "name": "D9F2B521-7B43-48E8-AC4B-85D1FB8A8ADDREPOSICION DEL EQ. KW C1C13418.pdf",
+      "size": 376292,
+      "sha256": "996bfa9bb334170c91cb0a3b1c7273b784fa4b02c7069d3f734cfb0481481531",
+      "folio": null,
+      "serial": "C1C13418",
+      "association": "exact_serial",
+      "matchedGoods": 1
+    },
+    {
+      "name": "DD01768E-288C-489D-A1CB-4C5B3127C256DO-CA-077 ARCHIVO DE LA DIRECCIÓN GRAL AIFA.pdf",
+      "size": 32896,
+      "sha256": "456a770e6a64e70679e300d0d618b144111db0c8da60b2a16f832394a47dfa6d",
+      "folio": "DO/CA/077",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 1
+    },
+    {
+      "name": "DD0761E3-2A4D-4DB7-A388-575E66B6DE5BDO-CA-0754 ARCHIVO DIR. OPN..pdf",
+      "size": 446737,
+      "sha256": "3b7cd83fd2bb9bf04d76d3c204b863d047f6d525b35f22dc59419b040addc725",
+      "folio": "DO/CA/0754",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 1
+    },
+    {
+      "name": "E416754D-1644-4976-A000-16059744B306DO-CA-125 DIR. COMERCIAL Y SVS. (PATIO REGULADOR) 10 EQPOS..pdf",
+      "size": 414773,
+      "sha256": "c4786ab33d5e40623469dee5d3992864b28c42d30c1ca051873aba5404b65311",
+      "folio": "DO/CA/125",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 10
+    },
+    {
+      "name": "E4921ECD-00E6-42AB-8326-F4890B73B422DO-CA-0798 G.O.P.A..pdf",
+      "size": 481449,
+      "sha256": "26aae5b081d9b1a79716ad6daea071a7da5e1c0ac817504c8609edce3ff93303",
+      "folio": "DO/CA/0798",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 6
+    },
+    {
+      "name": "E6B6AA40-E281-452C-AB3C-899885B53514DO-CA-0041 GERENCIA DE CALIDAD.pdf",
+      "size": 35776,
+      "sha256": "e95b3e9ae12ef232b42783cf03d3162ce4e46b3d9967159fe3781b6dc7a73753",
+      "folio": "DO/CA/0041",
+      "serial": null,
+      "association": "pending",
+      "matchedGoods": 0
+    },
+    {
+      "name": "EC584076-2019-47B8-844E-DB39F0ACCC40DO-CA-0751 SUBDIR. SEG. OPNAL..pdf",
+      "size": 530515,
+      "sha256": "fcfa45da9d79682cea0b799f3eb85372c3aea3ad88f1cd3b7829653a00380db2",
+      "folio": "DO/CA/0751",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 9
+    },
+    {
+      "name": "F0F16FC0-F39B-48AB-B4C6-DA0CC774392FDO-CA-0735 GPO. MUNDO MAYA 06 JUL. 2026.pdf",
+      "size": 221447,
+      "sha256": "920220ec7b46d9890a59a4c90b8cf26c88afa312ddf8c1ca2d4ddd679ee64f9b",
+      "folio": "DO/CA/0735",
+      "serial": null,
+      "association": "exact_folio",
+      "matchedGoods": 15
+    }
+  ]
+}

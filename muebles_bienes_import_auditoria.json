@@ -1,0 +1,48 @@
+{
+  "source": "879F15DD-35D5-49FB-BE8C-8D45E7200D11INVENTARIO GENERAL EQPS. KW, RUGGEAR Y ICOM 2026.xlsx",
+  "sheets": [
+    "422 EQUIPOS KW ",
+    "49 RUGGEAR",
+    "RESGUARDOS 70 RADIOS MOVILES 1",
+    "11 RADIOS BASE DIGITAL NXDN",
+    "TELECOM",
+    "AEREOS"
+  ],
+  "databaseRows": 573,
+  "physicalUnits": 613,
+  "individualRows": 566,
+  "lotRows": 7,
+  "explicitSerials": 566,
+  "duplicateSerials": [],
+  "rowsWithoutValidResguardo": 89,
+  "byFamily": [
+    {
+      "family": "Equipo KW",
+      "units": 422
+    },
+    {
+      "family": "Radio RugGear RG72S",
+      "units": 50
+    },
+    {
+      "family": "Radio móvil ICOM IC-F6123D",
+      "units": 70
+    },
+    {
+      "family": "Radio base ICOM IC-F6123D",
+      "units": 11
+    },
+    {
+      "family": "Repetidor UHF",
+      "units": 10
+    },
+    {
+      "family": "Equipo de telecomunicaciones",
+      "units": 47
+    },
+    {
+      "family": "Radio aéreo ICOM IC-A120",
+      "units": 3
+    }
+  ]
+}
