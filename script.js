@@ -7129,6 +7129,11 @@ function showSection(sectionKey, linkEl) {
             }, 80);
         }
 
+        // Hook: Coordinación de Auditoría — Muebles y Bienes
+        if (targetKey === 'muebles-bienes') {
+            setTimeout(() => window.mueblesBienesModule?.init(), 0);
+        }
+
         // Hook: Colaboradores – precarga en segundo plano
         if (targetKey === 'colaboradores') {
             // el módulo IIFE interno maneja su propia precarga via override de showSection;
@@ -24570,6 +24575,7 @@ async function _conciSaveBulkEdits() {
         { key: 'ingenieria-civil',     label: 'Ingeniería civil',        icon: 'helmet-safety',     group: 'Ingeniería' },
         { key: 'colaboradores',        label: 'Colaboradores',           icon: 'id-badge',          group: 'Personal' },
         { key: 'coord-auditoria',      label: 'Coord. Auditoría',        icon: 'clipboard-check',   group: 'Personal' },
+        { key: 'muebles-bienes',       label: 'Muebles y Bienes',        icon: 'boxes-stacked',     group: 'Personal' },
         { key: 'agenda',               label: 'Agenda de Comités',       icon: 'calendar-check',    group: 'Personal' },
         { key: 'biblioteca',           label: 'Biblioteca',              icon: 'book',              group: 'Personal' },
         { key: 'historia',             label: 'Historia',                icon: 'history',           group: 'Personal' },
@@ -24589,7 +24595,7 @@ async function _conciSaveBulkEdits() {
             desc: 'Coord. Auditoría · GPyC · Archivo',
             icon: 'sitemap',
             color: '#1e40af',
-            sections: ['colaboradores', 'coord-auditoria', 'agenda']
+            sections: ['colaboradores', 'coord-auditoria', 'muebles-bienes', 'agenda']
         },
         {
             key: 'UTIL',
