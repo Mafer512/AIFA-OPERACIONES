@@ -7578,6 +7578,7 @@ FF
                             font-size: .72rem; font-weight: 700; line-height: 1;
                             margin-top: .08rem; margin-bottom: .1rem;
                         }
+                        .cd-kpi-total .cd-kpi-pct { color: #1558d6; }
                         .cd-kpi-masc .cd-kpi-pct { color: #1565c0; }
                         .cd-kpi-fem  .cd-kpi-pct { color: #c2185b; }
 
@@ -9649,6 +9650,7 @@ FF
                                             <div class="cd-kpi-icon"><i class="fas fa-users"></i></div>
                                             <div>
                                                 <div class="cd-kpi-val" id="cd-kpi-total">—</div>
+                                                <div class="cd-kpi-pct" id="cd-kpi-total-note">Sólo personal activo</div>
                                                 <div class="cd-kpi-label">Total Colaboradores</div>
                                             </div>
                                         </div>
@@ -11331,6 +11333,7 @@ FF
                     </div>
 
                     <!-- -- JAVASCRIPT DE LA SECCIÓN -- -->
+                    <script src="js/colaboradores-directory-policy.js?v=20260804"></script>
                     <script src="js/employee-photo-upload.js?v=20260804"></script>
                     <script src="js/employee-document-upload.js?v=20260804"></script>
                     <script>
@@ -11344,6 +11347,7 @@ FF
                         let colabLastError = null;
                         let colabCols = null;           // mapeo de columnas reales detectadas
                         let colabLoadAttempts = 0;     // reintentos cuando llegan 0 filas
+                        let colabDirectoryUniverse = null; // universo activo usado por los KPIs del resumen
 
                         /* -- Auto-detección de columnas -- */
                         function colabDetectarColumnas(record) {
@@ -11389,11 +11393,16 @@ FF
                                 domicilio:       find('domicil'),
                                 rfc:             find('^rfc$'),
                                 curp:            find('^curp$'),
-                                comisionado:     find('comision'),
+                                comisionado:     find('^personal\\s+comisionado$', 'comision'),
+                                direccion_comisionado:    find('^direcci[oó]n\\s+comisionado$'),
+                                subdireccion_comisionado: find('^subdirecci[oó]n\\s+comisionado$'),
+                                gerencia_comisionado:     find('^gerencia\\s+comisionado$'),
+                                coordinacion_comisionado: find('^coordinaci[oó]n\\s+comisionado$'),
                                 direccion:       find('^dir\\.', 'dir\\..*org', '^direcci[oó]n', 'direcci(?!.*sub)'),
                                 subdireccion:    find('^subdir\\.', 'subdir\\..*org', 'subdir'),
                                 gerencia:        find('gerencia.*org', 'gerencia'),
                                 coordinacion:    find('coordinac.*org', 'coordinaci'),
+                                fecha_baja:      find('^fecha\\s+de\\s+baja$', 'fecha.*baja', 'baja.*fecha'),
                                 amonestaciones:  find('amonest'),
                                 comentarios:     find('comentar'),
                                 c1_nombre:       find('contacto.*1.*nom', 'emergencia.*1.*nom', 'contacto_?1'),
@@ -11426,6 +11435,40 @@ FF
                             if (!colabCols || !colabCols[colKey]) return null;
                             return record[colabCols[colKey]] ?? null;
                         }
+
+                        /* -- Universo operativo del Resumen del Directorio -- */
+                        function colabObtenerUniversoDirectorio() {
+                            const policy = window.ColaboradoresDirectoryPolicy;
+                            if (!policy || typeof policy.buildUniverse !== 'function') {
+                                throw new Error('No se pudo cargar la política de personal activo del directorio.');
+                            }
+
+                            colabDirectoryUniverse = policy.buildUniverse(colabCache || [], {
+                                get: (record, field) => gc(record, field),
+                                today: new Date(),
+                            });
+                            return colabDirectoryUniverse;
+                        }
+
+                        // Auditoría bajo demanda; no imprime datos personales automáticamente en consola.
+                        window.colabAuditarResumenDirectorio = function() {
+                            const universe = colabObtenerUniversoDirectorio();
+                            const identify = record => ({
+                                numeroEmpleado: gc(record, 'num') || '',
+                                nombre: gc(record, 'nombre') || '',
+                                estatus: gc(record, 'estatus') || '',
+                            });
+
+                            return {
+                                resumen: universe.summary,
+                                incluidos: universe.included.map(identify),
+                                excluidos: universe.excluded.map(item => ({
+                                    ...identify(item.record),
+                                    motivo: item.reason,
+                                    detalle: item.detail,
+                                })),
+                            };
+                        };
 
                         /* -- Helpers: mostrar/ocultar estados -- */
                         function colabSetState(state) {
@@ -12020,6 +12063,7 @@ FF
 
                                     if (error) throw error;
                                     colabCache  = data || [];
+                                    colabDirectoryUniverse = null;
                                     colabLoadPromise = null; // limpiar para posibles recargas futuras
                                     window.colabCache = colabCache; // exponer globalmente para módulo vacaciones
                                     if (colabCache.length) {
@@ -12043,6 +12087,7 @@ FF
                                     console.error('[Colaboradores] Error al cargar agenda_2026:', err?.message || err);
                                     colabLastError = err?.message || String(err);
                                     colabCache       = [];
+                                    colabDirectoryUniverse = null;
                                     colabLoaded      = false;
                                     colabLoadPromise = null;
                                     return [];
@@ -12093,8 +12138,11 @@ FF
                             if (loading) loading.style.display = 'none';
                             if (content) content.classList.remove('d-none');
 
-                            const data = colabCache;
-                            const total = data.length;
+                            // Todos los indicadores del resumen comparten el mismo universo:
+                            // persona real + Activo + sin baja vigente + no vacante + no comisionado fuera.
+                            const universe = colabObtenerUniversoDirectorio();
+                            const data = universe.included;
+                            const total = universe.summary.total;
 
                             // Helper: contar y ordenar por campo
                             function countBy(colKey) {
@@ -12119,16 +12167,16 @@ FF
                             // KPIs
                             const setKpi = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
                             setKpi('cd-kpi-total',   total);
+                            setKpi(
+                                'cd-kpi-total-note',
+                                universe.summary.genderOther > 0
+                                    ? `${universe.summary.genderOther} sin sexo definido`
+                                    : 'Sólo personal activo'
+                            );
 
-                            // Conteo de genero (campo 'sexo': Masculino / Femenino)
-                            const _sexNorm = function(v) {
-                                var s = (v||'').toString().trim().toUpperCase();
-                                if (s === 'MASCULINO' || s === 'HOMBRE' || s === 'M' || s === 'H') return 'H';
-                                if (s === 'FEMENINO'  || s === 'MUJER'  || s === 'F') return 'M';
-                                return '?';
-                            };
-                            var masc = data.filter(function(r) { return _sexNorm(gc(r,'sexo')) === 'H'; }).length;
-                            var fem  = data.filter(function(r) { return _sexNorm(gc(r,'sexo')) === 'M'; }).length;
+                            // Hombres y mujeres se calculan sobre el mismo universo activo.
+                            var masc = universe.summary.men;
+                            var fem  = universe.summary.women;
                             var mascPct = total > 0 ? Math.round(masc / total * 100) : 0;
                             var femPct  = total > 0 ? Math.round(fem  / total * 100) : 0;
                             setKpi('cd-kpi-masc', masc > 0 ? masc : '');
@@ -12572,6 +12620,7 @@ FF
                                             if (grp) colabAbrirGrupoModal(colKey, grp, {
                                                 filter: function(r){ return countAmonest(r) > 0; },
                                                 subtitulo: 'con amonestaciones',
+                                                allRecords: true,
                                                 showAmonest: true
                                             });
                                         });
@@ -12597,7 +12646,9 @@ FF
                             };
 
                             window.colabAbrirGrupoModal = function(colKey, groupValue, opts) {
-                                const todos = colabCache || [];
+                                const todos = opts && opts.allRecords
+                                    ? (colabCache || [])
+                                    : (colabDirectoryUniverse || colabObtenerUniversoDirectorio()).included;
                                 const extraFilter = opts && opts.filter;
                                 _grupoModalRecords = todos.filter(r => {
                                     const v = (gc(r, colKey) || '').toString().trim();
@@ -12857,6 +12908,7 @@ FF
                         window.colabReintentar = function() {
                             colabLoaded      = false;
                             colabCache       = null;
+                            colabDirectoryUniverse = null;
                             colabLoadPromise = null;
                             colabLoadAttempts = 0;
                             const loading = document.getElementById('cd-loading');
@@ -12917,7 +12969,7 @@ FF
                                 });
 
                                 // Invalidar cachÉ
-                                colabCache = null; colabLoaded = false; colabLoadPromise = null;
+                                colabCache = null; colabDirectoryUniverse = null; colabLoaded = false; colabLoadPromise = null;
                                 colabCurrentRow = null;
 
                                 // Volver a la vista inicial y recargar dashboard
@@ -14385,7 +14437,7 @@ FF
                                 });
 
                                 // Invalidar caché y recargar
-                                colabCache = null; colabLoaded = false; colabLoadPromise = null;
+                                colabCache = null; colabDirectoryUniverse = null; colabLoaded = false; colabLoadPromise = null;
 
                                 // Mostrar timestamp de último guardado
                                 const saveLabel = document.getElementById('colab-edit-last-save');
@@ -14529,7 +14581,7 @@ FF
                                 });
 
                                 // Invalidar cachÉ
-                                colabCache = null; colabLoaded = false; colabLoadPromise = null;
+                                colabCache = null; colabDirectoryUniverse = null; colabLoaded = false; colabLoadPromise = null;
 
                                 bootstrap.Modal.getInstance(document.getElementById('colabNuevoModal'))?.hide();
 
@@ -15500,7 +15552,9 @@ FF
                                 alert('Tu navegador bloqueó la ventana de impresión.\nPermite ventanas emergentes para esta página e inténtalo de nuevo.');
                                 return;
                             }
-                            printWin.document.write('<!doctype html><html lang="es"><meta charset="utf-8"><title>Preparando ficha…</title><body style="font-family:Segoe UI,Arial,sans-serif;padding:2rem;color:#334155">Preparando la ficha completa para impresión…</body></html>');
+                            // Escapar los cierres evita que servidores de desarrollo que inyectan
+                            // live-reload interpreten este HTML interno como el cierre del documento principal.
+                            printWin.document.write('<!doctype html><html lang="es"><meta charset="utf-8"><title>Preparando ficha…</title><body style="font-family:Segoe UI,Arial,sans-serif;padding:2rem;color:#334155">Preparando la ficha completa para impresión…<\/body><\/html>');
                             printWin.document.close();
 
                             const previousCourseSearch = typeof _ccSearchText === 'string' ? _ccSearchText : '';

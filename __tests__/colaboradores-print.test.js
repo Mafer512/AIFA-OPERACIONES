@@ -75,6 +75,12 @@ describe('impresión completa de la ficha de colaboradores', () => {
         expect(printFunction).not.toContain('}, 1400)');
     });
 
+    test('no expone cierres HTML literales que rompan Live Server', () => {
+        expect(printFunction).not.toContain('</body>');
+        expect(printFunction).not.toContain('</html>');
+        expect(printFunction).toContain('<\\/body><\\/html>');
+    });
+
     test('solo oculta controles, no los paneles con información', () => {
         expect(printFunction).toContain('.colab-cv-actions,#colab-cv-inline-preview,');
         expect(printFunction).toContain('#colab-cursos-toolbar,#colab-cursos-dropzone,');
