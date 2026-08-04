@@ -14,9 +14,24 @@
         { n: 9, long: 'Septiembre', short: 'Sep' }, { n: 10, long: 'Octubre', short: 'Oct' },
         { n: 11, long: 'Noviembre', short: 'Nov' }, { n: 12, long: 'Diciembre', short: 'Dic' }
     ];
-    const COLORS = { special: '#17658a', danger: '#c00000', value: '#e0a800', green: '#047857' };
+    const CHART_THEME = Object.freeze({
+        colors: Object.freeze({
+            special: '#169B62',
+            danger: '#E5484D',
+            value: '#E9B000',
+            trend: '#2563EB'
+        }),
+        text: '#475569',
+        textStrong: '#0F172A',
+        grid: '#E2E8F0',
+        white: '#FFFFFF',
+        valueText: '#4A3600'
+    });
+    const COLORS = CHART_THEME.colors;
+    const CHART_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
     const state = { rows: [], years: [], selectedYear: null, editMonth: 1, loaded: false, loading: false, bound: false };
     const charts = { monthly: null, composition: null, trend: null };
+    let dataLabelsRegistered = false;
 
     const $ = id => document.getElementById(id);
     const monthByNumber = n => MONTHS.find(m => m.n === Number(n)) || MONTHS[0];
@@ -26,9 +41,24 @@
         return Number.isFinite(n) ? n : null;
     };
     const fmt = value => value === null || value === undefined ? '—' : Number(value).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtChart = value => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n.toLocaleString('es-MX', { maximumFractionDigits: 2 }) : '—';
+    };
+    const fmtPercent = value => {
+        const n = Number(value);
+        return Number.isFinite(n) ? n.toLocaleString('es-MX', { maximumFractionDigits: 2 }) : '0';
+    };
     const sum = values => values.reduce((total, value) => total + (Number(value) || 0), 0);
     const hasData = row => ['inorganicos_kg', 'organicos_kg', 'lodos_kg', 'peligrosos_kg', 'valorizables_kg'].some(k => row && row[k] !== null && row[k] !== undefined);
     const specialOf = row => sum([row?.inorganicos_kg, row?.organicos_kg, row?.lodos_kg]);
+    const withAlpha = (hex, alpha) => {
+        const value = String(hex).replace('#', '');
+        const red = parseInt(value.slice(0, 2), 16);
+        const green = parseInt(value.slice(2, 4), 16);
+        const blue = parseInt(value.slice(4, 6), 16);
+        return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    };
 
     async function client() {
         if (window.supabaseClient) return window.supabaseClient;
@@ -149,26 +179,198 @@
         </tr>`;
     }
 
-    function chartOptions(yTitle) {
+    function ensureChartPlugins() {
+        if (dataLabelsRegistered || !window.ChartDataLabels || typeof Chart?.register !== 'function') return;
+        try {
+            Chart.register(window.ChartDataLabels);
+            dataLabelsRegistered = true;
+        } catch (_) {}
+    }
+
+    function legendOptions(extraLabels = {}) {
+        return {
+            position: 'bottom',
+            align: 'center',
+            labels: {
+                usePointStyle: true,
+                pointStyle: 'circle',
+                boxWidth: 8,
+                boxHeight: 8,
+                padding: 18,
+                color: CHART_THEME.text,
+                font: { family: CHART_FONT, size: 11, weight: '500' },
+                ...extraLabels
+            }
+        };
+    }
+
+    function tooltipOptions(labelCallback) {
+        return {
+            backgroundColor: withAlpha(CHART_THEME.textStrong, .94),
+            titleColor: CHART_THEME.white,
+            bodyColor: CHART_THEME.white,
+            borderColor: withAlpha(CHART_THEME.white, .14),
+            borderWidth: 1,
+            cornerRadius: 8,
+            padding: 10,
+            displayColors: true,
+            usePointStyle: true,
+            titleFont: { family: CHART_FONT, size: 11, weight: '700' },
+            bodyFont: { family: CHART_FONT, size: 11, weight: '500' },
+            callbacks: { label: labelCallback }
+        };
+    }
+
+    function axisOptions({ stacked = false, offset = false } = {}) {
+        return {
+            x: {
+                stacked,
+                offset,
+                grid: { display: false, drawBorder: false },
+                border: { display: false },
+                ticks: { color: CHART_THEME.text, font: { family: CHART_FONT, size: 11 }, maxRotation: 0, autoSkip: true }
+            },
+            y: {
+                stacked,
+                beginAtZero: true,
+                grace: '10%',
+                grid: { color: CHART_THEME.grid, lineWidth: 1, drawTicks: false },
+                border: { display: false },
+                title: { display: true, text: 'Kilogramos', color: CHART_THEME.text, font: { family: CHART_FONT, size: 11, weight: '600' }, padding: { bottom: 8 } },
+                ticks: { color: CHART_THEME.text, padding: 8, font: { family: CHART_FONT, size: 11 }, callback: value => fmtChart(value) }
+            }
+        };
+    }
+
+    function chartOptions({ stacked = false, offset = false, tooltipLabel, padding = {} } = {}) {
         return {
             responsive: true,
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
+            layout: { padding: { top: 12, right: 14, bottom: 6, left: 4, ...padding } },
             plugins: {
-                // Los valores se consultan en tooltip; evita etiquetas encimadas
-                // en barras apiladas y puntos cercanos.
                 datalabels: { display: false },
-                legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 9, padding: 14 } },
-                tooltip: { callbacks: { label: context => `${context.dataset.label}: ${fmt(context.parsed.y ?? context.parsed) } kg` } }
+                legend: legendOptions(),
+                tooltip: tooltipOptions(tooltipLabel || (context => `${context.dataset.label}: ${fmtChart(context.parsed.y ?? context.parsed)} kg`))
             },
-            scales: { y: { beginAtZero: true, title: { display: true, text: yTitle }, ticks: { callback: value => Number(value).toLocaleString('es-MX') } }, x: { grid: { display: false } } }
+            scales: axisOptions({ stacked, offset })
         };
+    }
+
+    const doughnutCenterText = {
+        id: 'residuosDoughnutCenterText',
+        afterDatasetsDraw(chart, _args, options) {
+            if (!options?.display || !chart.chartArea) return;
+            const values = chart.data.datasets[0]?.data || [];
+            const total = sum(values);
+            const centerX = (chart.chartArea.left + chart.chartArea.right) / 2;
+            const centerY = (chart.chartArea.top + chart.chartArea.bottom) / 2;
+            const compact = chart.width < 420;
+            const valueText = `${fmt(total)} kg`;
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = CHART_THEME.text;
+            ctx.font = `600 ${compact ? 10 : 11}px ${CHART_FONT}`;
+            ctx.fillText(options.label || 'Total generado', centerX, centerY - 12);
+            ctx.fillStyle = CHART_THEME.textStrong;
+            ctx.font = `800 ${compact ? 14 : 17}px ${CHART_FONT}`;
+            ctx.fillText(valueText, centerX, centerY + 12);
+            ctx.restore();
+        }
+    };
+
+    function doughnutLegendLabels(chart) {
+        const defaultGenerator = Chart.overrides?.doughnut?.plugins?.legend?.labels?.generateLabels
+            || Chart.defaults?.plugins?.legend?.labels?.generateLabels;
+        const fallback = chart.data.labels.map((text, index) => ({ text, index }));
+        const labels = typeof defaultGenerator === 'function' ? defaultGenerator(chart) : fallback;
+        const values = chart.data.datasets[0]?.data || [];
+        const total = sum(values);
+        const showPercent = chart.width >= 460;
+        return labels.map((item, index) => {
+            const percentage = total > 0 ? (Number(values[index]) || 0) / total * 100 : 0;
+            return {
+                ...item,
+                text: showPercent ? `${item.text} · ${fmtPercent(percentage)} %` : item.text,
+                fillStyle: [COLORS.special, COLORS.danger, COLORS.value][index],
+                strokeStyle: CHART_THEME.white,
+                lineWidth: 1
+            };
+        });
+    }
+
+    function stackedBarRadius(context) {
+        const dataIndex = context.dataIndex;
+        const datasets = context.chart.data.datasets;
+        let topDatasetIndex = -1;
+        for (let index = datasets.length - 1; index >= 0; index -= 1) {
+            if (Number(datasets[index].data[dataIndex]) > 0) { topDatasetIndex = index; break; }
+        }
+        return context.datasetIndex === topDatasetIndex ? { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 } : 0;
+    }
+
+    function trendGradient(context) {
+        const { chart } = context;
+        if (!chart.chartArea) return withAlpha(COLORS.trend, .14);
+        const gradient = chart.ctx.createLinearGradient(0, chart.chartArea.top, 0, chart.chartArea.bottom);
+        gradient.addColorStop(0, withAlpha(COLORS.trend, .22));
+        gradient.addColorStop(1, withAlpha(COLORS.trend, 0));
+        return gradient;
+    }
+
+    function visibleTrendLabelIndexes(context) {
+        const { chart, dataset } = context;
+        const validIndexes = dataset.data.reduce((indexes, item, index) => {
+            if (item !== null && Number.isFinite(Number(item))) indexes.push(index);
+            return indexes;
+        }, []);
+        if (chart.width >= 720) return new Set(validIndexes);
+
+        const points = chart.getDatasetMeta(context.datasetIndex)?.data || [];
+        if (!validIndexes.every(index => Number.isFinite(points[index]?.x) && Number.isFinite(points[index]?.y))) {
+            const step = chart.width < 480 ? 3 : 2;
+            return new Set(validIndexes.filter((index, position) => position % step === 0 || position === validIndexes.length - 1));
+        }
+
+        const fontSize = chart.width < 480 ? 8 : 10;
+        const labelHeight = fontSize + 5;
+        const firstIndex = validIndexes[0];
+        const lastIndex = validIndexes[validIndexes.length - 1];
+        const boxFor = index => {
+            const point = points[index];
+            const offset = chart.width < 640 && index % 2 ? 15 : 6;
+            chart.ctx.save();
+            chart.ctx.font = `700 ${fontSize}px ${CHART_FONT}`;
+            const width = chart.ctx.measureText(fmtChart(dataset.data[index])).width + 6;
+            chart.ctx.restore();
+            if (chart.width < 480 && index === firstIndex) {
+                return { left: point.x + offset, right: point.x + offset + width, top: point.y - labelHeight / 2, bottom: point.y + labelHeight / 2 };
+            }
+            return { left: point.x - width / 2, right: point.x + width / 2, top: point.y - offset - labelHeight, bottom: point.y - offset };
+        };
+        const overlaps = (a, b) => a.left < b.right + 3 && a.right + 3 > b.left && a.top < b.bottom + 3 && a.bottom + 3 > b.top;
+        const selected = [];
+        validIndexes.forEach(index => {
+            const box = boxFor(index);
+            if (!selected.some(item => overlaps(item.box, box))) selected.push({ index, box });
+        });
+        if (!selected.some(item => item.index === lastIndex)) {
+            const lastBox = boxFor(lastIndex);
+            for (let index = selected.length - 1; index >= 0; index -= 1) {
+                if (overlaps(selected[index].box, lastBox)) selected.splice(index, 1);
+            }
+            selected.push({ index: lastIndex, box: lastBox });
+        }
+        return new Set(selected.map(item => item.index));
     }
 
     function destroyChart(key) { if (charts[key]) { try { charts[key].destroy(); } catch (_) {} charts[key] = null; } }
 
     function renderCharts() {
         if (typeof Chart === 'undefined') return;
+        ensureChartPlugins();
         const rows = MONTHS.map(month => rowForMonth(month.n));
         const lastDataIndex = rows.reduce((last, row, index) => hasData(row) ? index : last, -1);
         const visibleRows = rows.slice(0, Math.max(lastDataIndex + 1, 1));
@@ -179,30 +381,129 @@
         const value = visibleRows.map(row => hasData(row) ? row.valorizables_kg : null);
         const total = visibleRows.map((row, i) => hasData(row) ? special[i] + (danger[i] || 0) + (value[i] || 0) : null);
         destroyChart('monthly'); destroyChart('composition'); destroyChart('trend');
+
         const monthlyCanvas = $('residuos-chart-mensual');
-        const monthlyOptions = chartOptions('Kilogramos');
-        monthlyOptions.plugins = { ...monthlyOptions.plugins, datalabels: {
-            display: context => Number(context.dataset.data[context.dataIndex] || 0) >= 1000,
-            formatter: valueToShow => Number(valueToShow).toLocaleString('es-MX', { maximumFractionDigits: 0 }),
-            color: context => context.datasetIndex === 2 ? '#111827' : '#fff', anchor: 'center', align: 'center', clamp: true,
-            font: { size: 9, weight: '700' }
-        } };
-        if (monthlyCanvas) charts.monthly = new Chart(monthlyCanvas, { type: 'bar', data: { labels, datasets: [
-            { label: 'Manejo especial', data: special, backgroundColor: COLORS.special, borderRadius: 4 },
-            { label: 'Peligrosos', data: danger, backgroundColor: COLORS.danger, borderRadius: 4 },
-            { label: 'Valorizables', data: value, backgroundColor: COLORS.value, borderRadius: 4 }
-        ] }, options: { ...monthlyOptions, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Kilogramos' }, ticks: { callback: v => Number(v).toLocaleString('es-MX') } } } } });
+        const monthlyOptions = chartOptions({ stacked: true, offset: true });
+        monthlyOptions.plugins.datalabels = {
+            display: context => {
+                const valueToShow = Number(context.dataset.data[context.dataIndex]);
+                const bar = context.chart.getDatasetMeta(context.datasetIndex)?.data?.[context.dataIndex];
+                const canvasContext = context.chart.ctx;
+                canvasContext.save();
+                canvasContext.font = `700 9px ${CHART_FONT}`;
+                const labelWidth = canvasContext.measureText(fmtChart(valueToShow)).width;
+                canvasContext.restore();
+                return context.chart.width >= 620 && valueToShow > 0
+                    && Math.abs(Number(bar?.height) || 0) >= 24
+                    && Math.abs(Number(bar?.width) || 0) >= labelWidth + 6;
+            },
+            formatter: valueToShow => fmtChart(valueToShow),
+            color: context => context.datasetIndex === 2 ? CHART_THEME.valueText : CHART_THEME.white,
+            anchor: 'center',
+            align: 'center',
+            clamp: true,
+            clip: true,
+            font: { family: CHART_FONT, size: 9, weight: '700' }
+        };
+        const barDataset = (label, data, color) => ({
+            label,
+            data,
+            backgroundColor: withAlpha(color, .88),
+            hoverBackgroundColor: color,
+            borderColor: color,
+            borderWidth: 1,
+            borderRadius: stackedBarRadius,
+            borderSkipped: false,
+            categoryPercentage: .74,
+            barPercentage: .88,
+            maxBarThickness: 68,
+            stack: 'residuos'
+        });
+        if (monthlyCanvas) charts.monthly = new Chart(monthlyCanvas, {
+            type: 'bar',
+            data: { labels, datasets: [
+                barDataset('Manejo especial', special, COLORS.special),
+                barDataset('Peligrosos', danger, COLORS.danger),
+                barDataset('Valorizables', value, COLORS.value)
+            ] },
+            options: monthlyOptions
+        });
+
         const compCanvas = $('residuos-chart-composicion');
-        if (compCanvas) charts.composition = new Chart(compCanvas, { type: 'doughnut', data: { labels: ['Manejo especial', 'Peligrosos', 'Valorizables'], datasets: [{ data: [sum(rows.map(specialOf)), sum(rows.map(row => row?.peligrosos_kg)), sum(rows.map(row => row?.valorizables_kg))], backgroundColor: [COLORS.special, COLORS.danger, COLORS.value], borderColor: '#fff', borderWidth: 3 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { datalabels: { display: false }, legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 9, padding: 14 } }, tooltip: { callbacks: { label: context => `${context.label}: ${fmt(context.raw)} kg` } } } } });
+        const compositionData = [sum(rows.map(specialOf)), sum(rows.map(row => row?.peligrosos_kg)), sum(rows.map(row => row?.valorizables_kg))];
+        if (compCanvas) charts.composition = new Chart(compCanvas, {
+            type: 'doughnut',
+            plugins: [doughnutCenterText],
+            data: {
+                labels: ['Manejo especial', 'Peligrosos', 'Valorizables'],
+                datasets: [{
+                    data: compositionData,
+                    backgroundColor: [COLORS.special, COLORS.danger, COLORS.value],
+                    hoverBackgroundColor: [COLORS.special, COLORS.danger, COLORS.value],
+                    borderColor: CHART_THEME.white,
+                    borderWidth: 2,
+                    spacing: 1,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '56%',
+                layout: { padding: { top: 4, right: 8, bottom: 4, left: 8 } },
+                plugins: {
+                    residuosDoughnutCenterText: { display: true, label: 'Total generado' },
+                    datalabels: { display: false },
+                    legend: legendOptions({ generateLabels: doughnutLegendLabels }),
+                    tooltip: tooltipOptions(context => {
+                        const raw = Number(context.raw) || 0;
+                        const totalGenerated = sum(context.dataset.data);
+                        const percentage = totalGenerated > 0 ? raw / totalGenerated * 100 : 0;
+                        return `${context.label}: ${fmtChart(raw)} kg (${fmtPercent(percentage)} %)`;
+                    })
+                }
+            }
+        });
+
         const trendCanvas = $('residuos-chart-tendencia');
-        const trendOptions = chartOptions('Kilogramos');
-        trendOptions.plugins = { ...trendOptions.plugins, datalabels: {
-            display: context => context.dataIndex === context.dataset.data.length - 1 && Number(context.dataset.data[context.dataIndex] || 0) > 0,
-            formatter: valueToShow => Number(valueToShow).toLocaleString('es-MX', { maximumFractionDigits: 0 }),
-            color: COLORS.green, anchor: 'end', align: 'top', offset: 5, clamp: true,
-            font: { size: 10, weight: '700' }
-        } };
-        if (trendCanvas) charts.trend = new Chart(trendCanvas, { type: 'line', data: { labels, datasets: [{ label: 'Total generado', data: total, borderColor: COLORS.green, backgroundColor: 'rgba(4,120,87,.12)', fill: true, tension: .32, pointRadius: 4, pointBackgroundColor: COLORS.green }] }, options: trendOptions });
+        const trendOptions = chartOptions({ offset: true, padding: { top: 28, right: 34, left: 30 } });
+        trendOptions.plugins.datalabels = {
+            display: context => visibleTrendLabelIndexes(context).has(context.dataIndex),
+            formatter: valueToShow => fmtChart(valueToShow),
+            color: COLORS.trend,
+            backgroundColor: withAlpha(CHART_THEME.white, .88),
+            borderRadius: 3,
+            padding: { top: 2, right: 3, bottom: 2, left: 3 },
+            anchor: 'end',
+            align: context => context.chart.width < 480 && context.dataIndex === 0 ? 'right' : 'top',
+            offset: context => context.chart.width < 640 && context.dataIndex % 2 ? 15 : 6,
+            clamp: true,
+            clip: false,
+            font: context => ({ family: CHART_FONT, size: context.chart.width < 480 ? 8 : 10, weight: '700' })
+        };
+        if (trendCanvas) charts.trend = new Chart(trendCanvas, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Total generado',
+                    data: total,
+                    borderColor: COLORS.trend,
+                    backgroundColor: trendGradient,
+                    fill: true,
+                    tension: .28,
+                    borderWidth: 3,
+                    pointRadius: 3.5,
+                    pointHoverRadius: 5.5,
+                    pointHitRadius: 12,
+                    pointBackgroundColor: CHART_THEME.white,
+                    pointBorderColor: COLORS.trend,
+                    pointBorderWidth: 2,
+                    spanGaps: false
+                }]
+            },
+            options: trendOptions
+        });
     }
 
     function renderAll() { renderKpis(); renderTable(); renderCharts(); applyAccess(); }
