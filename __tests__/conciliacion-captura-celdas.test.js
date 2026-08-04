@@ -31,11 +31,28 @@ describe('captura de celdas en Conciliacion > Manifiestos', () => {
     expect(source.match(declaration)).toHaveLength(1);
   });
 
-  test('los selectores de colaboracion admiten ids y columnas con espacios', () => {
-    expect(source).toMatch(/tr\[data-row-id='\$\{rowId\}'\]/);
-    expect(source).toMatch(/td\[data-col='\$\{col\}'\]/);
-    expect(source).toMatch(/tr\[data-row-id='\$\{payload\.rowId\}'\]/);
-    expect(source).toMatch(/td\[data-col='\$\{payload\.col\}'\]/);
+  test('la colaboracion encuentra ids y columnas con espacios o caracteres especiales', () => {
+    const finderSource = sourceBetween(
+      'function _conciFindLiveCell',
+      'function _conciApplyRemotePresenceHighlights'
+    );
+    const findLiveCell = new Function(
+      finderSource + '; return _conciFindLiveCell;'
+    )();
+    const table = document.createElement('table');
+    const tbody = document.createElement('tbody');
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    row.dataset.rowId = 'fila "A" [1]';
+    cell.dataset.col = 'HR. DE OPERACIÓN "REAL"';
+    row.appendChild(cell);
+    tbody.appendChild(row);
+    table.appendChild(tbody);
+
+    expect(findLiveCell(table, 'fila "A" [1]', 'HR. DE OPERACIÓN "REAL"')).toBe(cell);
+    expect(findLiveCell(table, 'fila inexistente', 'HR. DE OPERACIÓN "REAL"')).toBeNull();
+    expect(source).toContain('_conciFindLiveCell(tbody, rowId, col)');
+    expect(source).toContain('_conciFindLiveCell(table, payload.rowId, payload.col)');
   });
 
   test('las celdas AERONAVE y de texto abren su editor sin bloquear la captura', () => {

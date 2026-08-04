@@ -8515,27 +8515,113 @@ FF
                         @media print {
                             /* Ocultar toda la app excepto la ficha */
                             body * { visibility: hidden; }
-                            #colab-ficha-content, #colab-ficha-content * { visibility: visible !important; }
+                            #colab-ficha-content, #colab-ficha-content *,
+                            #colab-vac-panel, #colab-vac-panel * { visibility: visible !important; }
+                            html, body,
+                            #colaboradores-section,
+                            #colab-ficha-wrap,
+                            #colab-ficha-content,
+                            .colab-ficha,
+                            .colab-ficha-body {
+                                height: auto !important;
+                                min-height: 0 !important;
+                                max-height: none !important;
+                                overflow: visible !important;
+                            }
                             #colab-ficha-content {
-                                position: fixed !important;
+                                position: static !important;
                                 left: 0 !important; top: 0 !important;
                                 width: 100% !important; margin: 0 !important;
+                                transform: none !important;
                                 -webkit-print-color-adjust: exact; print-color-adjust: exact;
                             }
-                            .colab-ficha { box-shadow: none !important; border: none !important; }
+                            .colab-ficha { box-shadow: none !important; border: none !important; border-radius: 0 !important; }
                             .colab-ficha::before { opacity: 0.06 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                             /* Ocultar botones e interactivos */
+                            .colab-action-bar,
                             .colab-btn-print, .colab-btn-edit, .colab-btn-delete,
-                            .colab-cv-panel, #colab-cv-inline-preview,
+                            .colab-cv-actions, #colab-cv-inline-preview,
                             .ca-btn-attach, .ca-actions,
-                            /* Ocultar secciones posteriores a Comentarios */
-                            .colab-emergency-panel, .colab-datos-civiles,
-                            hr.colab-divider,
-                            #colab-cursos-alert-banner, #colab-cursos-toolbar,
-                            #colab-cursos-list, #colab-cursos-dropzone,
+                            #colab-cursos-toolbar, #colab-cursos-dropzone,
+                            #vac-add-wrap, .vac-per-delete, .colab-vac-panel .ms-auto,
                             .colab-historial-panel, .colab-historial-plaza-panel { display: none !important; visibility: hidden !important; }
+
+                            /* Todo el contenido informativo debe participar en el flujo multipágina. */
+                            .colab-emergency-panel, .colab-datos-civiles,
+                            .colab-cv-panel, #colab-cursos-alert-banner,
+                            #colab-cursos-list, .colab-cursos-folder,
+                            .colab-cursos-folder-body,
+                            .colab-cursos-folder-body.collapsed,
+                            .colab-vac-panel {
+                                display: block !important;
+                                visibility: visible !important;
+                                height: auto !important;
+                                max-height: none !important;
+                                overflow: visible !important;
+                            }
+                            .colab-datos-civiles { display: table !important; width: 100% !important; }
+                            .colab-cv-panel { display: flex !important; }
+                            hr.colab-divider {
+                                display: block !important;
+                                visibility: visible !important;
+                                break-after: avoid-page;
+                                page-break-after: avoid;
+                            }
+                            .colab-cursos-folder-header.collapsed .folder-chevron { transform: none !important; }
+                            .colab-cursos-folder-header.collapsed .folder-icon::before { content: '\f07c' !important; }
+
+                            /* Mantener juntos solo los bloques pequeños; las listas largas sí pueden paginar. */
+                            .colab-ficha-header,
+                            .colab-tabla,
+                            .colab-doc-photos,
+                            .colab-emergency-panel,
+                            .colab-cv-panel,
+                            .vac-year-bar-wrap,
+                            .vac-period-card,
+                            .ca-item,
+                            .colab-contact-row,
+                            .colab-med-tag,
+                            .colab-curso-item {
+                                break-inside: avoid-page;
+                                page-break-inside: avoid;
+                            }
+                            .colab-section-title,
+                            .colab-cursos-folder-header {
+                                break-after: avoid-page;
+                                page-break-after: avoid;
+                            }
+                            .ca-list, #cf-amonestaciones-list, #cf-comentarios-list,
+                            #colab-cursos-list, .colab-cursos-folder-body,
+                            .vac-period-grid {
+                                break-inside: auto;
+                                page-break-inside: auto;
+                            }
+                            #cf-amonestaciones-list .ca-list,
+                            #cf-comentarios-list .ca-list {
+                                display: block !important;
+                                height: auto !important;
+                                max-height: none !important;
+                                overflow: visible !important;
+                            }
+                            #cf-amonestaciones-list .ca-item,
+                            #cf-comentarios-list .ca-item {
+                                background: #fafbfd !important;
+                                border-color: #dde3ef !important;
+                                color: var(--col-text) !important;
+                            }
+                            #cf-amonestaciones-list .ca-text,
+                            #cf-comentarios-list .ca-text { color: var(--col-text) !important; }
+                            .colab-curso-name, .colab-curso-desc {
+                                white-space: normal !important;
+                                overflow: visible !important;
+                                text-overflow: clip !important;
+                                overflow-wrap: anywhere;
+                            }
+                            .colab-tabla { table-layout: fixed; }
+                            .colab-tabla th { white-space: normal !important; }
+                            .colab-tabla td, .colab-tabla th { overflow-wrap: anywhere; }
                         }
-                        @page { size: A4 portrait; margin: 8mm; }
+                        @page { size: A4 portrait; margin: 10mm; }
 
                         /* --- BOTÓN NUEVO COLABORADOR --- */
                         .colab-btn-nuevo {
@@ -8778,7 +8864,15 @@ FF
                         #vac-day-popup .vdp-badge.disfrutado { background: #e8f5e9; color: #2e7d32; }
                         #vac-day-popup .vdp-badge.cancelado  { background: #ffebee; color: #c62828; }
                         @media print {
-                            .colab-vac-panel { display: none !important; }
+                            .colab-vac-panel {
+                                display: block !important;
+                                height: auto !important;
+                                max-height: none !important;
+                                overflow: visible !important;
+                            }
+                            .vac-period-grid { display: block !important; }
+                            .vac-period-card { margin-bottom: .6rem; }
+                            #vac-add-wrap, .vac-per-delete, .colab-vac-panel .ms-auto { display: none !important; }
                         }
 
                         /* --- TABLA COMPLETA --- */
@@ -11573,7 +11667,7 @@ FF
                                 });
                             }
                             if (!contacts.length) {
-                                list.innerHTML = '<p class="text-muted" style="font-size:.83rem;margin:0">Sin contactos registrados</p>';
+                                list.innerHTML = '<p class="text-muted" style="font-size:.83rem;margin:0">Sin contactos de emergencia registrados</p>';
                                 return;
                             }
                             list.innerHTML = contacts.map(co =>
@@ -15342,69 +15436,182 @@ FF
                             XLSX.writeFile(wb, `colaboradores_${new Date().toISOString().slice(0,10)}.xlsx`);
                         };
 
-                        /** Imprimir ficha del colaborador en ventana limpia */
-                        window.colabImprimirFicha = function() {
+                        function colabPrintTimeout(ms) {
+                            return new Promise(resolve => setTimeout(resolve, ms));
+                        }
+
+                        /** Espera imágenes, hojas de estilo y fuentes sin bloquear indefinidamente la impresión. */
+                        async function colabWaitForPrintAssets(doc, root, timeoutMs = 6000) {
+                            if (!doc || !root) return;
+                            const imageTasks = Array.from(root.querySelectorAll('img[src]')).map(img => {
+                                if (img.complete) return Promise.resolve();
+                                return new Promise(resolve => {
+                                    img.addEventListener('load', resolve, { once: true });
+                                    img.addEventListener('error', resolve, { once: true });
+                                });
+                            });
+                            const styleTasks = Array.from(doc.querySelectorAll('link[rel="stylesheet"]')).map(link => {
+                                if (link.sheet) return Promise.resolve();
+                                return new Promise(resolve => {
+                                    link.addEventListener('load', resolve, { once: true });
+                                    link.addEventListener('error', resolve, { once: true });
+                                });
+                            });
+                            const fontTask = doc.fonts?.ready ? Promise.resolve(doc.fonts.ready).catch(() => {}) : Promise.resolve();
+                            await Promise.race([
+                                Promise.allSettled([...imageTasks, ...styleTasks, fontTask]),
+                                colabPrintTimeout(timeoutMs)
+                            ]);
+                        }
+
+                        /** Completa las consultas asíncronas que forman parte de la ficha antes de clonarla. */
+                        async function colabPrepareFichaForPrint() {
+                            const c = colabCurrentRow;
+                            const fichaEl = document.getElementById('colab-ficha-content');
+                            if (!c || !fichaEl) return;
+                            const numEmpl = val(gc(c, 'num'));
+                            const tasks = [
+                                renderAmonestaciones(c),
+                                renderComentarios(c),
+                                colabCargarCursos(numEmpl),
+                                vacLoadForColab(numEmpl),
+                                loadDocPhoto('colab-foto-ine', val(gc(c, 'foto_ine')), 'ine_front'),
+                                loadDocPhoto('colab-foto-ine-rev', val(gc(c, 'foto_ine_rev')), 'ine_back'),
+                                loadDocPhoto('colab-foto-cred', val(gc(c, 'foto_cred')), 'credential')
+                            ];
+                            const results = await Promise.allSettled(tasks);
+                            const failed = results.filter(result => result.status === 'rejected');
+                            if (failed.length) {
+                                console.warn('[Colaboradores][Impresión] Algunos recursos no pudieron actualizarse antes de imprimir', {
+                                    failedResources: failed.length
+                                });
+                            }
+                            await colabWaitForPrintAssets(document, fichaEl, 5000);
+                        }
+
+                        /** Imprimir ficha completa del colaborador en una ventana limpia y multipágina. */
+                        window.colabImprimirFicha = async function() {
                             const fichaEl = document.getElementById('colab-ficha-content');
                             if (!fichaEl) return;
 
-                            // Extraer CSS del bloque <style> de la sección colaboradores
-                            const sectionEl  = document.getElementById('colaboradores-section');
-                            const styleEl    = sectionEl ? sectionEl.querySelector('style') : null;
-                            const sectionCSS = styleEl ? styleEl.textContent : '';
-
-                            // Base URL para imágenes relativas
-                            const baseHref = window.location.origin +
-                                window.location.pathname.replace(/\/[^\/]*$/, '/');
-
-                            const fichaHTML = fichaEl.outerHTML;
-
+                            // Abrir de inmediato para conservar el gesto del usuario y evitar el bloqueo de popups.
                             const printWin = window.open('', '_blank', 'width=960,height=800');
                             if (!printWin) {
                                 alert('Tu navegador bloqueó la ventana de impresión.\nPermite ventanas emergentes para esta página e inténtalo de nuevo.');
                                 return;
                             }
-
-                            const html = '<!DOCTYPE html>\n' +
-                                '<html lang="es"><head>\n' +
-                                '<meta charset="UTF-8">\n' +
-                                '<title>Ficha del Colaborador<\/title>\n' +
-                                '<base href="' + baseHref + '">\n' +
-                                '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">\n' +
-                                '<' + 'style>\n' +
-                                ':root{--col-blue:#1558d6;--col-green:#2e7d32;--col-red:#c62828;--col-text:#1a2540;--col-muted:#7a8499;}\n' +
-                                '*{box-sizing:border-box;}\n' +
-                                'body{background:#fff;font-family:"Segoe UI",Arial,sans-serif;font-size:11.5px;margin:0;padding:0;}\n' +
-                                sectionCSS + '\n' +
-                                '.colab-btn-print,.colab-btn-edit,.colab-btn-delete,' +
-                                '.colab-cv-panel,#colab-cv-inline-preview,' +
-                                '.ca-btn-attach,.ca-actions,' +
-                                '.colab-emergency-panel,.colab-datos-civiles,' +
-                                'hr.colab-divider,' +
-                                '#colab-cursos-alert-banner,#colab-cursos-toolbar,' +
-                                '#colab-cursos-list,#colab-cursos-dropzone,' +
-                                '.colab-cursos-actions,.cc-btn,' +
-                                '.colab-historial-panel,.colab-historial-plaza-panel{display:none!important;}\n' +
-                                '.colab-ficha{box-shadow:none!important;border:none!important;max-width:100%!important;}\n' +
-                                '.colab-tabla td,.colab-tabla th{font-size:10.5px!important;}\n' +
-                                '@media print{' +
-                                '@page{size:A4 portrait;margin:8mm;}' +
-                                'body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
-                                '.colab-ficha::before{opacity:0.05!important;}' +
-                                '}\n' +
-                                '<\/style><\/head><body>' +
-                                fichaHTML +
-                                '<\/body><\/html>';
-
-                            printWin.document.write(html);
+                            printWin.document.write('<!doctype html><html lang="es"><meta charset="utf-8"><title>Preparando ficha…</title><body style="font-family:Segoe UI,Arial,sans-serif;padding:2rem;color:#334155">Preparando la ficha completa para impresión…</body></html>');
                             printWin.document.close();
 
-                            // Esperar a que carguen Font Awesome e imágenes, luego imprimir
-                            setTimeout(function() {
+                            const previousCourseSearch = typeof _ccSearchText === 'string' ? _ccSearchText : '';
+                            const numEmpl = colabCurrentRow ? val(gc(colabCurrentRow, 'num')) : null;
+                            let courseFilterRestored = false;
+                            const restoreCourseFilter = () => {
+                                if (courseFilterRestored) return;
+                                courseFilterRestored = true;
+                                _ccSearchText = previousCourseSearch;
+                                if (previousCourseSearch && numEmpl) {
+                                    colabCargarCursos(numEmpl).catch(error => {
+                                        console.warn('[Colaboradores][Impresión] No se pudo restaurar el filtro visual de cursos', {
+                                            code: error?.code || 'COURSE_FILTER_RESTORE_FAILED'
+                                        });
+                                    });
+                                }
+                            };
+
+                            try {
+                                // La ficha impresa siempre incluye todos los cursos, aunque haya una búsqueda activa en pantalla.
+                                _ccSearchText = '';
+                                await colabPrepareFichaForPrint();
+
+                                // Extraer CSS del bloque <style> de la sección colaboradores.
+                                const sectionEl  = document.getElementById('colaboradores-section');
+                                const styleEl    = sectionEl ? sectionEl.querySelector('style') : null;
+                                const sectionCSS = styleEl ? styleEl.textContent : '';
+
+                                // Base URL para imágenes relativas.
+                                const baseHref = window.location.origin +
+                                    window.location.pathname.replace(/\/[^\/]*$/, '/');
+
+                                const printRoot = document.createElement('main');
+                                printRoot.id = 'colab-print-document';
+                                printRoot.appendChild(fichaEl.cloneNode(true));
+                                const vacationPanel = document.getElementById('colab-vac-panel');
+                                if (vacationPanel) {
+                                    const vacationClone = vacationPanel.cloneNode(true);
+                                    vacationClone.classList.remove('d-none');
+                                    printRoot.appendChild(vacationClone);
+                                }
+                                printRoot.querySelector('#colab-cv-inline-preview')?.remove();
+                                printRoot.querySelectorAll('*').forEach(node => {
+                                    Array.from(node.attributes || []).forEach(attribute => {
+                                        if (/^on/i.test(attribute.name)) node.removeAttribute(attribute.name);
+                                    });
+                                    node.removeAttribute('draggable');
+                                });
+                                const fichaHTML = printRoot.outerHTML;
+                                restoreCourseFilter();
+
+                                const html = '<!DOCTYPE html>\n' +
+                                    '<html lang="es"><head>\n' +
+                                    '<meta charset="UTF-8">\n' +
+                                    '<meta name="viewport" content="width=device-width,initial-scale=1">\n' +
+                                    '<title>Ficha del Colaborador<\/title>\n' +
+                                    '<base href="' + baseHref + '">\n' +
+                                    '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">\n' +
+                                    '<' + 'style>\n' +
+                                    ':root{--col-blue:#1558d6;--col-green:#2e7d32;--col-red:#c62828;--col-text:#1a2540;--col-muted:#7a8499;}\n' +
+                                    '*{box-sizing:border-box;}\n' +
+                                    'html,body{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;}\n' +
+                                    'body{background:#fff;font-family:"Segoe UI",Arial,sans-serif;font-size:11.5px;margin:0;padding:0;}\n' +
+                                    sectionCSS + '\n' +
+                                    '.colab-action-bar,' +
+                                    '.colab-btn-print,.colab-btn-edit,.colab-btn-delete,' +
+                                    '.colab-cv-actions,#colab-cv-inline-preview,' +
+                                    '.ca-btn-attach,.ca-actions,' +
+                                    '#colab-cursos-toolbar,#colab-cursos-dropzone,' +
+                                    '#vac-add-wrap,.vac-per-delete,.colab-vac-panel .ms-auto,' +
+                                    '.colab-cursos-actions,.cc-btn,.colab-cursos-folder-rename-btn,.cc-folder-dropzone,' +
+                                    '.colab-historial-panel,.colab-historial-plaza-panel{display:none!important;}\n' +
+                                    '.colab-ficha{position:static!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;box-shadow:none!important;border:none!important;border-radius:0!important;transform:none!important;}\n' +
+                                    '.colab-ficha-body{height:auto!important;max-height:none!important;overflow:visible!important;}\n' +
+                                    '.colab-tabla td,.colab-tabla th{font-size:10.5px!important;}\n' +
+                                    '@media print{' +
+                                    '@page{size:A4 portrait;margin:10mm;}' +
+                                    'body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
+                                    '.colab-ficha::before{opacity:0.05!important;}' +
+                                    '}\n' +
+                                    '<\/style><\/head><body>' +
+                                    fichaHTML +
+                                    '<\/body><\/html>';
+
+                                if (printWin.closed) return;
+                                printWin.document.open();
+                                printWin.document.write(html);
+                                printWin.document.close();
+
+                                await Promise.race([
+                                    new Promise(resolve => {
+                                        if (printWin.document.readyState === 'complete') resolve();
+                                        else printWin.addEventListener('load', resolve, { once: true });
+                                    }),
+                                    colabPrintTimeout(6000)
+                                ]);
+                                await colabWaitForPrintAssets(printWin.document, printWin.document.body, 6000);
+                                await new Promise(resolve => printWin.requestAnimationFrame(() => printWin.requestAnimationFrame(resolve)));
                                 if (!printWin.closed) {
                                     printWin.focus();
                                     printWin.print();
                                 }
-                            }, 1400);
+                            } catch (error) {
+                                restoreCourseFilter();
+                                console.error('[Colaboradores][Impresión] No se pudo preparar la ficha', {
+                                    code: error?.code || 'PRINT_PREPARATION_FAILED',
+                                    message: error?.message || String(error)
+                                });
+                                if (!printWin.closed) printWin.close();
+                                alert('No se pudo preparar la ficha completa para impresión. Intenta nuevamente.');
+                            }
                         };
 
                         /** Mostrar/ocultar botón "Nuevo Colaborador" según permisos */

@@ -22505,6 +22505,22 @@ function _conciHandlePresenceSync() {
 // Recorre la tabla visible y marca/desmarca las celdas que otros usuarios
 // tienen abiertas ahora mismo. Se re-ejecuta en cada sync de presencia y
 // también tras cada lote de filas renderizadas (scroll perezoso).
+function _conciFindLiveCell(root, rowId, col) {
+    if (!root) return null;
+    const expectedRowId = String(rowId ?? '');
+    const expectedCol = String(col ?? '');
+    const rows = root.querySelectorAll('tr[data-row-id]');
+    for (const row of rows) {
+        if (String(row.dataset.rowId ?? '') !== expectedRowId) continue;
+        const cells = row.querySelectorAll('td[data-col]');
+        for (const cell of cells) {
+            if (String(cell.dataset.col ?? '') === expectedCol) return cell;
+        }
+        return null;
+    }
+    return null;
+}
+
 function _conciApplyRemotePresenceHighlights() {
     const table = document.getElementById('table-conci-manifiestos');
     if (!table) return;
@@ -22529,9 +22545,7 @@ function _conciApplyRemotePresenceHighlights() {
         const sep = cellKey.indexOf('|');
         const rowId = cellKey.slice(0, sep);
         const col = cellKey.slice(sep + 1);
-        const tr = tbody.querySelector(`tr[data-row-id="${rowId}"]`);
-        if (!tr) return; // fila aún no cargada en esta pantalla (scroll perezoso)
-        const td = tr.querySelector(`td[data-col="${col}"]`);
+        const td = _conciFindLiveCell(tbody, rowId, col);
         if (!td || td.classList.contains('conci-cell-active')) return; // no pisar un editor propio abierto
         const entry = entries[0];
         td.classList.add('conci-cell-remote-editing');
@@ -22562,9 +22576,7 @@ function _conciHandleRemoteCellInput(payload) {
     if (!payload || !payload.rowId || !payload.col) return;
     const table = document.getElementById('table-conci-manifiestos');
     if (!table) return;
-    const tr = table.querySelector(`tbody tr[data-row-id="${payload.rowId}"]`);
-    if (!tr) return;
-    const td = tr.querySelector(`td[data-col="${payload.col}"]`);
+    const td = _conciFindLiveCell(table, payload.rowId, payload.col);
     if (!td || td.classList.contains('conci-cell-active')) return;
     if (td.dataset.conciLivePreviewOrig === undefined) td.dataset.conciLivePreviewOrig = td.textContent;
     td.textContent = payload.value;
