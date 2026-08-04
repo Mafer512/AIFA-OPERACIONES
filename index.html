@@ -8473,6 +8473,44 @@ FF
                         #colabEditModal .tab-content { min-height: 280px; }
                         #cedit-foto-preview { transition: border-color .2s; }
                         #cedit-foto-preview:hover { border-color: #1565c0; }
+                        .cedit-doc-upload-grid {
+                            display: grid;
+                            grid-template-columns: repeat(3, minmax(0, 1fr));
+                            gap: .85rem;
+                        }
+                        .cedit-doc-upload-card {
+                            background: #fff;
+                            border: 1px solid #dbe3f0;
+                            border-radius: 12px;
+                            padding: .75rem;
+                            min-width: 0;
+                        }
+                        .cedit-doc-upload-title {
+                            color: #253858;
+                            font-size: .72rem;
+                            font-weight: 700;
+                            letter-spacing: .04em;
+                            text-transform: uppercase;
+                            margin-bottom: .45rem;
+                        }
+                        .cedit-doc-upload-help { font-size: .7rem; }
+                        .cedit-doc-upload-preview {
+                            align-items: center;
+                            aspect-ratio: 16 / 10;
+                            background: #f4f7fb;
+                            border: 1px dashed #b9c7db;
+                            border-radius: 9px;
+                            display: flex;
+                            justify-content: center;
+                            overflow: hidden;
+                        }
+                        .cedit-doc-upload-preview img { width: 100%; height: 100%; object-fit: contain; }
+                        .cedit-doc-upload-placeholder { color: #aeb9c8; font-size: 1.7rem; }
+                        .cedit-doc-upload-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .55rem; }
+                        .cedit-doc-upload-status { line-height: 1.25; min-height: 1.1rem; overflow-wrap: anywhere; }
+                        @media (max-width: 767.98px) {
+                            .cedit-doc-upload-grid { grid-template-columns: 1fr; }
+                        }
 
                         @media print {
                             /* Ocultar toda la app excepto la ficha */
@@ -10199,6 +10237,60 @@ FF
                                         <!-- TAB: Documentos -->
                                         <div class="tab-pane fade" id="cedit-docs" role="tabpanel">
                                             <div class="row g-3">
+                                                <div class="col-12">
+                                                    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                                                        <span class="fw-semibold small text-primary"><i class="fas fa-images me-1"></i>Imágenes de identificaciones</span>
+                                                        <span class="text-muted cedit-doc-upload-help">JPG, JPEG o PNG · Máximo 5 MB</span>
+                                                    </div>
+                                                    <div class="cedit-doc-upload-grid">
+                                                        <div class="cedit-doc-upload-card" data-document-kind="ine_front">
+                                                            <div class="cedit-doc-upload-title">INE frente</div>
+                                                            <div class="cedit-doc-upload-preview">
+                                                                <img id="ce-doc-ine-front-preview" src="" alt="Vista previa de INE frente" hidden>
+                                                                <i id="ce-doc-ine-front-placeholder" class="fas fa-id-card cedit-doc-upload-placeholder" aria-hidden="true"></i>
+                                                            </div>
+                                                            <div class="cedit-doc-upload-actions">
+                                                                <label class="btn btn-outline-primary btn-sm mb-0">
+                                                                    <i class="fas fa-upload me-1"></i>Seleccionar
+                                                                    <input type="file" id="ce-doc-ine-front" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden onchange="colabDocumentImageSelected('ine_front',this)">
+                                                                </label>
+                                                                <button type="button" id="ce-doc-ine-front-remove" class="btn btn-outline-danger btn-sm d-none" onclick="colabDocumentImageRemove('ine_front')"><i class="fas fa-trash me-1"></i>Eliminar</button>
+                                                            </div>
+                                                            <div id="ce-doc-ine-front-status" class="cedit-doc-upload-status small mt-1" role="status" aria-live="polite"></div>
+                                                        </div>
+                                                        <div class="cedit-doc-upload-card" data-document-kind="ine_back">
+                                                            <div class="cedit-doc-upload-title">INE reverso</div>
+                                                            <div class="cedit-doc-upload-preview">
+                                                                <img id="ce-doc-ine-back-preview" src="" alt="Vista previa de INE reverso" hidden>
+                                                                <i id="ce-doc-ine-back-placeholder" class="fas fa-id-card cedit-doc-upload-placeholder" aria-hidden="true"></i>
+                                                            </div>
+                                                            <div class="cedit-doc-upload-actions">
+                                                                <label class="btn btn-outline-primary btn-sm mb-0">
+                                                                    <i class="fas fa-upload me-1"></i>Seleccionar
+                                                                    <input type="file" id="ce-doc-ine-back" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden onchange="colabDocumentImageSelected('ine_back',this)">
+                                                                </label>
+                                                                <button type="button" id="ce-doc-ine-back-remove" class="btn btn-outline-danger btn-sm d-none" onclick="colabDocumentImageRemove('ine_back')"><i class="fas fa-trash me-1"></i>Eliminar</button>
+                                                            </div>
+                                                            <div id="ce-doc-ine-back-status" class="cedit-doc-upload-status small mt-1" role="status" aria-live="polite"></div>
+                                                        </div>
+                                                        <div class="cedit-doc-upload-card" data-document-kind="credential">
+                                                            <div class="cedit-doc-upload-title">TIA / Credencial AIFA</div>
+                                                            <div class="cedit-doc-upload-preview">
+                                                                <img id="ce-doc-credential-preview" src="" alt="Vista previa de TIA o credencial AIFA" hidden>
+                                                                <i id="ce-doc-credential-placeholder" class="fas fa-address-card cedit-doc-upload-placeholder" aria-hidden="true"></i>
+                                                            </div>
+                                                            <div class="cedit-doc-upload-actions">
+                                                                <label class="btn btn-outline-primary btn-sm mb-0">
+                                                                    <i class="fas fa-upload me-1"></i>Seleccionar
+                                                                    <input type="file" id="ce-doc-credential" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden onchange="colabDocumentImageSelected('credential',this)">
+                                                                </label>
+                                                                <button type="button" id="ce-doc-credential-remove" class="btn btn-outline-danger btn-sm d-none" onclick="colabDocumentImageRemove('credential')"><i class="fas fa-trash me-1"></i>Eliminar</button>
+                                                            </div>
+                                                            <div id="ce-doc-credential-status" class="cedit-doc-upload-status small mt-1" role="status" aria-live="polite"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-12"><hr class="my-0"></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Licencia</label><input type="text" class="form-control form-control-sm" id="ce-licencia" data-field="licencia"></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Tipo Licencia</label><input type="text" class="form-control form-control-sm" id="ce-licencia-tipo" data-field="licencia_tipo"></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia Licencia</label><input type="text" class="form-control form-control-sm" id="ce-vig-licencia" data-field="vig_licencia"></div>
@@ -11146,6 +11238,7 @@ FF
 
                     <!-- -- JAVASCRIPT DE LA SECCIÓN -- -->
                     <script src="js/employee-photo-upload.js?v=20260804"></script>
+                    <script src="js/employee-document-upload.js?v=20260804"></script>
                     <script>
                     (function() {
                         'use strict';
@@ -11396,18 +11489,36 @@ FF
                         };
 
                         /* -- Cargar foto documento -- */
-                        function loadDocPhoto(imgId, url) {
+                        async function loadDocPhoto(imgId, url, kind) {
                             const img = document.getElementById(imgId);
                             if (!img) return;
+                            const loadToken = String(Date.now()) + Math.random();
+                            img.dataset.loadToken = loadToken;
                             if (url && url.trim() && url.trim() !== '0') {
-                                img.src = url.trim();
-                                img.style.display = 'block';
-                                // ocultar placeholder
-                                const frame = img.parentElement;
-                                const placeholder = frame.querySelector('.colab-doc-empty');
-                                if (placeholder) placeholder.style.display = 'none';
+                                try {
+                                    const resolved = window.employeeDocumentUpload
+                                        ? await window.employeeDocumentUpload.resolve(window.supabaseClient, url.trim(), kind)
+                                        : url.trim();
+                                    if (img.dataset.loadToken !== loadToken) return;
+                                    img.src = resolved;
+                                    img.style.display = 'block';
+                                    const frame = img.parentElement;
+                                    const placeholder = frame.querySelector('.colab-doc-empty');
+                                    if (placeholder) placeholder.style.display = 'none';
+                                } catch (error) {
+                                    if (img.dataset.loadToken !== loadToken) return;
+                                    img.style.display = 'none';
+                                    const placeholder = img.parentElement?.querySelector('.colab-doc-empty');
+                                    if (placeholder) placeholder.style.display = 'flex';
+                                    console.error('[Colaboradores][Documento] No se pudo visualizar', {
+                                        documentKind: kind || null,
+                                        code: error?.code || 'RESOLVE_FAILED'
+                                    });
+                                }
                             } else {
                                 img.style.display = 'none';
+                                const placeholder = img.parentElement?.querySelector('.colab-doc-empty');
+                                if (placeholder) placeholder.style.display = 'flex';
                             }
                         }
 
@@ -11692,9 +11803,9 @@ FF
                             fillField('cf-cedula',          gc(c, 'cedula'));
 
                             // Sección 3: Documentos
-                            loadDocPhoto('colab-foto-ine',     val(gc(c, 'foto_ine')));
-                            loadDocPhoto('colab-foto-ine-rev', val(gc(c, 'foto_ine_rev')));
-                            loadDocPhoto('colab-foto-cred',    val(gc(c, 'foto_cred')));
+                            loadDocPhoto('colab-foto-ine',     val(gc(c, 'foto_ine')),     'ine_front');
+                            loadDocPhoto('colab-foto-ine-rev', val(gc(c, 'foto_ine_rev')), 'ine_back');
+                            loadDocPhoto('colab-foto-cred',    val(gc(c, 'foto_cred')),     'credential');
 
                             fillField('cf-licencia',       gc(c, 'licencia'));
                             fillField('cf-licencia-tipo',  gc(c, 'licencia_tipo'));
@@ -12834,7 +12945,8 @@ FF
                             alerg_ali:'Alergia Alimento', nss:'NSS',
                             estado_civil:'Estado Civil', dependientes:'Dependientes',
                             rubrica:'Rúbrica', doc_ingreso:'Doc. Ingreso',
-                            foto:'Foto de perfil', cv_url:'Currículum Vitae (CV)',
+                            foto:'Foto de perfil', foto_ine:'INE frente', foto_ine_rev:'INE reverso',
+                            foto_cred:'TIA / Credencial AIFA', cv_url:'Currículum Vitae (CV)',
                             estatus:'Estatus',
                         };
 
@@ -12857,6 +12969,183 @@ FF
                             'ce-sangre':'sangre','ce-alerg-med':'alerg_med','ce-alerg-ali':'alerg_ali','ce-nss':'nss',
                             'ce-estatus':'estatus',
                         };
+
+                        const COLAB_DOCUMENT_IMAGE_UI = Object.freeze({
+                            ine_front: Object.freeze({
+                                field: 'foto_ine', inputId: 'ce-doc-ine-front', previewId: 'ce-doc-ine-front-preview',
+                                placeholderId: 'ce-doc-ine-front-placeholder', removeId: 'ce-doc-ine-front-remove',
+                                statusId: 'ce-doc-ine-front-status', label: 'INE frente'
+                            }),
+                            ine_back: Object.freeze({
+                                field: 'foto_ine_rev', inputId: 'ce-doc-ine-back', previewId: 'ce-doc-ine-back-preview',
+                                placeholderId: 'ce-doc-ine-back-placeholder', removeId: 'ce-doc-ine-back-remove',
+                                statusId: 'ce-doc-ine-back-status', label: 'INE reverso'
+                            }),
+                            credential: Object.freeze({
+                                field: 'foto_cred', inputId: 'ce-doc-credential', previewId: 'ce-doc-credential-preview',
+                                placeholderId: 'ce-doc-credential-placeholder', removeId: 'ce-doc-credential-remove',
+                                statusId: 'ce-doc-credential-status', label: 'TIA / Credencial AIFA'
+                            })
+                        });
+                        let colabDocumentImageState = {};
+                        let colabDocumentImageLoadToken = 0;
+
+                        function colabDocumentImageConfig(kind) {
+                            const config = COLAB_DOCUMENT_IMAGE_UI[kind];
+                            if (!config) throw new Error('Tipo de documento no configurado.');
+                            return config;
+                        }
+
+                        function colabDocumentImageStatus(kind, message, tone) {
+                            const config = colabDocumentImageConfig(kind);
+                            const status = document.getElementById(config.statusId);
+                            if (!status) return;
+                            status.className = `cedit-doc-upload-status small mt-1 ${tone ? `text-${tone}` : 'text-muted'}`;
+                            status.textContent = message || '';
+                        }
+
+                        function colabDocumentImagePreview(kind, src) {
+                            const config = colabDocumentImageConfig(kind);
+                            const img = document.getElementById(config.previewId);
+                            const placeholder = document.getElementById(config.placeholderId);
+                            if (!img || !placeholder) return;
+                            if (src) {
+                                img.onerror = () => {
+                                    img.hidden = true;
+                                    placeholder.hidden = false;
+                                    colabDocumentImageStatus(kind, 'No se pudo visualizar la imagen.', 'danger');
+                                };
+                                img.src = src;
+                                img.hidden = false;
+                                placeholder.hidden = true;
+                            } else {
+                                img.removeAttribute('src');
+                                img.hidden = true;
+                                placeholder.hidden = false;
+                            }
+                        }
+
+                        function colabDocumentImageRevokePreview(state) {
+                            if (state?.objectUrl && window.URL?.revokeObjectURL) {
+                                window.URL.revokeObjectURL(state.objectUrl);
+                            }
+                        }
+
+                        async function colabDocumentImagesInit(c) {
+                            const token = ++colabDocumentImageLoadToken;
+                            Object.values(colabDocumentImageState).forEach(colabDocumentImageRevokePreview);
+                            colabDocumentImageState = {};
+
+                            for (const [kind, config] of Object.entries(COLAB_DOCUMENT_IMAGE_UI)) {
+                                const previousValue = String(gc(c, config.field) || '').trim();
+                                colabDocumentImageState[kind] = { previousValue, file: null, remove: false, objectUrl: null };
+                                const input = document.getElementById(config.inputId);
+                                const removeBtn = document.getElementById(config.removeId);
+                                if (input) input.value = '';
+                                if (removeBtn) removeBtn.classList.toggle('d-none', !previousValue);
+                                colabDocumentImagePreview(kind, null);
+                                colabDocumentImageStatus(kind, previousValue ? 'Cargando documento actual…' : 'Sin documento cargado.');
+                                if (!previousValue) continue;
+                                try {
+                                    if (!window.employeeDocumentUpload) throw new Error('Módulo de documentos no disponible.');
+                                    const src = await window.employeeDocumentUpload.resolve(window.supabaseClient, previousValue, kind);
+                                    if (token !== colabDocumentImageLoadToken) return;
+                                    colabDocumentImagePreview(kind, src);
+                                    colabDocumentImageStatus(kind, 'Documento actual listo.', 'success');
+                                } catch (error) {
+                                    if (token !== colabDocumentImageLoadToken) return;
+                                    const mapped = window.employeeDocumentUpload?.mapError(error, kind);
+                                    colabDocumentImageStatus(kind, mapped?.userMessage || 'No se pudo cargar el documento actual.', 'danger');
+                                }
+                            }
+                        }
+
+                        window.colabDocumentImageSelected = async function(kind, input) {
+                            const config = colabDocumentImageConfig(kind);
+                            const file = input?.files?.[0];
+                            if (!file) return;
+                            colabDocumentImageStatus(kind, `Validando ${config.label}…`);
+                            try {
+                                if (!window.employeeDocumentUpload) throw new Error('Módulo de documentos no disponible.');
+                                await window.employeeDocumentUpload.validate(file);
+                                const previousState = colabDocumentImageState[kind] || {};
+                                colabDocumentImageRevokePreview(previousState);
+                                const objectUrl = window.URL?.createObjectURL ? window.URL.createObjectURL(file) : null;
+                                colabDocumentImageState[kind] = {
+                                    previousValue: previousState.previousValue || '',
+                                    file,
+                                    remove: false,
+                                    objectUrl
+                                };
+                                if (objectUrl) colabDocumentImagePreview(kind, objectUrl);
+                                document.getElementById(config.removeId)?.classList.remove('d-none');
+                                colabDocumentImageStatus(kind, `${file.name} · imagen válida y lista para guardar.`, 'success');
+                            } catch (error) {
+                                input.value = '';
+                                const mapped = window.employeeDocumentUpload?.mapError(error, kind);
+                                colabDocumentImageStatus(kind, mapped?.userMessage || error?.message || 'Archivo no válido.', 'danger');
+                            }
+                        };
+
+                        window.colabDocumentImageRemove = function(kind) {
+                            const config = colabDocumentImageConfig(kind);
+                            const state = colabDocumentImageState[kind] || { previousValue: '' };
+                            colabDocumentImageRevokePreview(state);
+                            colabDocumentImageState[kind] = {
+                                previousValue: state.previousValue || '',
+                                file: null,
+                                remove: true,
+                                objectUrl: null
+                            };
+                            const input = document.getElementById(config.inputId);
+                            if (input) input.value = '';
+                            document.getElementById(config.removeId)?.classList.add('d-none');
+                            colabDocumentImagePreview(kind, null);
+                            colabDocumentImageStatus(
+                                kind,
+                                state.previousValue ? 'El documento se eliminará al guardar cambios.' : 'Sin documento cargado.',
+                                state.previousValue ? 'warning' : ''
+                            );
+                        };
+
+                        async function colabPrepareDocumentImageChanges(sb, c, numEmpl, updatePayload, cambios, uploaded, previousToDelete) {
+                            for (const [kind, config] of Object.entries(COLAB_DOCUMENT_IMAGE_UI)) {
+                                const state = colabDocumentImageState[kind];
+                                if (!state || (!state.file && !state.remove)) continue;
+                                const realCol = colabCols?.[config.field];
+                                if (!realCol) {
+                                    throw new window.employeeDocumentUpload.EmployeeDocumentUploadError(
+                                        'DOCUMENT_COLUMN_MISSING',
+                                        `No se encontró la columna para asociar ${config.label}.`,
+                                        { documentKind: kind }
+                                    );
+                                }
+                                const oldValue = String(c[realCol] || '').trim();
+                                if (state.file) {
+                                    colabDocumentImageStatus(kind, 'Subiendo imagen al almacenamiento seguro…');
+                                    const result = await window.employeeDocumentUpload.upload({
+                                        client: sb,
+                                        file: state.file,
+                                        employeeNumber: numEmpl,
+                                        kind
+                                    });
+                                    uploaded.push({ kind, reference: result.storageReference });
+                                    updatePayload[realCol] = result.storageReference;
+                                    cambios.push({ campo: config.field, valor_anterior: oldValue || null, valor_nuevo: result.storageReference });
+                                    if (window.employeeDocumentUpload.isStorageReference(oldValue)) {
+                                        previousToDelete.push({ kind, reference: oldValue });
+                                    }
+                                    colabDocumentImagePreview(kind, result.previewUrl);
+                                    colabDocumentImageStatus(kind, 'Imagen cargada; guardando asociación…', 'success');
+                                } else if (state.remove && oldValue) {
+                                    updatePayload[realCol] = null;
+                                    cambios.push({ campo: config.field, valor_anterior: oldValue, valor_nuevo: null });
+                                    if (window.employeeDocumentUpload.isStorageReference(oldValue)) {
+                                        previousToDelete.push({ kind, reference: oldValue });
+                                    }
+                                }
+                            }
+                        }
 
                         /* -- Verificar si el usuario actual puede editar -- */
                         function colabCanEdit() {
@@ -13533,6 +13822,12 @@ FF
                             const statusEl = document.getElementById('cedit-foto-status');
                             if (statusEl) statusEl.innerHTML = '';
 
+                            colabDocumentImagesInit(c).catch(error => {
+                                console.error('[Colaboradores][Documento] Error inicializando editor', {
+                                    code: error?.code || 'INIT_FAILED'
+                                });
+                            });
+
                             // Listener del input de archivo
                             const fileInput = document.getElementById('ce-foto-file');
                             if (fileInput) {
@@ -13847,6 +14142,10 @@ FF
                             const btn = document.getElementById('btn-colab-save');
                             if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando…'; }
 
+                            const uploadedDocumentRefs = [];
+                            const previousDocumentRefs = [];
+                            let employeeRowUpdated = false;
+
                             try {
                                 const sb = window.supabaseClient;
                                 if (!sb) throw new Error('Supabase no disponible');
@@ -13890,6 +14189,17 @@ FF
                                         return;
                                     }
                                 }
+
+                                if (!window.employeeDocumentUpload) throw new Error('El módulo seguro de documentos no está disponible.');
+                                await colabPrepareDocumentImageChanges(
+                                    sb,
+                                    c,
+                                    numEmpl,
+                                    updatePayload,
+                                    cambios,
+                                    uploadedDocumentRefs,
+                                    previousDocumentRefs
+                                );
 
                                 // Subir CV si hay archivo seleccionado
                                 const cvFileInput = document.getElementById('ce-cv-file');
@@ -13937,7 +14247,26 @@ FF
                                     // Entrecomillar columna si tiene caracteres especiales (ej: "No. Empleado")
                                     const safeNumCol = /[\s.]/.test(numCol) ? `"${numCol}"` : numCol;
                                     const { error: dbErr } = await sb.from('agenda_2026').update(updatePayload).eq(safeNumCol, numEmpl);
+                                    if (dbErr && uploadedDocumentRefs.length) {
+                                        throw new window.employeeDocumentUpload.EmployeeDocumentUploadError(
+                                            'DOCUMENT_ASSOCIATION_FAILED',
+                                            'Las imágenes se recibieron, pero no fue posible asociarlas con el colaborador. No se conservarán archivos incompletos.',
+                                            { cause: dbErr, documentKind: uploadedDocumentRefs[0]?.kind || null }
+                                        );
+                                    }
                                     if (dbErr) throw dbErr;
+                                    employeeRowUpdated = true;
+                                }
+
+                                for (const oldDocument of previousDocumentRefs) {
+                                    try {
+                                        await window.employeeDocumentUpload.remove(sb, oldDocument.reference, oldDocument.kind);
+                                    } catch (cleanupError) {
+                                        console.warn('[Colaboradores][Documento] No se pudo limpiar una versión anterior', {
+                                            documentKind: oldDocument.kind,
+                                            code: cleanupError?.code || 'CLEANUP_FAILED'
+                                        });
+                                    }
                                 }
 
                                 // Registrar historial
@@ -13979,11 +14308,19 @@ FF
                                 colabCargarHistorialPlaza(numEmpl);
 
                             } catch (err) {
+                                if (!employeeRowUpdated && uploadedDocumentRefs.length && window.employeeDocumentUpload) {
+                                    await Promise.allSettled(uploadedDocumentRefs.map(item =>
+                                        window.employeeDocumentUpload.remove(window.supabaseClient, item.reference, item.kind)
+                                    ));
+                                }
                                 console.error('[Colaboradores] Error al guardar:', err);
                                 const photoStatus = document.getElementById('cedit-foto-status');
                                 const userMessage = err?.userMessage || err?.message || String(err);
                                 if (err?.name === 'EmployeePhotoUploadError' && photoStatus) {
                                     photoStatus.innerHTML = `<small class="text-danger"><i class="fas fa-times me-1"></i>${userMessage}</small>`;
+                                }
+                                if (err?.name === 'EmployeeDocumentUploadError' && err.documentKind) {
+                                    colabDocumentImageStatus(err.documentKind, userMessage, 'danger');
                                 }
                                 alert('Error al guardar: ' + userMessage);
                             } finally {
