@@ -10360,10 +10360,10 @@ FF
                                                 </div>
                                                 <label class="btn btn-outline-primary btn-sm">
                                                     <i class="fas fa-upload me-1"></i>Seleccionar foto
-                                                    <input type="file" id="ce-foto-file" accept="image/jpeg,image/png,image/webp" style="display:none">
+                                                    <input type="file" id="ce-foto-file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" style="display:none">
                                                 </label>
-                                                <p class="text-muted small mt-2 mb-1">Formatos: JPG, PNG, WEBP · Se guarda con el número de empleado como nombre de archivo.</p>
-                                                <div id="cedit-foto-status" class="mt-1"></div>
+                                                <p class="text-muted small mt-2 mb-1">Formatos: JPG, JPEG, PNG, WEBP · Máximo 5 MB · Se guarda con el número de empleado como nombre de archivo.</p>
+                                                <div id="cedit-foto-status" class="mt-1" role="status" aria-live="polite"></div>
                                             </div>
                                         </div>
 
@@ -11145,6 +11145,7 @@ FF
                     </div>
 
                     <!-- -- JAVASCRIPT DE LA SECCIÓN -- -->
+                    <script src="js/employee-photo-upload.js?v=20260804"></script>
                     <script>
                     (function() {
                         'use strict';
@@ -11378,7 +11379,7 @@ FF
                         /* -- Avatar fallback: intenta jpg ? png ? webp, luego placeholder -- */
                         const EMPLOYEE_PHOTOS_BASE = 'https://fgstncvuuhpgyzmjceyr.supabase.co/storage/v1/object/public/employee-photos/';
                         const EMPLOYEE_CVDOCS_BASE  = 'https://fgstncvuuhpgyzmjceyr.supabase.co/storage/v1/object/public/employee-cvs/';
-                        const EMPLOYEE_PHOTO_EXTS  = ['jpg', 'png', 'webp'];
+                        const EMPLOYEE_PHOTO_EXTS  = ['jpg', 'jpeg', 'png', 'webp'];
 
                         window.colabAvatarFallback = function(img) {
                             const numEmpl = img.dataset.numEmpl;
@@ -13536,15 +13537,27 @@ FF
                             const fileInput = document.getElementById('ce-foto-file');
                             if (fileInput) {
                                 fileInput.value = '';
-                                fileInput.onchange = function() {
+                                fileInput.onchange = async function() {
                                     const file = this.files[0];
                                     if (!file) return;
-                                    const reader = new FileReader();
-                                    reader.onload = e => {
-                                        if (fi) { fi.src = e.target.result; fi.style.display = 'block'; }
-                                        if (ico) ico.style.display = 'none';
-                                    };
-                                    reader.readAsDataURL(file);
+                                    try {
+                                        if (!window.employeePhotoUpload) throw new Error('Validador de fotografías no disponible.');
+                                        await window.employeePhotoUpload.validate(file);
+                                        const reader = new FileReader();
+                                        reader.onload = e => {
+                                            if (fi) { fi.src = e.target.result; fi.style.display = 'block'; }
+                                            if (ico) ico.style.display = 'none';
+                                            if (statusEl) statusEl.innerHTML = '<small class="text-success"><i class="fas fa-check me-1"></i>Imagen válida y lista para guardar</small>';
+                                        };
+                                        reader.onerror = () => {
+                                            if (statusEl) statusEl.innerHTML = '<small class="text-danger"><i class="fas fa-times me-1"></i>No se pudo leer la imagen seleccionada.</small>';
+                                        };
+                                        reader.readAsDataURL(file);
+                                    } catch (error) {
+                                        const mapped = window.employeePhotoUpload?.storageError(error);
+                                        this.value = '';
+                                        if (statusEl) statusEl.innerHTML = `<small class="text-danger"><i class="fas fa-times me-1"></i>${mapped?.userMessage || error.message}</small>`;
+                                    }
                                 };
                             }
 
@@ -13899,15 +13912,19 @@ FF
                                 const fileInput = document.getElementById('ce-foto-file');
                                 if (fileInput && fileInput.files[0]) {
                                     const file = fileInput.files[0];
-                                    const ext  = file.name.split('.').pop().toLowerCase();
-                                    const path = `${numEmpl}.${ext}`;
                                     const statusEl = document.getElementById('cedit-foto-status');
                                     if (statusEl) statusEl.innerHTML = '<small class="text-primary"><span class="spinner-border spinner-border-sm me-1"></span>Subiendo foto…</small>';
-                                    const { error: upFotoErr } = await sb.storage.from('employee-photos').upload(path, file, { upsert: true, contentType: file.type });
-                                    if (upFotoErr) throw new Error('Error subiendo foto: ' + upFotoErr.message);
-                                    if (statusEl) statusEl.innerHTML = '<small class="text-success"><i class="fas fa-check me-1"></i>Foto subida correctamente</small>';
-                                    // Agregar al historial tambiÉn
-                                    cambios.push({ campo: 'foto', valor_anterior: '(anterior)', valor_nuevo: `${numEmpl}.${ext}` });
+                                    if (!window.employeePhotoUpload) throw new Error('El módulo seguro de fotografías no está disponible.');
+                                    const uploadedPhoto = await window.employeePhotoUpload.upload({
+                                        client: sb,
+                                        file,
+                                        employeeNumber: numEmpl
+                                    });
+                                    const photoCol = colabCols?.foto;
+                                    const previousPhoto = photoCol ? val(c[photoCol]) : val(gc(c, 'foto'));
+                                    if (photoCol) updatePayload[photoCol] = uploadedPhoto.publicUrl;
+                                    if (statusEl) statusEl.innerHTML = '<small class="text-success"><i class="fas fa-check me-1"></i>Foto subida correctamente; guardando referencia…</small>';
+                                    cambios.push({ campo: 'foto', valor_anterior: previousPhoto || null, valor_nuevo: uploadedPhoto.publicUrl });
                                 }
 
                                 if (!Object.keys(updatePayload).length && cambios.length === 0) {
@@ -13963,7 +13980,12 @@ FF
 
                             } catch (err) {
                                 console.error('[Colaboradores] Error al guardar:', err);
-                                alert('Error al guardar: ' + (err?.message || String(err)));
+                                const photoStatus = document.getElementById('cedit-foto-status');
+                                const userMessage = err?.userMessage || err?.message || String(err);
+                                if (err?.name === 'EmployeePhotoUploadError' && photoStatus) {
+                                    photoStatus.innerHTML = `<small class="text-danger"><i class="fas fa-times me-1"></i>${userMessage}</small>`;
+                                }
+                                alert('Error al guardar: ' + userMessage);
                             } finally {
                                 if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar Cambios'; }
                             }
