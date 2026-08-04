@@ -123,7 +123,7 @@
         href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20260731-conci-live-collab">
+    <link rel="stylesheet" href="style.css?v=20260804-airline-stats-v2">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -29114,6 +29114,46 @@ FF
                                                 </div>
                                             </div>
 
+                                            <!-- ══ ESTADÍSTICO POR AEROLÍNEA ══ -->
+                                            <div class="accordion-item border-0 rounded-3 shadow-sm overflow-hidden mb-3" id="yoy-sub-aerolineas">
+                                                <h2 class="accordion-header">
+                                                    <button class="accordion-button collapsed fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#acc-airline-body" aria-expanded="false" aria-controls="acc-airline-body" style="background:#f5f3ff;border-left:4px solid #7c3aed;color:#5b21b6;">
+                                                        <i class="fas fa-chart-pie me-2"></i>Estadístico por Aerolínea
+                                                        <span class="badge fw-normal ms-2" style="background:#ddd6fe;color:#5b21b6;font-size:.72rem;">Totales por operador</span>
+                                                    </button>
+                                                </h2>
+                                                <div id="acc-airline-body" class="accordion-collapse collapse">
+                                                    <div class="accordion-body p-3">
+                                                        <div class="airline-stats-toolbar mb-3">
+                                                            <div>
+                                                                <label for="airline-stats-year" class="small fw-semibold text-secondary">Año</label>
+                                                                <select id="airline-stats-year" class="form-select form-select-sm"></select>
+                                                            </div>
+                                                            <div>
+                                                                <label for="airline-stats-metric" class="small fw-semibold text-secondary">Indicador</label>
+                                                                <select id="airline-stats-metric" class="form-select form-select-sm">
+                                                                    <option value="pasajeros" selected>Pasajeros transportados</option>
+                                                                    <option value="operaciones">Operaciones</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="airline-stats-toolbar__months">
+                                                                <span class="small fw-semibold text-secondary">Meses</span>
+                                                                <div id="airline-stats-months" class="d-flex flex-wrap gap-1"></div>
+                                                            </div>
+                                                            <button type="button" class="btn btn-sm btn-outline-primary" id="airline-stats-export" title="Exportar tabla en CSV"><i class="fas fa-download me-1"></i>CSV</button>
+                                                        </div>
+                                                        <div class="airline-stats-summary" id="airline-stats-summary" aria-live="polite"></div>
+                                                        <div class="airline-stats-chart-wrap"><canvas id="airline-stats-chart"></canvas></div>
+                                                        <div class="table-responsive mt-3">
+                                                            <table class="table table-hover table-bordered table-sm align-middle mb-0" id="airline-stats-table">
+                                                                <thead class="table-light"></thead><tbody></tbody>
+                                                            </table>
+                                                        </div>
+                                                        <div class="text-center text-muted small py-4 d-none" id="airline-stats-empty">No hay datos de aerolíneas para el periodo seleccionado.</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
                                             <!-- ══ AVIACIÓN GENERAL ══ -->
                                             <div class="accordion-item border-0 rounded-3 shadow-sm overflow-hidden mb-3" id="yoy-sub-general">
                                                 <h2 class="accordion-header">
@@ -35526,6 +35566,7 @@ FF
     <script src="js/comparativa.js"></script>
     <script src="js/insights.js"></script>
     <script src="js/comparativa-historica.js"></script>
+    <script src="js/estadistico-aerolineas.js?v=20260804-v8"></script>
     <script src="js/yoy-general.js"></script>
     <script src="js/yoy-cargo.js"></script>
     <script src="js/parte-ops-flights.js?v=20260730-aodb-status-order"></script>
