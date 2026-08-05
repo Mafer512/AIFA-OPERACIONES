@@ -29408,8 +29408,12 @@ FF
                                                             <button type="button" class="btn btn-sm btn-outline-primary" id="airline-stats-export" title="Exportar tabla en CSV"><i class="fas fa-download me-1"></i>CSV</button>
                                                         </div>
                                                         <div class="airline-stats-summary" id="airline-stats-summary" aria-live="polite"></div>
-                                                        <div class="airline-stats-chart-wrap"><canvas id="airline-stats-chart"></canvas></div>
-                                                        <div class="table-responsive mt-3">
+                                                        <div class="airline-stats-chart-wrap">
+                                                            <div class="airline-stats-chart-canvas" id="airline-stats-chart-canvas">
+                                                                <canvas id="airline-stats-chart"></canvas>
+                                                            </div>
+                                                        </div>
+                                                        <div class="table-responsive mt-3 airline-stats-table-wrap">
                                                             <table class="table table-hover table-bordered table-sm align-middle mb-0" id="airline-stats-table">
                                                                 <thead class="table-light"></thead><tbody></tbody>
                                                             </table>
@@ -35831,7 +35835,8 @@ FF
     <script src="js/comparativa.js"></script>
     <script src="js/insights.js"></script>
     <script src="js/comparativa-historica.js"></script>
-    <script src="js/estadistico-aerolineas.js?v=20260804-v8"></script>
+    <script src="js/estadistico-aerolineas-core.js?v=20260805-v1"></script>
+    <script src="js/estadistico-aerolineas.js?v=20260805-v9"></script>
     <script src="js/yoy-general.js"></script>
     <script src="js/yoy-cargo.js"></script>
     <script src="js/parte-ops-flights.js?v=20260804-conci-cache-reset"></script>

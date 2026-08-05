@@ -20417,10 +20417,16 @@ button > i:only-child {
 
 .airline-stats-toolbar__months {
    flex: 1 1 290px;
+   min-width: 0;
 }
 
 .airline-stats-month {
    min-width: 2.6rem;
+}
+
+.airline-stats-month--empty {
+   opacity: .48;
+   cursor: not-allowed;
 }
 
 .airline-stats-summary {
@@ -20441,13 +20447,103 @@ button > i:only-child {
 .airline-stat-card span,
 .airline-stat-card small { display: block; color: #64748b; font-size: .76rem; }
 .airline-stat-card strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #4c1d95; font-size: 1.08rem; }
-.airline-stats-chart-wrap { position: relative; height: min(460px, 58vh); min-height: 280px; margin-top: .9rem; }
+
+.airline-stat-card--top {
+   border-color: #e5e7eb;
+   border-left: 4px solid var(--airline-color, #64748b);
+   background: #fff;
+}
+
+.airline-stat-card--top small {
+   display: inline-flex;
+   align-items: center;
+   gap: .35rem;
+}
+
+.airline-stat-card--top small::before {
+   width: .55rem;
+   height: .55rem;
+   flex: 0 0 .55rem;
+   border-radius: 50%;
+   background: var(--airline-color, #64748b);
+   content: '';
+}
+
+.airline-stats-chart-wrap {
+   position: relative;
+   width: 100%;
+   max-width: 100%;
+   min-width: 0;
+   min-height: 300px;
+   max-height: min(620px, 68vh);
+   margin-top: .9rem;
+   overflow-x: hidden;
+   overflow-y: auto;
+   border: 1px solid #eef0f4;
+   border-radius: .65rem;
+   background: #fff;
+   scrollbar-gutter: stable;
+}
+
+.airline-stats-chart-canvas {
+   position: relative;
+   width: 100%;
+   max-width: 100%;
+   min-width: 0;
+   min-height: 300px;
+}
+
+#airline-stats-chart {
+   max-width: 100% !important;
+}
+
+.airline-stats-table-wrap {
+   width: 100%;
+   max-width: 100%;
+   min-width: 0;
+   max-height: 430px;
+   border: 1px solid #e5e7eb;
+   border-radius: .65rem;
+}
+
+#airline-stats-table thead th {
+   position: sticky;
+   top: 0;
+   z-index: 2;
+   border-top: 0;
+   background: #f8fafc;
+   color: #334155;
+   white-space: nowrap;
+}
+
+#airline-stats-table tbody tr:nth-child(even):not(.airline-stats-total-row) td {
+   background: #fafbfc;
+}
+
+#airline-stats-table .airline-stats-top-row td {
+   background: #f5f3ff;
+}
+
+#airline-stats-table .airline-stats-top-row td:first-child {
+   box-shadow: inset 3px 0 #7c3aed;
+}
+
+#airline-stats-table td:nth-child(2) {
+   overflow-wrap: anywhere;
+}
 
 @media (max-width: 575.98px) {
    .airline-stats-toolbar { align-items: stretch; }
    .airline-stats-toolbar > div:not(.airline-stats-toolbar__months),
-   .airline-stats-toolbar .btn { flex: 1 1 100%; }
+   .airline-stats-toolbar > .btn { flex: 1 1 100%; }
    .airline-stats-toolbar__months { flex-basis: 100%; }
+   .airline-stats-toolbar__months > .d-flex {
+      display: grid !important;
+      width: 100%;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+   }
+   .airline-stats-month { min-width: 0; }
    .airline-stats-summary { grid-template-columns: 1fr; }
-   .airline-stats-chart-wrap { height: 360px; }
+   .airline-stats-chart-wrap { max-height: 480px; }
+   .airline-stats-table-wrap { max-height: 360px; }
 }
