@@ -543,12 +543,55 @@ class DataManager {
     }
 
     async updateWildlifeStrike(id, updates) {
-        const { data, error } = await this.client
+        const recordId = String(id == null ? '' : id).trim();
+        if (!/^\d+$/.test(recordId)) {
+            const invalidIdError = new Error('El identificador del registro de Fauna no es válido.');
+            invalidIdError.code = 'FAUNA_INVALID_ID';
+            invalidIdError.httpStatus = 400;
+            throw invalidIdError;
+        }
+
+        const { data: authData, error: authError } = await this.client.auth.getSession();
+        if (authError || !authData || !authData.session) {
+            const sessionError = new Error('La sesión no está disponible o ha expirado.');
+            sessionError.code = 'FAUNA_AUTH_REQUIRED';
+            sessionError.httpStatus = 401;
+            sessionError.cause = authError || null;
+            throw sessionError;
+        }
+
+        const { data, error, status, statusText } = await this.client
             .from('wildlife_strikes')
             .update(updates)
-            .eq('id', id)
+            .eq('id', recordId)
             .select();
-        if (error) throw error;
+
+        if (error) {
+            error.httpStatus = error.status || status || null;
+            error.httpStatusText = statusText || null;
+            throw error;
+        }
+
+        if (!Array.isArray(data) || data.length !== 1) {
+            const { data: existing, error: lookupError } = await this.client
+                .from('wildlife_strikes')
+                .select('id')
+                .eq('id', recordId)
+                .maybeSingle();
+
+            const notAppliedError = new Error(
+                !lookupError && !existing
+                    ? 'El registro de Fauna ya no existe.'
+                    : 'La base de datos no autorizó la actualización del registro de Fauna.'
+            );
+            notAppliedError.code = !lookupError && !existing
+                ? 'FAUNA_RECORD_NOT_FOUND'
+                : 'FAUNA_UPDATE_FORBIDDEN';
+            notAppliedError.httpStatus = !lookupError && !existing ? 404 : 403;
+            notAppliedError.cause = lookupError || null;
+            throw notAppliedError;
+        }
+
         return data;
     }
 
