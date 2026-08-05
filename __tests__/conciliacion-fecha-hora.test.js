@@ -111,8 +111,8 @@ describe('validacion de fecha y hora en Conciliacion > Manifiestos', () => {
       currentRaw: '30/07/2026 12:00',
     });
 
-    expect(td.querySelector('.conci-dt-date').min).toBe('2000-01-01');
-    expect(td.querySelector('.conci-dt-date').max).toBe('2100-12-31');
+    expect(td.querySelector('.conci-dt-date').min).toBe('1000-01-01');
+    expect(td.querySelector('.conci-dt-date').max).toBe('9999-12-31');
 
     const timeInput = td.querySelector('.conci-dt-time');
     timeInput.value = '25:85';
