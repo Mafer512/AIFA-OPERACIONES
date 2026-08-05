@@ -17771,6 +17771,46 @@ body.dark-mode #table-conci-manifiestos tbody tr.conci-row-selected > td.conci-d
    box-shadow: inset 0 0 0 1px rgba(239, 154, 154, .75);
 }
 
+/* Alerta de cifra negativa: ningún campo de pasajeros/PAX puede ser negativo
+   (sobre todo PAX QUE PAGAN TUA, que se calcula por resta). Ámbar para no
+   confundirse con el error de orden de fechas (rojo). */
+#table-conci-manifiestos tbody tr > td.conci-cell-negative-alert,
+#table-conci-manifiestos tbody tr:hover > td.conci-cell-negative-alert,
+#table-conci-manifiestos tbody tr.conci-row-selected > td.conci-cell-negative-alert {
+   position: relative;
+   background: #fff3cd !important;
+   color: #7a4f01 !important;
+   box-shadow: inset 0 0 0 1px #e0a800;
+   padding-right: 25px;
+}
+#table-conci-manifiestos td.conci-cell-negative-alert::after {
+   content: '!';
+   position: absolute;
+   top: 50%;
+   right: 6px;
+   transform: translateY(-50%);
+   display: inline-flex;
+   align-items: center;
+   justify-content: center;
+   width: 16px;
+   height: 16px;
+   border-radius: 50%;
+   background: #e0a800;
+   color: #fff;
+   font-size: 11px;
+   font-weight: 800;
+   line-height: 1;
+   pointer-events: none;
+   z-index: 2;
+}
+body.dark-mode #table-conci-manifiestos tbody tr > td.conci-cell-negative-alert,
+body.dark-mode #table-conci-manifiestos tbody tr:hover > td.conci-cell-negative-alert,
+body.dark-mode #table-conci-manifiestos tbody tr.conci-row-selected > td.conci-cell-negative-alert {
+   background: rgba(224, 168, 0, .28) !important;
+   color: #ffe8a3 !important;
+   box-shadow: inset 0 0 0 1px rgba(224, 168, 0, .8);
+}
+
 /* Fila de vuelo sin manifiesto (Solo Vuelos + validado): borde naranja, fondo verde del validated-itinerario */
 #table-conci-manifiestos tr.conci-missing-manifiesto>td:first-child {
    border-left: 4px solid #f9a825 !important;

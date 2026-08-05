@@ -21798,10 +21798,15 @@ function _conciNormalizeTimeInput(value) {
     return `${_conciPad2(h)}:${_conciPad2(m)}`;
 }
 
+// Rango operativo válido para cualquier año capturado en Conciliación.
+const _CONCI_MIN_YEAR = 2000;
+const _CONCI_MAX_YEAR = 2100;
+
 function _conciIsValidCalendarDate(year, month, day) {
     if (![year, month, day].every(Number.isInteger)) return false;
-    // El aÃ±o debe tener cuatro dÃ­gitos; evita capturas parciales como 193.
-    if (year < 1000 || year > 9999 || month < 1 || month > 12 || day < 1) return false;
+    // El año debe caer dentro del rango operativo (2000-2100); evita capturas
+    // parciales (p. ej. 193) y años irreales como 9875.
+    if (year < _CONCI_MIN_YEAR || year > _CONCI_MAX_YEAR || month < 1 || month > 12 || day < 1) return false;
     const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
     return day <= daysInMonth;
 }
@@ -21992,6 +21997,55 @@ function _conciRefreshManifestDateOrderValidation(tr, changedValues = {}) {
     return valid;
 }
 
+function _conciToggleCellWarning(td, active, message) {
+    if (!td) return;
+    td.classList.toggle('conci-cell-negative-alert', active);
+    if (active) {
+        if (td.dataset.conciNegPrevTitle === undefined) {
+            td.dataset.conciNegPrevTitle = td.getAttribute('title') || '';
+        }
+        td.dataset.conciNegativeAlert = message;
+        td.setAttribute('aria-invalid', 'true');
+        td.title = message;
+    } else if (td.dataset.conciNegPrevTitle !== undefined) {
+        delete td.dataset.conciNegativeAlert;
+        const prev = td.dataset.conciNegPrevTitle;
+        delete td.dataset.conciNegPrevTitle;
+        // Conservar aria-invalid si la alerta de orden de fechas sigue activa.
+        if (!td.dataset.conciDateOrderAlert) td.removeAttribute('aria-invalid');
+        if (typeof _conciEditMode !== 'undefined' && _conciEditMode) td.title = 'Clic para editar';
+        else if (prev) td.title = prev;
+        else td.removeAttribute('title');
+    }
+}
+
+function _conciToggleNegativeAlert(td, active, label) {
+    if (!td) return;
+    const message = /pagan\s+tua/i.test(label || '')
+        ? 'Verifica las cifras: PAX QUE PAGAN TUA no puede ser negativo (revisa TOTAL PAX y los exentos).'
+        : `Verifica las cifras: ${label || 'el número de pasajeros'} no puede ser negativo.`;
+    _conciToggleCellWarning(td, active, message);
+}
+
+// Rechaza fechas cuyo año quede fuera del rango operativo (2000-2100).
+function _conciValidateDateYearRange(td, { notify = false } = {}) {
+    if (!td) return false;
+    const col = td.dataset.col;
+    if (!_conciColIsDate(col) && !_conciColIsDateTime(col)) return false;
+    const raw = _conciNormalizeEditableCellText(
+        td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent ?? ''
+    );
+    const parts = raw ? _conciParseDateTimeParts(raw, _conciEditFallbackYear) : null;
+    const outOfRange = !!(parts && Number.isFinite(parts.year)
+        && (parts.year < _CONCI_MIN_YEAR || parts.year > _CONCI_MAX_YEAR));
+    const message = `Verifica la fecha: el año debe estar entre ${_CONCI_MIN_YEAR} y ${_CONCI_MAX_YEAR}.`;
+    _conciToggleCellWarning(td, outOfRange, message);
+    if (outOfRange && notify) {
+        try { showNotification(message, 'warning'); } catch (_) { }
+    }
+    return outOfRange;
+}
+
 function _conciRefreshCalculatedCellsForRow(tr, changedValues = {}) {
     if (!tr) return;
     const cells = Array.from(tr.querySelectorAll('td[data-col]'));
@@ -22064,6 +22118,38 @@ function _conciRefreshCalculatedCellsForRow(tr, changedValues = {}) {
         if (tuaDisabled) paxTuaCell.title = 'Los pasajeros de llegada no pagan TUA.';
         else if (paxTuaCell.title === 'Los pasajeros de llegada no pagan TUA.') paxTuaCell.removeAttribute('title');
     }
+
+    // Alerta de cifras negativas: ningún campo de pasajeros/PAX puede ser
+    // negativo (sobre todo PAX QUE PAGAN TUA, que se calcula por resta).
+    const paxAlertCells = [
+        [totalPaxCell, 'TOTAL PAX'],
+        [diplomaticosCell, 'DIPLOMATICOS'],
+        [comisionCell, 'EN COMISION'],
+        [infantesCell, 'INFANTES'],
+        [transitosCell, 'TRANSITOS'],
+        [conexionesCell, 'CONEXIONES'],
+        [otrosExentosCell, 'OTROS EXENTOS'],
+        [totalExentosCell, 'TOTAL EXENTOS'],
+        [paxTuaCell, 'PAX QUE PAGAN TUA'],
+    ];
+    let hasNegativePax = false;
+    paxAlertCells.forEach(([cell, label]) => {
+        if (!cell) return;
+        const negative = readNumber(cell) < 0;
+        if (negative) hasNegativePax = true;
+        _conciToggleNegativeAlert(cell, negative, label);
+    });
+    if (hasNegativePax) {
+        if (Object.keys(changedValues).length && !tr.dataset.conciNegativePaxNotified) {
+            tr.dataset.conciNegativePaxNotified = '1';
+            try {
+                showNotification('Verifica las cifras: hay pasajeros/PAX en negativo (revisa PAX QUE PAGAN TUA).', 'warning');
+            } catch (_) { }
+        }
+    } else {
+        delete tr.dataset.conciNegativePaxNotified;
+    }
+
     _conciRefreshManifestDateOrderValidation(tr, changedValues);
 }
 
@@ -22954,6 +23040,8 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     td.title = 'Clic para editar';
     _conciRefreshMatriculaValidationForRow(tr);
     _conciRefreshCalculatedCellsForRow(tr);
+    // Límite operativo: alerta si la fecha capturada cae fuera de 2000-2100.
+    _conciValidateDateYearRange(td, { notify: didChange });
 
     // Guardado tipo Excel: al salir de una celda se persiste la fila sin esperar
     // un botón global de Guardar.
@@ -23007,8 +23095,8 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
     const dateInput = document.createElement('input');
     dateInput.type = 'date';
     dateInput.className = 'conci-dt-date';
-    dateInput.min = '1000-01-01';
-    dateInput.max = '9999-12-31';
+    dateInput.min = `${_CONCI_MIN_YEAR}-01-01`;
+    dateInput.max = `${_CONCI_MAX_YEAR}-12-31`;
     if (parts && _conciIsValidCalendarDate(parts.year, parts.month, parts.day)) {
         dateInput.value = `${parts.year}-${_conciPad2(parts.month)}-${_conciPad2(parts.day)}`;
     }
