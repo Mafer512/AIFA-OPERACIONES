@@ -37,7 +37,7 @@ const api = new Function(
 );
 
 describe('guardado de Conciliacion por movement_key', () => {
-  test('carga los manifiestos por la fecha normalizada que usa movement_key', async () => {
+  test('carga los manifiestos en la ventana normalizada que cubre cruces de medianoche', async () => {
     const fetchSource = sourceBetween(
       'async function _conciFetchManifestsForDate',
       '// Month abbreviation'
@@ -79,12 +79,12 @@ describe('guardado de Conciliacion por movement_key', () => {
     expect(calls).toContainEqual({
       type: 'gte',
       column: '_portal_flight_date',
-      value: '2026-08-03',
+      value: '2026-08-02',
     });
     expect(calls).toContainEqual({
       type: 'lte',
       column: '_portal_flight_date',
-      value: '2026-08-03',
+      value: '2026-08-04',
     });
   });
 

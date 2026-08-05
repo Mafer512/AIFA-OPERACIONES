@@ -41,10 +41,23 @@ describe('captura de celdas en Conciliacion > Manifiestos', () => {
   });
 
   test('los selectores de colaboracion admiten ids y columnas con espacios', () => {
-    expect(source).toMatch(/tr\[data-row-id=(?:'|\x22)\$\{rowId\}(?:'|\x22)\]/);
-    expect(source).toMatch(/td\[data-col=(?:'|\x22)\$\{col\}(?:'|\x22)\]/);
-    expect(source).toMatch(/tr\[data-row-id=(?:'|\x22)\$\{payload\.rowId\}(?:'|\x22)\]/);
-    expect(source).toMatch(/td\[data-col=(?:'|\x22)\$\{payload\.col\}(?:'|\x22)\]/);
+    const findSource = sourceBetween(
+      'function _conciFindLiveCell',
+      'function _conciApplyRemotePresenceHighlights'
+    );
+    const findLiveCell = new Function(
+      findSource + '; return _conciFindLiveCell;'
+    )();
+    document.body.innerHTML = [
+      '<table><tbody>',
+      '<tr data-row-id="vuelo 42/[A]"><td data-col="HR. DE OPERACIÓN / SLOT"></td></tr>',
+      '</tbody></table>',
+    ].join('');
+
+    const tbody = document.querySelector('tbody');
+    const cell = document.querySelector('td');
+    expect(findLiveCell(tbody, 'vuelo 42/[A]', 'HR. DE OPERACIÓN / SLOT')).toBe(cell);
+    expect(findLiveCell(tbody, 'vuelo inexistente', 'HR. DE OPERACIÓN / SLOT')).toBeNull();
   });
 
   test('las celdas AERONAVE y de texto abren su editor sin bloquear la captura', () => {
@@ -370,7 +383,9 @@ describe('captura de celdas en Conciliacion > Manifiestos', () => {
     );
     expect(bulkSource).toContain('Mantener el DOM y sus celdas dirty');
     expect(bulkSource).toMatch(/if \(fail\.length > 0\)[\s\S]*?_conciRefreshEditToolbar\(\);\s*return;/);
-    expect(source).toContain('if (tr._conciAutoSavePromise) {\n        tr._conciAutoSaveQueued = true;');
+    expect(source).toMatch(
+      /if \(tr\._conciAutoSavePromise\)\s*\{\s*tr\._conciAutoSaveQueued = true;\s*return tr\._conciAutoSavePromise;/
+    );
     expect(source).toContain('async function _conciAutoSaveRow(tr, options = {})');
     expect(source).toContain('if (!options.keepEditorsOpen)');
     expect(source).toContain('if (shouldRetry) _conciAutoSaveRow(tr, options);');

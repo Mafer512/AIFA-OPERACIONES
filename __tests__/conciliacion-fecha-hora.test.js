@@ -38,6 +38,7 @@ function loadDateTimeEditor(commitCell) {
     '_conciNormalizeTimeInput', '_conciNormalizeEditableCellText',
     '_conciCommitCellRaw', '_conciUpdateSummaryLiveCell', '_conciPad2',
     '_conciRefreshCalculatedCellsForRow', '_conciRefreshManifestDateOrderValidation',
+    '_CONCI_MIN_YEAR', '_CONCI_MAX_YEAR',
     editorSnippet + '; return _conciActivateDateTimeEditor;'
   );
   return factory(
@@ -49,7 +50,9 @@ function loadDateTimeEditor(commitCell) {
     commitCell, jest.fn(),
     value => String(value).padStart(2, '0'),
     jest.fn(),
-    jest.fn()
+    jest.fn(),
+    2000,
+    2100
   );
 }
 
@@ -107,6 +110,9 @@ describe('validacion de fecha y hora en Conciliacion > Manifiestos', () => {
       parts: { year: 2026, month: 7, day: 30, hour: 12, minute: 0 },
       currentRaw: '30/07/2026 12:00',
     });
+
+    expect(td.querySelector('.conci-dt-date').min).toBe('2000-01-01');
+    expect(td.querySelector('.conci-dt-date').max).toBe('2100-12-31');
 
     const timeInput = td.querySelector('.conci-dt-time');
     timeInput.value = '25:85';
