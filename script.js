@@ -19222,6 +19222,7 @@ function _conciVueloToRow(vRow, tipo, outputCols, colm, hasManifestSchema) {
         if (colm.aeronave)  row[colm.aeronave]   = vRow['Aircraft type'] || '';
         if (colm.matricula) row[colm.matricula]  = vRow['Registration']  || '';
         if (colm.routing)   row[colm.routing]    = vRow['Routing']       || '';
+        if (Object.prototype.hasOwnProperty.call(row, 'RUTA')) row['RUTA'] = vRow['Routing'] || '';
         if (colm.stand)     row[colm.stand]      = isArr ? vRow['[Arr] Stand']  : vRow['[Dep] Stand'];
         if (colm.puerta)    row[colm.puerta]     = isArr ? vRow['[Arr] Gates']  : vRow['[Dep] Gates'];
         if (colm.pax)       row[colm.pax]        = isArr ? vRow['[Arr] Boarded']: vRow['[Dep] Boarded'];
@@ -19326,11 +19327,11 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
         outputCols = [
             "CIERRE SUBSECRETARIA", "MES", "FECHA", "TIPO DE MANIFIESTO", "AEROLINEA",
             "TIPO DE OPERACIÓN", "AERONAVE", "MATRÍCULA", "ESTATUS MATRÍCULA", "# DE VUELO",
-            "DESTINO / ORIGEN", "SLOT ASIGNADO", "SLOT COORDINADO", "HR. DE INICIO O TERMINO DE PERNOCTA",
+            "DESTINO / ORIGEN", "RUTA", "SLOT ASIGNADO", "SLOT COORDINADO", "HR. DE INICIO O TERMINO DE PERNOCTA",
             "HR. DE EMBARQUE O DESEMBARQUE", "HR. DE OPERACIÓN", "HR. MÁXIMA DE ENTREGA", "HR. DE RECEPCIÓN",
             "HRS. CUMPLIDAS", "PUNTUALIDAD / CANCELACIÓN", "TOTAL PAX", "DIPLOMATICOS", "EN COMISION",
             "INFANTES", "TRANSITOS", "CONEXIONES", "OTROS EXENTOS", "TOTAL EXENTOS", "PAX QUE PAGAN TUA",
-            "KGS. DE EQUIPAJE", "KGS. DE CARGA", "CORREO", "DEMORA +- 15 MIN.", "CÓDIGO DEMORA",
+            "KGS. DE EQUIPAJE", "KGS. DE CARGA NACIONAL", "KGS. DE CARGA INTERNACIONAL", "KG DE CARGA TOTAL", "CORREO", "DEMORA +- 15 MIN.", "CÓDIGO DEMORA",
             "OBSERVACIONES", "CAPTURÓ", "CAPACIDAD MÁXIMA", "FACTOR DE OCUPACIÓN", "id", "EVIDENCIA", "Hora y Fecha Generación", "_fuente"
         ];
         if (!outputCols.includes('Hora y Fecha Generación')) outputCols.push('Hora y Fecha Generación');
@@ -19339,11 +19340,11 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
               outputCols = [
             "CIERRE SUBSECRETARIA", "MES", "FECHA", "TIPO DE MANIFIESTO", "AEROLINEA",
             "TIPO DE OPERACIÓN", "AERONAVE", "MATRíCULA", "ESTATUS MATRÍCULA", "# DE VUELO",
-            "DESTINO / ORIGEN", "SLOT ASIGNADO", "SLOT COORDINADO", "HR. DE INICIO O TERMINO DE PERNOCTA",
+            "DESTINO / ORIGEN", "RUTA", "SLOT ASIGNADO", "SLOT COORDINADO", "HR. DE INICIO O TERMINO DE PERNOCTA",
             "HR. DE EMBARQUE O DESEMBARQUE", "HR. DE OPERACKN", "HR. MÈXIMA DE ENTREGA", "HR. DE RECEPCIÓN",
             "HRS. CUMPLIDAS", "PUNTUALIDAD / CANCELACIÓN", "TOTAL PAX", "DIPLOMATICOS", "EN COMISION",
             "INFANTES", "TRANSITOS", "CONEXIONES", "OTROS EXENTOS", "TOTAL EXENTOS", "PAX QUE PAGAN TUA",
-            "KGS. DE EQUIPAJE", "KGS. DE CARGA", "CORREO", "DEMORA +- 15 MIN.", "CDIGO DEMORA",
+            "KGS. DE EQUIPAJE", "KGS. DE CARGA NACIONAL", "KGS. DE CARGA INTERNACIONAL", "KG DE CARGA TOTAL", "CORREO", "DEMORA +- 15 MIN.", "CDIGO DEMORA",
             "OBSERVACIONES", "CAPTURÓ", "CAPACIDAD MÁXIMA", "FACTOR DE OCUPACIÓN", "id", "EVIDENCIA", "Hora y Fecha Generación", "_fuente"
         ];
     }
@@ -20330,6 +20331,7 @@ const _CONCI_EXPORT_COLS_PAX = [
     { h: 'ESTATUS MATRÍCULA', t: 'text', a: ['ESTATUS MATRÍCULA', 'ESTATUS MATRICULA'] },
     { h: '# DE VUELO', t: 'text', a: ['# DE VUELO'] },
     { h: 'DESTINO / ORIGEN', t: 'routecity', a: ['DESTINO / ORIGEN'] },
+    { h: 'RUTA', t: 'text', a: ['RUTA', 'DESTINO / ORIGEN', 'ROUTING'] },
     { h: 'SLOT ASIGNADO', t: 'datetime', a: ['SLOT ASIGNADO'] },
     { h: 'SLOT COORDINADO', t: 'datetime', a: ['SLOT COORDINADO'] },
     { h: 'HR. DE INICIO O TERMINO DE PERNOCTA', t: 'datetime', a: ['HR. DE INICIO O TERMINO DE PERNOCTA'] },
@@ -20349,7 +20351,9 @@ const _CONCI_EXPORT_COLS_PAX = [
     { h: 'TOTAL EXENTOS', t: 'num', a: ['TOTAL EXENTOS'] },
     { h: 'PAX QUE PAGAN TUA', t: 'num', a: ['PAX QUE PAGAN TUA'] },
     { h: 'KGS. DE EQUIPAJE', t: 'num', a: ['KGS. DE EQUIPAJE'] },
-    { h: 'KGS. DE CARGA', t: 'num', a: ['KGS. DE CARGA'] },
+    { h: 'KGS. DE CARGA NACIONAL', t: 'num', a: ['KGS. DE CARGA NACIONAL'] },
+    { h: 'KGS. DE CARGA INTERNACIONAL', t: 'num', a: ['KGS. DE CARGA INTERNACIONAL'] },
+    { h: 'KG DE CARGA TOTAL', t: 'num', a: ['KG DE CARGA TOTAL', 'KGS. DE CARGA'] },
     { h: 'CORREO', t: 'num', a: ['CORREO'] },
     { h: 'DEMORA +- 15 MIN.', t: 'text', a: ['DEMORA +- 15 MIN.', 'DEMORA +-15 MIN', 'DEMORA +- 15 MIN'] },
     { h: 'CÓDIGO DEMORA', t: 'text', a: ['CÓDIGO DEMORA', 'CODIGO DEMORA'] },
@@ -20601,12 +20605,13 @@ const _CONCI_IMPORT_TABLE = 'Conciliación Manifiestos';
 const _CONCI_IMPORT_FALLBACK_COLUMNS = [
     'CIERRE SUBSECRETARIA', 'MES', 'FECHA', 'TIPO DE MANIFIESTO', 'AEROLINEA',
     'TIPO DE OPERACIÓN', 'AERONAVE', 'MATRÍCULA', 'ESTATUS MATRÍCULA', '# DE VUELO',
-    'DESTINO / ORIGEN', 'SLOT ASIGNADO', 'SLOT COORDINADO',
+    'DESTINO / ORIGEN', 'RUTA', 'SLOT ASIGNADO', 'SLOT COORDINADO',
     'HR. DE INICIO O TERMINO DE PERNOCTA', 'HR. DE EMBARQUE O DESEMBARQUE',
     'HR. DE OPERACIÓN', 'HR. MÁXIMA DE ENTREGA', 'HR. DE RECEPCIÓN',
     'HRS. CUMPLIDAS', 'PUNTUALIDAD / CANCELACIÓN', 'TOTAL PAX', 'DIPLOMATICOS',
     'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS',
-    'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE EQUIPAJE', 'KGS. DE CARGA',
+    'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE EQUIPAJE',
+    'KGS. DE CARGA NACIONAL', 'KGS. DE CARGA INTERNACIONAL', 'KG DE CARGA TOTAL',
     'CORREO', 'DEMORA +- 15 MIN.', 'CÓDIGO DEMORA', 'OBSERVACIONES', 'CAPTURÓ'
 ];
 const _CONCI_IMPORT_IGNORED_COLUMNS = new Set([
@@ -20951,7 +20956,7 @@ function _updateManifiestosSummaryStripLegacy(data, columns) {
     const _airlineCol  = cols.find(c => /aerol[ií]nea|airline/i.test(c))          || null;
     const _optypeCol   = cols.find(c => /tipo.*oper|service\s*type/i.test(c))      || null;
     const _totalPaxCol = cols.find(c => /^total\s*pax$/i.test(c.trim()))           || null;
-    const _kgsCarCol   = cols.find(c => /kgs?\.?\s*(de\s*)?carga/i.test(c.trim())) || null;
+    const _kgsCarCol   = cols.find(c => /carga\s*total/i.test(c.trim())) || cols.find(c => /kgs?\.?\s*(de\s*)?carga/i.test(c.trim())) || null;
 
     let paxOps = 0, totalPax = 0, cargoOps = 0, kgsCarga = 0;
 
@@ -21140,6 +21145,8 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     const _aeronaveCol = displayCols.find(c => /^aeronave$/i.test(c.trim())) || null;
     // Match columns named exactly 'Routing' OR containing 'origen' or 'destino' (e.g. 'DESTINO / ORIGEN')
     const _routingCol = displayCols.find(c => /^routing$/i.test(c) || /origen|destino.*origen|routing/i.test(c)) || null;
+    // Columna "RUTA": muestra la pierna completa (origen-destino) sin maquillar.
+    const _rutaCol = displayCols.find(c => /^ruta$/i.test(c.trim())) || null;
     // Columna "TIPO DE OPERACIÓN": se muestra como Nacional / Internacional según el
     // origen/destino del vuelo (no como el service type F/J/P original).
     const _optypeCol  = displayCols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
@@ -21335,6 +21342,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         isMatriculaStatus: c === _matriculaStatusCol,
         isAeronave:  c === _aeronaveCol,
         isRouting:   c === _routingCol && (hasIataMap || hasAirportCatalog),
+        isRuta:      c === _rutaCol,
         isOptype:    c === _optypeCol,
         isHrsCumplidas: c === _hrsCumplidasCol && !!_hrOperacionCol && !!_hrRecepcionCol,
         isPuntualidad: c === _puntualidadCol && !!_slotAsignadoCol && !!_hrOperacionCol,
@@ -21389,6 +21397,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
             const _tipoRaw = _tipoCol ? String(row[_tipoCol] || '').toLowerCase() : '';
             tr.dataset.rowDir = /lleg|arr/.test(_tipoRaw) ? 'arr' : (/sal|dep/.test(_tipoRaw) ? 'dep' : '');
             tr.dataset.rowCargo = _conciRowIsCargo(row, _optypeCol, _airlineCol) ? '1' : '0';
+            const _isCargoRow = tr.dataset.rowCargo === '1';
             tr.dataset.rowOvercap = row._conci_overcapacity ? '1' : '0';
             if (row._conci_overcapacity) {
                 tr.classList.add('conci-row-overcapacity');
@@ -21405,6 +21414,9 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                 if (_conciIsCalculatedColumn(c)) {
                     td.dataset.conciReadonly = '1';
                     td.title = 'Campo calculado: no se puede modificar.';
+                } else if (_isCargoRow && _conciIsPassengerColumn(c)) {
+                    td.dataset.conciReadonly = '1';
+                    td.title = 'Vuelo de carga: no aplica la captura de pasajeros.';
                 }
                 const val = row[c];
                 const rawStr = String(val !== null && val !== undefined ? val : '').trim();
@@ -21447,6 +21459,13 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                     td.dataset.routeRaw = rawStr;
                     td.dataset.raw = shown;
                     if (rawStr && rawStr.toUpperCase() !== String(shown).toUpperCase()) td.title = rawStr;
+                } else if (meta.isRuta) {
+                    // RUTA: pierna completa (origen-destino) tal cual; si la fila aun
+                    // no tiene RUTA propia, cae al routing crudo de DESTINO / ORIGEN.
+                    const routingRaw = _routingCol ? String(row[_routingCol] || '').trim() : '';
+                    const shownRuta = (rawStr || routingRaw).toUpperCase();
+                    td.textContent = shownRuta;
+                    td.dataset.raw = shownRuta;
                 } else if (meta.isOptype) {
                     const routingRaw = _routingCol ? String(row[_routingCol] || '') : '';
                     const tipoRaw = _tipoCol ? String(row[_tipoCol] || '') : '';
@@ -21798,15 +21817,10 @@ function _conciNormalizeTimeInput(value) {
     return `${_conciPad2(h)}:${_conciPad2(m)}`;
 }
 
-// Rango operativo válido para cualquier año capturado en Conciliación.
-const _CONCI_MIN_YEAR = 2000;
-const _CONCI_MAX_YEAR = 2100;
-
 function _conciIsValidCalendarDate(year, month, day) {
     if (![year, month, day].every(Number.isInteger)) return false;
-    // El año debe caer dentro del rango operativo (2000-2100); evita capturas
-    // parciales (p. ej. 193) y años irreales como 9875.
-    if (year < _CONCI_MIN_YEAR || year > _CONCI_MAX_YEAR || month < 1 || month > 12 || day < 1) return false;
+    // El aÃ±o debe tener cuatro dÃ­gitos; evita capturas parciales como 193.
+    if (year < 1000 || year > 9999 || month < 1 || month > 12 || day < 1) return false;
     const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
     return day <= daysInMonth;
 }
@@ -21904,6 +21918,7 @@ function _conciIsCalculatedColumn(column) {
         || /hr\.?\s*maxima\s*de\s*entrega/.test(key)
         || /^total\s+exentos$/.test(key)
         || /^pax\s+que\s+pagan\s+tua$/.test(key)
+        || /^kgs?\.?\s*de\s*carga\s+total$/.test(key)
         || /capacidad.*maxima/.test(key)
         || /factor.*ocupacion/.test(key)
         || /^capturo$/.test(key);
@@ -21911,7 +21926,29 @@ function _conciIsCalculatedColumn(column) {
 
 function _conciShouldPersistCalculatedColumn(column) {
     const key = _conciNormalizedColumnName(column);
-    return /^total\s+exentos$/.test(key) || /^pax\s+que\s+pagan\s+tua$/.test(key);
+    return /^total\s+exentos$/.test(key) || /^pax\s+que\s+pagan\s+tua$/.test(key) || /^kgs?\.?\s*de\s*carga\s+total$/.test(key);
+}
+
+// Columnas de captura de pasajeros. En vuelos de carga (incluye mixtos
+// clasificados como carga) no aplican y se bloquea su edición.
+function _conciIsPassengerColumn(column) {
+    const key = _conciNormalizedColumnName(column);
+    return /^total\s+pax$/.test(key)
+        || /^diplomaticos$/.test(key)
+        || /^en\s+comision$/.test(key)
+        || /^infantes$/.test(key)
+        || /^transitos$/.test(key)
+        || /^conexiones$/.test(key)
+        || /^otros\s+exentos$/.test(key)
+        || /^total\s+exentos$/.test(key)
+        || /^pax\s+que\s+pagan\s+tua$/.test(key)
+        || /^kgs?\.?\s*de\s*equipaje$/.test(key);
+}
+
+// true si el <tr> quedó clasificado como carga (ver dataset.rowCargo en el render).
+function _conciRowElementIsCargo(el) {
+    const tr = el && (el.matches?.('tr') ? el : el.closest?.('tr'));
+    return !!tr && tr.dataset.rowCargo === '1';
 }
 
 function _conciValidatedDateTime(rawValue, fallbackYear) {
@@ -21997,55 +22034,6 @@ function _conciRefreshManifestDateOrderValidation(tr, changedValues = {}) {
     return valid;
 }
 
-function _conciToggleCellWarning(td, active, message) {
-    if (!td) return;
-    td.classList.toggle('conci-cell-negative-alert', active);
-    if (active) {
-        if (td.dataset.conciNegPrevTitle === undefined) {
-            td.dataset.conciNegPrevTitle = td.getAttribute('title') || '';
-        }
-        td.dataset.conciNegativeAlert = message;
-        td.setAttribute('aria-invalid', 'true');
-        td.title = message;
-    } else if (td.dataset.conciNegPrevTitle !== undefined) {
-        delete td.dataset.conciNegativeAlert;
-        const prev = td.dataset.conciNegPrevTitle;
-        delete td.dataset.conciNegPrevTitle;
-        // Conservar aria-invalid si la alerta de orden de fechas sigue activa.
-        if (!td.dataset.conciDateOrderAlert) td.removeAttribute('aria-invalid');
-        if (typeof _conciEditMode !== 'undefined' && _conciEditMode) td.title = 'Clic para editar';
-        else if (prev) td.title = prev;
-        else td.removeAttribute('title');
-    }
-}
-
-function _conciToggleNegativeAlert(td, active, label) {
-    if (!td) return;
-    const message = /pagan\s+tua/i.test(label || '')
-        ? 'Verifica las cifras: PAX QUE PAGAN TUA no puede ser negativo (revisa TOTAL PAX y los exentos).'
-        : `Verifica las cifras: ${label || 'el número de pasajeros'} no puede ser negativo.`;
-    _conciToggleCellWarning(td, active, message);
-}
-
-// Rechaza fechas cuyo año quede fuera del rango operativo (2000-2100).
-function _conciValidateDateYearRange(td, { notify = false } = {}) {
-    if (!td) return false;
-    const col = td.dataset.col;
-    if (!_conciColIsDate(col) && !_conciColIsDateTime(col)) return false;
-    const raw = _conciNormalizeEditableCellText(
-        td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent ?? ''
-    );
-    const parts = raw ? _conciParseDateTimeParts(raw, _conciEditFallbackYear) : null;
-    const outOfRange = !!(parts && Number.isFinite(parts.year)
-        && (parts.year < _CONCI_MIN_YEAR || parts.year > _CONCI_MAX_YEAR));
-    const message = `Verifica la fecha: el año debe estar entre ${_CONCI_MIN_YEAR} y ${_CONCI_MAX_YEAR}.`;
-    _conciToggleCellWarning(td, outOfRange, message);
-    if (outOfRange && notify) {
-        try { showNotification(message, 'warning'); } catch (_) { }
-    }
-    return outOfRange;
-}
-
 function _conciRefreshCalculatedCellsForRow(tr, changedValues = {}) {
     if (!tr) return;
     const cells = Array.from(tr.querySelectorAll('td[data-col]'));
@@ -22119,37 +22107,17 @@ function _conciRefreshCalculatedCellsForRow(tr, changedValues = {}) {
         else if (paxTuaCell.title === 'Los pasajeros de llegada no pagan TUA.') paxTuaCell.removeAttribute('title');
     }
 
-    // Alerta de cifras negativas: ningún campo de pasajeros/PAX puede ser
-    // negativo (sobre todo PAX QUE PAGAN TUA, que se calcula por resta).
-    const paxAlertCells = [
-        [totalPaxCell, 'TOTAL PAX'],
-        [diplomaticosCell, 'DIPLOMATICOS'],
-        [comisionCell, 'EN COMISION'],
-        [infantesCell, 'INFANTES'],
-        [transitosCell, 'TRANSITOS'],
-        [conexionesCell, 'CONEXIONES'],
-        [otrosExentosCell, 'OTROS EXENTOS'],
-        [totalExentosCell, 'TOTAL EXENTOS'],
-        [paxTuaCell, 'PAX QUE PAGAN TUA'],
-    ];
-    let hasNegativePax = false;
-    paxAlertCells.forEach(([cell, label]) => {
-        if (!cell) return;
-        const negative = readNumber(cell) < 0;
-        if (negative) hasNegativePax = true;
-        _conciToggleNegativeAlert(cell, negative, label);
-    });
-    if (hasNegativePax) {
-        if (Object.keys(changedValues).length && !tr.dataset.conciNegativePaxNotified) {
-            tr.dataset.conciNegativePaxNotified = '1';
-            try {
-                showNotification('Verifica las cifras: hay pasajeros/PAX en negativo (revisa PAX QUE PAGAN TUA).', 'warning');
-            } catch (_) { }
-        }
-    } else {
-        delete tr.dataset.conciNegativePaxNotified;
+    // KGS. DE CARGA (total) = nacional + internacional. Solo se recalcula cuando
+    // hay al menos un desglose capturado; los registros historicos sin desglose
+    // conservan su total guardado.
+    const cargaNacCell = findCell(/^kgs?\.?\s*de\s*carga\s+nacional$/);
+    const cargaIntCell = findCell(/^kgs?\.?\s*de\s*carga\s+internacional$/);
+    const cargaTotalCell = findCell(/^kgs?\.?\s*de\s*carga\s+total$/);
+    if (cargaTotalCell && (cargaNacCell || cargaIntCell)) {
+        const hasCargaComponent = String(readCell(cargaNacCell) ?? '').trim() !== ''
+            || String(readCell(cargaIntCell) ?? '').trim() !== '';
+        if (hasCargaComponent) renderNumber(cargaTotalCell, readNumber(cargaNacCell) + readNumber(cargaIntCell));
     }
-
     _conciRefreshManifestDateOrderValidation(tr, changedValues);
 }
 
@@ -22895,6 +22863,7 @@ function _conciActivateCellEditor(td) {
 
     const col = td.dataset.col || '';
     if (_conciIsMatriculaStatusColumn(col) || _conciIsProtectedEditColumn(col) || _conciIsCalculatedColumn(col)) return;
+    if (_conciIsPassengerColumn(col) && _conciRowElementIsCargo(td)) return;
     const currentRaw = _conciNormalizeEditableCellText(
         td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
     );
@@ -23040,8 +23009,6 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     td.title = 'Clic para editar';
     _conciRefreshMatriculaValidationForRow(tr);
     _conciRefreshCalculatedCellsForRow(tr);
-    // Límite operativo: alerta si la fecha capturada cae fuera de 2000-2100.
-    _conciValidateDateYearRange(td, { notify: didChange });
 
     // Guardado tipo Excel: al salir de una celda se persiste la fila sin esperar
     // un botón global de Guardar.
@@ -23095,8 +23062,8 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
     const dateInput = document.createElement('input');
     dateInput.type = 'date';
     dateInput.className = 'conci-dt-date';
-    dateInput.min = `${_CONCI_MIN_YEAR}-01-01`;
-    dateInput.max = `${_CONCI_MAX_YEAR}-12-31`;
+    dateInput.min = '1000-01-01';
+    dateInput.max = '9999-12-31';
     if (parts && _conciIsValidCalendarDate(parts.year, parts.month, parts.day)) {
         dateInput.value = `${parts.year}-${_conciPad2(parts.month)}-${_conciPad2(parts.day)}`;
     }
@@ -23345,7 +23312,8 @@ function _conciSetTableEditableState(enabled) {
         tbody.querySelectorAll('td[data-col]').forEach(td => {
             const isProtected = _conciIsProtectedEditColumn(td.dataset.col);
             const isCalculated = _conciIsCalculatedColumn(td.dataset.col);
-            const isReadOnly = isProtected || isCalculated || _conciIsMatriculaStatusColumn(td.dataset.col);
+            const isCargoPax = _conciIsPassengerColumn(td.dataset.col) && _conciRowElementIsCargo(td);
+            const isReadOnly = isProtected || isCalculated || isCargoPax || _conciIsMatriculaStatusColumn(td.dataset.col);
             const editableRaw = _conciIsRoutingColumn(td.dataset.col) ? (td.dataset.routeRaw || td.dataset.raw || '') : (td.dataset.raw || '');
             const hasLocalDraft = td.dataset.dirty === '1'
                 || td.classList.contains('conci-cell-active')
@@ -23358,7 +23326,9 @@ function _conciSetTableEditableState(enabled) {
             }
             if (isReadOnly) {
                 td.dataset.conciReadonly = '1';
-                td.title = isProtected ? 'Campo bloqueado: no se puede modificar.' : 'Campo calculado: no se puede modificar.';
+                td.title = isProtected ? 'Campo bloqueado: no se puede modificar.'
+                    : (isCargoPax ? 'Vuelo de carga: no aplica la captura de pasajeros.'
+                    : 'Campo calculado: no se puede modificar.');
             } else {
                 td.removeAttribute('data-conci-readonly');
                 td.title = 'Clic para editar';
@@ -23911,7 +23881,7 @@ async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
 const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bigint|integer|numeric|double precision|real|smallint|decimal):\s*"([^"]+)"/i);
         if (typeValueMatch) {
             const badValue = _conciNormalizeEditableCellText(typeValueMatch[1]).toLowerCase();
-            const knownNumCols = ['TOTAL PAX', 'KGS. DE EQUIPAJE', 'HRS. CUMPLIDAS', '# DE VUELO', 'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE CARGA', 'CORREO', 'DIPLOMATICOS', 'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS'];
+            const knownNumCols = ['TOTAL PAX', 'KGS. DE EQUIPAJE', 'HRS. CUMPLIDAS', '# DE VUELO', 'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE CARGA NACIONAL', 'KGS. DE CARGA INTERNACIONAL', 'KG DE CARGA TOTAL', 'CORREO', 'DIPLOMATICOS', 'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS'];
             // Un error de tipo numérico SOLO puede venir de una columna que
             // realmente sea numérica en la base de datos — nunca de una
             // columna de texto (AEROLINEA, DESTINO/ORIGEN, OBSERVACIONES...).
