@@ -193,7 +193,53 @@
             { label: 'Valorizables', data: value, backgroundColor: COLORS.value, borderRadius: 4 }
         ] }, options: { ...monthlyOptions, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Kilogramos' }, ticks: { callback: v => Number(v).toLocaleString('es-MX') } } } } });
         const compCanvas = $('residuos-chart-composicion');
-        if (compCanvas) charts.composition = new Chart(compCanvas, { type: 'doughnut', data: { labels: ['Manejo especial', 'Peligrosos', 'Valorizables'], datasets: [{ data: [sum(rows.map(specialOf)), sum(rows.map(row => row?.peligrosos_kg)), sum(rows.map(row => row?.valorizables_kg))], backgroundColor: [COLORS.special, COLORS.danger, COLORS.value], borderColor: '#fff', borderWidth: 3 }] }, options: { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { datalabels: { display: false }, legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 9, padding: 14 } }, tooltip: { callbacks: { label: context => `${context.label}: ${fmt(context.raw)} kg` } } } } });
+        const compData = [sum(rows.map(specialOf)), sum(rows.map(row => row?.peligrosos_kg)), sum(rows.map(row => row?.valorizables_kg))];
+        const compTotal = sum(compData);
+        const compPct = value => compTotal > 0 ? (value / compTotal * 100) : 0;
+        const compCenterText = {
+            id: 'compositionCenterText',
+            afterDraw(chart) {
+                const { ctx, chartArea } = chart;
+                if (!chartArea) return;
+                const cx = (chartArea.left + chartArea.right) / 2;
+                const cy = (chartArea.top + chartArea.bottom) / 2;
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#0f172a';
+                ctx.font = '800 19px sans-serif';
+                ctx.fillText(fmt(compTotal), cx, cy - 9);
+                ctx.fillStyle = '#64748b';
+                ctx.font = '700 10px sans-serif';
+                ctx.fillText('kg totales', cx, cy + 12);
+                ctx.restore();
+            }
+        };
+        if (compCanvas) charts.composition = new Chart(compCanvas, { type: 'doughnut', data: { labels: ['Manejo especial', 'Peligrosos', 'Valorizables'], datasets: [{ data: compData, backgroundColor: [COLORS.special, COLORS.danger, COLORS.value], borderColor: '#fff', borderWidth: 3, hoverOffset: 8 }] }, plugins: [compCenterText], options: { responsive: true, maintainAspectRatio: false, cutout: '68%', plugins: {
+            datalabels: {
+                display: context => compPct(Number(context.dataset.data[context.dataIndex] || 0)) >= 2,
+                formatter: value => `${compPct(Number(value)).toFixed(1)}%`,
+                color: (context) => context.dataIndex === 2 ? '#111827' : '#fff',
+                font: { size: 11, weight: '800' },
+                textStrokeColor: 'rgba(0,0,0,.2)', textStrokeWidth: (context) => context.dataIndex === 2 ? 0 : 2
+            },
+            legend: { display: false },
+            tooltip: { callbacks: { label: context => `${context.label}: ${fmt(context.raw)} kg (${compPct(context.raw).toFixed(1)}%)` } }
+        } } });
+        const compBreakdown = $('residuos-comp-breakdown');
+        if (compBreakdown) {
+            const compLabels = ['Manejo especial', 'Peligrosos', 'Valorizables'];
+            const compColors = [COLORS.special, COLORS.danger, COLORS.value];
+            compBreakdown.innerHTML = compLabels.map((label, i) => {
+                const value = compData[i] || 0;
+                const pct = compPct(value);
+                return `<div class="residuos-comp-row">
+                    <div class="residuos-comp-row-top"><span class="residuos-comp-dot" style="background:${compColors[i]}"></span><span class="residuos-comp-label">${label}</span><span class="residuos-comp-pct">${pct.toFixed(1)}%</span></div>
+                    <div class="residuos-comp-bar"><div class="residuos-comp-bar-fill" style="width:${pct}%;background:${compColors[i]}"></div></div>
+                    <div class="residuos-comp-value">${fmt(value)} kg</div>
+                </div>`;
+            }).join('');
+        }
         const trendCanvas = $('residuos-chart-tendencia');
         const trendOptions = chartOptions('Kilogramos');
         trendOptions.plugins = { ...trendOptions.plugins, datalabels: {

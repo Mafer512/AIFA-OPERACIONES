@@ -21701,6 +21701,14 @@ FF
                     #hidraulicas-section .residuos-panel{ background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:16px; box-shadow:0 3px 14px rgba(15,23,42,.05); height:100%; }
                     #hidraulicas-section .residuos-panel-title{ color:#0f172a; font-size:.95rem; font-weight:800; margin-bottom:10px; }
                     #hidraulicas-section .residuos-chart-host{ height:300px; position:relative; }
+                    #hidraulicas-section .residuos-comp-breakdown{ display:flex; flex-direction:column; gap:10px; margin-top:12px; padding-top:12px; border-top:1px dashed #e2e8f0; }
+                    #hidraulicas-section .residuos-comp-row-top{ display:flex; align-items:center; gap:7px; margin-bottom:4px; }
+                    #hidraulicas-section .residuos-comp-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+                    #hidraulicas-section .residuos-comp-label{ font-size:.78rem; font-weight:700; color:#334155; flex:1; }
+                    #hidraulicas-section .residuos-comp-pct{ font-size:.8rem; font-weight:800; color:#0f172a; }
+                    #hidraulicas-section .residuos-comp-bar{ height:7px; background:#eef2f7; border-radius:999px; overflow:hidden; }
+                    #hidraulicas-section .residuos-comp-bar-fill{ height:100%; border-radius:999px; transition:width .4s ease; }
+                    #hidraulicas-section .residuos-comp-value{ font-size:.7rem; color:#64748b; margin-top:3px; text-align:right; }
                     #hidraulicas-section .residuos-table-wrap{ overflow:auto; border:1px solid #cbd5e1; border-radius:10px; }
                     #hidraulicas-section .residuos-table{ min-width:850px; margin:0; }
                     #hidraulicas-section .residuos-table thead th{ color:#fff; font-size:.72rem; text-align:center; vertical-align:middle; border-color:#fff; white-space:nowrap; }
@@ -21720,8 +21728,13 @@ FF
                     #hidraulicas-section .residuos-table .residuos-total-special{ background:#0b3040; color:#fff; }
                     #hidraulicas-section .residuos-table .residuos-total-danger{ background:#c00000; color:#fff; }
                     #hidraulicas-section .residuos-table .residuos-total-value{ background:#ffc000; color:#111827; }
-                    #hidraulicas-section .residuos-notes{ background:#f1f5f4; border-left:4px solid #047857; border-radius:8px; padding:15px 18px; color:#334155; font-size:.78rem; line-height:1.55; }
-                    #hidraulicas-section .residuos-notes-title{ color:#064e3b; font-weight:800; font-style:italic; margin-bottom:8px; }
+                    #hidraulicas-section .residuos-notes{ position:relative; background:linear-gradient(135deg,#ecfdf5 0%,#f0fdfa 60%,#eff6ff 100%); border:1px solid #a7f3d0; border-radius:14px; padding:16px 20px 16px 22px; margin-bottom:16px; color:#134e4a; font-size:.8rem; line-height:1.6; box-shadow:0 4px 16px rgba(6,95,70,.08); overflow:hidden; }
+                    #hidraulicas-section .residuos-notes::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:linear-gradient(180deg,#059669,#0d9488,#0284c7); }
+                    #hidraulicas-section .residuos-notes-title{ display:inline-flex; align-items:center; gap:8px; color:#fff; font-weight:800; font-size:.82rem; letter-spacing:.03em; text-transform:uppercase; margin-bottom:10px; background:linear-gradient(120deg,#047857,#0d9488); padding:5px 14px 5px 10px; border-radius:999px; box-shadow:0 3px 10px rgba(4,120,87,.25); }
+                    #hidraulicas-section .residuos-notes-title i{ font-size:.85rem; }
+                    #hidraulicas-section .residuos-notes p{ display:flex; align-items:flex-start; gap:9px; margin:0 0 8px; }
+                    #hidraulicas-section .residuos-notes p:last-child{ margin-bottom:0; }
+                    #hidraulicas-section .residuos-notes p i.fa-circle{ font-size:.32rem; margin-top:.5em; color:#0d9488; flex-shrink:0; }
                     #hidraulicas-section .residuos-editor{ background:#fffbeb; border:1px solid #fde68a; border-radius:12px; padding:16px; }
                     #hidraulicas-section .residuos-editor .form-label{ color:#475569; font-size:.72rem; font-weight:800; }
                     #hidraulicas-section .residuos-editor input{ font-size:.82rem; }
@@ -22115,6 +22128,13 @@ FF
                                 </div>
                               </div>
                             </div>
+                            <div class="residuos-notes">
+                              <div class="residuos-notes-title"><i class="fas fa-note-sticky"></i>Notas</div>
+                              <p><i class="fas fa-circle"></i>Los datos presentados son proporcionados por la empresa ASECA, S.A. de C.V., a través de la Gerencia de Servicios Generales.</p>
+                              <p><i class="fas fa-circle"></i>Las cantidades registradas de manera mensual corresponden a datos preliminares, ya que los manifiestos que contienen las cantidades oficiales son emitidos por el sitio de disposición final con un desfase aproximado de 2 a 3 meses. Una vez recibidos dichos manifiestos, la información será actualizada, en su caso, para reflejar las cantidades definitivas.</p>
+                              <p class="mb-0"><i class="fas fa-circle"></i>Con la información presentada en esta tabla, se elaborarán gráficas que muestren el comportamiento mensual de las cantidades generadas para cada tipo de residuo (manejo especial, peligrosos, valorizables), con la finalidad de facilitar el análisis de su comportamiento durante el año.</p>
+                            </div>
+
                             <div id="residuos-status" class="alert alert-info py-2 small d-none" role="status"></div>
 
                             <div class="row g-3 mb-3">
@@ -22126,7 +22146,7 @@ FF
 
                             <div class="row g-3 mb-3">
                               <div class="col-12 col-xl-7"><div class="residuos-panel"><div class="residuos-panel-title"><i class="fas fa-chart-column me-2 text-success"></i>Comportamiento mensual por tipo de residuo</div><div class="residuos-chart-host"><canvas id="residuos-chart-mensual"></canvas></div></div></div>
-                              <div class="col-12 col-xl-5"><div class="residuos-panel"><div class="residuos-panel-title"><i class="fas fa-chart-pie me-2 text-danger"></i>Composición acumulada</div><div class="residuos-chart-host"><canvas id="residuos-chart-composicion"></canvas></div></div></div>
+                              <div class="col-12 col-xl-5"><div class="residuos-panel"><div class="residuos-panel-title"><i class="fas fa-chart-pie me-2 text-danger"></i>Composición acumulada</div><div class="residuos-chart-host" style="height:230px;"><canvas id="residuos-chart-composicion"></canvas></div><div id="residuos-comp-breakdown" class="residuos-comp-breakdown"></div></div></div>
                             </div>
                             <div class="row g-3 mb-3">
                               <div class="col-12"><div class="residuos-panel"><div class="residuos-panel-title"><i class="fas fa-chart-line me-2 text-primary"></i>Tendencia mensual · kg generados</div><div class="residuos-chart-host"><canvas id="residuos-chart-tendencia"></canvas></div></div></div>
@@ -22161,12 +22181,6 @@ FF
                               <div class="mt-2"><label class="form-label mb-1" for="residuos-observaciones">Observaciones</label><input id="residuos-observaciones" class="form-control form-control-sm" type="text" placeholder="Ej. Manifiesto pendiente de confirmación..." maxlength="1000"></div>
                             </div>
 
-                            <div class="residuos-notes">
-                              <div class="residuos-notes-title"><i class="fas fa-note-sticky me-2"></i>Notas:</div>
-                              <p class="mb-2">* Los datos presentados son proporcionados por la empresa ASECA, S.A. de C.V., a través de la Gerencia de Servicios Generales.</p>
-                              <p class="mb-2">* Las cantidades registradas de manera mensual corresponden a datos preliminares, ya que los manifiestos que contienen las cantidades oficiales son emitidos por el sitio de disposición final con un desfase aproximado de 2 a 3 meses. Una vez recibidos dichos manifiestos, la información será actualizada, en su caso, para reflejar las cantidades definitivas.</p>
-                              <p class="mb-0">* Con la información presentada en esta tabla, se elaborarán gráficas que muestren el comportamiento mensual de las cantidades generadas para cada tipo de residuo (manejo especial, peligrosos, valorizables), con la finalidad de facilitar el análisis de su comportamiento durante el año.</p>
-                            </div>
                           </div>
                         </div>
                       </div>
