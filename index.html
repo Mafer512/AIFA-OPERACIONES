@@ -123,7 +123,7 @@
         href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20260731-conci-live-collab">
+    <link rel="stylesheet" href="style.css?v=20260804-airline-stats-v2">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -148,7 +148,7 @@
     <!-- Preload de los 5 scripts mas pesados (descarga en paralelo desde el primer byte del HTML).
          No altera el orden de ejecución: los <script> tags más abajo siguen mandando.
          Los hrefs DEBEN coincidir EXACTAMENTE con el src del script para que el navegador reuse el preload. -->
-    <link rel="preload" as="script" href="script.js?v=20260803-conci-fix-edit" fetchpriority="high">
+    <link rel="preload" as="script" href="script.js?v=20260805-conci-cargo-nopax" fetchpriority="high">
     <link rel="preload" as="script" href="js/manifiestos.js">
     <link rel="preload" as="script" href="js/data-management.js">
     <link rel="preload" as="script" href="js/analisis-operaciones.js?v=47">
@@ -7578,6 +7578,7 @@ FF
                             font-size: .72rem; font-weight: 700; line-height: 1;
                             margin-top: .08rem; margin-bottom: .1rem;
                         }
+                        .cd-kpi-total .cd-kpi-pct { color: #1558d6; }
                         .cd-kpi-masc .cd-kpi-pct { color: #1565c0; }
                         .cd-kpi-fem  .cd-kpi-pct { color: #c2185b; }
 
@@ -8473,31 +8474,155 @@ FF
                         #colabEditModal .tab-content { min-height: 280px; }
                         #cedit-foto-preview { transition: border-color .2s; }
                         #cedit-foto-preview:hover { border-color: #1565c0; }
+                        .cedit-doc-upload-grid {
+                            display: grid;
+                            grid-template-columns: repeat(3, minmax(0, 1fr));
+                            gap: .85rem;
+                        }
+                        .cedit-doc-upload-card {
+                            background: #fff;
+                            border: 1px solid #dbe3f0;
+                            border-radius: 12px;
+                            padding: .75rem;
+                            min-width: 0;
+                        }
+                        .cedit-doc-upload-title {
+                            color: #253858;
+                            font-size: .72rem;
+                            font-weight: 700;
+                            letter-spacing: .04em;
+                            text-transform: uppercase;
+                            margin-bottom: .45rem;
+                        }
+                        .cedit-doc-upload-help { font-size: .7rem; }
+                        .cedit-doc-upload-preview {
+                            align-items: center;
+                            aspect-ratio: 16 / 10;
+                            background: #f4f7fb;
+                            border: 1px dashed #b9c7db;
+                            border-radius: 9px;
+                            display: flex;
+                            justify-content: center;
+                            overflow: hidden;
+                        }
+                        .cedit-doc-upload-preview img { width: 100%; height: 100%; object-fit: contain; }
+                        .cedit-doc-upload-placeholder { color: #aeb9c8; font-size: 1.7rem; }
+                        .cedit-doc-upload-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .55rem; }
+                        .cedit-doc-upload-status { line-height: 1.25; min-height: 1.1rem; overflow-wrap: anywhere; }
+                        @media (max-width: 767.98px) {
+                            .cedit-doc-upload-grid { grid-template-columns: 1fr; }
+                        }
 
                         @media print {
                             /* Ocultar toda la app excepto la ficha */
                             body * { visibility: hidden; }
-                            #colab-ficha-content, #colab-ficha-content * { visibility: visible !important; }
+                            #colab-ficha-content, #colab-ficha-content *,
+                            #colab-vac-panel, #colab-vac-panel * { visibility: visible !important; }
+                            html, body,
+                            #colaboradores-section,
+                            #colab-ficha-wrap,
+                            #colab-ficha-content,
+                            .colab-ficha,
+                            .colab-ficha-body {
+                                height: auto !important;
+                                min-height: 0 !important;
+                                max-height: none !important;
+                                overflow: visible !important;
+                            }
                             #colab-ficha-content {
-                                position: fixed !important;
+                                position: static !important;
                                 left: 0 !important; top: 0 !important;
                                 width: 100% !important; margin: 0 !important;
+                                transform: none !important;
                                 -webkit-print-color-adjust: exact; print-color-adjust: exact;
                             }
-                            .colab-ficha { box-shadow: none !important; border: none !important; }
+                            .colab-ficha { box-shadow: none !important; border: none !important; border-radius: 0 !important; }
                             .colab-ficha::before { opacity: 0.06 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                             /* Ocultar botones e interactivos */
+                            .colab-action-bar,
                             .colab-btn-print, .colab-btn-edit, .colab-btn-delete,
-                            .colab-cv-panel, #colab-cv-inline-preview,
+                            .colab-cv-actions, #colab-cv-inline-preview,
                             .ca-btn-attach, .ca-actions,
-                            /* Ocultar secciones posteriores a Comentarios */
-                            .colab-emergency-panel, .colab-datos-civiles,
-                            hr.colab-divider,
-                            #colab-cursos-alert-banner, #colab-cursos-toolbar,
-                            #colab-cursos-list, #colab-cursos-dropzone,
+                            #colab-cursos-toolbar, #colab-cursos-dropzone,
+                            #vac-add-wrap, .vac-per-delete, .colab-vac-panel .ms-auto,
                             .colab-historial-panel, .colab-historial-plaza-panel { display: none !important; visibility: hidden !important; }
+
+                            /* Todo el contenido informativo debe participar en el flujo multipágina. */
+                            .colab-emergency-panel, .colab-datos-civiles,
+                            .colab-cv-panel, #colab-cursos-alert-banner,
+                            #colab-cursos-list, .colab-cursos-folder,
+                            .colab-cursos-folder-body,
+                            .colab-cursos-folder-body.collapsed,
+                            .colab-vac-panel {
+                                display: block !important;
+                                visibility: visible !important;
+                                height: auto !important;
+                                max-height: none !important;
+                                overflow: visible !important;
+                            }
+                            .colab-datos-civiles { display: table !important; width: 100% !important; }
+                            .colab-cv-panel { display: flex !important; }
+                            hr.colab-divider {
+                                display: block !important;
+                                visibility: visible !important;
+                                break-after: avoid-page;
+                                page-break-after: avoid;
+                            }
+                            .colab-cursos-folder-header.collapsed .folder-chevron { transform: none !important; }
+                            .colab-cursos-folder-header.collapsed .folder-icon::before { content: '\f07c' !important; }
+
+                            /* Mantener juntos solo los bloques pequeños; las listas largas sí pueden paginar. */
+                            .colab-ficha-header,
+                            .colab-tabla,
+                            .colab-doc-photos,
+                            .colab-emergency-panel,
+                            .colab-cv-panel,
+                            .vac-year-bar-wrap,
+                            .vac-period-card,
+                            .ca-item,
+                            .colab-contact-row,
+                            .colab-med-tag,
+                            .colab-curso-item {
+                                break-inside: avoid-page;
+                                page-break-inside: avoid;
+                            }
+                            .colab-section-title,
+                            .colab-cursos-folder-header {
+                                break-after: avoid-page;
+                                page-break-after: avoid;
+                            }
+                            .ca-list, #cf-amonestaciones-list, #cf-comentarios-list,
+                            #colab-cursos-list, .colab-cursos-folder-body,
+                            .vac-period-grid {
+                                break-inside: auto;
+                                page-break-inside: auto;
+                            }
+                            #cf-amonestaciones-list .ca-list,
+                            #cf-comentarios-list .ca-list {
+                                display: block !important;
+                                height: auto !important;
+                                max-height: none !important;
+                                overflow: visible !important;
+                            }
+                            #cf-amonestaciones-list .ca-item,
+                            #cf-comentarios-list .ca-item {
+                                background: #fafbfd !important;
+                                border-color: #dde3ef !important;
+                                color: var(--col-text) !important;
+                            }
+                            #cf-amonestaciones-list .ca-text,
+                            #cf-comentarios-list .ca-text { color: var(--col-text) !important; }
+                            .colab-curso-name, .colab-curso-desc {
+                                white-space: normal !important;
+                                overflow: visible !important;
+                                text-overflow: clip !important;
+                                overflow-wrap: anywhere;
+                            }
+                            .colab-tabla { table-layout: fixed; }
+                            .colab-tabla th { white-space: normal !important; }
+                            .colab-tabla td, .colab-tabla th { overflow-wrap: anywhere; }
                         }
-                        @page { size: A4 portrait; margin: 8mm; }
+                        @page { size: A4 portrait; margin: 10mm; }
 
                         /* --- BOTÓN NUEVO COLABORADOR --- */
                         .colab-btn-nuevo {
@@ -8740,7 +8865,15 @@ FF
                         #vac-day-popup .vdp-badge.disfrutado { background: #e8f5e9; color: #2e7d32; }
                         #vac-day-popup .vdp-badge.cancelado  { background: #ffebee; color: #c62828; }
                         @media print {
-                            .colab-vac-panel { display: none !important; }
+                            .colab-vac-panel {
+                                display: block !important;
+                                height: auto !important;
+                                max-height: none !important;
+                                overflow: visible !important;
+                            }
+                            .vac-period-grid { display: block !important; }
+                            .vac-period-card { margin-bottom: .6rem; }
+                            #vac-add-wrap, .vac-per-delete, .colab-vac-panel .ms-auto { display: none !important; }
                         }
 
                         /* --- TABLA COMPLETA --- */
@@ -9517,6 +9650,7 @@ FF
                                             <div class="cd-kpi-icon"><i class="fas fa-users"></i></div>
                                             <div>
                                                 <div class="cd-kpi-val" id="cd-kpi-total">—</div>
+                                                <div class="cd-kpi-pct" id="cd-kpi-total-note">Sólo personal activo</div>
                                                 <div class="cd-kpi-label">Total Colaboradores</div>
                                             </div>
                                         </div>
@@ -10199,6 +10333,60 @@ FF
                                         <!-- TAB: Documentos -->
                                         <div class="tab-pane fade" id="cedit-docs" role="tabpanel">
                                             <div class="row g-3">
+                                                <div class="col-12">
+                                                    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                                                        <span class="fw-semibold small text-primary"><i class="fas fa-images me-1"></i>Imágenes de identificaciones</span>
+                                                        <span class="text-muted cedit-doc-upload-help">JPG, JPEG o PNG · Máximo 5 MB</span>
+                                                    </div>
+                                                    <div class="cedit-doc-upload-grid">
+                                                        <div class="cedit-doc-upload-card" data-document-kind="ine_front">
+                                                            <div class="cedit-doc-upload-title">INE frente</div>
+                                                            <div class="cedit-doc-upload-preview">
+                                                                <img id="ce-doc-ine-front-preview" src="" alt="Vista previa de INE frente" hidden>
+                                                                <i id="ce-doc-ine-front-placeholder" class="fas fa-id-card cedit-doc-upload-placeholder" aria-hidden="true"></i>
+                                                            </div>
+                                                            <div class="cedit-doc-upload-actions">
+                                                                <label class="btn btn-outline-primary btn-sm mb-0">
+                                                                    <i class="fas fa-upload me-1"></i>Seleccionar
+                                                                    <input type="file" id="ce-doc-ine-front" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden onchange="colabDocumentImageSelected('ine_front',this)">
+                                                                </label>
+                                                                <button type="button" id="ce-doc-ine-front-remove" class="btn btn-outline-danger btn-sm d-none" onclick="colabDocumentImageRemove('ine_front')"><i class="fas fa-trash me-1"></i>Eliminar</button>
+                                                            </div>
+                                                            <div id="ce-doc-ine-front-status" class="cedit-doc-upload-status small mt-1" role="status" aria-live="polite"></div>
+                                                        </div>
+                                                        <div class="cedit-doc-upload-card" data-document-kind="ine_back">
+                                                            <div class="cedit-doc-upload-title">INE reverso</div>
+                                                            <div class="cedit-doc-upload-preview">
+                                                                <img id="ce-doc-ine-back-preview" src="" alt="Vista previa de INE reverso" hidden>
+                                                                <i id="ce-doc-ine-back-placeholder" class="fas fa-id-card cedit-doc-upload-placeholder" aria-hidden="true"></i>
+                                                            </div>
+                                                            <div class="cedit-doc-upload-actions">
+                                                                <label class="btn btn-outline-primary btn-sm mb-0">
+                                                                    <i class="fas fa-upload me-1"></i>Seleccionar
+                                                                    <input type="file" id="ce-doc-ine-back" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden onchange="colabDocumentImageSelected('ine_back',this)">
+                                                                </label>
+                                                                <button type="button" id="ce-doc-ine-back-remove" class="btn btn-outline-danger btn-sm d-none" onclick="colabDocumentImageRemove('ine_back')"><i class="fas fa-trash me-1"></i>Eliminar</button>
+                                                            </div>
+                                                            <div id="ce-doc-ine-back-status" class="cedit-doc-upload-status small mt-1" role="status" aria-live="polite"></div>
+                                                        </div>
+                                                        <div class="cedit-doc-upload-card" data-document-kind="credential">
+                                                            <div class="cedit-doc-upload-title">TIA / Credencial AIFA</div>
+                                                            <div class="cedit-doc-upload-preview">
+                                                                <img id="ce-doc-credential-preview" src="" alt="Vista previa de TIA o credencial AIFA" hidden>
+                                                                <i id="ce-doc-credential-placeholder" class="fas fa-address-card cedit-doc-upload-placeholder" aria-hidden="true"></i>
+                                                            </div>
+                                                            <div class="cedit-doc-upload-actions">
+                                                                <label class="btn btn-outline-primary btn-sm mb-0">
+                                                                    <i class="fas fa-upload me-1"></i>Seleccionar
+                                                                    <input type="file" id="ce-doc-credential" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden onchange="colabDocumentImageSelected('credential',this)">
+                                                                </label>
+                                                                <button type="button" id="ce-doc-credential-remove" class="btn btn-outline-danger btn-sm d-none" onclick="colabDocumentImageRemove('credential')"><i class="fas fa-trash me-1"></i>Eliminar</button>
+                                                            </div>
+                                                            <div id="ce-doc-credential-status" class="cedit-doc-upload-status small mt-1" role="status" aria-live="polite"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-12"><hr class="my-0"></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Licencia</label><input type="text" class="form-control form-control-sm" id="ce-licencia" data-field="licencia"></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Tipo Licencia</label><input type="text" class="form-control form-control-sm" id="ce-licencia-tipo" data-field="licencia_tipo"></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia Licencia</label><input type="text" class="form-control form-control-sm" id="ce-vig-licencia" data-field="vig_licencia"></div>
@@ -10360,10 +10548,10 @@ FF
                                                 </div>
                                                 <label class="btn btn-outline-primary btn-sm">
                                                     <i class="fas fa-upload me-1"></i>Seleccionar foto
-                                                    <input type="file" id="ce-foto-file" accept="image/jpeg,image/png,image/webp" style="display:none">
+                                                    <input type="file" id="ce-foto-file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" style="display:none">
                                                 </label>
-                                                <p class="text-muted small mt-2 mb-1">Formatos: JPG, PNG, WEBP · Se guarda con el número de empleado como nombre de archivo.</p>
-                                                <div id="cedit-foto-status" class="mt-1"></div>
+                                                <p class="text-muted small mt-2 mb-1">Formatos: JPG, JPEG, PNG, WEBP · Máximo 5 MB · Se guarda con el número de empleado como nombre de archivo.</p>
+                                                <div id="cedit-foto-status" class="mt-1" role="status" aria-live="polite"></div>
                                             </div>
                                         </div>
 
@@ -11145,6 +11333,9 @@ FF
                     </div>
 
                     <!-- -- JAVASCRIPT DE LA SECCIÓN -- -->
+                    <script src="js/colaboradores-directory-policy.js?v=20260804"></script>
+                    <script src="js/employee-photo-upload.js?v=20260804"></script>
+                    <script src="js/employee-document-upload.js?v=20260804"></script>
                     <script>
                     (function() {
                         'use strict';
@@ -11156,6 +11347,7 @@ FF
                         let colabLastError = null;
                         let colabCols = null;           // mapeo de columnas reales detectadas
                         let colabLoadAttempts = 0;     // reintentos cuando llegan 0 filas
+                        let colabDirectoryUniverse = null; // universo activo usado por los KPIs del resumen
 
                         /* -- Auto-detección de columnas -- */
                         function colabDetectarColumnas(record) {
@@ -11201,11 +11393,16 @@ FF
                                 domicilio:       find('domicil'),
                                 rfc:             find('^rfc$'),
                                 curp:            find('^curp$'),
-                                comisionado:     find('comision'),
+                                comisionado:     find('^personal\\s+comisionado$', 'comision'),
+                                direccion_comisionado:    find('^direcci[oó]n\\s+comisionado$'),
+                                subdireccion_comisionado: find('^subdirecci[oó]n\\s+comisionado$'),
+                                gerencia_comisionado:     find('^gerencia\\s+comisionado$'),
+                                coordinacion_comisionado: find('^coordinaci[oó]n\\s+comisionado$'),
                                 direccion:       find('^dir\\.', 'dir\\..*org', '^direcci[oó]n', 'direcci(?!.*sub)'),
                                 subdireccion:    find('^subdir\\.', 'subdir\\..*org', 'subdir'),
                                 gerencia:        find('gerencia.*org', 'gerencia'),
                                 coordinacion:    find('coordinac.*org', 'coordinaci'),
+                                fecha_baja:      find('^fecha\\s+de\\s+baja$', 'fecha.*baja', 'baja.*fecha'),
                                 amonestaciones:  find('amonest'),
                                 comentarios:     find('comentar'),
                                 c1_nombre:       find('contacto.*1.*nom', 'emergencia.*1.*nom', 'contacto_?1'),
@@ -11238,6 +11435,40 @@ FF
                             if (!colabCols || !colabCols[colKey]) return null;
                             return record[colabCols[colKey]] ?? null;
                         }
+
+                        /* -- Universo operativo del Resumen del Directorio -- */
+                        function colabObtenerUniversoDirectorio() {
+                            const policy = window.ColaboradoresDirectoryPolicy;
+                            if (!policy || typeof policy.buildUniverse !== 'function') {
+                                throw new Error('No se pudo cargar la política de personal activo del directorio.');
+                            }
+
+                            colabDirectoryUniverse = policy.buildUniverse(colabCache || [], {
+                                get: (record, field) => gc(record, field),
+                                today: new Date(),
+                            });
+                            return colabDirectoryUniverse;
+                        }
+
+                        // Auditoría bajo demanda; no imprime datos personales automáticamente en consola.
+                        window.colabAuditarResumenDirectorio = function() {
+                            const universe = colabObtenerUniversoDirectorio();
+                            const identify = record => ({
+                                numeroEmpleado: gc(record, 'num') || '',
+                                nombre: gc(record, 'nombre') || '',
+                                estatus: gc(record, 'estatus') || '',
+                            });
+
+                            return {
+                                resumen: universe.summary,
+                                incluidos: universe.included.map(identify),
+                                excluidos: universe.excluded.map(item => ({
+                                    ...identify(item.record),
+                                    motivo: item.reason,
+                                    detalle: item.detail,
+                                })),
+                            };
+                        };
 
                         /* -- Helpers: mostrar/ocultar estados -- */
                         function colabSetState(state) {
@@ -11378,7 +11609,7 @@ FF
                         /* -- Avatar fallback: intenta jpg ? png ? webp, luego placeholder -- */
                         const EMPLOYEE_PHOTOS_BASE = 'https://fgstncvuuhpgyzmjceyr.supabase.co/storage/v1/object/public/employee-photos/';
                         const EMPLOYEE_CVDOCS_BASE  = 'https://fgstncvuuhpgyzmjceyr.supabase.co/storage/v1/object/public/employee-cvs/';
-                        const EMPLOYEE_PHOTO_EXTS  = ['jpg', 'png', 'webp'];
+                        const EMPLOYEE_PHOTO_EXTS  = ['jpg', 'jpeg', 'png', 'webp'];
 
                         window.colabAvatarFallback = function(img) {
                             const numEmpl = img.dataset.numEmpl;
@@ -11395,18 +11626,36 @@ FF
                         };
 
                         /* -- Cargar foto documento -- */
-                        function loadDocPhoto(imgId, url) {
+                        async function loadDocPhoto(imgId, url, kind) {
                             const img = document.getElementById(imgId);
                             if (!img) return;
+                            const loadToken = String(Date.now()) + Math.random();
+                            img.dataset.loadToken = loadToken;
                             if (url && url.trim() && url.trim() !== '0') {
-                                img.src = url.trim();
-                                img.style.display = 'block';
-                                // ocultar placeholder
-                                const frame = img.parentElement;
-                                const placeholder = frame.querySelector('.colab-doc-empty');
-                                if (placeholder) placeholder.style.display = 'none';
+                                try {
+                                    const resolved = window.employeeDocumentUpload
+                                        ? await window.employeeDocumentUpload.resolve(window.supabaseClient, url.trim(), kind)
+                                        : url.trim();
+                                    if (img.dataset.loadToken !== loadToken) return;
+                                    img.src = resolved;
+                                    img.style.display = 'block';
+                                    const frame = img.parentElement;
+                                    const placeholder = frame.querySelector('.colab-doc-empty');
+                                    if (placeholder) placeholder.style.display = 'none';
+                                } catch (error) {
+                                    if (img.dataset.loadToken !== loadToken) return;
+                                    img.style.display = 'none';
+                                    const placeholder = img.parentElement?.querySelector('.colab-doc-empty');
+                                    if (placeholder) placeholder.style.display = 'flex';
+                                    console.error('[Colaboradores][Documento] No se pudo visualizar', {
+                                        documentKind: kind || null,
+                                        code: error?.code || 'RESOLVE_FAILED'
+                                    });
+                                }
                             } else {
                                 img.style.display = 'none';
+                                const placeholder = img.parentElement?.querySelector('.colab-doc-empty');
+                                if (placeholder) placeholder.style.display = 'flex';
                             }
                         }
 
@@ -11461,7 +11710,7 @@ FF
                                 });
                             }
                             if (!contacts.length) {
-                                list.innerHTML = '<p class="text-muted" style="font-size:.83rem;margin:0">Sin contactos registrados</p>';
+                                list.innerHTML = '<p class="text-muted" style="font-size:.83rem;margin:0">Sin contactos de emergencia registrados</p>';
                                 return;
                             }
                             list.innerHTML = contacts.map(co =>
@@ -11691,9 +11940,9 @@ FF
                             fillField('cf-cedula',          gc(c, 'cedula'));
 
                             // Sección 3: Documentos
-                            loadDocPhoto('colab-foto-ine',     val(gc(c, 'foto_ine')));
-                            loadDocPhoto('colab-foto-ine-rev', val(gc(c, 'foto_ine_rev')));
-                            loadDocPhoto('colab-foto-cred',    val(gc(c, 'foto_cred')));
+                            loadDocPhoto('colab-foto-ine',     val(gc(c, 'foto_ine')),     'ine_front');
+                            loadDocPhoto('colab-foto-ine-rev', val(gc(c, 'foto_ine_rev')), 'ine_back');
+                            loadDocPhoto('colab-foto-cred',    val(gc(c, 'foto_cred')),     'credential');
 
                             fillField('cf-licencia',       gc(c, 'licencia'));
                             fillField('cf-licencia-tipo',  gc(c, 'licencia_tipo'));
@@ -11814,6 +12063,7 @@ FF
 
                                     if (error) throw error;
                                     colabCache  = data || [];
+                                    colabDirectoryUniverse = null;
                                     colabLoadPromise = null; // limpiar para posibles recargas futuras
                                     window.colabCache = colabCache; // exponer globalmente para módulo vacaciones
                                     if (colabCache.length) {
@@ -11837,6 +12087,7 @@ FF
                                     console.error('[Colaboradores] Error al cargar agenda_2026:', err?.message || err);
                                     colabLastError = err?.message || String(err);
                                     colabCache       = [];
+                                    colabDirectoryUniverse = null;
                                     colabLoaded      = false;
                                     colabLoadPromise = null;
                                     return [];
@@ -11887,8 +12138,11 @@ FF
                             if (loading) loading.style.display = 'none';
                             if (content) content.classList.remove('d-none');
 
-                            const data = colabCache;
-                            const total = data.length;
+                            // Todos los indicadores del resumen comparten el mismo universo:
+                            // persona real + Activo + sin baja vigente + no vacante + no comisionado fuera.
+                            const universe = colabObtenerUniversoDirectorio();
+                            const data = universe.included;
+                            const total = universe.summary.total;
 
                             // Helper: contar y ordenar por campo
                             function countBy(colKey) {
@@ -11913,16 +12167,16 @@ FF
                             // KPIs
                             const setKpi = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
                             setKpi('cd-kpi-total',   total);
+                            setKpi(
+                                'cd-kpi-total-note',
+                                universe.summary.genderOther > 0
+                                    ? `${universe.summary.genderOther} sin sexo definido`
+                                    : 'Sólo personal activo'
+                            );
 
-                            // Conteo de genero (campo 'sexo': Masculino / Femenino)
-                            const _sexNorm = function(v) {
-                                var s = (v||'').toString().trim().toUpperCase();
-                                if (s === 'MASCULINO' || s === 'HOMBRE' || s === 'M' || s === 'H') return 'H';
-                                if (s === 'FEMENINO'  || s === 'MUJER'  || s === 'F') return 'M';
-                                return '?';
-                            };
-                            var masc = data.filter(function(r) { return _sexNorm(gc(r,'sexo')) === 'H'; }).length;
-                            var fem  = data.filter(function(r) { return _sexNorm(gc(r,'sexo')) === 'M'; }).length;
+                            // Hombres y mujeres se calculan sobre el mismo universo activo.
+                            var masc = universe.summary.men;
+                            var fem  = universe.summary.women;
                             var mascPct = total > 0 ? Math.round(masc / total * 100) : 0;
                             var femPct  = total > 0 ? Math.round(fem  / total * 100) : 0;
                             setKpi('cd-kpi-masc', masc > 0 ? masc : '');
@@ -12366,6 +12620,7 @@ FF
                                             if (grp) colabAbrirGrupoModal(colKey, grp, {
                                                 filter: function(r){ return countAmonest(r) > 0; },
                                                 subtitulo: 'con amonestaciones',
+                                                allRecords: true,
                                                 showAmonest: true
                                             });
                                         });
@@ -12391,7 +12646,9 @@ FF
                             };
 
                             window.colabAbrirGrupoModal = function(colKey, groupValue, opts) {
-                                const todos = colabCache || [];
+                                const todos = opts && opts.allRecords
+                                    ? (colabCache || [])
+                                    : (colabDirectoryUniverse || colabObtenerUniversoDirectorio()).included;
                                 const extraFilter = opts && opts.filter;
                                 _grupoModalRecords = todos.filter(r => {
                                     const v = (gc(r, colKey) || '').toString().trim();
@@ -12651,6 +12908,7 @@ FF
                         window.colabReintentar = function() {
                             colabLoaded      = false;
                             colabCache       = null;
+                            colabDirectoryUniverse = null;
                             colabLoadPromise = null;
                             colabLoadAttempts = 0;
                             const loading = document.getElementById('cd-loading');
@@ -12711,7 +12969,7 @@ FF
                                 });
 
                                 // Invalidar cachÉ
-                                colabCache = null; colabLoaded = false; colabLoadPromise = null;
+                                colabCache = null; colabDirectoryUniverse = null; colabLoaded = false; colabLoadPromise = null;
                                 colabCurrentRow = null;
 
                                 // Volver a la vista inicial y recargar dashboard
@@ -12833,7 +13091,8 @@ FF
                             alerg_ali:'Alergia Alimento', nss:'NSS',
                             estado_civil:'Estado Civil', dependientes:'Dependientes',
                             rubrica:'Rúbrica', doc_ingreso:'Doc. Ingreso',
-                            foto:'Foto de perfil', cv_url:'Currículum Vitae (CV)',
+                            foto:'Foto de perfil', foto_ine:'INE frente', foto_ine_rev:'INE reverso',
+                            foto_cred:'TIA / Credencial AIFA', cv_url:'Currículum Vitae (CV)',
                             estatus:'Estatus',
                         };
 
@@ -12856,6 +13115,183 @@ FF
                             'ce-sangre':'sangre','ce-alerg-med':'alerg_med','ce-alerg-ali':'alerg_ali','ce-nss':'nss',
                             'ce-estatus':'estatus',
                         };
+
+                        const COLAB_DOCUMENT_IMAGE_UI = Object.freeze({
+                            ine_front: Object.freeze({
+                                field: 'foto_ine', inputId: 'ce-doc-ine-front', previewId: 'ce-doc-ine-front-preview',
+                                placeholderId: 'ce-doc-ine-front-placeholder', removeId: 'ce-doc-ine-front-remove',
+                                statusId: 'ce-doc-ine-front-status', label: 'INE frente'
+                            }),
+                            ine_back: Object.freeze({
+                                field: 'foto_ine_rev', inputId: 'ce-doc-ine-back', previewId: 'ce-doc-ine-back-preview',
+                                placeholderId: 'ce-doc-ine-back-placeholder', removeId: 'ce-doc-ine-back-remove',
+                                statusId: 'ce-doc-ine-back-status', label: 'INE reverso'
+                            }),
+                            credential: Object.freeze({
+                                field: 'foto_cred', inputId: 'ce-doc-credential', previewId: 'ce-doc-credential-preview',
+                                placeholderId: 'ce-doc-credential-placeholder', removeId: 'ce-doc-credential-remove',
+                                statusId: 'ce-doc-credential-status', label: 'TIA / Credencial AIFA'
+                            })
+                        });
+                        let colabDocumentImageState = {};
+                        let colabDocumentImageLoadToken = 0;
+
+                        function colabDocumentImageConfig(kind) {
+                            const config = COLAB_DOCUMENT_IMAGE_UI[kind];
+                            if (!config) throw new Error('Tipo de documento no configurado.');
+                            return config;
+                        }
+
+                        function colabDocumentImageStatus(kind, message, tone) {
+                            const config = colabDocumentImageConfig(kind);
+                            const status = document.getElementById(config.statusId);
+                            if (!status) return;
+                            status.className = `cedit-doc-upload-status small mt-1 ${tone ? `text-${tone}` : 'text-muted'}`;
+                            status.textContent = message || '';
+                        }
+
+                        function colabDocumentImagePreview(kind, src) {
+                            const config = colabDocumentImageConfig(kind);
+                            const img = document.getElementById(config.previewId);
+                            const placeholder = document.getElementById(config.placeholderId);
+                            if (!img || !placeholder) return;
+                            if (src) {
+                                img.onerror = () => {
+                                    img.hidden = true;
+                                    placeholder.hidden = false;
+                                    colabDocumentImageStatus(kind, 'No se pudo visualizar la imagen.', 'danger');
+                                };
+                                img.src = src;
+                                img.hidden = false;
+                                placeholder.hidden = true;
+                            } else {
+                                img.removeAttribute('src');
+                                img.hidden = true;
+                                placeholder.hidden = false;
+                            }
+                        }
+
+                        function colabDocumentImageRevokePreview(state) {
+                            if (state?.objectUrl && window.URL?.revokeObjectURL) {
+                                window.URL.revokeObjectURL(state.objectUrl);
+                            }
+                        }
+
+                        async function colabDocumentImagesInit(c) {
+                            const token = ++colabDocumentImageLoadToken;
+                            Object.values(colabDocumentImageState).forEach(colabDocumentImageRevokePreview);
+                            colabDocumentImageState = {};
+
+                            for (const [kind, config] of Object.entries(COLAB_DOCUMENT_IMAGE_UI)) {
+                                const previousValue = String(gc(c, config.field) || '').trim();
+                                colabDocumentImageState[kind] = { previousValue, file: null, remove: false, objectUrl: null };
+                                const input = document.getElementById(config.inputId);
+                                const removeBtn = document.getElementById(config.removeId);
+                                if (input) input.value = '';
+                                if (removeBtn) removeBtn.classList.toggle('d-none', !previousValue);
+                                colabDocumentImagePreview(kind, null);
+                                colabDocumentImageStatus(kind, previousValue ? 'Cargando documento actual…' : 'Sin documento cargado.');
+                                if (!previousValue) continue;
+                                try {
+                                    if (!window.employeeDocumentUpload) throw new Error('Módulo de documentos no disponible.');
+                                    const src = await window.employeeDocumentUpload.resolve(window.supabaseClient, previousValue, kind);
+                                    if (token !== colabDocumentImageLoadToken) return;
+                                    colabDocumentImagePreview(kind, src);
+                                    colabDocumentImageStatus(kind, 'Documento actual listo.', 'success');
+                                } catch (error) {
+                                    if (token !== colabDocumentImageLoadToken) return;
+                                    const mapped = window.employeeDocumentUpload?.mapError(error, kind);
+                                    colabDocumentImageStatus(kind, mapped?.userMessage || 'No se pudo cargar el documento actual.', 'danger');
+                                }
+                            }
+                        }
+
+                        window.colabDocumentImageSelected = async function(kind, input) {
+                            const config = colabDocumentImageConfig(kind);
+                            const file = input?.files?.[0];
+                            if (!file) return;
+                            colabDocumentImageStatus(kind, `Validando ${config.label}…`);
+                            try {
+                                if (!window.employeeDocumentUpload) throw new Error('Módulo de documentos no disponible.');
+                                await window.employeeDocumentUpload.validate(file);
+                                const previousState = colabDocumentImageState[kind] || {};
+                                colabDocumentImageRevokePreview(previousState);
+                                const objectUrl = window.URL?.createObjectURL ? window.URL.createObjectURL(file) : null;
+                                colabDocumentImageState[kind] = {
+                                    previousValue: previousState.previousValue || '',
+                                    file,
+                                    remove: false,
+                                    objectUrl
+                                };
+                                if (objectUrl) colabDocumentImagePreview(kind, objectUrl);
+                                document.getElementById(config.removeId)?.classList.remove('d-none');
+                                colabDocumentImageStatus(kind, `${file.name} · imagen válida y lista para guardar.`, 'success');
+                            } catch (error) {
+                                input.value = '';
+                                const mapped = window.employeeDocumentUpload?.mapError(error, kind);
+                                colabDocumentImageStatus(kind, mapped?.userMessage || error?.message || 'Archivo no válido.', 'danger');
+                            }
+                        };
+
+                        window.colabDocumentImageRemove = function(kind) {
+                            const config = colabDocumentImageConfig(kind);
+                            const state = colabDocumentImageState[kind] || { previousValue: '' };
+                            colabDocumentImageRevokePreview(state);
+                            colabDocumentImageState[kind] = {
+                                previousValue: state.previousValue || '',
+                                file: null,
+                                remove: true,
+                                objectUrl: null
+                            };
+                            const input = document.getElementById(config.inputId);
+                            if (input) input.value = '';
+                            document.getElementById(config.removeId)?.classList.add('d-none');
+                            colabDocumentImagePreview(kind, null);
+                            colabDocumentImageStatus(
+                                kind,
+                                state.previousValue ? 'El documento se eliminará al guardar cambios.' : 'Sin documento cargado.',
+                                state.previousValue ? 'warning' : ''
+                            );
+                        };
+
+                        async function colabPrepareDocumentImageChanges(sb, c, numEmpl, updatePayload, cambios, uploaded, previousToDelete) {
+                            for (const [kind, config] of Object.entries(COLAB_DOCUMENT_IMAGE_UI)) {
+                                const state = colabDocumentImageState[kind];
+                                if (!state || (!state.file && !state.remove)) continue;
+                                const realCol = colabCols?.[config.field];
+                                if (!realCol) {
+                                    throw new window.employeeDocumentUpload.EmployeeDocumentUploadError(
+                                        'DOCUMENT_COLUMN_MISSING',
+                                        `No se encontró la columna para asociar ${config.label}.`,
+                                        { documentKind: kind }
+                                    );
+                                }
+                                const oldValue = String(c[realCol] || '').trim();
+                                if (state.file) {
+                                    colabDocumentImageStatus(kind, 'Subiendo imagen al almacenamiento seguro…');
+                                    const result = await window.employeeDocumentUpload.upload({
+                                        client: sb,
+                                        file: state.file,
+                                        employeeNumber: numEmpl,
+                                        kind
+                                    });
+                                    uploaded.push({ kind, reference: result.storageReference });
+                                    updatePayload[realCol] = result.storageReference;
+                                    cambios.push({ campo: config.field, valor_anterior: oldValue || null, valor_nuevo: result.storageReference });
+                                    if (window.employeeDocumentUpload.isStorageReference(oldValue)) {
+                                        previousToDelete.push({ kind, reference: oldValue });
+                                    }
+                                    colabDocumentImagePreview(kind, result.previewUrl);
+                                    colabDocumentImageStatus(kind, 'Imagen cargada; guardando asociación…', 'success');
+                                } else if (state.remove && oldValue) {
+                                    updatePayload[realCol] = null;
+                                    cambios.push({ campo: config.field, valor_anterior: oldValue, valor_nuevo: null });
+                                    if (window.employeeDocumentUpload.isStorageReference(oldValue)) {
+                                        previousToDelete.push({ kind, reference: oldValue });
+                                    }
+                                }
+                            }
+                        }
 
                         /* -- Verificar si el usuario actual puede editar -- */
                         function colabCanEdit() {
@@ -13532,19 +13968,37 @@ FF
                             const statusEl = document.getElementById('cedit-foto-status');
                             if (statusEl) statusEl.innerHTML = '';
 
+                            colabDocumentImagesInit(c).catch(error => {
+                                console.error('[Colaboradores][Documento] Error inicializando editor', {
+                                    code: error?.code || 'INIT_FAILED'
+                                });
+                            });
+
                             // Listener del input de archivo
                             const fileInput = document.getElementById('ce-foto-file');
                             if (fileInput) {
                                 fileInput.value = '';
-                                fileInput.onchange = function() {
+                                fileInput.onchange = async function() {
                                     const file = this.files[0];
                                     if (!file) return;
-                                    const reader = new FileReader();
-                                    reader.onload = e => {
-                                        if (fi) { fi.src = e.target.result; fi.style.display = 'block'; }
-                                        if (ico) ico.style.display = 'none';
-                                    };
-                                    reader.readAsDataURL(file);
+                                    try {
+                                        if (!window.employeePhotoUpload) throw new Error('Validador de fotografías no disponible.');
+                                        await window.employeePhotoUpload.validate(file);
+                                        const reader = new FileReader();
+                                        reader.onload = e => {
+                                            if (fi) { fi.src = e.target.result; fi.style.display = 'block'; }
+                                            if (ico) ico.style.display = 'none';
+                                            if (statusEl) statusEl.innerHTML = '<small class="text-success"><i class="fas fa-check me-1"></i>Imagen válida y lista para guardar</small>';
+                                        };
+                                        reader.onerror = () => {
+                                            if (statusEl) statusEl.innerHTML = '<small class="text-danger"><i class="fas fa-times me-1"></i>No se pudo leer la imagen seleccionada.</small>';
+                                        };
+                                        reader.readAsDataURL(file);
+                                    } catch (error) {
+                                        const mapped = window.employeePhotoUpload?.storageError(error);
+                                        this.value = '';
+                                        if (statusEl) statusEl.innerHTML = `<small class="text-danger"><i class="fas fa-times me-1"></i>${mapped?.userMessage || error.message}</small>`;
+                                    }
                                 };
                             }
 
@@ -13834,6 +14288,10 @@ FF
                             const btn = document.getElementById('btn-colab-save');
                             if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando…'; }
 
+                            const uploadedDocumentRefs = [];
+                            const previousDocumentRefs = [];
+                            let employeeRowUpdated = false;
+
                             try {
                                 const sb = window.supabaseClient;
                                 if (!sb) throw new Error('Supabase no disponible');
@@ -13878,6 +14336,17 @@ FF
                                     }
                                 }
 
+                                if (!window.employeeDocumentUpload) throw new Error('El módulo seguro de documentos no está disponible.');
+                                await colabPrepareDocumentImageChanges(
+                                    sb,
+                                    c,
+                                    numEmpl,
+                                    updatePayload,
+                                    cambios,
+                                    uploadedDocumentRefs,
+                                    previousDocumentRefs
+                                );
+
                                 // Subir CV si hay archivo seleccionado
                                 const cvFileInput = document.getElementById('ce-cv-file');
                                 if (cvFileInput && cvFileInput.files[0]) {
@@ -13899,15 +14368,19 @@ FF
                                 const fileInput = document.getElementById('ce-foto-file');
                                 if (fileInput && fileInput.files[0]) {
                                     const file = fileInput.files[0];
-                                    const ext  = file.name.split('.').pop().toLowerCase();
-                                    const path = `${numEmpl}.${ext}`;
                                     const statusEl = document.getElementById('cedit-foto-status');
                                     if (statusEl) statusEl.innerHTML = '<small class="text-primary"><span class="spinner-border spinner-border-sm me-1"></span>Subiendo foto…</small>';
-                                    const { error: upFotoErr } = await sb.storage.from('employee-photos').upload(path, file, { upsert: true, contentType: file.type });
-                                    if (upFotoErr) throw new Error('Error subiendo foto: ' + upFotoErr.message);
-                                    if (statusEl) statusEl.innerHTML = '<small class="text-success"><i class="fas fa-check me-1"></i>Foto subida correctamente</small>';
-                                    // Agregar al historial tambiÉn
-                                    cambios.push({ campo: 'foto', valor_anterior: '(anterior)', valor_nuevo: `${numEmpl}.${ext}` });
+                                    if (!window.employeePhotoUpload) throw new Error('El módulo seguro de fotografías no está disponible.');
+                                    const uploadedPhoto = await window.employeePhotoUpload.upload({
+                                        client: sb,
+                                        file,
+                                        employeeNumber: numEmpl
+                                    });
+                                    const photoCol = colabCols?.foto;
+                                    const previousPhoto = photoCol ? val(c[photoCol]) : val(gc(c, 'foto'));
+                                    if (photoCol) updatePayload[photoCol] = uploadedPhoto.publicUrl;
+                                    if (statusEl) statusEl.innerHTML = '<small class="text-success"><i class="fas fa-check me-1"></i>Foto subida correctamente; guardando referencia…</small>';
+                                    cambios.push({ campo: 'foto', valor_anterior: previousPhoto || null, valor_nuevo: uploadedPhoto.publicUrl });
                                 }
 
                                 if (!Object.keys(updatePayload).length && cambios.length === 0) {
@@ -13920,7 +14393,26 @@ FF
                                     // Entrecomillar columna si tiene caracteres especiales (ej: "No. Empleado")
                                     const safeNumCol = /[\s.]/.test(numCol) ? `"${numCol}"` : numCol;
                                     const { error: dbErr } = await sb.from('agenda_2026').update(updatePayload).eq(safeNumCol, numEmpl);
+                                    if (dbErr && uploadedDocumentRefs.length) {
+                                        throw new window.employeeDocumentUpload.EmployeeDocumentUploadError(
+                                            'DOCUMENT_ASSOCIATION_FAILED',
+                                            'Las imágenes se recibieron, pero no fue posible asociarlas con el colaborador. No se conservarán archivos incompletos.',
+                                            { cause: dbErr, documentKind: uploadedDocumentRefs[0]?.kind || null }
+                                        );
+                                    }
                                     if (dbErr) throw dbErr;
+                                    employeeRowUpdated = true;
+                                }
+
+                                for (const oldDocument of previousDocumentRefs) {
+                                    try {
+                                        await window.employeeDocumentUpload.remove(sb, oldDocument.reference, oldDocument.kind);
+                                    } catch (cleanupError) {
+                                        console.warn('[Colaboradores][Documento] No se pudo limpiar una versión anterior', {
+                                            documentKind: oldDocument.kind,
+                                            code: cleanupError?.code || 'CLEANUP_FAILED'
+                                        });
+                                    }
                                 }
 
                                 // Registrar historial
@@ -13945,7 +14437,7 @@ FF
                                 });
 
                                 // Invalidar caché y recargar
-                                colabCache = null; colabLoaded = false; colabLoadPromise = null;
+                                colabCache = null; colabDirectoryUniverse = null; colabLoaded = false; colabLoadPromise = null;
 
                                 // Mostrar timestamp de último guardado
                                 const saveLabel = document.getElementById('colab-edit-last-save');
@@ -13962,8 +14454,21 @@ FF
                                 colabCargarHistorialPlaza(numEmpl);
 
                             } catch (err) {
+                                if (!employeeRowUpdated && uploadedDocumentRefs.length && window.employeeDocumentUpload) {
+                                    await Promise.allSettled(uploadedDocumentRefs.map(item =>
+                                        window.employeeDocumentUpload.remove(window.supabaseClient, item.reference, item.kind)
+                                    ));
+                                }
                                 console.error('[Colaboradores] Error al guardar:', err);
-                                alert('Error al guardar: ' + (err?.message || String(err)));
+                                const photoStatus = document.getElementById('cedit-foto-status');
+                                const userMessage = err?.userMessage || err?.message || String(err);
+                                if (err?.name === 'EmployeePhotoUploadError' && photoStatus) {
+                                    photoStatus.innerHTML = `<small class="text-danger"><i class="fas fa-times me-1"></i>${userMessage}</small>`;
+                                }
+                                if (err?.name === 'EmployeeDocumentUploadError' && err.documentKind) {
+                                    colabDocumentImageStatus(err.documentKind, userMessage, 'danger');
+                                }
+                                alert('Error al guardar: ' + userMessage);
                             } finally {
                                 if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar Cambios'; }
                             }
@@ -14076,7 +14581,7 @@ FF
                                 });
 
                                 // Invalidar cachÉ
-                                colabCache = null; colabLoaded = false; colabLoadPromise = null;
+                                colabCache = null; colabDirectoryUniverse = null; colabLoaded = false; colabLoadPromise = null;
 
                                 bootstrap.Modal.getInstance(document.getElementById('colabNuevoModal'))?.hide();
 
@@ -14983,69 +15488,184 @@ FF
                             XLSX.writeFile(wb, `colaboradores_${new Date().toISOString().slice(0,10)}.xlsx`);
                         };
 
-                        /** Imprimir ficha del colaborador en ventana limpia */
-                        window.colabImprimirFicha = function() {
+                        function colabPrintTimeout(ms) {
+                            return new Promise(resolve => setTimeout(resolve, ms));
+                        }
+
+                        /** Espera imágenes, hojas de estilo y fuentes sin bloquear indefinidamente la impresión. */
+                        async function colabWaitForPrintAssets(doc, root, timeoutMs = 6000) {
+                            if (!doc || !root) return;
+                            const imageTasks = Array.from(root.querySelectorAll('img[src]')).map(img => {
+                                if (img.complete) return Promise.resolve();
+                                return new Promise(resolve => {
+                                    img.addEventListener('load', resolve, { once: true });
+                                    img.addEventListener('error', resolve, { once: true });
+                                });
+                            });
+                            const styleTasks = Array.from(doc.querySelectorAll('link[rel="stylesheet"]')).map(link => {
+                                if (link.sheet) return Promise.resolve();
+                                return new Promise(resolve => {
+                                    link.addEventListener('load', resolve, { once: true });
+                                    link.addEventListener('error', resolve, { once: true });
+                                });
+                            });
+                            const fontTask = doc.fonts?.ready ? Promise.resolve(doc.fonts.ready).catch(() => {}) : Promise.resolve();
+                            await Promise.race([
+                                Promise.allSettled([...imageTasks, ...styleTasks, fontTask]),
+                                colabPrintTimeout(timeoutMs)
+                            ]);
+                        }
+
+                        /** Completa las consultas asíncronas que forman parte de la ficha antes de clonarla. */
+                        async function colabPrepareFichaForPrint() {
+                            const c = colabCurrentRow;
+                            const fichaEl = document.getElementById('colab-ficha-content');
+                            if (!c || !fichaEl) return;
+                            const numEmpl = val(gc(c, 'num'));
+                            const tasks = [
+                                renderAmonestaciones(c),
+                                renderComentarios(c),
+                                colabCargarCursos(numEmpl),
+                                vacLoadForColab(numEmpl),
+                                loadDocPhoto('colab-foto-ine', val(gc(c, 'foto_ine')), 'ine_front'),
+                                loadDocPhoto('colab-foto-ine-rev', val(gc(c, 'foto_ine_rev')), 'ine_back'),
+                                loadDocPhoto('colab-foto-cred', val(gc(c, 'foto_cred')), 'credential')
+                            ];
+                            const results = await Promise.allSettled(tasks);
+                            const failed = results.filter(result => result.status === 'rejected');
+                            if (failed.length) {
+                                console.warn('[Colaboradores][Impresión] Algunos recursos no pudieron actualizarse antes de imprimir', {
+                                    failedResources: failed.length
+                                });
+                            }
+                            await colabWaitForPrintAssets(document, fichaEl, 5000);
+                        }
+
+                        /** Imprimir ficha completa del colaborador en una ventana limpia y multipágina. */
+                        window.colabImprimirFicha = async function() {
                             const fichaEl = document.getElementById('colab-ficha-content');
                             if (!fichaEl) return;
 
-                            // Extraer CSS del bloque <style> de la sección colaboradores
-                            const sectionEl  = document.getElementById('colaboradores-section');
-                            const styleEl    = sectionEl ? sectionEl.querySelector('style') : null;
-                            const sectionCSS = styleEl ? styleEl.textContent : '';
-
-                            // Base URL para imágenes relativas
-                            const baseHref = window.location.origin +
-                                window.location.pathname.replace(/\/[^\/]*$/, '/');
-
-                            const fichaHTML = fichaEl.outerHTML;
-
+                            // Abrir de inmediato para conservar el gesto del usuario y evitar el bloqueo de popups.
                             const printWin = window.open('', '_blank', 'width=960,height=800');
                             if (!printWin) {
                                 alert('Tu navegador bloqueó la ventana de impresión.\nPermite ventanas emergentes para esta página e inténtalo de nuevo.');
                                 return;
                             }
-
-                            const html = '<!DOCTYPE html>\n' +
-                                '<html lang="es"><head>\n' +
-                                '<meta charset="UTF-8">\n' +
-                                '<title>Ficha del Colaborador<\/title>\n' +
-                                '<base href="' + baseHref + '">\n' +
-                                '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">\n' +
-                                '<' + 'style>\n' +
-                                ':root{--col-blue:#1558d6;--col-green:#2e7d32;--col-red:#c62828;--col-text:#1a2540;--col-muted:#7a8499;}\n' +
-                                '*{box-sizing:border-box;}\n' +
-                                'body{background:#fff;font-family:"Segoe UI",Arial,sans-serif;font-size:11.5px;margin:0;padding:0;}\n' +
-                                sectionCSS + '\n' +
-                                '.colab-btn-print,.colab-btn-edit,.colab-btn-delete,' +
-                                '.colab-cv-panel,#colab-cv-inline-preview,' +
-                                '.ca-btn-attach,.ca-actions,' +
-                                '.colab-emergency-panel,.colab-datos-civiles,' +
-                                'hr.colab-divider,' +
-                                '#colab-cursos-alert-banner,#colab-cursos-toolbar,' +
-                                '#colab-cursos-list,#colab-cursos-dropzone,' +
-                                '.colab-cursos-actions,.cc-btn,' +
-                                '.colab-historial-panel,.colab-historial-plaza-panel{display:none!important;}\n' +
-                                '.colab-ficha{box-shadow:none!important;border:none!important;max-width:100%!important;}\n' +
-                                '.colab-tabla td,.colab-tabla th{font-size:10.5px!important;}\n' +
-                                '@media print{' +
-                                '@page{size:A4 portrait;margin:8mm;}' +
-                                'body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
-                                '.colab-ficha::before{opacity:0.05!important;}' +
-                                '}\n' +
-                                '<\/style><\/head><body>' +
-                                fichaHTML +
-                                '<\/body><\/html>';
-
-                            printWin.document.write(html);
+                            // Escapar los cierres evita que servidores de desarrollo que inyectan
+                            // live-reload interpreten este HTML interno como el cierre del documento principal.
+                            printWin.document.write('<!doctype html><html lang="es"><meta charset="utf-8"><title>Preparando ficha…</title><body style="font-family:Segoe UI,Arial,sans-serif;padding:2rem;color:#334155">Preparando la ficha completa para impresión…<\/body><\/html>');
                             printWin.document.close();
 
-                            // Esperar a que carguen Font Awesome e imágenes, luego imprimir
-                            setTimeout(function() {
+                            const previousCourseSearch = typeof _ccSearchText === 'string' ? _ccSearchText : '';
+                            const numEmpl = colabCurrentRow ? val(gc(colabCurrentRow, 'num')) : null;
+                            let courseFilterRestored = false;
+                            const restoreCourseFilter = () => {
+                                if (courseFilterRestored) return;
+                                courseFilterRestored = true;
+                                _ccSearchText = previousCourseSearch;
+                                if (previousCourseSearch && numEmpl) {
+                                    colabCargarCursos(numEmpl).catch(error => {
+                                        console.warn('[Colaboradores][Impresión] No se pudo restaurar el filtro visual de cursos', {
+                                            code: error?.code || 'COURSE_FILTER_RESTORE_FAILED'
+                                        });
+                                    });
+                                }
+                            };
+
+                            try {
+                                // La ficha impresa siempre incluye todos los cursos, aunque haya una búsqueda activa en pantalla.
+                                _ccSearchText = '';
+                                await colabPrepareFichaForPrint();
+
+                                // Extraer CSS del bloque <style> de la sección colaboradores.
+                                const sectionEl  = document.getElementById('colaboradores-section');
+                                const styleEl    = sectionEl ? sectionEl.querySelector('style') : null;
+                                const sectionCSS = styleEl ? styleEl.textContent : '';
+
+                                // Base URL para imágenes relativas.
+                                const baseHref = window.location.origin +
+                                    window.location.pathname.replace(/\/[^\/]*$/, '/');
+
+                                const printRoot = document.createElement('main');
+                                printRoot.id = 'colab-print-document';
+                                printRoot.appendChild(fichaEl.cloneNode(true));
+                                const vacationPanel = document.getElementById('colab-vac-panel');
+                                if (vacationPanel) {
+                                    const vacationClone = vacationPanel.cloneNode(true);
+                                    vacationClone.classList.remove('d-none');
+                                    printRoot.appendChild(vacationClone);
+                                }
+                                printRoot.querySelector('#colab-cv-inline-preview')?.remove();
+                                printRoot.querySelectorAll('*').forEach(node => {
+                                    Array.from(node.attributes || []).forEach(attribute => {
+                                        if (/^on/i.test(attribute.name)) node.removeAttribute(attribute.name);
+                                    });
+                                    node.removeAttribute('draggable');
+                                });
+                                const fichaHTML = printRoot.outerHTML;
+                                restoreCourseFilter();
+
+                                const html = '<!DOCTYPE html>\n' +
+                                    '<html lang="es"><head>\n' +
+                                    '<meta charset="UTF-8">\n' +
+                                    '<meta name="viewport" content="width=device-width,initial-scale=1">\n' +
+                                    '<title>Ficha del Colaborador<\/title>\n' +
+                                    '<base href="' + baseHref + '">\n' +
+                                    '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">\n' +
+                                    '<' + 'style>\n' +
+                                    ':root{--col-blue:#1558d6;--col-green:#2e7d32;--col-red:#c62828;--col-text:#1a2540;--col-muted:#7a8499;}\n' +
+                                    '*{box-sizing:border-box;}\n' +
+                                    'html,body{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;}\n' +
+                                    'body{background:#fff;font-family:"Segoe UI",Arial,sans-serif;font-size:11.5px;margin:0;padding:0;}\n' +
+                                    sectionCSS + '\n' +
+                                    '.colab-action-bar,' +
+                                    '.colab-btn-print,.colab-btn-edit,.colab-btn-delete,' +
+                                    '.colab-cv-actions,#colab-cv-inline-preview,' +
+                                    '.ca-btn-attach,.ca-actions,' +
+                                    '#colab-cursos-toolbar,#colab-cursos-dropzone,' +
+                                    '#vac-add-wrap,.vac-per-delete,.colab-vac-panel .ms-auto,' +
+                                    '.colab-cursos-actions,.cc-btn,.colab-cursos-folder-rename-btn,.cc-folder-dropzone,' +
+                                    '.colab-historial-panel,.colab-historial-plaza-panel{display:none!important;}\n' +
+                                    '.colab-ficha{position:static!important;width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;box-shadow:none!important;border:none!important;border-radius:0!important;transform:none!important;}\n' +
+                                    '.colab-ficha-body{height:auto!important;max-height:none!important;overflow:visible!important;}\n' +
+                                    '.colab-tabla td,.colab-tabla th{font-size:10.5px!important;}\n' +
+                                    '@media print{' +
+                                    '@page{size:A4 portrait;margin:10mm;}' +
+                                    'body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
+                                    '.colab-ficha::before{opacity:0.05!important;}' +
+                                    '}\n' +
+                                    '<\/style><\/head><body>' +
+                                    fichaHTML +
+                                    '<\/body><\/html>';
+
+                                if (printWin.closed) return;
+                                printWin.document.open();
+                                printWin.document.write(html);
+                                printWin.document.close();
+
+                                await Promise.race([
+                                    new Promise(resolve => {
+                                        if (printWin.document.readyState === 'complete') resolve();
+                                        else printWin.addEventListener('load', resolve, { once: true });
+                                    }),
+                                    colabPrintTimeout(6000)
+                                ]);
+                                await colabWaitForPrintAssets(printWin.document, printWin.document.body, 6000);
+                                await new Promise(resolve => printWin.requestAnimationFrame(() => printWin.requestAnimationFrame(resolve)));
                                 if (!printWin.closed) {
                                     printWin.focus();
                                     printWin.print();
                                 }
-                            }, 1400);
+                            } catch (error) {
+                                restoreCourseFilter();
+                                console.error('[Colaboradores][Impresión] No se pudo preparar la ficha', {
+                                    code: error?.code || 'PRINT_PREPARATION_FAILED',
+                                    message: error?.message || String(error)
+                                });
+                                if (!printWin.closed) printWin.close();
+                                alert('No se pudo preparar la ficha completa para impresión. Intenta nuevamente.');
+                            }
                         };
 
                         /** Mostrar/ocultar botón "Nuevo Colaborador" según permisos */
@@ -21700,15 +22320,11 @@ FF
                     #hidraulicas-section .residuos-kpi-unit{ color:#64748b; font-size:.72rem; }
                     #hidraulicas-section .residuos-panel{ background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:16px; box-shadow:0 3px 14px rgba(15,23,42,.05); height:100%; }
                     #hidraulicas-section .residuos-panel-title{ color:#0f172a; font-size:.95rem; font-weight:800; margin-bottom:10px; }
-                    #hidraulicas-section .residuos-chart-host{ height:300px; position:relative; }
-                    #hidraulicas-section .residuos-comp-breakdown{ display:flex; flex-direction:column; gap:10px; margin-top:12px; padding-top:12px; border-top:1px dashed #e2e8f0; }
-                    #hidraulicas-section .residuos-comp-row-top{ display:flex; align-items:center; gap:7px; margin-bottom:4px; }
-                    #hidraulicas-section .residuos-comp-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
-                    #hidraulicas-section .residuos-comp-label{ font-size:.78rem; font-weight:700; color:#334155; flex:1; }
-                    #hidraulicas-section .residuos-comp-pct{ font-size:.8rem; font-weight:800; color:#0f172a; }
-                    #hidraulicas-section .residuos-comp-bar{ height:7px; background:#eef2f7; border-radius:999px; overflow:hidden; }
-                    #hidraulicas-section .residuos-comp-bar-fill{ height:100%; border-radius:999px; transition:width .4s ease; }
-                    #hidraulicas-section .residuos-comp-value{ font-size:.7rem; color:#64748b; margin-top:3px; text-align:right; }
+                    #hidraulicas-section .residuos-chart-panel{ min-width:0; padding:18px 18px 14px; border-color:#e5e7eb; box-shadow:0 4px 16px rgba(15,23,42,.055); }
+                    #hidraulicas-section .residuos-chart-panel .residuos-panel-title{ display:flex; align-items:center; min-height:1.5rem; margin-bottom:12px; line-height:1.35; }
+                    #hidraulicas-section .residuos-chart-panel .residuos-panel-title i{ flex:0 0 auto; width:1.05rem; text-align:center; }
+                    #hidraulicas-section .residuos-chart-host{ width:100%; max-width:100%; min-width:0; height:310px; position:relative; overflow:hidden; }
+                    #hidraulicas-section .residuos-chart-host canvas{ display:block; max-width:100%!important; }
                     #hidraulicas-section .residuos-table-wrap{ overflow:auto; border:1px solid #cbd5e1; border-radius:10px; }
                     #hidraulicas-section .residuos-table{ min-width:850px; margin:0; }
                     #hidraulicas-section .residuos-table thead th{ color:#fff; font-size:.72rem; text-align:center; vertical-align:middle; border-color:#fff; white-space:nowrap; }
@@ -21728,7 +22344,7 @@ FF
                     #hidraulicas-section .residuos-table .residuos-total-special{ background:#0b3040; color:#fff; }
                     #hidraulicas-section .residuos-table .residuos-total-danger{ background:#c00000; color:#fff; }
                     #hidraulicas-section .residuos-table .residuos-total-value{ background:#ffc000; color:#111827; }
-                    #hidraulicas-section .residuos-notes{ position:relative; background:linear-gradient(135deg,#ecfdf5 0%,#f0fdfa 60%,#eff6ff 100%); border:1px solid #a7f3d0; border-radius:14px; padding:16px 20px 16px 22px; margin-bottom:16px; color:#134e4a; font-size:.8rem; line-height:1.6; box-shadow:0 4px 16px rgba(6,95,70,.08); overflow:hidden; }
+                    #hidraulicas-section .residuos-notes{ position:relative; background:linear-gradient(135deg,#ecfdf5 0%,#f0fdfa 60%,#eff6ff 100%); border:1px solid #a7f3d0; border-radius:14px; padding:16px 20px 16px 22px; margin-bottom:16px; color:#134e4a; font-size:.8rem; line-height:1.6; box-shadow:0 4px 16px rgba(6,95,70,.08); overflow:hidden; overflow-wrap:anywhere; }
                     #hidraulicas-section .residuos-notes::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:linear-gradient(180deg,#059669,#0d9488,#0284c7); }
                     #hidraulicas-section .residuos-notes-title{ display:inline-flex; align-items:center; gap:8px; color:#fff; font-weight:800; font-size:.82rem; letter-spacing:.03em; text-transform:uppercase; margin-bottom:10px; background:linear-gradient(120deg,#047857,#0d9488); padding:5px 14px 5px 10px; border-radius:999px; box-shadow:0 3px 10px rgba(4,120,87,.25); }
                     #hidraulicas-section .residuos-notes-title i{ font-size:.85rem; }
@@ -21743,6 +22359,12 @@ FF
                     @media (max-width: 991px){
                       #hidraulicas-section .hidra-statgrid{ grid-template-columns:repeat(2,1fr); }
                       #hidraulicas-section .hidra-scada-grid{ grid-template-columns:repeat(2,1fr); }
+                    }
+                    @media (max-width: 575px){
+                      #hidraulicas-section .residuos-shell{ padding:12px; }
+                      #hidraulicas-section .residuos-chart-panel{ padding:14px 10px 12px; }
+                      #hidraulicas-section .residuos-chart-panel .residuos-panel-title{ font-size:.86rem; }
+                      #hidraulicas-section .residuos-chart-host{ height:300px; }
                     }
                   </style>
                   <div class="card border-0 shadow-sm">
@@ -22114,6 +22736,12 @@ FF
                         <!-- RESIDUOS · CAPTURA Y ANÁLISIS MENSUAL -->
                         <div class="tab-pane fade" id="hidra-tab-residuos" role="tabpanel">
                           <div class="residuos-shell">
+                            <aside class="residuos-notes" aria-labelledby="residuos-notes-title">
+                              <div class="residuos-notes-title" id="residuos-notes-title"><i class="fas fa-note-sticky" aria-hidden="true"></i>Notas</div>
+                              <p><i class="fas fa-circle" aria-hidden="true"></i>Los datos presentados son proporcionados por la empresa ASECA, S.A. de C.V., a través de la Gerencia de Servicios Generales.</p>
+                              <p><i class="fas fa-circle" aria-hidden="true"></i>Las cantidades registradas de manera mensual corresponden a datos preliminares, ya que los manifiestos que contienen las cantidades oficiales son emitidos por el sitio de disposición final con un desfase aproximado de 2 a 3 meses. Una vez recibidos dichos manifiestos, la información será actualizada, en su caso, para reflejar las cantidades definitivas.</p>
+                              <p class="mb-0"><i class="fas fa-circle" aria-hidden="true"></i>Con la información presentada en esta tabla, se elaborarán gráficas que muestren el comportamiento mensual de las cantidades generadas para cada tipo de residuo (manejo especial, peligrosos y valorizables), con la finalidad de facilitar el análisis de su comportamiento durante el año.</p>
+                            </aside>
                             <div class="residuos-hero mb-3">
                               <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
                                 <div>
@@ -22128,12 +22756,6 @@ FF
                                 </div>
                               </div>
                             </div>
-                            <div class="residuos-notes">
-                              <div class="residuos-notes-title"><i class="fas fa-note-sticky"></i>Notas</div>
-                              <p><i class="fas fa-circle"></i>Los datos presentados son proporcionados por la empresa ASECA, S.A. de C.V., a través de la Gerencia de Servicios Generales.</p>
-                              <p><i class="fas fa-circle"></i>Las cantidades registradas de manera mensual corresponden a datos preliminares, ya que los manifiestos que contienen las cantidades oficiales son emitidos por el sitio de disposición final con un desfase aproximado de 2 a 3 meses. Una vez recibidos dichos manifiestos, la información será actualizada, en su caso, para reflejar las cantidades definitivas.</p>
-                              <p class="mb-0"><i class="fas fa-circle"></i>Con la información presentada en esta tabla, se elaborarán gráficas que muestren el comportamiento mensual de las cantidades generadas para cada tipo de residuo (manejo especial, peligrosos, valorizables), con la finalidad de facilitar el análisis de su comportamiento durante el año.</p>
-                            </div>
 
                             <div id="residuos-status" class="alert alert-info py-2 small d-none" role="status"></div>
 
@@ -22145,11 +22767,11 @@ FF
                             </div>
 
                             <div class="row g-3 mb-3">
-                              <div class="col-12 col-xl-7"><div class="residuos-panel"><div class="residuos-panel-title"><i class="fas fa-chart-column me-2 text-success"></i>Comportamiento mensual por tipo de residuo</div><div class="residuos-chart-host"><canvas id="residuos-chart-mensual"></canvas></div></div></div>
-                              <div class="col-12 col-xl-5"><div class="residuos-panel"><div class="residuos-panel-title"><i class="fas fa-chart-pie me-2 text-danger"></i>Composición acumulada</div><div class="residuos-chart-host" style="height:230px;"><canvas id="residuos-chart-composicion"></canvas></div><div id="residuos-comp-breakdown" class="residuos-comp-breakdown"></div></div></div>
+                              <div class="col-12 col-xl-7"><div class="residuos-panel residuos-chart-panel"><div class="residuos-panel-title"><i class="fas fa-chart-column me-2 text-success"></i>Comportamiento mensual por tipo de residuo</div><div class="residuos-chart-host"><canvas id="residuos-chart-mensual"></canvas></div></div></div>
+                              <div class="col-12 col-xl-5"><div class="residuos-panel residuos-chart-panel"><div class="residuos-panel-title"><i class="fas fa-chart-pie me-2 text-danger"></i>Composición acumulada</div><div class="residuos-chart-host"><canvas id="residuos-chart-composicion"></canvas></div></div></div>
                             </div>
                             <div class="row g-3 mb-3">
-                              <div class="col-12"><div class="residuos-panel"><div class="residuos-panel-title"><i class="fas fa-chart-line me-2 text-primary"></i>Tendencia mensual · kg generados</div><div class="residuos-chart-host"><canvas id="residuos-chart-tendencia"></canvas></div></div></div>
+                              <div class="col-12"><div class="residuos-panel residuos-chart-panel"><div class="residuos-panel-title"><i class="fas fa-chart-line me-2 text-primary"></i>Tendencia mensual · kg generados</div><div class="residuos-chart-host"><canvas id="residuos-chart-tendencia"></canvas></div></div></div>
                             </div>
 
                             <div class="residuos-panel mb-3">
@@ -22180,7 +22802,6 @@ FF
                               </div>
                               <div class="mt-2"><label class="form-label mb-1" for="residuos-observaciones">Observaciones</label><input id="residuos-observaciones" class="form-control form-control-sm" type="text" placeholder="Ej. Manifiesto pendiente de confirmación..." maxlength="1000"></div>
                             </div>
-
                           </div>
                         </div>
                       </div>
@@ -28284,7 +28905,7 @@ FF
                                                 </div>
                                             </div>
                                             <div class="col-12 col-lg-8 col-xxl-9">
-                                                <div class="card h-100 insight-card--visual" style="background-image: url('images/Analisis_pax.jpg');">
+                                                <div class="card h-100 insight-card--visual" style="background-image: url('images/Pax.jpeg');">
                                                     <div class="card-body">
                                                         <div class="d-flex flex-column gap-3">
                                                             <div>
@@ -28754,6 +29375,46 @@ FF
                                                                 <thead class="table-light"></thead><tbody></tbody>
                                                             </table>
                                                         </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- ══ ESTADÍSTICO POR AEROLÍNEA ══ -->
+                                            <div class="accordion-item border-0 rounded-3 shadow-sm overflow-hidden mb-3" id="yoy-sub-aerolineas">
+                                                <h2 class="accordion-header">
+                                                    <button class="accordion-button collapsed fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#acc-airline-body" aria-expanded="false" aria-controls="acc-airline-body" style="background:#f5f3ff;border-left:4px solid #7c3aed;color:#5b21b6;">
+                                                        <i class="fas fa-chart-pie me-2"></i>Estadístico por Aerolínea
+                                                        <span class="badge fw-normal ms-2" style="background:#ddd6fe;color:#5b21b6;font-size:.72rem;">Totales por operador</span>
+                                                    </button>
+                                                </h2>
+                                                <div id="acc-airline-body" class="accordion-collapse collapse">
+                                                    <div class="accordion-body p-3">
+                                                        <div class="airline-stats-toolbar mb-3">
+                                                            <div>
+                                                                <label for="airline-stats-year" class="small fw-semibold text-secondary">Año</label>
+                                                                <select id="airline-stats-year" class="form-select form-select-sm"></select>
+                                                            </div>
+                                                            <div>
+                                                                <label for="airline-stats-metric" class="small fw-semibold text-secondary">Indicador</label>
+                                                                <select id="airline-stats-metric" class="form-select form-select-sm">
+                                                                    <option value="pasajeros" selected>Pasajeros transportados</option>
+                                                                    <option value="operaciones">Operaciones</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="airline-stats-toolbar__months">
+                                                                <span class="small fw-semibold text-secondary">Meses</span>
+                                                                <div id="airline-stats-months" class="d-flex flex-wrap gap-1"></div>
+                                                            </div>
+                                                            <button type="button" class="btn btn-sm btn-outline-primary" id="airline-stats-export" title="Exportar tabla en CSV"><i class="fas fa-download me-1"></i>CSV</button>
+                                                        </div>
+                                                        <div class="airline-stats-summary" id="airline-stats-summary" aria-live="polite"></div>
+                                                        <div class="airline-stats-chart-wrap"><canvas id="airline-stats-chart"></canvas></div>
+                                                        <div class="table-responsive mt-3">
+                                                            <table class="table table-hover table-bordered table-sm align-middle mb-0" id="airline-stats-table">
+                                                                <thead class="table-light"></thead><tbody></tbody>
+                                                            </table>
+                                                        </div>
+                                                        <div class="text-center text-muted small py-4 d-none" id="airline-stats-empty">No hay datos de aerolíneas para el periodo seleccionado.</div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -35135,7 +35796,7 @@ FF
     <script src="js/medicas.js?v=2"></script>
     <script src="js/fauna.js"></script>
     <script src="js/hidraulicas.js?v=15"></script>
-    <script src="js/residuos-hidraulicas.js?v=20260727-2"></script>
+    <script src="js/residuos-hidraulicas.js?v=20260803-chart-theme"></script>
     <script src="js/ggen-energia.js?v=5"></script>
     <script src="js/gtrans-energia.js?v=1"></script>
     <script src="js/gtrans-preventivos.js?v=2"></script>
@@ -35170,9 +35831,10 @@ FF
     <script src="js/comparativa.js"></script>
     <script src="js/insights.js"></script>
     <script src="js/comparativa-historica.js"></script>
+    <script src="js/estadistico-aerolineas.js?v=20260804-v8"></script>
     <script src="js/yoy-general.js"></script>
     <script src="js/yoy-cargo.js"></script>
-    <script src="js/parte-ops-flights.js?v=20260730-aodb-status-order"></script>
+    <script src="js/parte-ops-flights.js?v=20260804-conci-cache-reset"></script>
     <!-- Conciliación Board View — extraído a js/conciliacion-board.js (v=20260616m) -->
     <script src="js/conciliacion-board.js?v=20260616m" defer></script>
     <script src="js/analisis-mensual.js?v=1.0"></script>
@@ -35305,7 +35967,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260803-conci-fix-edit" defer></script>
+    <script src="script.js?v=20260805-conci-cargo-nopax" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>

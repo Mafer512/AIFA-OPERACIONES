@@ -7397,22 +7397,23 @@ function handleNavigation(e) {
         }
         if (section === 'conciliacion') {
             try {
-                if (window.opsFlights && typeof window.opsFlights.loadFlights === 'function') {
-                    // El filtro de Itinerario debe apuntar al día calendario
-                    // anterior al actual (nunca "el más reciente con datos")
-                    // — solo se fija si el usuario no había elegido ya otra
-                    // fecha durante la sesión.
-                    const itinPicker = document.getElementById('conci-date-picker');
-                    if (itinPicker && !itinPicker.value) {
-                        const yesterday = new Date();
-                        yesterday.setDate(yesterday.getDate() - 1);
-                        const y = yesterday.getFullYear();
-                        const m = String(yesterday.getMonth() + 1).padStart(2, '0');
-                        const d = String(yesterday.getDate()).padStart(2, '0');
-                        itinPicker.value = `${y}-${m}-${d}`;
-                    }
-                    // Cargar vuelos al entrar a la sección
-                    setTimeout(() => window.opsFlights.loadFlights(), 50);
+                // Cada entrada al módulo comienza desde Supabase y sin filtros
+                // heredados de la visita anterior.
+                _conciResetModuleState();
+            } catch (error) {
+                console.warn('[Conciliación] no se pudo reiniciar el estado del módulo:', error);
+            }
+            try {
+                if (window.opsFlights) {
+                    setTimeout(() => {
+                        if (typeof window.opsFlights.resetModuleState === 'function') {
+                            window.opsFlights.resetModuleState();
+                        } else {
+                            if (typeof window.opsFlights.clearAllFilters === 'function') window.opsFlights.clearAllFilters();
+                            if (typeof window.opsFlights.refreshFlights === 'function') window.opsFlights.refreshFlights();
+                            else if (typeof window.opsFlights.loadFlights === 'function') window.opsFlights.loadFlights();
+                        }
+                    }, 50);
                 }
             } catch (_) { }
             try {
@@ -7420,7 +7421,7 @@ function handleNavigation(e) {
                 // shown.bs.tab no vuelve a disparar → forzar carga con fecha de hoy.
                 const mTab = document.getElementById('tab-conci-comercial');
                 if (mTab && mTab.classList.contains('active')) {
-                    setTimeout(() => { _conciApplyTodayFilters(); loadConciliacionManifiestos({ autoLatestDate: true }); }, 80);
+                    setTimeout(() => loadConciliacionManifiestos({ forceRefresh: true }), 80);
                 }
             } catch (_) { }
         }
@@ -17183,7 +17184,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnConciClearFilters = document.getElementById('btn-conci-clear-filters');
     if (btnConciRefresh) btnConciRefresh.addEventListener('click', () => loadConciliacionManifiestos({ forceRefresh: true }));
     if (btnConciImport) btnConciImport.addEventListener('click', () => {
-        if (!_conciCanCurrentUserEdit()) {
+        if (!_conciCanCurrentUserManage()) {
             alert('Solo usuarios editor o admin pueden importar manifiestos.');
             return;
         }
@@ -17243,6 +17244,33 @@ let _conciEditFechaCol     = null;   // cached fecha column name for formatting
 let _conciEditMode         = false;  // global edit mode for the whole table
 let _conciPendingAutoSaveCount = 0;  // guardados de fila en curso (no confirmados aún por Supabase)
 let _conciPendingRemoteRefresh = false; // true cuando llegó un cambio remoto pero hay un editor local abierto
+let _conciDeferredRefreshNoticeAt = 0;
+
+// Una recarga de tbody nunca debe sustituir la captura local. Esto incluye no
+// sólo el input que conserva el foco, sino también celdas dirty cuyo UPDATE
+// falló o todavía está esperando confirmación de Supabase.
+function _conciHasPendingLocalEdits() {
+    const table = document.getElementById('table-conci-manifiestos');
+    if (_conciPendingAutoSaveCount > 0) return true;
+    if (!table) return false;
+    return !!table.querySelector(
+        'td.conci-cell-active, .conci-cell-input, .conci-cell-dt, '
+        + 'td[data-dirty="1"], tr[data-dirty="1"], tr.conci-row-saving'
+    );
+}
+
+function _conciDeferRefreshForLocalEdits(options = {}) {
+    if (options.allowLocalEditsReplace || !_conciHasPendingLocalEdits()) return false;
+    _conciPendingRemoteRefresh = true;
+    const now = Date.now();
+    if (options.notify && now - _conciDeferredRefreshNoticeAt > 4000) {
+        _conciDeferredRefreshNoticeAt = now;
+        if (typeof showNotification === 'function') {
+            showNotification('La tabla no se actualizó porque hay capturas pendientes de guardar.', 'warning');
+        }
+    }
+    return true;
+}
 
 // ─── Colaboración en vivo: presencia + preview de captura entre compañeros ──
 let _conciLiveChannel = null;       // canal de Supabase Realtime (presence + broadcast)
@@ -18130,12 +18158,10 @@ async function _ensureConciAirlineOverrides() {
     }
 }
 
-function _conciCanCurrentUserEdit() {
-    const allowedRoles = new Set(['admin', 'editor', 'superadmin']);
-    try {
-        if (typeof canCurrentUserEditParteOperaciones === 'function' && canCurrentUserEditParteOperaciones()) return true;
-    } catch (_) {}
+function _conciCurrentUserRole() {
     const candidates = [];
+    // La sesión se autoriza contra usuarios_aplicaciones (OPERACIONES); es la
+    // fuente que también consulta la política RLS del módulo.
     try { candidates.push(sessionStorage.getItem('user_role')); } catch (_) {}
     try { candidates.push(window.dataManager && window.dataManager.userRole); } catch (_) {}
     try {
@@ -18145,7 +18171,33 @@ function _conciCanCurrentUserEdit() {
             if (cache && cache.userRole) candidates.push(cache.userRole);
         }
     } catch (_) {}
-    return candidates.some(r => allowedRoles.has(String(r || '').trim().toLowerCase()));
+    return String(candidates.find(Boolean) || '').trim().toLowerCase();
+}
+
+function _conciSectionLevelAllows(allowedLevels) {
+    try {
+        if (typeof window.sectionLevel === 'function') {
+            const level = String(window.sectionLevel('conciliacion') || '').trim().toLowerCase();
+            if (level) return allowedLevels.has(level);
+        }
+    } catch (_) {}
+    return true;
+}
+
+// Captura de celdas y alta de filas: capturista, editor y administradores,
+// siempre respetando el nivel efectivo asignado específicamente a Conciliación.
+function _conciCanCurrentUserEdit() {
+    const allowedRoles = new Set(['capturista', 'editor', 'admin', 'superadmin']);
+    return allowedRoles.has(_conciCurrentUserRole())
+        && _conciSectionLevelAllows(new Set(['capture', 'edit', 'admin']));
+}
+
+// Acciones destructivas o de administración del módulo: un capturista puede
+// escribir datos, pero no eliminar filas, importar lotes ni cambiar catálogos.
+function _conciCanCurrentUserManage() {
+    const allowedRoles = new Set(['editor', 'admin', 'superadmin']);
+    return allowedRoles.has(_conciCurrentUserRole())
+        && _conciSectionLevelAllows(new Set(['edit', 'admin']));
 }
 
 function _conciNormalizeEditableCellText(value) {
@@ -18167,6 +18219,7 @@ function _conciRefreshEditToolbar() {
     const monthSel = document.getElementById('filter-conci-manifiestos-month');
     const daySel = document.getElementById('filter-conci-manifiestos-day');
     const canEdit = _conciCanCurrentUserEdit();
+    const canManage = _conciCanCurrentUserManage();
 
     if (btnUndo) {
         const canUndo = _conciEditMode && _conciHasUndoHistory();
@@ -18178,17 +18231,17 @@ function _conciRefreshEditToolbar() {
         btnAdd.disabled = !canEdit || !_conciEditMode;
     }
     if (btnAirlineColors) {
-        btnAirlineColors.classList.toggle('d-none', !canEdit);
-        btnAirlineColors.disabled = !canEdit;
+        btnAirlineColors.classList.toggle('d-none', !canManage);
+        btnAirlineColors.disabled = !canManage;
     }
     if (btnMatriculaCatalog) {
-        btnMatriculaCatalog.classList.toggle('d-none', !canEdit);
-        btnMatriculaCatalog.disabled = !canEdit;
+        btnMatriculaCatalog.classList.toggle('d-none', !canManage);
+        btnMatriculaCatalog.disabled = !canManage;
     }
 
     if (btnImport) {
-        btnImport.classList.toggle('d-none', !canEdit);
-        btnImport.disabled = !canEdit;
+        btnImport.classList.toggle('d-none', !canManage);
+        btnImport.disabled = !canManage;
     }
 
     const controlsLocked = _conciEditMode;
@@ -18399,9 +18452,10 @@ async function _conciGetManifestColInfo(client) {
     const mKey = keys.find(k => /^mes$/i.test(k) || /month/i.test(k));
     const dKey = keys.find(k => /^d[ií]a$/i.test(k) || /\bday\b/i.test(k));
     const fKey = keys.find(k => /(^|\b)fecha(\b|$)/i.test(k));
+    const portalDateKey = keys.find(k => String(k).toLowerCase() === '_portal_flight_date');
     // Keep a sample row so the table schema (column set) is available even when the
     // selected day has vuelos but no manifests.
-    _conciManifestColInfo = { yKey, mKey, dKey, fKey, sampleRow: probe[0] };
+    _conciManifestColInfo = { yKey, mKey, dKey, fKey, portalDateKey, sampleRow: probe[0] };
     return _conciManifestColInfo;
 }
 
@@ -18570,11 +18624,50 @@ async function _conciFetchLatestManifestDate(client, year) {
 // can be detected at all.
 async function _conciFetchManifestsForDate(client, year, month, day, dayEnd) {
     const info = await _conciGetManifestColInfo(client);
-    if (!info || (!info.mKey && !info.dKey && !info.fKey)) {
+    if (!info || (!info.portalDateKey && !info.mKey && !info.dKey && !info.fKey)) {
         return _concifetchAllRows(client, 'Conciliación Manifiestos', {
             batchSize: 5000,
             orderBy: [{ column: 'id', ascending: true }],
         });
+    }
+
+    // La migración de unicidad mantiene esta fecha normalizada con el mismo
+    // trigger que calcula movement_key. Usarla evita ocultar un manifiesto ya
+    // existente cuando MES/FECHA tienen formatos históricos distintos; ese
+    // ocultamiento hacía aparecer una fila virtual e intentaba insertarla de
+    // nuevo al capturar.
+    if (info.portalDateKey && year) {
+        // Se amplía la ventana ±1 día cuando se pide un día concreto: un
+        // manifiesto que cruza medianoche se PROGRAMA el día N (portal_date = N)
+        // pero OPERA el N+1, y el usuario lo captura viendo el día de operación.
+        // Si sólo se consultara portal_date = díaVisto, ese manifiesto (guardado
+        // con portal_date = día programado) NO se recuperaría al refrescar en el
+        // día operado y "desaparecería". El filtro fino (_conciRowMatchesOperationDay)
+        // acota luego por día programado U operado, igual que filteredVuelos.
+        let startIso;
+        let endIso;
+        if (day) {
+            const lastDay = (dayEnd && dayEnd > day) ? dayEnd : day;
+            const startDate = new Date(year, (month || 1) - 1, day);
+            startDate.setDate(startDate.getDate() - 1);
+            const endDate = new Date(year, (month || 1) - 1, lastDay);
+            endDate.setDate(endDate.getDate() + 1);
+            startIso = _conciIsoDateKey(startDate.getFullYear(), startDate.getMonth() + 1, startDate.getDate());
+            endIso = _conciIsoDateKey(endDate.getFullYear(), endDate.getMonth() + 1, endDate.getDate());
+        } else {
+            const startMonth = month || 1;
+            const endMonth = month || 12;
+            startIso = _conciIsoDateKey(year, startMonth, 1);
+            endIso = _conciIsoDateKey(year, endMonth, new Date(year, endMonth, 0).getDate());
+        }
+        const portalResult = await client
+            .from('Conciliación Manifiestos')
+            .select('*')
+            .gte(info.portalDateKey, startIso)
+            .lte(info.portalDateKey, endIso)
+            .order('id', { ascending: true });
+        if (!portalResult.error) return { data: portalResult.data || [], error: null };
+        console.warn('[Conciliación] filtro por _portal_flight_date no disponible; usando columnas heredadas:', portalResult.error);
     }
 
     let q = client.from('Conciliación Manifiestos').select('*');
@@ -19060,18 +19153,26 @@ function _conciRowMatchesOperationDay(row, columns, year, month, day) {
     const opCol    = keys.find(c => /hr\.?\s*de\s*oper/i.test(c));
     const slotCol  = keys.find(c => /slot\s*asignad/i.test(c));
     const fechaCol = keys.find(c => /(^|\b)fecha(\b|$)/i.test(c));
+    // La consulta de manifiestos se amplía ±1 día (ver _conciFetchManifestsForDate)
+    // para no perder salidas que cruzan medianoche: se PROGRAMAN el día N (FECHA /
+    // _portal_flight_date = N) pero OPERAN el N+1 (HR. DE OPERACIÓN = N+1). Aquí se
+    // acota al día pedido conservando la fila si su día PROGRAMADO (FECHA) O su día
+    // de OPERACIÓN (HR. DE OPERACIÓN / SLOT) coincide — mismo criterio que
+    // filteredVuelos. Así el manifiesto aparece tanto en su día programado como en
+    // el operado y NUNCA se "pierde" al refrescar en el día en que se capturó.
+    let sawParseable = false;
     for (const col of [opCol, slotCol, fechaCol]) {
         if (!col) continue;
         const val = row[col];
         if (val === null || val === undefined || String(val).trim() === '') continue;
         const parts = _conciParseDateTimeParts(val, year);
         if (parts && Number.isFinite(parts.day)) {
-            if (parts.day !== day) return false;
-            if (month && Number.isFinite(parts.month) && parts.month !== month) return false;
-            return true;
+            sawParseable = true;
+            const monthOk = !month || !Number.isFinite(parts.month) || parts.month === month;
+            if (parts.day === day && monthOk) return true;
         }
     }
-    return true;
+    return !sawParseable;
 }
 
 // Clasifica una fila como 'carga' o 'pasajeros'. Usa el Service Type IATA del vuelo
@@ -19121,6 +19222,7 @@ function _conciVueloToRow(vRow, tipo, outputCols, colm, hasManifestSchema) {
         if (colm.aeronave)  row[colm.aeronave]   = vRow['Aircraft type'] || '';
         if (colm.matricula) row[colm.matricula]  = vRow['Registration']  || '';
         if (colm.routing)   row[colm.routing]    = vRow['Routing']       || '';
+        if (Object.prototype.hasOwnProperty.call(row, 'RUTA')) row['RUTA'] = vRow['Routing'] || '';
         if (colm.stand)     row[colm.stand]      = isArr ? vRow['[Arr] Stand']  : vRow['[Dep] Stand'];
         if (colm.puerta)    row[colm.puerta]     = isArr ? vRow['[Arr] Gates']  : vRow['[Dep] Gates'];
         if (colm.pax)       row[colm.pax]        = isArr ? vRow['[Arr] Boarded']: vRow['[Dep] Boarded'];
@@ -19225,11 +19327,11 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
         outputCols = [
             "CIERRE SUBSECRETARIA", "MES", "FECHA", "TIPO DE MANIFIESTO", "AEROLINEA",
             "TIPO DE OPERACIÓN", "AERONAVE", "MATRÍCULA", "ESTATUS MATRÍCULA", "# DE VUELO",
-            "DESTINO / ORIGEN", "SLOT ASIGNADO", "SLOT COORDINADO", "HR. DE INICIO O TERMINO DE PERNOCTA",
+            "DESTINO / ORIGEN", "RUTA", "SLOT ASIGNADO", "SLOT COORDINADO", "HR. DE INICIO O TERMINO DE PERNOCTA",
             "HR. DE EMBARQUE O DESEMBARQUE", "HR. DE OPERACIÓN", "HR. MÁXIMA DE ENTREGA", "HR. DE RECEPCIÓN",
             "HRS. CUMPLIDAS", "PUNTUALIDAD / CANCELACIÓN", "TOTAL PAX", "DIPLOMATICOS", "EN COMISION",
             "INFANTES", "TRANSITOS", "CONEXIONES", "OTROS EXENTOS", "TOTAL EXENTOS", "PAX QUE PAGAN TUA",
-            "KGS. DE EQUIPAJE", "KGS. DE CARGA", "CORREO", "DEMORA +- 15 MIN.", "CÓDIGO DEMORA",
+            "KGS. DE EQUIPAJE", "KGS. DE CARGA NACIONAL", "KGS. DE CARGA INTERNACIONAL", "KG DE CARGA TOTAL", "CORREO", "DEMORA +- 15 MIN.", "CÓDIGO DEMORA",
             "OBSERVACIONES", "CAPTURÓ", "CAPACIDAD MÁXIMA", "FACTOR DE OCUPACIÓN", "id", "EVIDENCIA", "Hora y Fecha Generación", "_fuente"
         ];
         if (!outputCols.includes('Hora y Fecha Generación')) outputCols.push('Hora y Fecha Generación');
@@ -19238,11 +19340,11 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
               outputCols = [
             "CIERRE SUBSECRETARIA", "MES", "FECHA", "TIPO DE MANIFIESTO", "AEROLINEA",
             "TIPO DE OPERACIÓN", "AERONAVE", "MATRíCULA", "ESTATUS MATRÍCULA", "# DE VUELO",
-            "DESTINO / ORIGEN", "SLOT ASIGNADO", "SLOT COORDINADO", "HR. DE INICIO O TERMINO DE PERNOCTA",
+            "DESTINO / ORIGEN", "RUTA", "SLOT ASIGNADO", "SLOT COORDINADO", "HR. DE INICIO O TERMINO DE PERNOCTA",
             "HR. DE EMBARQUE O DESEMBARQUE", "HR. DE OPERACKN", "HR. MÈXIMA DE ENTREGA", "HR. DE RECEPCIÓN",
             "HRS. CUMPLIDAS", "PUNTUALIDAD / CANCELACIÓN", "TOTAL PAX", "DIPLOMATICOS", "EN COMISION",
             "INFANTES", "TRANSITOS", "CONEXIONES", "OTROS EXENTOS", "TOTAL EXENTOS", "PAX QUE PAGAN TUA",
-            "KGS. DE EQUIPAJE", "KGS. DE CARGA", "CORREO", "DEMORA +- 15 MIN.", "CDIGO DEMORA",
+            "KGS. DE EQUIPAJE", "KGS. DE CARGA NACIONAL", "KGS. DE CARGA INTERNACIONAL", "KG DE CARGA TOTAL", "CORREO", "DEMORA +- 15 MIN.", "CDIGO DEMORA",
             "OBSERVACIONES", "CAPTURÓ", "CAPACIDAD MÁXIMA", "FACTOR DE OCUPACIÓN", "id", "EVIDENCIA", "Hora y Fecha Generación", "_fuente"
         ];
     }
@@ -19272,18 +19374,23 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
     //                                         be parsed; never crosses a known other day)
     // Cruzar incluyendo la fecha evita que un manifiesto se empareje con el mismo
     // número de vuelo de un día distinto.
+    const vByMovementKey = new Map();
     const vByKeyDate = new Map();
     const vByKey = new Map();
     for (const r of activeVuelos) {
         const arr = (r['[Arr] Flight Designator'] || '').trim().toUpperCase();
         const dep = (r['[Dep] Flight Designator'] || '').trim().toUpperCase();
         if (arr) {
+            const movementKey = String(r.arr_movement_key || '').trim();
+            if (movementKey) vByMovementKey.set(movementKey, { row: r, direction: 'arr' });
             const md = _vueloMd(r, true);
             if (md !== null) vByKeyDate.set(`${arr}|arr|${md}`, r);
             if (!vByKey.has(`${arr}|arr`)) vByKey.set(`${arr}|arr`, []);
             vByKey.get(`${arr}|arr`).push(r);
         }
         if (dep) {
+            const movementKey = String(r.dep_movement_key || '').trim();
+            if (movementKey) vByMovementKey.set(movementKey, { row: r, direction: 'dep' });
             const md = _vueloMd(r, false);
             if (md !== null) vByKeyDate.set(`${dep}|dep|${md}`, r);
             if (!vByKey.has(`${dep}|dep`)) vByKey.set(`${dep}|dep`, []);
@@ -19312,14 +19419,30 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
         }
 
         let vRow = null;
-        if (flightNum) {
+        let matchedDirection = '';
+        const manifestMovementKey = String(mRow.movement_key || '').trim();
+        if (manifestMovementKey) {
+            const movementMatch = vByMovementKey.get(manifestMovementKey);
+            if (movementMatch) {
+                vRow = movementMatch.row;
+                matchedDirection = movementMatch.direction;
+                usedVuelo.add(`${vueloId.get(vRow)}|${matchedDirection}`);
+            }
+        }
+        if (!vRow && flightNum) {
             const dirs = isLlegada ? ['arr'] : isSalida ? ['dep'] : ['arr', 'dep'];
             // 1) exact same-day match
             if (mMd !== null) {
                 for (const d of dirs) {
                     const ek = `${flightNum}|${d}|${mMd}`;
                     const hit = vByKeyDate.get(ek);
-                    if (hit && !usedKeys.has(ek)) { vRow = hit; usedKeys.add(ek); usedVuelo.add(`${vueloId.get(hit)}|${d}`); break; }
+                    if (hit && !usedKeys.has(ek)) {
+                        vRow = hit;
+                        matchedDirection = d;
+                        usedKeys.add(ek);
+                        usedVuelo.add(`${vueloId.get(hit)}|${d}`);
+                        break;
+                    }
                 }
             }
             // 2) fallback: only vuelos with unknown date (never cross a known other day)
@@ -19335,7 +19458,11 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
                             const rmd = _vueloMd(r, d === 'arr');
                             if (rmd !== null && rmd !== mMd) continue;
                         }
-                        vRow = r; usedKeys.add(fk); usedVuelo.add(`${vueloId.get(r)}|${d}`); break;
+                        vRow = r;
+                        matchedDirection = d;
+                        usedKeys.add(fk);
+                        usedVuelo.add(`${vueloId.get(r)}|${d}`);
+                        break;
                     }
                     if (vRow) break;
                 }
@@ -19343,7 +19470,9 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
         }
 
         if (vRow) {
-            const useArr = isLlegada || (!isSalida && vRow['[Arr] Flight Designator']);
+            const useArr = matchedDirection
+                ? matchedDirection === 'arr'
+                : (isLlegada || (!isSalida && vRow['[Arr] Flight Designator']));
             const _dp = _conciExtractVueloDateParts(vRow, useArr);
             const _mesVal   = _dp ? String(_dp.month) : '';
             const _fechaVal = _dp ? `${_dp.day}/${String(_dp.month).padStart(2,'0')}` : '';
@@ -19419,6 +19548,42 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
     return { rows: enrichedRows, columns: outputCols };
 }
 
+// Descarta cualquier fotografía o filtro de una visita anterior al módulo.
+// No toca la sesión de autenticación ni preferencias globales de la aplicación.
+function _conciResetModuleState() {
+    // Al volver al módulo puede seguir en curso el blur/autoguardado disparado
+    // al navegar. Preservar esa tabla hasta que Supabase confirme; limpiar el
+    // caché nunca debe significar descartar una captura pendiente.
+    if (_conciDeferRefreshForLocalEdits({ notify: true })) return false;
+
+    _conciLoadRequestSeq++;
+    _conciRenderCache.clear();
+    _conciRenderedKey = '';
+    _conciRawCache = null;
+    _conciVuelosCache = null;
+    _conciManifestColInfo = null;
+    _conciPendingRemoteRefresh = false;
+    _conciSummaryLiveOverrides.clear();
+    _conciScopedCatalogColumnFilters = { airline: {}, matricula: {} };
+    _conciUndoHistory.length = 0;
+
+    _conciClearAllTableFilters();
+    _conciApplyTodayFilters();
+
+    const selectedDate = document.getElementById('filter-conci-fecha-desde')?.value || '';
+    const itineraryStart = document.getElementById('conci-date-picker');
+    const itineraryEnd = document.getElementById('conci-date-end');
+    if (itineraryStart) itineraryStart.value = selectedDate;
+    if (itineraryEnd) itineraryEnd.value = '';
+
+    if (_conciEditMode) {
+        _conciEditMode = false;
+        _conciSetTableEditableState(false);
+        _conciRefreshEditToolbar();
+    }
+    return true;
+}
+
 // Fija los filtros Año/Mes/Día (y el selector de fecha visible) al día
 // calendario ANTERIOR al actual — nunca "el más reciente con datos". El
 // personal captura manifiestos del día que acaba de cerrar, así que al
@@ -19454,6 +19619,10 @@ async function loadConciliacionManifiestos(options = {}) {
     const errorEl = document.getElementById('conci-manifiestos-error');
     const badge   = document.getElementById('badge-conci-manifiestos-count');
     const config = (typeof Event !== 'undefined' && options instanceof Event) ? {} : (options || {});
+    if (_conciDeferRefreshForLocalEdits({
+        allowLocalEditsReplace: config.allowLocalEditsReplace === true,
+        notify: config.fromRemoteSync !== true,
+    })) return;
     // Un refresco disparado por un cambio remoto (colaboración en vivo) nunca
     // debe arrancarse si justo en ese instante el usuario tiene una celda
     // propia abierta — reemplazar el tbody a media captura le borraría lo que
@@ -20162,6 +20331,7 @@ const _CONCI_EXPORT_COLS_PAX = [
     { h: 'ESTATUS MATRÍCULA', t: 'text', a: ['ESTATUS MATRÍCULA', 'ESTATUS MATRICULA'] },
     { h: '# DE VUELO', t: 'text', a: ['# DE VUELO'] },
     { h: 'DESTINO / ORIGEN', t: 'routecity', a: ['DESTINO / ORIGEN'] },
+    { h: 'RUTA', t: 'text', a: ['RUTA', 'DESTINO / ORIGEN', 'ROUTING'] },
     { h: 'SLOT ASIGNADO', t: 'datetime', a: ['SLOT ASIGNADO'] },
     { h: 'SLOT COORDINADO', t: 'datetime', a: ['SLOT COORDINADO'] },
     { h: 'HR. DE INICIO O TERMINO DE PERNOCTA', t: 'datetime', a: ['HR. DE INICIO O TERMINO DE PERNOCTA'] },
@@ -20181,7 +20351,9 @@ const _CONCI_EXPORT_COLS_PAX = [
     { h: 'TOTAL EXENTOS', t: 'num', a: ['TOTAL EXENTOS'] },
     { h: 'PAX QUE PAGAN TUA', t: 'num', a: ['PAX QUE PAGAN TUA'] },
     { h: 'KGS. DE EQUIPAJE', t: 'num', a: ['KGS. DE EQUIPAJE'] },
-    { h: 'KGS. DE CARGA', t: 'num', a: ['KGS. DE CARGA'] },
+    { h: 'KGS. DE CARGA NACIONAL', t: 'num', a: ['KGS. DE CARGA NACIONAL'] },
+    { h: 'KGS. DE CARGA INTERNACIONAL', t: 'num', a: ['KGS. DE CARGA INTERNACIONAL'] },
+    { h: 'KG DE CARGA TOTAL', t: 'num', a: ['KG DE CARGA TOTAL', 'KGS. DE CARGA'] },
     { h: 'CORREO', t: 'num', a: ['CORREO'] },
     { h: 'DEMORA +- 15 MIN.', t: 'text', a: ['DEMORA +- 15 MIN.', 'DEMORA +-15 MIN', 'DEMORA +- 15 MIN'] },
     { h: 'CÓDIGO DEMORA', t: 'text', a: ['CÓDIGO DEMORA', 'CODIGO DEMORA'] },
@@ -20433,12 +20605,13 @@ const _CONCI_IMPORT_TABLE = 'Conciliación Manifiestos';
 const _CONCI_IMPORT_FALLBACK_COLUMNS = [
     'CIERRE SUBSECRETARIA', 'MES', 'FECHA', 'TIPO DE MANIFIESTO', 'AEROLINEA',
     'TIPO DE OPERACIÓN', 'AERONAVE', 'MATRÍCULA', 'ESTATUS MATRÍCULA', '# DE VUELO',
-    'DESTINO / ORIGEN', 'SLOT ASIGNADO', 'SLOT COORDINADO',
+    'DESTINO / ORIGEN', 'RUTA', 'SLOT ASIGNADO', 'SLOT COORDINADO',
     'HR. DE INICIO O TERMINO DE PERNOCTA', 'HR. DE EMBARQUE O DESEMBARQUE',
     'HR. DE OPERACIÓN', 'HR. MÁXIMA DE ENTREGA', 'HR. DE RECEPCIÓN',
     'HRS. CUMPLIDAS', 'PUNTUALIDAD / CANCELACIÓN', 'TOTAL PAX', 'DIPLOMATICOS',
     'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS',
-    'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE EQUIPAJE', 'KGS. DE CARGA',
+    'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE EQUIPAJE',
+    'KGS. DE CARGA NACIONAL', 'KGS. DE CARGA INTERNACIONAL', 'KG DE CARGA TOTAL',
     'CORREO', 'DEMORA +- 15 MIN.', 'CÓDIGO DEMORA', 'OBSERVACIONES', 'CAPTURÓ'
 ];
 const _CONCI_IMPORT_IGNORED_COLUMNS = new Set([
@@ -20677,7 +20850,7 @@ async function _conciImportWriteRecords(client, records, existingBySignature) {
 }
 
 async function _conciImportManifiestosFile(file) {
-    if (!_conciCanCurrentUserEdit()) {
+    if (!_conciCanCurrentUserManage()) {
         alert('Solo usuarios editor o admin pueden importar manifiestos.');
         return;
     }
@@ -20783,7 +20956,7 @@ function _updateManifiestosSummaryStripLegacy(data, columns) {
     const _airlineCol  = cols.find(c => /aerol[ií]nea|airline/i.test(c))          || null;
     const _optypeCol   = cols.find(c => /tipo.*oper|service\s*type/i.test(c))      || null;
     const _totalPaxCol = cols.find(c => /^total\s*pax$/i.test(c.trim()))           || null;
-    const _kgsCarCol   = cols.find(c => /kgs?\.?\s*(de\s*)?carga/i.test(c.trim())) || null;
+    const _kgsCarCol   = cols.find(c => /carga\s*total/i.test(c.trim())) || cols.find(c => /kgs?\.?\s*(de\s*)?carga/i.test(c.trim())) || null;
 
     let paxOps = 0, totalPax = 0, cargoOps = 0, kgsCarga = 0;
 
@@ -20972,6 +21145,8 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     const _aeronaveCol = displayCols.find(c => /^aeronave$/i.test(c.trim())) || null;
     // Match columns named exactly 'Routing' OR containing 'origen' or 'destino' (e.g. 'DESTINO / ORIGEN')
     const _routingCol = displayCols.find(c => /^routing$/i.test(c) || /origen|destino.*origen|routing/i.test(c)) || null;
+    // Columna "RUTA": muestra la pierna completa (origen-destino) sin maquillar.
+    const _rutaCol = displayCols.find(c => /^ruta$/i.test(c.trim())) || null;
     // Columna "TIPO DE OPERACIÓN": se muestra como Nacional / Internacional según el
     // origen/destino del vuelo (no como el service type F/J/P original).
     const _optypeCol  = displayCols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
@@ -21167,6 +21342,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         isMatriculaStatus: c === _matriculaStatusCol,
         isAeronave:  c === _aeronaveCol,
         isRouting:   c === _routingCol && (hasIataMap || hasAirportCatalog),
+        isRuta:      c === _rutaCol,
         isOptype:    c === _optypeCol,
         isHrsCumplidas: c === _hrsCumplidasCol && !!_hrOperacionCol && !!_hrRecepcionCol,
         isPuntualidad: c === _puntualidadCol && !!_slotAsignadoCol && !!_hrOperacionCol,
@@ -21221,6 +21397,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
             const _tipoRaw = _tipoCol ? String(row[_tipoCol] || '').toLowerCase() : '';
             tr.dataset.rowDir = /lleg|arr/.test(_tipoRaw) ? 'arr' : (/sal|dep/.test(_tipoRaw) ? 'dep' : '');
             tr.dataset.rowCargo = _conciRowIsCargo(row, _optypeCol, _airlineCol) ? '1' : '0';
+            const _isCargoRow = tr.dataset.rowCargo === '1';
             tr.dataset.rowOvercap = row._conci_overcapacity ? '1' : '0';
             if (row._conci_overcapacity) {
                 tr.classList.add('conci-row-overcapacity');
@@ -21237,6 +21414,9 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                 if (_conciIsCalculatedColumn(c)) {
                     td.dataset.conciReadonly = '1';
                     td.title = 'Campo calculado: no se puede modificar.';
+                } else if (_isCargoRow && _conciIsPassengerColumn(c)) {
+                    td.dataset.conciReadonly = '1';
+                    td.title = 'Vuelo de carga: no aplica la captura de pasajeros.';
                 }
                 const val = row[c];
                 const rawStr = String(val !== null && val !== undefined ? val : '').trim();
@@ -21279,6 +21459,13 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                     td.dataset.routeRaw = rawStr;
                     td.dataset.raw = shown;
                     if (rawStr && rawStr.toUpperCase() !== String(shown).toUpperCase()) td.title = rawStr;
+                } else if (meta.isRuta) {
+                    // RUTA: pierna completa (origen-destino) tal cual; si la fila aun
+                    // no tiene RUTA propia, cae al routing crudo de DESTINO / ORIGEN.
+                    const routingRaw = _routingCol ? String(row[_routingCol] || '').trim() : '';
+                    const shownRuta = (rawStr || routingRaw).toUpperCase();
+                    td.textContent = shownRuta;
+                    td.dataset.raw = shownRuta;
                 } else if (meta.isOptype) {
                     const routingRaw = _routingCol ? String(row[_routingCol] || '') : '';
                     const tipoRaw = _tipoCol ? String(row[_tipoCol] || '') : '';
@@ -21731,6 +21918,7 @@ function _conciIsCalculatedColumn(column) {
         || /hr\.?\s*maxima\s*de\s*entrega/.test(key)
         || /^total\s+exentos$/.test(key)
         || /^pax\s+que\s+pagan\s+tua$/.test(key)
+        || /^kgs?\.?\s*de\s*carga\s+total$/.test(key)
         || /capacidad.*maxima/.test(key)
         || /factor.*ocupacion/.test(key)
         || /^capturo$/.test(key);
@@ -21738,7 +21926,29 @@ function _conciIsCalculatedColumn(column) {
 
 function _conciShouldPersistCalculatedColumn(column) {
     const key = _conciNormalizedColumnName(column);
-    return /^total\s+exentos$/.test(key) || /^pax\s+que\s+pagan\s+tua$/.test(key);
+    return /^total\s+exentos$/.test(key) || /^pax\s+que\s+pagan\s+tua$/.test(key) || /^kgs?\.?\s*de\s*carga\s+total$/.test(key);
+}
+
+// Columnas de captura de pasajeros. En vuelos de carga (incluye mixtos
+// clasificados como carga) no aplican y se bloquea su edición.
+function _conciIsPassengerColumn(column) {
+    const key = _conciNormalizedColumnName(column);
+    return /^total\s+pax$/.test(key)
+        || /^diplomaticos$/.test(key)
+        || /^en\s+comision$/.test(key)
+        || /^infantes$/.test(key)
+        || /^transitos$/.test(key)
+        || /^conexiones$/.test(key)
+        || /^otros\s+exentos$/.test(key)
+        || /^total\s+exentos$/.test(key)
+        || /^pax\s+que\s+pagan\s+tua$/.test(key)
+        || /^kgs?\.?\s*de\s*equipaje$/.test(key);
+}
+
+// true si el <tr> quedó clasificado como carga (ver dataset.rowCargo en el render).
+function _conciRowElementIsCargo(el) {
+    const tr = el && (el.matches?.('tr') ? el : el.closest?.('tr'));
+    return !!tr && tr.dataset.rowCargo === '1';
 }
 
 function _conciValidatedDateTime(rawValue, fallbackYear) {
@@ -21895,6 +22105,18 @@ function _conciRefreshCalculatedCellsForRow(tr, changedValues = {}) {
         paxTuaCell.classList.toggle('conci-cell-tua-disabled', tuaDisabled);
         if (tuaDisabled) paxTuaCell.title = 'Los pasajeros de llegada no pagan TUA.';
         else if (paxTuaCell.title === 'Los pasajeros de llegada no pagan TUA.') paxTuaCell.removeAttribute('title');
+    }
+
+    // KGS. DE CARGA (total) = nacional + internacional. Solo se recalcula cuando
+    // hay al menos un desglose capturado; los registros historicos sin desglose
+    // conservan su total guardado.
+    const cargaNacCell = findCell(/^kgs?\.?\s*de\s*carga\s+nacional$/);
+    const cargaIntCell = findCell(/^kgs?\.?\s*de\s*carga\s+internacional$/);
+    const cargaTotalCell = findCell(/^kgs?\.?\s*de\s*carga\s+total$/);
+    if (cargaTotalCell && (cargaNacCell || cargaIntCell)) {
+        const hasCargaComponent = String(readCell(cargaNacCell) ?? '').trim() !== ''
+            || String(readCell(cargaIntCell) ?? '').trim() !== '';
+        if (hasCargaComponent) renderNumber(cargaTotalCell, readNumber(cargaNacCell) + readNumber(cargaIntCell));
     }
     _conciRefreshManifestDateOrderValidation(tr, changedValues);
 }
@@ -22505,6 +22727,22 @@ function _conciHandlePresenceSync() {
 // Recorre la tabla visible y marca/desmarca las celdas que otros usuarios
 // tienen abiertas ahora mismo. Se re-ejecuta en cada sync de presencia y
 // también tras cada lote de filas renderizadas (scroll perezoso).
+function _conciFindLiveCell(root, rowId, col) {
+    if (!root) return null;
+    const expectedRowId = String(rowId ?? '');
+    const expectedCol = String(col ?? '');
+    const rows = root.querySelectorAll('tr[data-row-id]');
+    for (const row of rows) {
+        if (String(row.dataset.rowId ?? '') !== expectedRowId) continue;
+        const cells = row.querySelectorAll('td[data-col]');
+        for (const cell of cells) {
+            if (String(cell.dataset.col ?? '') === expectedCol) return cell;
+        }
+        return null;
+    }
+    return null;
+}
+
 function _conciApplyRemotePresenceHighlights() {
     const table = document.getElementById('table-conci-manifiestos');
     if (!table) return;
@@ -22529,9 +22767,7 @@ function _conciApplyRemotePresenceHighlights() {
         const sep = cellKey.indexOf('|');
         const rowId = cellKey.slice(0, sep);
         const col = cellKey.slice(sep + 1);
-        const tr = tbody.querySelector(`tr[data-row-id="${rowId}"]`);
-        if (!tr) return; // fila aún no cargada en esta pantalla (scroll perezoso)
-        const td = tr.querySelector(`td[data-col="${col}"]`);
+        const td = _conciFindLiveCell(tbody, rowId, col);
         if (!td || td.classList.contains('conci-cell-active')) return; // no pisar un editor propio abierto
         const entry = entries[0];
         td.classList.add('conci-cell-remote-editing');
@@ -22562,9 +22798,7 @@ function _conciHandleRemoteCellInput(payload) {
     if (!payload || !payload.rowId || !payload.col) return;
     const table = document.getElementById('table-conci-manifiestos');
     if (!table) return;
-    const tr = table.querySelector(`tbody tr[data-row-id="${payload.rowId}"]`);
-    if (!tr) return;
-    const td = tr.querySelector(`td[data-col="${payload.col}"]`);
+    const td = _conciFindLiveCell(table, payload.rowId, payload.col);
     if (!td || td.classList.contains('conci-cell-active')) return;
     if (td.dataset.conciLivePreviewOrig === undefined) td.dataset.conciLivePreviewOrig = td.textContent;
     td.textContent = payload.value;
@@ -22583,12 +22817,45 @@ function _conciHandleRemoteTableChange() {
 
 function _conciMaybeApplyDeferredRemoteRefresh() {
     if (!_conciPendingRemoteRefresh) return;
-    if (document.querySelector('#table-conci-manifiestos td.conci-cell-active')) return;
-    if (_conciPendingAutoSaveCount > 0) return;
+    if (_conciHasPendingLocalEdits()) return;
     _conciPendingRemoteRefresh = false;
     _conciRenderCache.clear();
     _conciRenderedKey = '';
     loadConciliacionManifiestos({ forceRefresh: true, fromRemoteSync: true });
+}
+
+// Mientras el usuario escribe, conserva el valor como borrador local desde el
+// primer cambio. Esto hace que los guards de refresco lo detecten antes del
+// blur y permite enviarlo a Supabase sin cerrar el input activo.
+const _CONCI_AUTOSAVE_INPUT_DELAY_MS = 400;
+
+function _conciStageCellDraft(td, rawValue) {
+    if (!td) return '';
+    const nextRaw = _conciNormalizeEditableCellText(rawValue);
+    const currentRaw = _conciNormalizeEditableCellText(
+        td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || td.textContent)
+    );
+    if (td.dataset.origRaw === undefined) td.dataset.origRaw = currentRaw;
+    const origRaw = _conciNormalizeEditableCellText(td.dataset.origRaw);
+    td.dataset.pendingRaw = nextRaw;
+    if (nextRaw !== origRaw) td.dataset.dirty = '1';
+    else td.removeAttribute('data-dirty');
+
+    const tr = td.closest('tr');
+    if (tr) {
+        if (tr.querySelector('td[data-dirty="1"]')) tr.dataset.dirty = '1';
+        else tr.removeAttribute('data-dirty');
+    }
+    return nextRaw;
+}
+
+function _conciQueueAutoSave(tr) {
+    if (!tr || !tr.isConnected || !_conciEditMode || !_conciCanCurrentUserEdit()) return;
+    if (tr._conciAutoSaveTimer) clearTimeout(tr._conciAutoSaveTimer);
+    tr._conciAutoSaveTimer = setTimeout(() => {
+        tr._conciAutoSaveTimer = null;
+        _conciAutoSaveRow(tr, { keepEditorsOpen: true });
+    }, _CONCI_AUTOSAVE_INPUT_DELAY_MS);
 }
 
 function _conciActivateCellEditor(td) {
@@ -22596,6 +22863,7 @@ function _conciActivateCellEditor(td) {
 
     const col = td.dataset.col || '';
     if (_conciIsMatriculaStatusColumn(col) || _conciIsProtectedEditColumn(col) || _conciIsCalculatedColumn(col)) return;
+    if (_conciIsPassengerColumn(col) && _conciRowElementIsCargo(td)) return;
     const currentRaw = _conciNormalizeEditableCellText(
         td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
     );
@@ -22635,6 +22903,7 @@ function _conciActivateCellEditor(td) {
         : currentRaw;
 
     td.classList.add('conci-cell-active');
+    td._conciEditorStartRaw = currentRaw;
     td.textContent = '';
     td.appendChild(input);
     if (isAirlineCol) _conciApplyAirlineCellPreview(td, input.value);
@@ -22646,7 +22915,9 @@ function _conciActivateCellEditor(td) {
         td._conciCloseEditor = null;
 
         const fallbackRaw = _conciNormalizeEditableCellText(
-            td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
+            td._conciEditorStartRaw !== undefined
+                ? td._conciEditorStartRaw
+                : (td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || ''))
         );
         const nextRaw = accept ? _conciNormalizeEditableCellText(input.value) : fallbackRaw;
         _conciCommitCellRaw(td, nextRaw, move, nextRaw);
@@ -22668,10 +22939,13 @@ function _conciActivateCellEditor(td) {
         }
     });
     input.addEventListener('input', () => {
+        const tr = td.closest('tr');
+        _conciStageCellDraft(td, input.value);
+        _conciQueueAutoSave(tr);
         if (isAirlineCol) _conciApplyAirlineCellPreview(td, input.value);
-        _conciRefreshMatriculaValidationForRow(td.closest('tr'));
+        _conciRefreshMatriculaValidationForRow(tr);
         _conciUpdateSummaryLiveCell(td, input.value);
-        _conciRefreshCalculatedCellsForRow(td.closest('tr'), { [col]: input.value });
+        _conciRefreshCalculatedCellsForRow(tr, { [col]: input.value });
         _conciBroadcastCellInput(td, input.value);
     });
     input.addEventListener('blur', () => closeEditor(true, false));
@@ -22685,8 +22959,11 @@ function _conciActivateCellEditor(td) {
 function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     nextRaw = _conciNormalizeEditableCellText(nextRaw);
     const previousRaw = _conciNormalizeEditableCellText(
-        td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || td.textContent)
+        td._conciEditorStartRaw !== undefined
+            ? td._conciEditorStartRaw
+            : (td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || td.textContent))
     );
+    delete td._conciEditorStartRaw;
     const hasOriginalValue = td.dataset.origRaw !== undefined;
     const origRaw = hasOriginalValue
         ? _conciNormalizeEditableCellText(td.dataset.origRaw)
@@ -22701,6 +22978,10 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     else td.removeAttribute('data-dirty');
     const tr = td.closest('tr');
     if (tr) {
+        if (tr._conciAutoSaveTimer) {
+            clearTimeout(tr._conciAutoSaveTimer);
+            tr._conciAutoSaveTimer = null;
+        }
         const rowDirty = !!tr.querySelector('td[data-dirty="1"]');
         if (rowDirty) tr.dataset.dirty = '1';
         else tr.removeAttribute('data-dirty');
@@ -23031,20 +23312,32 @@ function _conciSetTableEditableState(enabled) {
         tbody.querySelectorAll('td[data-col]').forEach(td => {
             const isProtected = _conciIsProtectedEditColumn(td.dataset.col);
             const isCalculated = _conciIsCalculatedColumn(td.dataset.col);
-            const isReadOnly = isProtected || isCalculated || _conciIsMatriculaStatusColumn(td.dataset.col);
+            const isCargoPax = _conciIsPassengerColumn(td.dataset.col) && _conciRowElementIsCargo(td);
+            const isReadOnly = isProtected || isCalculated || isCargoPax || _conciIsMatriculaStatusColumn(td.dataset.col);
             const editableRaw = _conciIsRoutingColumn(td.dataset.col) ? (td.dataset.routeRaw || td.dataset.raw || '') : (td.dataset.raw || '');
-            td.dataset.origRaw = editableRaw;
-            td.dataset.pendingRaw = editableRaw;
-            td.removeAttribute('data-dirty');
-            td.classList.remove('conci-cell-active');
+            const hasLocalDraft = td.dataset.dirty === '1'
+                || td.classList.contains('conci-cell-active')
+                || !!td.querySelector('.conci-cell-input, .conci-cell-dt');
+            if (!hasLocalDraft) {
+                td.dataset.origRaw = editableRaw;
+                td.dataset.pendingRaw = editableRaw;
+                td.removeAttribute('data-dirty');
+                td.classList.remove('conci-cell-active');
+            }
             if (isReadOnly) {
                 td.dataset.conciReadonly = '1';
-                td.title = isProtected ? 'Campo bloqueado: no se puede modificar.' : 'Campo calculado: no se puede modificar.';
+                td.title = isProtected ? 'Campo bloqueado: no se puede modificar.'
+                    : (isCargoPax ? 'Vuelo de carga: no aplica la captura de pasajeros.'
+                    : 'Campo calculado: no se puede modificar.');
             } else {
                 td.removeAttribute('data-conci-readonly');
                 td.title = 'Clic para editar';
             }
-        });        tbody.querySelectorAll('tr').forEach(tr => tr.removeAttribute('data-dirty'));
+        });
+        tbody.querySelectorAll('tr').forEach(tr => {
+            if (tr.querySelector('td[data-dirty="1"]')) tr.dataset.dirty = '1';
+            else tr.removeAttribute('data-dirty');
+        });
     } else {
         if (_conciCellClickHandler) tbody.removeEventListener('click', _conciCellClickHandler);
         if (_conciTabNavigationHandler) tbody.removeEventListener('keydown', _conciTabNavigationHandler, true);
@@ -23073,7 +23366,7 @@ function _conciCoerceNumberCandidate(value) {
 }
 
 function _conciOpenAirlineColorsLegacy() {
-    if (!_conciCanCurrentUserEdit()) {
+    if (!_conciCanCurrentUserManage()) {
         alert('Solo usuarios editor o admin pueden administrar el catálogo de aerolíneas.');
         return;
     }
@@ -23348,7 +23641,7 @@ async function _conciDeleteScopedMatricula(id) {
 }
 
 function _conciOpenScopedCatalog(kind) {
-    if (!_conciCanCurrentUserEdit()) { alert('Solo usuarios autorizados del área de Manifiestos pueden modificar estos catálogos.'); return; }
+    if (!_conciCanCurrentUserManage()) { alert('Solo usuarios editor o admin pueden modificar estos catálogos.'); return; }
     _conciScopedCatalogKind = kind;
     _conciScopedCatalogRows = [];
     const modal = _conciRenderScopedCatalog(kind);
@@ -23393,8 +23686,144 @@ function _conciPrepareValueForDatabase(col, value) {
     return value;
 }
 
-async function _conciWriteRowSafe(client, payload, rowId) {
+function _conciPayloadIdentityValue(payload, names) {
+    const wanted = (names || []).map(name => _conciNormalizedColumnName(name));
+    const key = Object.keys(payload || {}).find(column =>
+        wanted.includes(_conciNormalizedColumnName(column))
+    );
+    return key ? payload[key] : null;
+}
+
+// Replica en el cliente la identidad definida por _aifa_movement_key. Se usa
+// únicamente como respaldo cuando PostgREST no incluye el valor de la llave
+// duplicada en los detalles del error.
+function _conciMovementKeyFromPayload(payload) {
+    const normalizePart = value => {
+        const normalized = String(value ?? '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '');
+        return normalized || '';
+    };
+    const carrier = normalizePart(_conciPayloadIdentityValue(payload, ['AEROLINEA']));
+    let designator = normalizePart(_conciPayloadIdentityValue(payload, ['# DE VUELO']));
+    if (carrier && designator.startsWith(carrier)) designator = designator.slice(carrier.length);
+    const numberMatch = designator.match(/([0-9]+[A-Z]?)$/);
+    const flightNumber = numberMatch ? numberMatch[1] : designator;
+
+    const rawDate = String(_conciPayloadIdentityValue(payload, ['FECHA']) ?? '').trim();
+    let year;
+    let month;
+    let day;
+    let dateMatch = rawDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (dateMatch) {
+        day = Number(dateMatch[1]);
+        month = Number(dateMatch[2]);
+        year = Number(dateMatch[3]);
+        if (year < 100) year += 2000;
+    } else {
+        dateMatch = rawDate.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+        if (dateMatch) {
+            year = Number(dateMatch[1]);
+            month = Number(dateMatch[2]);
+            day = Number(dateMatch[3]);
+        }
+    }
+    const dateCandidate = Number.isInteger(year) && Number.isInteger(month) && Number.isInteger(day)
+        ? new Date(Date.UTC(year, month - 1, day))
+        : null;
+    const validDate = dateCandidate
+        && dateCandidate.getUTCFullYear() === year
+        && dateCandidate.getUTCMonth() === month - 1
+        && dateCandidate.getUTCDate() === day;
+    const scheduledDate = validDate
+        ? [year, String(month).padStart(2, '0'), String(day).padStart(2, '0')].join('-')
+        : '';
+
+    const manifestType = String(_conciPayloadIdentityValue(payload, ['TIPO DE MANIFIESTO']) ?? '').toUpperCase();
+    const direction = /(LLEG|ARRIV|ARRIVAL)/.test(manifestType)
+        ? 'A'
+        : (/(SAL|DEP|DEPARTURE)/.test(manifestType) ? 'D' : '');
+    const routing = String(_conciPayloadIdentityValue(payload, ['DESTINO / ORIGEN', 'ROUTING']) ?? '').trim();
+    const routeTokens = routing.toUpperCase()
+        .replace(/^[^A-Z0-9]+|[^A-Z0-9]+$/g, '')
+        .split(/[^A-Z0-9]+/)
+        .filter(Boolean);
+    let endpoint = '';
+    if (routeTokens.length && direction === 'A') {
+        const localIndex = routeTokens.findIndex(token => token === 'NLU' || token === 'MMSM');
+        endpoint = normalizePart(localIndex > 0 ? routeTokens[localIndex - 1] : routeTokens[0]);
+    } else if (routeTokens.length && direction === 'D') {
+        let localIndex = -1;
+        routeTokens.forEach((token, index) => {
+            if (token === 'NLU' || token === 'MMSM') localIndex = index;
+        });
+        endpoint = normalizePart(
+            localIndex >= 0 && localIndex < routeTokens.length - 1
+                ? routeTokens[localIndex + 1]
+                : routeTokens[routeTokens.length - 1]
+        );
+    }
+    if (!carrier || !flightNumber || !scheduledDate || !direction || !endpoint) return '';
+    return [carrier, flightNumber, scheduledDate, direction, endpoint].join('|');
+}
+
+function _conciMovementKeyFromDuplicateError(error) {
+    const errorText = [error?.details, error?.message, error?.hint].filter(Boolean).join(' ');
+    const match = errorText.match(/key\s*\(\s*movement_key\s*\)\s*=\s*\(([^)]+)\)\s*already exists/i);
+    return match ? String(match[1] || '').trim() : '';
+}
+
+function _conciIsMovementKeyDuplicate(error) {
+    if (String(error?.code || '') !== '23505') return false;
+    const errorText = [error?.constraint, error?.details, error?.message, error?.hint].filter(Boolean).join(' ');
+    return /uq_conciliacion_manifiestos_movement_key|movement_key/i.test(errorText);
+}
+
+function _conciDatabaseValueEquals(expected, actual) {
+    if (expected === null || expected === undefined) {
+        return actual === null || actual === undefined;
+    }
+    if (typeof expected === 'number') {
+        return Number.isFinite(Number(actual)) && Number(actual) === expected;
+    }
+    if (typeof expected === 'boolean') {
+        return String(actual).toLowerCase() === String(expected).toLowerCase();
+    }
+    if (typeof expected === 'object') {
+        try { return JSON.stringify(actual) === JSON.stringify(expected); } catch (_) { return false; }
+    }
+    return String(actual ?? '').trim() === String(expected).trim();
+}
+
+function _conciPersistenceMismatch(persistedRow, expectedPayload) {
+    if (!persistedRow || typeof persistedRow !== 'object') return ['id'];
+    return Object.keys(expectedPayload || {}).filter(column =>
+        !Object.prototype.hasOwnProperty.call(persistedRow, column)
+        || !_conciDatabaseValueEquals(expectedPayload[column], persistedRow[column])
+    );
+}
+
+async function _conciFindExistingMovementRowId(client, payload, error) {
+    const movementKey = _conciMovementKeyFromDuplicateError(error)
+        || _conciMovementKeyFromPayload(payload);
+    if (!movementKey) return null;
+    const lookup = await client
+        .from('Conciliación Manifiestos')
+        .select('id')
+        .eq('movement_key', movementKey)
+        .maybeSingle();
+    if (lookup.error) return null;
+    const row = Array.isArray(lookup.data) ? lookup.data[0] : lookup.data;
+    return row?.id !== undefined && row?.id !== null ? row.id : null;
+}
+
+async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
     let currentPayload = { ...payload };
+    let effectiveRowId = String(rowId ?? '').trim();
+    let recoveredRowId = null;
+    const allowMovementRecovery = options.recoverMovementConflict === true && !effectiveRowId;
+    const duplicateUpdatePayload = options.duplicateUpdatePayload
+        && typeof options.duplicateUpdatePayload === 'object'
+        ? { ...options.duplicateUpdatePayload }
+        : null;
     // Columnas que el mecanismo de auto-corrección quitó del payload porque
     // su valor no era compatible con el tipo de la columna en la base de
     // datos (ej. "# DE VUELO" es bigint pero contiene letras como "VB 9999").
@@ -23412,11 +23841,39 @@ async function _conciWriteRowSafe(client, payload, rowId) {
         }
 
         const req = client.from('Conciliación Manifiestos');
-        const result = rowId
-            ? await req.update(currentPayload).eq('id', rowId)
-            : await req.insert(currentPayload).select('id').maybeSingle();
+        // UPDATE sin .select() puede responder 204 sin error aunque RLS o un id
+        // obsoleto hayan afectado cero filas. Siempre pedimos la fila resultante
+        // y comprobamos los valores antes de considerar la captura guardada.
+        let result = effectiveRowId
+            ? await req.update(currentPayload).eq('id', effectiveRowId).select('*').maybeSingle()
+            : await req.insert(currentPayload).select('*').maybeSingle();
 
-        if (!result.error) return { ok: true, adjusted: attempt > 0, data: result.data || null, payload: currentPayload, droppedColumns: [...droppedColumns] };
+        if (!result.error) {
+            const persistedRow = Array.isArray(result.data) ? result.data[0] : result.data;
+            const mismatchedColumns = _conciPersistenceMismatch(persistedRow, currentPayload);
+            if (mismatchedColumns.length) {
+                result = {
+                    data: persistedRow || null,
+                    error: {
+                        code: 'CONCI_WRITE_NOT_CONFIRMED',
+                        message: persistedRow
+                            ? `Supabase no confirmó los valores de: ${mismatchedColumns.join(', ')}`
+                            : 'Supabase no confirmó ninguna fila modificada. Revisa los permisos de actualización.',
+                    },
+                };
+            }
+        }
+
+        if (!result.error) {
+            return {
+                ok: true,
+                adjusted: attempt > 0 || recoveredRowId !== null,
+                data: result.data || (recoveredRowId !== null ? { id: recoveredRowId } : null),
+                payload: currentPayload,
+                droppedColumns: [...droppedColumns],
+                recoveredMovementConflict: recoveredRowId !== null,
+            };
+        }
 
         const message = String(result.error.message || '');
         let mutated = false;
@@ -23424,7 +23881,7 @@ async function _conciWriteRowSafe(client, payload, rowId) {
 const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bigint|integer|numeric|double precision|real|smallint|decimal):\s*"([^"]+)"/i);
         if (typeValueMatch) {
             const badValue = _conciNormalizeEditableCellText(typeValueMatch[1]).toLowerCase();
-            const knownNumCols = ['TOTAL PAX', 'KGS. DE EQUIPAJE', 'HRS. CUMPLIDAS', '# DE VUELO', 'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE CARGA', 'CORREO', 'DIPLOMATICOS', 'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS'];
+            const knownNumCols = ['TOTAL PAX', 'KGS. DE EQUIPAJE', 'HRS. CUMPLIDAS', '# DE VUELO', 'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE CARGA NACIONAL', 'KGS. DE CARGA INTERNACIONAL', 'KG DE CARGA TOTAL', 'CORREO', 'DIPLOMATICOS', 'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS'];
             // Un error de tipo numérico SOLO puede venir de una columna que
             // realmente sea numérica en la base de datos — nunca de una
             // columna de texto (AEROLINEA, DESTINO/ORIGEN, OBSERVACIONES...).
@@ -23482,6 +23939,23 @@ const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bi
             }
         }
 
+        // Una fila sintetizada desde Itinerario puede no traer id aunque el
+        // manifiesto ya exista. El trigger calcula el mismo movement_key y el
+        // INSERT choca con la restricción única. En ese caso se resuelve el id
+        // existente y se reintenta como UPDATE, limitado por el llamador a las
+        // celdas realmente modificadas para no pisar otros datos capturados.
+        if (!mutated && allowMovementRecovery && !effectiveRowId && _conciIsMovementKeyDuplicate(result.error)) {
+            const existingId = await _conciFindExistingMovementRowId(client, payload, result.error);
+            if (existingId !== null) {
+                effectiveRowId = String(existingId);
+                recoveredRowId = existingId;
+                if (duplicateUpdatePayload && Object.keys(duplicateUpdatePayload).length) {
+                    currentPayload = { ...duplicateUpdatePayload };
+                }
+                mutated = true;
+            }
+        }
+
         if (!mutated) return { ok: false, error: result.error, droppedColumns: [...droppedColumns] };
     }
 
@@ -23511,13 +23985,15 @@ function _conciFillRowActionCell(actionTd, persistedId) {
     hist.innerHTML = '<i class="fas fa-history"></i>';
     hist.dataset.rowId = persistedId;
     group.appendChild(hist);
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'btn btn-outline-danger conci-delete-row';
-    del.title = 'Eliminar fila';
-    del.innerHTML = '<i class="fas fa-trash-alt"></i>';
-    del.dataset.rowId = persistedId;
-    group.appendChild(del);
+    if (_conciCanCurrentUserManage()) {
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn btn-outline-danger conci-delete-row';
+        del.title = 'Eliminar fila';
+        del.innerHTML = '<i class="fas fa-trash-alt"></i>';
+        del.dataset.rowId = persistedId;
+        group.appendChild(del);
+    }
     actionTd.appendChild(group);
 }
 
@@ -23531,6 +24007,25 @@ function _conciMarkRowSaved(tr, cells) {
     tr.removeAttribute('data-dirty');
     tr.classList.remove('table-warning');
     tr.removeAttribute('title');
+}
+
+// Sólo confirma en pantalla el valor exacto que participó en la escritura.
+// Si el usuario avanzó a otra celda mientras Supabase respondía, esa captura
+// más reciente conserva data-dirty y será enviada por el reintento en cola.
+function _conciSettleSavedCells(tr, cells, savedCellValues, savedColumns) {
+    const allowed = savedColumns instanceof Set ? savedColumns : null;
+    cells.forEach(td => {
+        if (allowed && !allowed.has(td.dataset.col)) return;
+        const savedRaw = savedCellValues.get(td);
+        const currentRaw = _conciNormalizeEditableCellText(
+            td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent
+        );
+        if (currentRaw !== savedRaw) return;
+        td.dataset.origRaw = savedRaw;
+        td.removeAttribute('data-dirty');
+    });
+    if (tr.querySelector(`td[data-dirty='1']`)) tr.dataset.dirty = '1';
+    else tr.removeAttribute('data-dirty');
 }
 
 async function _conciSaveVirtualAirlineOverride(client, tr, value) {
@@ -23549,7 +24044,7 @@ async function _conciSaveVirtualAirlineOverride(client, tr, value) {
     return data;
 }
 
-async function _conciAutoSaveRow(tr) {
+async function _conciAutoSaveRow(tr, options = {}) {
     if (!tr || !tr.isConnected || !_conciEditMode || !_conciCanCurrentUserEdit()) return;
     if (tr._conciAutoSavePromise) {
         tr._conciAutoSaveQueued = true;
@@ -23569,12 +24064,21 @@ async function _conciAutoSaveRow(tr) {
     // accept=false es seguro: si el usuario sí lo editó, ese editor ya se
     // habría cerrado a sí mismo (con accept=true) al disparar su "change",
     // y no llegaría vivo hasta este punto.
-    cells.forEach(td => {
-        if (typeof td._conciCloseEditor === 'function') td._conciCloseEditor(false, false);
-    });
+    if (!options.keepEditorsOpen) {
+        cells.forEach(td => {
+            if (typeof td._conciCloseEditor === 'function') td._conciCloseEditor(false, false);
+        });
+    }
+    // Cerrar otro editor de la fila puede disparar recursivamente su propio
+    // autoguardado. No iniciar una segunda escritura ni sobrescribir la promesa.
+    if (tr._conciAutoSavePromise) {
+        tr._conciAutoSaveQueued = true;
+        return tr._conciAutoSavePromise;
+    }
     const savedCellValues = new Map();
     const payload = {};
     const dirtyCols = new Set();
+    const autoPersistedCols = new Set();
     cells.forEach(td => {
         const col = td.dataset.col;
         const liveInput = td.querySelector('input, textarea, select');
@@ -23613,21 +24117,8 @@ async function _conciAutoSaveRow(tr) {
         }
         if (isDirty) dirtyCols.add(col);
     });
-    const settleSavedCells = (savedColumns) => {
-        const allowed = savedColumns instanceof Set ? savedColumns : null;
-        cells.forEach(td => {
-            if (allowed && !allowed.has(td.dataset.col)) return;
-            const savedRaw = savedCellValues.get(td);
-            const currentRaw = _conciNormalizeEditableCellText(
-                td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent
-            );
-            if (currentRaw !== savedRaw) return;
-            td.dataset.origRaw = savedRaw;
-            td.removeAttribute('data-dirty');
-        });
-        if (tr.querySelector('td[data-dirty="1"]')) tr.dataset.dirty = '1';
-        else tr.removeAttribute('data-dirty');
-    };
+    const settleSavedCells = (savedColumns) =>
+        _conciSettleSavedCells(tr, cells, savedCellValues, savedColumns);
     // Si la fila nueva sólo tiene el mes capturado, usa la fecha actualmente
     // seleccionada en el filtro como fecha inicial del registro.
     if (tr.dataset.conciNew === '1' && !payload.FECHA) {
@@ -23654,6 +24145,7 @@ async function _conciAutoSaveRow(tr) {
                     if (displayName) {
                         _conciRenderCapturoCell(capturoTd, displayName);
                         payload['CAPTURÓ'] = _conciPrepareValueForDatabase('CAPTURÓ', displayName);
+                        autoPersistedCols.add('CAPTURÓ');
                         savedCellValues.set(capturoTd, displayName);
                     }
                 }
@@ -23691,7 +24183,16 @@ async function _conciAutoSaveRow(tr) {
                 // no tenía manifiesto propio: "Conciliación Manifiestos" es una
                 // tabla distinta a la de Itinerario de Vuelos, así que esto debe
                 // crear un registro real ahí, no perderse en la fila espejo.
-                const result = await _conciWriteRowSafe(client, payload, null);
+                const duplicateUpdatePayload = {};
+                Object.keys(payload).forEach(col => {
+                    if (dirtyCols.has(col) || autoPersistedCols.has(col) || _conciShouldPersistCalculatedColumn(col)) {
+                        duplicateUpdatePayload[col] = payload[col];
+                    }
+                });
+                const result = await _conciWriteRowSafe(client, payload, null, {
+                    recoverMovementConflict: true,
+                    duplicateUpdatePayload,
+                });
                 if (!result.ok) {
                     const msg = result.error?.message || 'error de base de datos';
                     tr.title = `Pendiente de guardar: ${msg}`;
@@ -23714,7 +24215,7 @@ async function _conciAutoSaveRow(tr) {
                 // marcarse como guardada.
                 const droppedSetSV = new Set(result.droppedColumns || []);
                 if (droppedSetSV.size) {
-                    const savedOnly = new Set(Object.keys(payload).filter(c => !droppedSetSV.has(c)));
+                    const savedOnly = new Set(Object.keys(result.payload || {}).filter(c => !droppedSetSV.has(c)));
                     settleSavedCells(savedOnly);
                     const colList = [...droppedSetSV].join(', ');
                     tr.title = `No se pudo guardar: ${colList} (valor incompatible con el tipo de columna en la base de datos)`;
@@ -23724,13 +24225,25 @@ async function _conciAutoSaveRow(tr) {
                     }
                     return;
                 }
-                settleSavedCells();
+                settleSavedCells(new Set(Object.keys(result.payload || payload)));
                 tr.classList.remove('table-secondary');
                 tr.removeAttribute('title');
                 return;
             }
             const rowId = String(tr.dataset.rowId || '').trim();
-            const result = await _conciWriteRowSafe(client, payload, rowId || null);
+            const writePayload = rowId ? {} : { ...payload };
+            if (rowId) {
+                Object.keys(payload).forEach(col => {
+                    if (dirtyCols.has(col) || autoPersistedCols.has(col) || _conciShouldPersistCalculatedColumn(col)) {
+                        writePayload[col] = payload[col];
+                    }
+                });
+            }
+            if (!Object.keys(writePayload).length) return;
+            const result = await _conciWriteRowSafe(client, writePayload, rowId || null, {
+                recoverMovementConflict: !rowId,
+                duplicateUpdatePayload: writePayload,
+            });
             if (!result.ok) {
                 // Conserva la fila y sus valores para que el usuario pueda corregir
                 // el campo que causó el error; nunca se elimina silenciosamente.
@@ -23761,14 +24274,10 @@ async function _conciAutoSaveRow(tr) {
             // cual estaba antes en la base de datos, y el usuario necesita
             // saberlo explícitamente en vez de asumir que todo se guardó.
             const droppedSet = new Set(result.droppedColumns || []);
-            cells.forEach(td => {
-                if (droppedSet.has(td.dataset.col)) return;
-                const raw = _conciNormalizeEditableCellText(td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent);
-                td.dataset.origRaw = raw;
-                td.removeAttribute('data-dirty');
-            });
-            if (tr.querySelector('td[data-dirty="1"]')) tr.dataset.dirty = '1';
-            else tr.removeAttribute('data-dirty');
+            const confirmedColumns = new Set(
+                Object.keys(result.payload || writePayload).filter(col => !droppedSet.has(col))
+            );
+            settleSavedCells(confirmedColumns);
             tr.classList.remove('table-warning');
             if (droppedSet.size) {
                 const colList = [...droppedSet].join(', ');
@@ -23803,7 +24312,7 @@ async function _conciAutoSaveRow(tr) {
             const shouldRetry = tr._conciAutoSaveQueued && !!tr.querySelector('td[data-dirty="1"]');
             tr._conciAutoSaveQueued = false;
             tr._conciAutoSavePromise = null;
-            if (shouldRetry) _conciAutoSaveRow(tr);
+            if (shouldRetry) _conciAutoSaveRow(tr, options);
             else _conciMaybeApplyDeferredRemoteRefresh();
         }
     })();
@@ -23826,6 +24335,7 @@ function _conciBindRowActions() {
             tr?.remove();
             return;
         }
+        if (!_conciCanCurrentUserManage()) return;
         const rowId = String(button.dataset.rowId || tr?.dataset.rowId || '').trim();
         if (!rowId) return;
         if (!confirm('¿Eliminar esta fila de Conciliación? Esta acción no se puede deshacer.')) return;
@@ -23848,7 +24358,7 @@ function _conciBindRowActions() {
 
 function _conciAddBlankRow() {
     if (!_conciCanCurrentUserEdit()) {
-        alert('Solo usuarios editor o admin pueden agregar filas.');
+        alert('No tienes permiso de captura en el módulo de Conciliación.');
         return;
     }
     if (!_conciEditMode) _conciEnterEditMode();
@@ -23917,7 +24427,7 @@ async function _conciRunBatchWrites(items, batchSize, worker) {
 
 function _conciEnterEditMode() {
     if (!_conciCanCurrentUserEdit()) {
-        alert('Solo usuarios editor o admin pueden editar esta tabla.');
+        alert('No tienes permiso de captura en el módulo de Conciliación.');
         return;
     }
     if (_conciEditMode) return;
@@ -23935,13 +24445,13 @@ async function _conciCancelBulkEdits() {
     _conciUndoHistory.length = 0;
     _conciSetTableEditableState(false);
     _conciRefreshEditToolbar();
-    await loadConciliacionManifiestos();
+    await loadConciliacionManifiestos({ allowLocalEditsReplace: true });
 }
 
 async function _conciSaveBulkEdits() {
     if (!_conciEditMode) return;
     if (!_conciCanCurrentUserEdit()) {
-        alert('Solo usuarios editor o admin pueden guardar cambios.');
+        alert('No tienes permiso de captura en el módulo de Conciliación.');
         return;
     }
 
@@ -24019,14 +24529,44 @@ async function _conciSaveBulkEdits() {
             if (Object.keys(changedPayload).length === 0) return;
             if (tr.dataset.rowFuente === 'Solo Vuelos') {
                 const airlineEntry = _conciAirlinePayloadEntry(changedPayload);
-                if (airlineEntry) virtualAirlineOverrides.push({ tr, value: airlineEntry.value });
+                const changedColumns = Object.keys(changedPayload);
+                const onlyAirlineChanged = airlineEntry
+                    && changedColumns.every(column => column === airlineEntry.key);
+                if (onlyAirlineChanged) {
+                    virtualAirlineOverrides.push({ tr, value: airlineEntry.value });
+                } else {
+                    const manifestPayload = {};
+                    Object.entries(fullPayload).forEach(([column, value]) => {
+                        if (value !== null && String(value).trim() !== '') manifestPayload[column] = value;
+                    });
+                    Object.entries(changedPayload).forEach(([column, value]) => {
+                        manifestPayload[column] = value;
+                    });
+                    if (Object.keys(manifestPayload).length) {
+                        inserts.push({
+                            payload: manifestPayload,
+                            options: {
+                                recoverMovementConflict: true,
+                                duplicateUpdatePayload: changedPayload,
+                            },
+                        });
+                    }
+                }
                 return;
             }
             if (rowId) updates.push({ id: rowId, payload: changedPayload });
             else {
                 const hasMeaningfulValue = Object.values(changedPayload)
                     .some(v => v !== null && String(v).trim() !== '');
-                if (hasMeaningfulValue) inserts.push(changedPayload);
+                if (hasMeaningfulValue) {
+                    inserts.push({
+                        payload: changedPayload,
+                        options: {
+                            recoverMovementConflict: true,
+                            duplicateUpdatePayload: changedPayload,
+                        },
+                    });
+                }
             }
         });
 
@@ -24053,7 +24593,7 @@ async function _conciSaveBulkEdits() {
         const insertResults = await _conciRunBatchWrites(
             inserts,
             30,
-            (payload) => _conciWriteRowSafe(client, payload, null)
+            (item) => _conciWriteRowSafe(client, item.payload, null, item.options)
         );
 
         const results = [...virtualResults, ...updateResults, ...insertResults];
@@ -24063,12 +24603,16 @@ async function _conciSaveBulkEdits() {
         if (fail.length > 0) {
             const firstErr = fail[0]?.error?.message || 'Error desconocido';
             alert(`Guardado parcial: ${okCount} filas guardadas, ${fail.length} con error. Primer error: ${firstErr}`);
+            // Mantener el DOM y sus celdas dirty; recargar aquí reemplazaba los
+            // valores fallidos por la copia anterior de la base de datos.
+            _conciRefreshEditToolbar();
+            return;
         }
 
         _conciEditMode = false;
         _conciSetTableEditableState(false);
         _conciRefreshEditToolbar();
-        await loadConciliacionManifiestos({ forceRefresh: true });
+        await loadConciliacionManifiestos({ forceRefresh: true, allowLocalEditsReplace: true });
     } catch (e) {
         alert('Error al guardar cambios: ' + e.message);
     } finally {

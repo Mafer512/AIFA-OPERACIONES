@@ -44,3 +44,5 @@ videos/FBO AIFA - Trim.mp4
 
 # TypeScript
 *.tsbuildinfo
+.vercel
+.env*

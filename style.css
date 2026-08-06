@@ -20387,3 +20387,62 @@ button > i:only-child {
       min-height: 44px;
    }
 }
+
+/* Estadístico por aerolínea — Comparativa histórica */
+.airline-stats-toolbar {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: end;
+   gap: .75rem;
+   padding: .75rem;
+   border: 1px solid #ddd6fe;
+   border-radius: .65rem;
+   background: #faf9ff;
+}
+
+.airline-stats-toolbar > div:not(.airline-stats-toolbar__months) {
+   min-width: 155px;
+}
+
+.airline-stats-toolbar label,
+.airline-stats-toolbar__months > span {
+   display: block;
+   margin-bottom: .25rem;
+}
+
+.airline-stats-toolbar__months {
+   flex: 1 1 290px;
+}
+
+.airline-stats-month {
+   min-width: 2.6rem;
+}
+
+.airline-stats-summary {
+   display: grid;
+   grid-template-columns: repeat(3, minmax(0, 1fr));
+   gap: .75rem;
+   margin-top: .85rem;
+}
+
+.airline-stat-card {
+   min-width: 0;
+   padding: .75rem .9rem;
+   border: 1px solid #e9e5ff;
+   border-radius: .65rem;
+   background: linear-gradient(135deg, #faf9ff, #f5f3ff);
+}
+
+.airline-stat-card span,
+.airline-stat-card small { display: block; color: #64748b; font-size: .76rem; }
+.airline-stat-card strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #4c1d95; font-size: 1.08rem; }
+.airline-stats-chart-wrap { position: relative; height: min(460px, 58vh); min-height: 280px; margin-top: .9rem; }
+
+@media (max-width: 575.98px) {
+   .airline-stats-toolbar { align-items: stretch; }
+   .airline-stats-toolbar > div:not(.airline-stats-toolbar__months),
+   .airline-stats-toolbar .btn { flex: 1 1 100%; }
+   .airline-stats-toolbar__months { flex-basis: 100%; }
+   .airline-stats-summary { grid-template-columns: 1fr; }
+   .airline-stats-chart-wrap { height: 360px; }
+}

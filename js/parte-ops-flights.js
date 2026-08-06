@@ -153,6 +153,7 @@
             refreshFlights: () => { _flightProbeCache = null; return loadFlights(); },
             // Reset date picker filter — reload using latest available day.
             resetDateFilter: () => loadFlights(),
+            resetModuleState,
             importCsvFromFile,
             toggleColumn,
             toggleValidacion,
@@ -1175,6 +1176,49 @@
             if (badgeText) badgeText.textContent = 'Sin filtros';
             badge.title = 'No hay filtros de columna activos.';
         }
+    }
+
+    function resetModuleState() {
+        clearTimeout(_renderDebounceTimer);
+        _renderDebounceTimer = null;
+        _flightProbeCache = null;
+        _flightTotalCount = 0;
+        currentData = [];
+        columnFilters = {};
+        csvExcelFilters = {};
+        dateMode = 'relative';
+        relStart = -4;
+        relEnd = 0;
+        absStart = '';
+        absEnd = '';
+        latestDataDate = null;
+        _dateWindowUserActivated = false;
+
+        document.querySelectorAll('.csv-excel-dropdown').forEach(el => el.remove());
+        document.querySelectorAll('#table-ops-flights-csv .csv-filter-row input').forEach(input => {
+            input.value = '';
+        });
+
+        const values = {
+            'rel-start': '-4',
+            'rel-end': '0',
+            'ops-date-start': '',
+            'ops-date-end': '',
+            'conci-date-end': '',
+        };
+        Object.entries(values).forEach(([id, value]) => {
+            const element = document.getElementById(id);
+            if (element) element.value = value;
+        });
+        document.getElementById('btn-date-mode-relative')?.classList.add('active');
+        document.getElementById('btn-date-mode-absolute')?.classList.remove('active');
+        document.getElementById('ops-date-relative')?.classList.remove('d-none');
+        document.getElementById('ops-date-absolute')?.classList.add('d-none');
+
+        updateCsvExcelFilterIcons();
+        updateFilterIndicator();
+        updateRelativeLabels();
+        return loadFlights();
     }
 
     function clearAllCsvFilters() {

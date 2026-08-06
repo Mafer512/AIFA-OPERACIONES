@@ -1,0 +1,55 @@
+# Publicar solamente la aplicacion estatica y sus recursos de ejecucion.
+/*
+!/*.html
+!/*.css
+!/*.js
+!/*.json
+!/*.csv
+!/*.ico
+!/*.webmanifest
+!/*.png
+!/*.jpg
+!/*.jpeg
+!/*.svg
+!/*.pdf
+!/.nojekyll
+!/vercel.json
+
+!/js/
+!/js/**
+!/data/
+!/data/**
+!/defaultLayout/
+!/defaultLayout/**
+!/images/
+!/images/**
+!/pdfs/
+!/pdfs/**
+!/vendor/
+!/vendor/**
+!/NG-Client/
+!/NG-Client/**
+!/excel/
+!/excel/**
+!/examples/
+!/examples/**
+!/videos/
+!/videos/**
+!/lib/
+!/lib/**
+
+# Recursos de produccion no utilizados por la interfaz.
+/images/Aviones FBO.png
+/images/Analisis_pax.jpg
+/images/Analisis_carga.jpg
+/images/Análisis_carga.jpg
+/images/Carga aérea.jpg
+/images/Aeronaves carga.jpg
+/images/mujer-bandera.png
+/images/slots.png
+
+/videos/*
+!/videos/Aterrizaje Cargo.mp4
+
+/excel/*
+!/excel/itinerario_completo.xlsx

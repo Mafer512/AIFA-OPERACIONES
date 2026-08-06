@@ -1091,6 +1091,17 @@ class AdminUI {
         const form = document.getElementById('admin-form');
         const formData = new FormData(form);
         const updates = {};
+        const isFaunaUpdate = this.currentTable === 'wildlife_strikes' && !!this.currentRecord;
+        const saveButton = isFaunaUpdate ? document.getElementById('admin-save-btn') : null;
+
+        if (isFaunaUpdate && this.faunaSaveInProgress) return;
+        if (isFaunaUpdate) {
+            this.faunaSaveInProgress = true;
+            if (saveButton) {
+                saveButton.disabled = true;
+                saveButton.setAttribute('aria-busy', 'true');
+            }
+        }
 
         this.currentSchema.forEach(field => {
             // Special case: Always include weekly_total for weekly_frequencies, even if readonly, 
@@ -1127,6 +1138,14 @@ class AdminUI {
                 }
             }
         });
+
+        // PostgreSQL date/time columns accept NULL for optional fields, not an
+        // empty string. Keep this normalization scoped to the Fauna editor.
+        if (isFaunaUpdate) {
+            ['date', 'time'].forEach(fieldName => {
+                if (updates[fieldName] === '') updates[fieldName] = null;
+            });
+        }
 
         try {
             let pkField = 'id';
@@ -1221,7 +1240,11 @@ class AdminUI {
 
             if (recordId) {
                 // Update
-                await window.dataManager.updateTable(this.currentTable, recordId, updates, pkField);
+                if (isFaunaUpdate) {
+                    await window.dataManager.updateWildlifeStrike(recordId, updates);
+                } else {
+                    await window.dataManager.updateTable(this.currentTable, recordId, updates, pkField);
+                }
                 
                 // History Logging via Global Logger
                 if (window.logHistory) {
@@ -1254,9 +1277,56 @@ class AdminUI {
             // Trigger event to refresh data
             window.dispatchEvent(new CustomEvent('data-updated', { detail: { table: this.currentTable } }));
         } catch (err) {
-            console.error(err);
-            alert('Error al guardar: ' + err.message);
+            if (isFaunaUpdate) {
+                console.error('[Fauna][UPDATE wildlife_strikes]', {
+                    recordId: this.currentRecord ? this.currentRecord.id : null,
+                    status: err && (err.httpStatus || err.status) || null,
+                    code: err && err.code || null,
+                    message: err && err.message || String(err)
+                });
+                alert(this.getFaunaUpdateErrorMessage(err));
+            } else {
+                console.error(err);
+                alert('Error al guardar: ' + err.message);
+            }
+        } finally {
+            if (isFaunaUpdate) {
+                this.faunaSaveInProgress = false;
+                if (saveButton) {
+                    saveButton.disabled = false;
+                    saveButton.removeAttribute('aria-busy');
+                }
+            }
         }
+    }
+
+    getFaunaUpdateErrorMessage(error) {
+        const code = String(error && error.code || '');
+        const status = Number(error && (error.httpStatus || error.status) || 0);
+        const message = String(error && error.message || '').toLowerCase();
+
+        if (code === 'FAUNA_AUTH_REQUIRED' || status === 401 || code === 'PGRST301' || message.includes('jwt')) {
+            return 'Tu sesión venció. Inicia sesión nuevamente para guardar los cambios.';
+        }
+        if (code === 'FAUNA_UPDATE_FORBIDDEN' || status === 403 || code === '42501' || message.includes('permission')) {
+            return 'No tienes permiso para editar este registro de Fauna.';
+        }
+        if (code === 'FAUNA_RECORD_NOT_FOUND' || status === 404 || code === 'PGRST116') {
+            return 'El registro ya no existe. Actualiza la información e inténtalo nuevamente.';
+        }
+        if (code === 'FAUNA_INVALID_ID') {
+            return 'No fue posible identificar el registro de Fauna que se desea actualizar.';
+        }
+        if (['22P02', '22007', '23502', '23514'].includes(code) || status === 400 || status === 422) {
+            return 'El servidor rechazó uno de los valores enviados. Revisa la fecha, la hora y los campos numéricos.';
+        }
+        if (error instanceof TypeError || message.includes('failed to fetch') || message.includes('network')) {
+            return 'No fue posible conectar con el servidor. Verifica tu conexión y vuelve a intentarlo.';
+        }
+        if (status >= 500) {
+            return 'El servidor no pudo actualizar el registro de Fauna. Inténtalo nuevamente más tarde.';
+        }
+        return 'No fue posible actualizar el registro de Fauna. Los cambios permanecen en el formulario.';
     }
 
     async deleteRecord(table, id, pkField = 'id') {
