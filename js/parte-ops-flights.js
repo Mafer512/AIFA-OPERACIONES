@@ -484,10 +484,13 @@
             }
 
             const existingIdByMovement = new Map();
+            const existingKeysById = new Map();
             (existingIdentityRows || []).forEach(row => {
+                const id = String(row.id);
+                existingKeysById.set(id, { arr: row.arr_movement_key || null, dep: row.dep_movement_key || null });
                 [row.arr_movement_key, row.dep_movement_key].filter(Boolean).forEach(key => {
                     if (!existingIdByMovement.has(key)) existingIdByMovement.set(key, new Set());
-                    existingIdByMovement.get(key).add(String(row.id));
+                    existingIdByMovement.get(key).add(id);
                 });
             });
 
@@ -548,19 +551,135 @@
 
             const insertItems = [];
             const updateItems = [];
+            const ambiguousItems = [];
             uniquePrepared.forEach(item => {
                 const matchedIds = new Set();
                 item.movementKeys.forEach(key => {
                     (existingIdByMovement.get(key) || []).forEach(id => matchedIds.add(id));
                 });
                 if (matchedIds.size > 1) {
+                    ambiguousItems.push({ item, matchedIds });
+                    return;
+                }
+                if (matchedIds.size === 1) updateItems.push({ id: [...matchedIds][0], ...item });
+                else insertItems.push(item);
+            });
+
+            // Igual que con los duplicados dentro del archivo: si una fila
+            // enlaza con dos registros distintos ya en la base porque el
+            // AODB reemplazó un movimiento cancelado por uno vigente en
+            // importaciones separadas, se actualiza el vigente y se ignora
+            // el cancelado en vez de abortar toda la importación. Solo se
+            // sigue exigiendo revisión manual cuando ambos (o ninguno) de
+            // los registros en conflicto están cancelados/no-operando.
+            let resolvedCancelledInDb = 0;
+            let resolvedTurnaroundReassignInDb = 0;
+            if (ambiguousItems.length) {
+                const ambiguousIds = [...new Set(ambiguousItems.flatMap(({ matchedIds }) => [...matchedIds]))];
+                const statusById = new Map();
+                for (const ids of chunkArray(ambiguousIds, 500)) {
+                    const { data, error } = await supabase
+                        .from(TABLE_NAME)
+                        .select('id,"Status"')
+                        .in('id', ids);
+                    if (error) throw new Error(`No se pudieron revisar los registros en conflicto: ${error.message}`);
+                    (data || []).forEach(row => statusById.set(String(row.id), row.Status));
+                }
+                ambiguousItems.forEach(({ item, matchedIds }) => {
+                    const ids = [...matchedIds];
+                    const activeIds = ids.filter(id => !_EXCLUDED_STATUS_RE.test(String(statusById.get(id) || '').trim()));
+                    const cancelledIds = ids.filter(id => _EXCLUDED_STATUS_RE.test(String(statusById.get(id) || '').trim()));
+                    if (activeIds.length === 1 && cancelledIds.length === ids.length - 1) {
+                        updateItems.push({ id: activeIds[0], ...item });
+                        resolvedCancelledInDb++;
+                        return;
+                    }
+                    // El AODB a veces reasigna a qué salida continúa una
+                    // llegada entre una exportación y otra (la aeronave de
+                    // XN 1503 antes enlazaba con XN 1100 y ahora con
+                    // XN 1106, por ejemplo). Cuando eso pasa, la llegada de
+                    // esta fila y su salida coinciden, cada una, con un
+                    // registro activo DISTINTO ya guardado. Se conserva el
+                    // registro cuya llegada coincide -- es la identidad más
+                    // estable del movimiento -- y se actualiza con el
+                    // enlace nuevo; el enlace de salida obsoleto del otro
+                    // registro se libera más abajo (ver liberación de
+                    // llaves obsoletas) para que no choque con el nuevo.
+                    if (item.arrKey) {
+                        const arrActiveIds = [...(existingIdByMovement.get(item.arrKey) || [])]
+                            .filter(id => activeIds.includes(id));
+                        if (arrActiveIds.length === 1) {
+                            updateItems.push({ id: arrActiveIds[0], ...item });
+                            resolvedTurnaroundReassignInDb++;
+                            return;
+                        }
+                    }
                     throw new Error(
                         `La fila ${item.sourceRow} coincide con más de un registro existente. ` +
                         'La base contiene un enlace de turnaround inconsistente que requiere revisión.'
                     );
-                }
-                if (matchedIds.size === 1) updateItems.push({ id: [...matchedIds][0], ...item });
-                else insertItems.push(item);
+                });
+            }
+
+            // Dos filas distintas del archivo pueden terminar apuntando al
+            // MISMO registro existente: una coincide con su llegada actual
+            // y otra con su salida actual, porque el AODB reasignó cada
+            // mitad del turnaround a un movimiento distinto por separado
+            // (ej. la llegada VB 9405 antes salía como VB 9222 y ahora sale
+            // como VB 842; y la salida VB 9222 antes venía de VB 9405 y
+            // ahora viene de VB 771). Solo una de las dos puede quedarse
+            // con ese id -- se conserva la que coincide por llegada -- y la
+            // otra pasa a ser un vuelo nuevo (insert) en vez de intentar
+            // actualizar el mismo id dos veces, lo cual la base rechaza.
+            let splitTurnaroundReassignments = 0;
+            const updateItemsById = new Map();
+            updateItems.forEach(entry => {
+                if (!updateItemsById.has(entry.id)) updateItemsById.set(entry.id, []);
+                updateItemsById.get(entry.id).push(entry);
+            });
+            const dedupedUpdateItems = [];
+            updateItemsById.forEach(entries => {
+                if (entries.length === 1) { dedupedUpdateItems.push(entries[0]); return; }
+                const existingKeys = existingKeysById.get(entries[0].id) || {};
+                const arrMatch = entries.find(e => e.arrKey && e.arrKey === existingKeys.arr);
+                const winner = arrMatch || entries[0];
+                dedupedUpdateItems.push(winner);
+                entries.forEach(e => {
+                    if (e === winner) return;
+                    const { id, ...rest } = e;
+                    insertItems.push(rest);
+                    splitTurnaroundReassignments++;
+                });
+            });
+            updateItems.length = 0;
+            updateItems.push(...dedupedUpdateItems);
+
+            // Un registro que ya no aparece en este archivo (su propia
+            // llegada o salida cayó fuera de la ventana del CSV) puede
+            // quedarse con una llave de llegada/salida que un registro
+            // que SÍ estamos actualizando ahora necesita para sí mismo
+            // (ver reasignación de rotación arriba). Si no se libera esa
+            // llave obsoleta antes de guardar, la base rechaza el guardado
+            // por violar la restricción de unicidad. Solo se detecta aquí
+            // (de lectura); la limpieza real se hace más abajo, después de
+            // que el usuario confirme la importación.
+            const ARR_CLEAR_FIELDS = HEADERS.filter(h => h.startsWith('[Arr]'));
+            const DEP_CLEAR_FIELDS = HEADERS.filter(h => h.startsWith('[Dep]'));
+            const staleKeyClears = new Map(); // id -> Set('arr' | 'dep')
+            const markStaleHolders = (key, ownTargetId) => {
+                if (!key) return;
+                const holders = existingIdByMovement.get(key);
+                if (!holders) return;
+                const side = key.split('|')[3] === 'A' ? 'arr' : 'dep';
+                holders.forEach(holderId => {
+                    if (holderId === ownTargetId) return;
+                    if (!staleKeyClears.has(holderId)) staleKeyClears.set(holderId, new Set());
+                    staleKeyClears.get(holderId).add(side);
+                });
+            };
+            updateItems.forEach(entry => {
+                markStaleHolders(entry.arrKey, entry.id);
+                markStaleHolders(entry.depKey, entry.id);
             });
 
             const existingFullById = new Map();
@@ -605,13 +724,51 @@
             if (resolvedCancelledInFile) {
                 parts.push(`- ${resolvedCancelledInFile} vuelo(s) tenían un registro cancelado/no-operando duplicado en el archivo (se omitió el cancelado, se conservó el vigente).`);
             }
+            if (resolvedCancelledInDb) {
+                parts.push(`- ${resolvedCancelledInDb} vuelo(s) coincidían con un registro cancelado/no-operando ya guardado en la base (se ignoró ese registro y se actualizó el vigente).`);
+            }
+            if (resolvedTurnaroundReassignInDb) {
+                parts.push(`- ${resolvedTurnaroundReassignInDb} vuelo(s) tenían su rotación reasignada a otra salida en la base (se actualizó el registro de la llegada).`);
+            }
+            if (splitTurnaroundReassignments) {
+                parts.push(`- ${splitTurnaroundReassignments} vuelo(s) formaban parte de un turnaround que se dividió en dos movimientos distintos (se actualizó el registro por su llegada y se creó un vuelo nuevo para la otra mitad).`);
+            }
+            if (staleKeyClears.size) {
+                parts.push(`- ${staleKeyClears.size} registro(s) en la base tenían una llegada/salida que quedó obsoleta por una reasignación de rotación; se liberará ese enlace (no se borra el registro, solo esa mitad del turnaround).`);
+            }
             const confirmMsg = parts.join('\n') + `\n\n¿Deseas continuar con la importación?`;
 
             if (!confirm(confirmMsg)) return;
 
-            // Pass 'true' to append instead of replace
-            await saveToDatabase(insertRows, true);
+            // Libera llaves obsoletas ANTES de escribir los datos nuevos,
+            // para que no choquen con la restricción de unicidad.
+            if (staleKeyClears.size) {
+                const clearRows = [...staleKeyClears.entries()].map(([id, sides]) => {
+                    const payload = { id };
+                    if (sides.has('arr')) ARR_CLEAR_FIELDS.forEach(f => { payload[f] = null; });
+                    if (sides.has('dep')) DEP_CLEAR_FIELDS.forEach(f => { payload[f] = null; });
+                    return payload;
+                });
+                for (const batch of chunkArray(clearRows, 500)) {
+                    const results = await Promise.all([
+                        supabase.from(TABLE_NAME).upsert(batch, { onConflict: 'id' }),
+                        supabase.from(EDIT_TABLE_NAME).upsert(batch, { onConflict: 'id' }),
+                        supabase.from(MANIFIESTOS_MIRROR_TABLE_NAME).upsert(batch, { onConflict: 'id' })
+                    ]);
+                    if (results[0].error) throw new Error(`No se pudo liberar un enlace obsoleto: ${results[0].error.message}`);
+                    results.slice(1).forEach((r, i) => {
+                        if (r.error) console.warn(`[Itinerario] no se pudo liberar enlace obsoleto en tabla espejo ${i}:`, r.error);
+                    });
+                }
+            }
+
+            // Los updates van primero: cuando una fila "pierde" el id y pasa
+            // a insertarse como vuelo nuevo (ver más arriba), su llave
+            // solo queda libre después de que el registro ganador se
+            // actualice con sus datos nuevos. Insertar antes chocaría con
+            // la llave que ese id todavía tiene.
             await updateExistingFlights(updateRows);
+            await saveToDatabase(insertRows, true);
 
             const modalEl = document.getElementById('uploadOpsCsvModal');
             if (modalEl) {
@@ -1605,6 +1762,8 @@
         return {
             sourceRow,
             invalidMovements,
+            arrKey,
+            depKey,
             movementKeys: [arrKey, depKey].filter(Boolean),
             payload: {
                 ...row,
