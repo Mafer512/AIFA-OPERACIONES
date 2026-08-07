@@ -19619,6 +19619,9 @@ async function loadConciliacionManifiestos(options = {}) {
     const errorEl = document.getElementById('conci-manifiestos-error');
     const badge   = document.getElementById('badge-conci-manifiestos-count');
     const config = (typeof Event !== 'undefined' && options instanceof Event) ? {} : (options || {});
+    // Se recalcula aquí (no solo tras renderizar filas) para cubrir también
+    // el atajo de caché y el cambio de pestaña hacia una vista ya cargada.
+    requestAnimationFrame(_conciSyncScrollHeight);
     if (_conciDeferRefreshForLocalEdits({
         allowLocalEditsReplace: config.allowLocalEditsReplace === true,
         notify: config.fromRemoteSync !== true,
@@ -21100,6 +21103,24 @@ function _updateManifiestosSummaryStrip(data, columns) {
     strip.classList.remove('d-none');
 }
 
+// Ajusta el alto del contenedor con scroll (#conci-manifiestos-scroll) al
+// espacio real disponible entre su borde superior y el final de la
+// ventana, en vez de un alto fijo en px — así se aprovecha toda la pantalla
+// y la tabla queda "fija" en ese rango: solo su contenido interno se
+// desplaza (vertical y horizontal), nunca la página completa.
+let _conciScrollResizeTimer = null;
+function _conciSyncScrollHeight() {
+    const wrap = document.getElementById('conci-manifiestos-scroll');
+    if (!wrap || wrap.offsetParent === null) return; // pestaña oculta: nada que medir
+    const top = wrap.getBoundingClientRect().top;
+    const available = window.innerHeight - top - 16;
+    wrap.style.maxHeight = `${Math.max(available, 360)}px`;
+}
+window.addEventListener('resize', () => {
+    clearTimeout(_conciScrollResizeTimer);
+    _conciScrollResizeTimer = setTimeout(_conciSyncScrollHeight, 120);
+});
+
 function _renderConciManifiestosTable(data, columns, fallbackYear) {
     const tableId = 'table-conci-manifiestos';
 
@@ -21267,12 +21288,52 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         });
     }
 
-    // Ajustar top de la fila de filtros al alto real del encabezado (sticky).
+    // Navegación con flechas desde la fila de filtros: ↓ entra a la tabla
+    // (misma columna, primera fila visible editable) y ←/→ pasan al filtro
+    // de la columna vecina — solo cuando el cursor ya está en el extremo del
+    // texto, para no robarle la flecha a la edición normal del filtro.
+    if (!thead.dataset.conciColFilterKeyBound) {
+        thead.dataset.conciColFilterKeyBound = '1';
+        thead.addEventListener('keydown', (ev) => {
+            const inp = ev.target.closest('.conci-col-filter');
+            if (!inp) return;
+            if (ev.key === 'ArrowDown') {
+                ev.preventDefault();
+                const col = inp.dataset.col;
+                for (const tr of _conciVisibleBodyRows()) {
+                    const cell = _conciGetCellInRow(tr, col);
+                    if (cell) {
+                        cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                        _conciActivateCellEditor(cell);
+                        break;
+                    }
+                }
+            } else if (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') {
+                const atStart = inp.selectionStart === 0 && inp.selectionEnd === 0;
+                const atEnd = inp.selectionStart === inp.value.length && inp.selectionEnd === inp.value.length;
+                const inputs = _conciGetVisibleFilterInputs();
+                const idx = inputs.indexOf(inp);
+                if (ev.key === 'ArrowRight' && atEnd && idx >= 0 && idx < inputs.length - 1) {
+                    ev.preventDefault();
+                    inputs[idx + 1].focus();
+                    inputs[idx + 1].select();
+                } else if (ev.key === 'ArrowLeft' && atStart && idx > 0) {
+                    ev.preventDefault();
+                    inputs[idx - 1].focus();
+                    inputs[idx - 1].select();
+                }
+            }
+        });
+    }
+
+    // Ajustar top de la fila de filtros al alto real del encabezado (sticky),
+    // y el alto del contenedor con scroll para aprovechar la pantalla.
     requestAnimationFrame(() => {
         const headerRow = thead.querySelector('tr:first-child');
         if (headerRow && table) {
             table.style.setProperty('--conci-head-h', Math.ceil(headerRow.getBoundingClientRect().height) + 'px');
         }
+        _conciSyncScrollHeight();
     });
 
     // Encabezado fijo vía CSS (position:sticky). Sin manipulación de transform
@@ -21864,6 +21925,81 @@ function _conciGetPrevEditableCell(td) {
         row = row.previousElementSibling;
     }
     return null;
+}
+
+// ── Navegación vertical (↑/↓) y desde la fila de filtros ──────────────────
+// A diferencia de ←/→ (que recorren celdas en orden de lectura, saltando de
+// fila), ↑/↓ se mueven en la MISMA columna, como en una hoja de cálculo, y
+// respetan las filas ocultas por filtros y las columnas ocultas/solo-lectura.
+function _conciVisibleBodyRows() {
+    const table = document.getElementById('table-conci-manifiestos');
+    const tbody = table ? table.querySelector('tbody') : null;
+    if (!tbody) return [];
+    return Array.from(tbody.querySelectorAll('tr[data-row-index]')).filter(tr => tr.style.display !== 'none');
+}
+
+function _conciGetCellInRow(tr, col) {
+    if (!tr) return null;
+    return Array.from(tr.querySelectorAll('td[data-col]'))
+        .find(td => td.dataset.col === col && td.dataset.conciReadonly !== '1') || null;
+}
+
+function _conciGetCellAbove(td) {
+    if (!td) return null;
+    const col = td.dataset.col;
+    const rows = _conciVisibleBodyRows();
+    const idx = rows.indexOf(td.closest('tr'));
+    if (idx <= 0) return null;
+    for (let i = idx - 1; i >= 0; i--) {
+        const cell = _conciGetCellInRow(rows[i], col);
+        if (cell) return cell;
+    }
+    return null;
+}
+
+function _conciGetCellBelow(td) {
+    if (!td) return null;
+    const col = td.dataset.col;
+    const rows = _conciVisibleBodyRows();
+    const idx = rows.indexOf(td.closest('tr'));
+    if (idx === -1 || idx >= rows.length - 1) return null;
+    for (let i = idx + 1; i < rows.length; i++) {
+        const cell = _conciGetCellInRow(rows[i], col);
+        if (cell) return cell;
+    }
+    return null;
+}
+
+function _conciGetVisibleFilterInputs() {
+    const thead = document.querySelector('#table-conci-manifiestos thead');
+    if (!thead) return [];
+    return Array.from(thead.querySelectorAll('.conci-col-filter'))
+        .filter(inp => !inp.closest('th')?.classList.contains('d-none'));
+}
+
+function _conciGetFilterInputForColumn(col) {
+    return _conciGetVisibleFilterInputs().find(inp => inp.dataset.col === col) || null;
+}
+
+// Desde la celda de más arriba de una columna, ↑ regresa al filtro de esa
+// misma columna en vez de no hacer nada.
+function _conciFocusFilterOrAbove(td) {
+    const above = _conciGetCellAbove(td);
+    if (above) {
+        above.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        _conciActivateCellEditor(above);
+        return;
+    }
+    const input = _conciGetFilterInputForColumn(td.dataset.col);
+    if (input) { input.focus(); input.select(); }
+}
+
+function _conciFocusBelow(td) {
+    const below = _conciGetCellBelow(td);
+    if (below) {
+        below.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        _conciActivateCellEditor(below);
+    }
 }
 
 function _conciApplyAirlineCellPreview(td, value) {
@@ -22936,6 +23072,10 @@ function _conciActivateCellEditor(td) {
             // sin importar en qué posición esté el cursor dentro del texto.
             e.preventDefault();
             closeEditor(true, (e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey)) ? 'prev' : 'next');
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            // ↑/↓ se mueven a la misma columna de la fila anterior/siguiente.
+            e.preventDefault();
+            closeEditor(true, e.key === 'ArrowUp' ? 'up' : 'down');
         }
     });
     input.addEventListener('input', () => {
@@ -23016,10 +23156,8 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
         _conciAutoSaveRow(tr);
     }
     // Deja de anunciar esta celda como "en captura" para el resto de usuarios
-    // conectados, y aplica cualquier cambio remoto que haya quedado en espera
-    // mientras este editor estaba abierto.
+    // conectados.
     _conciSetPresenceCell(null, null);
-    _conciMaybeApplyDeferredRemoteRefresh();
     if (move === 'next') {
         const nextCell = _conciGetNextEditableCell(td);
         if (nextCell) {
@@ -23034,7 +23172,16 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
             prevCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
             _conciActivateCellEditor(prevCell);
         }
+    } else if (move === 'up') {
+        _conciFocusFilterOrAbove(td);
+    } else if (move === 'down') {
+        _conciFocusBelow(td);
     }
+    // Aplica un refresco remoto en espera SOLO después de intentar abrir la
+    // siguiente celda: si la navegación deja una celda activa, este chequeo
+    // la detecta (vía _conciHasPendingLocalEdits) y difiere el refresco en
+    // vez de reconstruir la tabla a media navegación y perder el cursor.
+    _conciMaybeApplyDeferredRemoteRefresh();
 }
 
 // Obtiene la fecha (ISO yyyy-mm-dd) del campo FECHA de la misma fila, para
@@ -23201,6 +23348,11 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
                 e.preventDefault();
                 closeEditor(true, 'next');
             }
+        } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            // Igual que ←/→: se prioriza moverse de fila sobre el incremento
+            // nativo de día/mes/año del selector de fecha.
+            e.preventDefault();
+            closeEditor(true, e.key === 'ArrowUp' ? 'up' : 'down');
         }
     };
     const onBlur = (e) => {
