@@ -2,6 +2,7 @@
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
+const compression = require('compression');
 const fs = require('fs');
 const crypto = require('crypto');
 const multer = require('multer');
@@ -112,11 +113,17 @@ const corsOptions = {
   }
 };
 app.use(cors(corsOptions));
+// Reduce de forma importante el peso de HTML, CSS, JS, JSON y SVG.
+app.use(compression({ threshold: 1024 }));
 app.use(express.json({ limit: '256kb' }));
 
 // Cabeceras de cache + seguridad para assets y respuestas.
 app.use((req, res, next) => {
-  res.setHeader('Cache-Control', 'no-store');
+  // El documento y la API deben revalidarse; los recursos con version en la URL
+  // pueden permanecer en cache. express.static completa esta politica abajo.
+  if (req.path === '/' || req.path.endsWith('.html') || req.path.startsWith('/api/')) {
+    res.setHeader('Cache-Control', 'no-cache');
+  }
   // Sin CSP: la SPA usa scripts inline y múltiples CDNs (Bootstrap, Chart.js,
   // PDF.js, Tesseract, SheetJS); una CSP estricta requiere una allowlist probada.
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -313,7 +320,18 @@ api.delete('/parte-operaciones/custom/:date', requireAuth, async (req, res) => {
 app.use('/api', api);
 
 // Serve all static files from the repository root
-app.use(express.static(ROOT, { index: 'index.html' }));
+app.use(express.static(ROOT, {
+  index: 'index.html',
+  etag: true,
+  lastModified: true,
+  maxAge: DEV ? 0 : '30d',
+  immutable: !DEV,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  }
+}));
 
 // Fallback for SPA routes: use a generic middleware (avoids path-to-regexp issues on Express 5)
 app.use((req, res) => {
