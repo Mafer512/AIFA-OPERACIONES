@@ -17218,6 +17218,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnConciMatriculaCatalog) btnConciMatriculaCatalog.addEventListener('click', _conciOpenMatriculaCatalog);
     if (btnConciUndo) btnConciUndo.addEventListener('click', _conciUndoLastChange);
     if (btnConciClearFilters) btnConciClearFilters.addEventListener('click', _conciClearAllTableFilters);
+    _conciInitQuickFlightSearch();
     window.addEventListener('admin-mode-changed', _conciRefreshEditToolbar);
     window.addEventListener('airline-catalog-updated', () => {
         _conciAirlineCatalogLoaded = false;
@@ -17287,7 +17288,7 @@ function _conciColorForUser(name) {
     return _CONCI_LIVE_COLORS[hash % _CONCI_LIVE_COLORS.length];
 }
 let _conciCellClickHandler = null;   // delegated click handler for edit-mode cells
-let _conciTabNavigationHandler = null; // captura Tab para navegación horizontal
+let _conciTabNavigationHandler = null; // captura Tab: avanza de campo (da la vuelta a la fila siguiente/anterior)
 let _conciAirlineCatalogLoaded = false;
 let _conciAirlineCodeMap = new Map();
 let _conciAirlineMasterCodeMap = new Map();
@@ -20028,6 +20029,13 @@ let _conciManifestosAllData = [];   // Referencia al conjunto de datos actual (p
 let _conciManifestosSummaryColumns = [];
 let _conciSummaryLiveOverrides = new Map(); // row index -> { column: current value }
 
+let _conciQuickFlightDebounce = null;
+
+// Quita espacios, guiones y puntos para comparar "XN1107" contra "XN 1107".
+function _conciCompactText(value) {
+    return String(value || '').replace(/[\s.\-_/]/g, '');
+}
+
 // Determina si una fila (tr) es visible bajo los filtros activos.
 function _conciRowPassesPillFilter(tr) {
     if (_conciClassFilter) {
@@ -20050,6 +20058,9 @@ function _conciRowPassesColFilter(tr) {
     const activeText = Object.entries(_conciColFilters).filter(([, v]) => v && v.trim());
     for (const [col, term] of activeText) {
         const lower = term.toLowerCase();
+        // Se compara también sin espacios/guiones/puntos para que "XN1107" o
+        // "xn-1107" encuentren el vuelo capturado como "XN 1107".
+        const compact = _conciCompactText(lower);
         let matched = false;
         for (const td of tr.querySelectorAll('td[data-col]')) {
             if (td.dataset.col === col) {
@@ -20059,7 +20070,8 @@ function _conciRowPassesColFilter(tr) {
                 // comparaba contra "VB". Se revisa contra ambos.
                 const rawVal = (td.dataset.raw || '').toLowerCase();
                 const textVal = (td.textContent || '').toLowerCase();
-                matched = rawVal.includes(lower) || textVal.includes(lower);
+                matched = rawVal.includes(lower) || textVal.includes(lower)
+                    || (!!compact && (_conciCompactText(rawVal).includes(compact) || _conciCompactText(textVal).includes(compact)));
                 break;
             }
         }
@@ -20109,16 +20121,198 @@ function _conciApplyPillFilter() {
     _conciUpdatePillActiveStyles();
 }
 
+// ── Buscador rápido de # de vuelo ────────────────────────────────────────────
+// Filtra la columna "# DE VUELO" y deja el cursor listo en el primer campo
+// capturable de la primera fila visible, para no perder tiempo buscando y
+// haciendo clic antes de capturar.
+function _conciFlightColumnKey() {
+    const fromMenu = (_conciDisplayColumns || []).find(c => /#\s*de\s*vuelo|n[ºo°u]?\.?\s*(de\s*)?vuelo/i.test(c));
+    if (fromMenu) return fromMenu;
+    const th = document.querySelector('#table-conci-manifiestos thead th[data-conci-column-key*="VUELO"]');
+    return th ? th.dataset.conciColumnKey : null;
+}
+
+// Coloca el cursor en la primera celda editable de la primera fila visible.
+function _conciFocusFirstCaptureCell() {
+    if (typeof _conciCanCurrentUserEdit === 'function' && _conciCanCurrentUserEdit() && !_conciEditMode) {
+        _conciEnterEditMode();
+    }
+
+    const row = _conciVisibleBodyRows()[0];
+    if (!row) return false;
+
+    try { row.scrollIntoView({ block: 'nearest' }); } catch (_) { /* navegadores viejos */ }
+
+    const tbody = row.closest('tbody');
+    (tbody || document).querySelectorAll('tr.conci-row-selected').forEach(r => {
+        r.classList.remove('conci-row-selected');
+        r.setAttribute('aria-selected', 'false');
+    });
+    row.classList.add('conci-row-selected');
+    row.setAttribute('aria-selected', 'true');
+
+    if (!_conciEditMode) return true;
+
+    const td = Array.from(row.querySelectorAll('td[data-col]')).find(cell =>
+        cell.dataset.conciReadonly !== '1' && !cell.classList.contains('d-none'));
+    if (!td) return true;
+    _conciActivateCellEditor(td);
+    return true;
+}
+
+function _conciApplyQuickFlightSearch(term, options) {
+    const opts = options || {};
+    const col = _conciFlightColumnKey();
+    if (!col) return;
+
+    const value = String(term || '').trim();
+    if (value) _conciColFilters[col] = value;
+    else delete _conciColFilters[col];
+
+    // Mantener sincronizada la caja de filtro de la propia columna.
+    document.querySelectorAll('#table-conci-manifiestos .conci-col-filter').forEach(inp => {
+        if (inp.dataset.col === col) inp.value = value;
+    });
+
+    _conciApplyPillFilter();
+
+    if (!value) return;
+    const visible = _conciVisibleBodyRows().length;
+    // Enter/↓ siempre saltan a la captura; al escribir, solo cuando el filtro
+    // ya dejó un único vuelo (no tiene caso robar el foco con varios resultados).
+    if (opts.focusFirst || visible === 1) {
+        requestAnimationFrame(() => _conciFocusFirstCaptureCell());
+    }
+}
+
+function _conciClearQuickFlightSearch(focusInput) {
+    const input = document.getElementById('conci-quick-flight');
+    if (input) input.value = '';
+    _conciApplyQuickFlightSearch('');
+    if (focusInput && input) input.focus();
+}
+
+function _conciInitQuickFlightSearch() {
+    const input = document.getElementById('conci-quick-flight');
+    const btnClear = document.getElementById('btn-conci-quick-flight-clear');
+    if (!input || input.dataset.conciQuickBound === '1') return;
+    input.dataset.conciQuickBound = '1';
+
+    input.addEventListener('input', () => {
+        clearTimeout(_conciQuickFlightDebounce);
+        _conciQuickFlightDebounce = setTimeout(() => _conciApplyQuickFlightSearch(input.value), 200);
+    });
+
+    input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === 'ArrowDown') {
+            // Enter y ↓ hacen lo mismo: aplican el filtro y saltan a capturar,
+            // sin depender del mouse.
+            ev.preventDefault();
+            clearTimeout(_conciQuickFlightDebounce);
+            _conciApplyQuickFlightSearch(input.value, { focusFirst: true });
+        } else if (ev.key === 'Escape') {
+            ev.preventDefault();
+            clearTimeout(_conciQuickFlightDebounce);
+            _conciClearQuickFlightSearch(true);
+        }
+    });
+
+    if (btnClear) btnClear.addEventListener('click', () => {
+        clearTimeout(_conciQuickFlightDebounce);
+        _conciClearQuickFlightSearch(true);
+    });
+}
+
+// ── Campos de fecha con máscara dd/mm/aaaa ────────────────────────────────────
+// Convierte un input en campo de fecha dd/mm/aaaa: acomoda las diagonales
+// mientras se teclea y completa el año a 4 dígitos al salir del campo.
+// Sólo se usa en las celdas capturables de la tabla; los filtros de la barra
+// siguen siendo <input type="date"> nativos, con su calendario, tal cual.
+function _conciAttachDateMask(input) {
+    if (!input || input.dataset.conciDateMask === '1') return;
+    const isoValue = input.value;
+    input.type = 'text';
+    input.dataset.conciDateMask = '1';
+    input.inputMode = 'numeric';
+    input.autocomplete = 'off';
+    input.maxLength = 10;
+    input.placeholder = 'dd/mm/aaaa';
+
+    const onlyDigits = value => String(value || '').replace(/\D/g, '');
+
+    // Se guardan aparte los dígitos que realmente tecleó el usuario: en pantalla
+    // "10/10/2026" puede venir de 6 teclas ("101026", con el siglo completado)
+    // o de 8, y hay que distinguirlo para que al seguir escribiendo se pueda
+    // capturar un año de otro siglo.
+    // `notify` reemite el evento "input" que el teclado ya no dispara (se
+    // intercepta con preventDefault). Sin él, el editor de la celda nunca se
+    // entera de que hubo captura y no guardaría lo tecleado.
+    const render = (digits, notify) => {
+        const raw = onlyDigits(digits).slice(0, 8);
+        input.dataset.conciDateDigits = raw;
+        input.value = _conciFormatDateMask(raw);
+        if (document.activeElement === input) {
+            const end = input.value.length;
+            input.setSelectionRange(end, end);
+        }
+        if (notify) input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    // El valor con el que se abre la celda viene en ISO.
+    render(isoValue ? onlyDigits(_conciIsoToMaskedDate(isoValue) || isoValue) : '', false);
+
+    // Se maneja la escritura en keydown (y no reformateando en "input") porque
+    // la pantalla deja de coincidir dígito a dígito con lo tecleado en cuanto
+    // el siglo se completa solo.
+    input.addEventListener('keydown', (ev) => {
+        if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+        const raw = input.dataset.conciDateDigits || '';
+        const hasSelection = input.selectionStart !== input.selectionEnd;
+        if (/^\d$/.test(ev.key)) {
+            ev.preventDefault();
+            // Teclear sobre el texto seleccionado reemplaza la fecha completa.
+            render((hasSelection ? '' : raw) + ev.key, true);
+        } else if (ev.key === 'Backspace') {
+            ev.preventDefault();
+            render(hasSelection ? '' : raw.slice(0, -1), true);
+        }
+        // Tab, Enter, Escape y las flechas pasan intactas: la navegación de la
+        // tabla sigue funcionando igual sobre este campo.
+    });
+
+    // Red para lo que no viene del teclado: pegar, autocompletar, etc.
+    input.addEventListener('input', () => {
+        if (input.value === _conciFormatDateMask(input.dataset.conciDateDigits || '')) return;
+        // Ya se está propagando un "input" real; no hace falta reemitirlo.
+        render(input.value, false);
+    });
+
+    // Al salir se completa el año si quedó a medias. No se emite "change": el
+    // editor de la celda ya tiene su propio ciclo de confirmación y este blur
+    // corre antes que él.
+    input.addEventListener('blur', () => {
+        const expanded = _conciExpandDateMaskYear(input.value);
+        if (expanded !== input.value) input.value = expanded;
+    });
+}
+
 // ── Filtro desplegable estilo Excel para columnas de manifiestos ──────────────────
 function _conciClearAllTableFilters() {
     if (_conciColFilterDebounce) {
         clearTimeout(_conciColFilterDebounce);
         _conciColFilterDebounce = null;
     }
+    if (_conciQuickFlightDebounce) {
+        clearTimeout(_conciQuickFlightDebounce);
+        _conciQuickFlightDebounce = null;
+    }
     _conciClassFilter = null;
     _conciDirFilter = null;
     _conciColFilters = {};
     _conciExcelFilters = {};
+
+    const quickFlightInput = document.getElementById('conci-quick-flight');
+    if (quickFlightInput) quickFlightInput.value = '';
 
     document.querySelectorAll('#table-conci-manifiestos .conci-col-filter').forEach(input => {
         input.value = '';
@@ -21749,6 +21943,11 @@ function _conciEnsureEditStyles() {
             background: #ffffff;
             color: #212529;
         }
+        #table-conci-manifiestos .conci-cell-dt input.conci-dt-date {
+            width: 92px;
+            text-align: center;
+            letter-spacing: 0.5px;
+        }
         #table-conci-manifiestos .conci-cell-dt input.conci-dt-time {
             width: 58px;
             text-align: center;
@@ -21896,6 +22095,57 @@ function _conciIsValidIsoDateInput(value) {
     );
 }
 
+// ── Máscara dd/mm/aaaa ────────────────────────────────────────────────────────
+// El <input type="date"> nativo no permite capturar el año con 2 dígitos: el
+// navegador es dueño de sus segmentos y siempre espera los 4. Por eso las
+// celdas de fecha capturables de la tabla (CIERRE SUBSECRETARIA, FECHA, slots
+// y horas) usan inputs de texto con esta máscara, que sí puede dar por hecho
+// el prefijo "20". Los filtros de la barra superior siguen siendo nativos.
+
+// Da formato dd/mm/aaaa a los dígitos capturados, sin validar el calendario.
+// En cuanto el año llega a 2 dígitos se completa en pantalla a 20XX, que es el
+// caso normal de captura: teclear "101026" deja "10/10/2026" al instante, sin
+// escribir el siglo. Si se siguen tecleando dígitos el año se toma tal cual
+// (3-4 dígitos), para poder registrar cualquier otro año en el mismo campo.
+function _conciFormatDateMask(value) {
+    const digits = String(value || '').replace(/\D/g, '').slice(0, 8);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    const year = digits.slice(4);
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${year.length === 2 ? `20${year}` : year}`;
+}
+
+// Convierte lo capturado en la máscara a ISO (yyyy-mm-dd), o '' si aún no es
+// una fecha real. El año se toma con 2 dígitos como 20XX ("26" → 2026), que es
+// el caso normal de captura; con 4 dígitos se respeta tal cual, para poder
+// registrar cualquier otro año sin salirse del mismo campo.
+function _conciMaskedDateToIso(value) {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (digits.length !== 6 && digits.length !== 8) return '';
+    const day = parseInt(digits.slice(0, 2), 10);
+    const month = parseInt(digits.slice(2, 4), 10);
+    const yearDigits = digits.slice(4);
+    const year = yearDigits.length === 2
+        ? 2000 + parseInt(yearDigits, 10)
+        : parseInt(yearDigits, 10);
+    if (!_conciIsValidCalendarDate(year, month, day)) return '';
+    return `${year}-${_conciPad2(month)}-${_conciPad2(day)}`;
+}
+
+// ISO (yyyy-mm-dd) → texto de la máscara (dd/mm/aaaa).
+function _conciIsoToMaskedDate(value) {
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+}
+
+// Deja el campo con el año ya completo a 4 dígitos ("12/03/26" → "12/03/2026").
+// Devuelve el texto final; si lo capturado no es una fecha real lo deja igual,
+// para que el usuario vea lo que escribió y pueda corregirlo.
+function _conciExpandDateMaskYear(value) {
+    const iso = _conciMaskedDateToIso(value);
+    return iso ? _conciIsoToMaskedDate(iso) : _conciFormatDateMask(value);
+}
+
 function _conciGetNextEditableCell(td) {
     if (!td) return null;
     const SEL = 'td[data-col]:not([data-conci-readonly="1"])';
@@ -21931,6 +22181,7 @@ function _conciGetPrevEditableCell(td) {
 // A diferencia de ←/→ (que recorren celdas en orden de lectura, saltando de
 // fila), ↑/↓ se mueven en la MISMA columna, como en una hoja de cálculo, y
 // respetan las filas ocultas por filtros y las columnas ocultas/solo-lectura.
+// También lo usa el buscador rápido de vuelo para ubicar la primera fila.
 function _conciVisibleBodyRows() {
     const table = document.getElementById('table-conci-manifiestos');
     const tbody = table ? table.querySelector('tbody') : null;
@@ -21982,12 +22233,21 @@ function _conciGetFilterInputForColumn(col) {
 }
 
 // Desde la celda de más arriba de una columna, ↑ regresa al filtro de esa
-// misma columna en vez de no hacer nada.
+// misma columna en vez de no hacer nada. Si se llegó a la tabla desde el
+// buscador rápido de vuelo, ↑ devuelve el foco a ese buscador con el texto
+// seleccionado: así se captura un vuelo y se busca el siguiente sin soltar el
+// teclado (buscar → ↓ → capturar → ↑ → buscar el que sigue).
 function _conciFocusFilterOrAbove(td) {
     const above = _conciGetCellAbove(td);
     if (above) {
         above.scrollIntoView({ block: 'nearest', inline: 'nearest' });
         _conciActivateCellEditor(above);
+        return;
+    }
+    const quickSearch = document.getElementById('conci-quick-flight');
+    if (quickSearch && quickSearch.value.trim()) {
+        quickSearch.focus();
+        quickSearch.select();
         return;
     }
     const input = _conciGetFilterInputForColumn(td.dataset.col);
@@ -23206,14 +23466,15 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
     const wrap = document.createElement('span');
     wrap.className = 'conci-cell-dt';
 
+    // Campo de texto con máscara dd/mm/aaaa (no <input type="date">): el control
+    // nativo no deja capturar el año con 2 dígitos porque el navegador es dueño
+    // de sus segmentos y siempre espera los 4.
     const dateInput = document.createElement('input');
-    dateInput.type = 'date';
     dateInput.className = 'conci-dt-date';
-    dateInput.min = '1000-01-01';
-    dateInput.max = '9999-12-31';
     if (parts && _conciIsValidCalendarDate(parts.year, parts.month, parts.day)) {
         dateInput.value = `${parts.year}-${_conciPad2(parts.month)}-${_conciPad2(parts.day)}`;
     }
+    _conciAttachDateMask(dateInput);
     wrap.appendChild(dateInput);
 
     let timeInput = null;
@@ -23260,7 +23521,11 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
         return false;
     };
     const buildValidatedRaw = (reportErrors = true) => {
-        const dv = dateInput.value;
+        // El campo trae la fecha con m\u00e1scara dd/mm/aaaa. Al pasarla a ISO se
+        // completa el a\u00f1o de 2 d\u00edgitos a 20XX y se valida el calendario, as\u00ed
+        // que "12/03/26" y "12/03/2026" llegan aqu\u00ed como la misma fecha.
+        const dateText = String(dateInput.value || '').trim();
+        const dv = _conciMaskedDateToIso(dateText);
         const rawTime = withTime && timeInput ? String(timeInput.value || '').trim() : '';
         clearInvalidState(dateInput);
         clearInvalidState(timeInput);
@@ -23269,9 +23534,8 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
             ok: reportErrors ? rejectInvalidInput(input, message) : false
         });
 
-        if (dateInput.validity.badInput || dateInput.validity.rangeUnderflow
-            || dateInput.validity.rangeOverflow || (dv && !_conciIsValidIsoDateInput(dv))) {
-            return reject(dateInput, 'Fecha inv\u00e1lida. Captura una fecha real con a\u00f1o de 4 d\u00edgitos.');
+        if (dateText && !dv) {
+            return reject(dateInput, 'Fecha inv\u00e1lida. Captura la fecha como dd/mm/aa (el a\u00f1o 20 va impl\u00edcito).');
         }
         if (rawTime && !dv) {
             return reject(dateInput, 'Captura una fecha v\u00e1lida antes de indicar la hora.');
@@ -23403,7 +23667,7 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
     // queda editable por si se requiere ajustarla.
     if (withTime && timeInput && !dateInput.value) {
         const isoFromFecha = _conciRowFechaIso(td);
-        if (isoFromFecha) dateInput.value = isoFromFecha;
+        if (isoFromFecha) dateInput.value = _conciIsoToMaskedDate(isoFromFecha);
     }
 
     // Enfoca hora si la fecha ya está puesta (caso típico: solo ajustar la hora).
