@@ -14231,7 +14231,12 @@ body.dark-mode #yoy-insights-list li {
     display: flex;
     align-items: center;
     position: relative;
-    z-index: 100;
+    /* Debe quedar por ENCIMA del <header> (z-index:1300): el tooltip de los
+       chips se abre hacia arriba (bottom: calc(100% + 8px)) y, al ser esta
+       barra un hermano del header con menor z-index, el propio contexto de
+       apilamiento lo atrapaba debajo aunque el tooltip pidiera z-index:9999
+       — ese valor solo compite dentro de este contenedor, no contra el header. */
+    z-index: 1310;
     box-shadow: 0 2px 12px rgba(0, 0, 0, .35);
 }
 .ag-tb-inner {
