@@ -18348,6 +18348,123 @@ async function _ensureConciAircraftTypeMap() {
     }
 }
 
+// Catálogo de códigos de demora (public.catalogo_demoras) que alimenta el combo
+// de la columna CÓDIGO DEMORA. Se descarga una sola vez por sesión y el filtrado
+// del typeahead se hace en memoria: el catálogo es chico (decenas de filas) y así
+// escribir no dispara una consulta por cada tecla.
+let _conciDemoraCatalogByMovement = { LLEGADAS: [], SALIDAS: [], GENERAL: [] };
+let _conciDemoraCatalogLoaded = false;
+let _conciDemoraCatalogPromise = null;
+
+// Un mismo `codigo` aparece en varias filas del catálogo, con distinto `motivo`
+// (p. ej. CTB tiene tres). Como en la celda sólo se guarda el código, esas filas
+// se fusionan en una sola opción en vez de listar entradas repetidas que
+// guardarían todas lo mismo: el título usa la subfamilia (`descripcion`, p. ej.
+// "TRAFICO") o la `causa` cuando aquélla viene vacía, y los `motivo` se juntan
+// como texto secundario. El índice de búsqueda conserva el texto de todas las
+// filas del código, para que el respaldo por causa/descripción las encuentre.
+// El catálogo está lleno de acentos ("migración", "METEOROLOGÍA") pero se captura
+// sin ellos: tanto el índice como lo tecleado se comparan sin diacríticos.
+function _conciDemoraSearchText(value) {
+    return String(value == null ? '' : value)
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .toLowerCase();
+}
+
+function _conciDemoraAccumulateRow(bucket, row) {
+    const codigo = String(row?.codigo || '').trim().toUpperCase();
+    if (!codigo) return;
+    const causa = String(row?.causa || '').trim();
+    const descripcion = String(row?.descripcion || '').trim();
+    const motivo = String(row?.motivo || '').trim();
+
+    let entry = bucket.get(codigo);
+    if (!entry) {
+        entry = { codigo, titulo: '', detalles: [], search: _conciDemoraSearchText(codigo) };
+        bucket.set(codigo, entry);
+    }
+    if (!entry.titulo) entry.titulo = descripcion || causa;
+    if (motivo && !entry.detalles.includes(motivo)) entry.detalles.push(motivo);
+    entry.search += ` ${_conciDemoraSearchText(`${causa} ${descripcion} ${motivo}`)}`;
+}
+
+function _conciDemoraFinalizeBucket(bucket) {
+    return Array.from(bucket.values()).map(entry => ({
+        codigo: entry.codigo,
+        label: entry.titulo ? `${entry.codigo} — ${entry.titulo}` : entry.codigo,
+        detalle: entry.detalles.join(' · '),
+        search: entry.search
+    })).sort((a, b) => a.codigo.localeCompare(b.codigo, 'es'));
+}
+
+async function _ensureConciDemoraCatalog(client) {
+    if (_conciDemoraCatalogLoaded) return _conciDemoraCatalogByMovement;
+    if (_conciDemoraCatalogPromise) return _conciDemoraCatalogPromise;
+
+    _conciDemoraCatalogPromise = (async () => {
+        try {
+            let activeClient = client || window.supabaseClient;
+            if (!activeClient && window.ensureSupabaseClient) activeClient = await window.ensureSupabaseClient();
+            if (!activeClient) return _conciDemoraCatalogByMovement;
+            const { data, error } = await activeClient
+                .from('catalogo_demoras')
+                .select('codigo, causa, descripcion, motivo, tipo_evento, tipo_movimiento')
+                .eq('activo', true)
+                .eq('tipo_evento', 'DEMORA')
+                .order('codigo', { ascending: true });
+            if (error) throw error;
+            const buckets = { LLEGADAS: new Map(), SALIDAS: new Map(), GENERAL: new Map() };
+            (data || []).forEach(row => {
+                const movement = String(row?.tipo_movimiento || '').trim().toUpperCase();
+                if (buckets[movement]) _conciDemoraAccumulateRow(buckets[movement], row);
+            });
+            const groups = {
+                LLEGADAS: _conciDemoraFinalizeBucket(buckets.LLEGADAS),
+                SALIDAS: _conciDemoraFinalizeBucket(buckets.SALIDAS),
+                GENERAL: _conciDemoraFinalizeBucket(buckets.GENERAL)
+            };
+            _conciDemoraCatalogByMovement = groups;
+            // Sólo se da por cargado si trajo opciones; si vino vacío se reintenta en
+            // el siguiente refresco de la tabla en vez de quedar sin combo toda la sesión.
+            _conciDemoraCatalogLoaded = !!(groups.LLEGADAS.length || groups.SALIDAS.length || groups.GENERAL.length);
+            if (!_conciDemoraCatalogLoaded) {
+                console.warn('[Conciliación] catalogo_demoras no devolvió filas con activo=true y tipo_evento=DEMORA; CÓDIGO DEMORA queda como texto libre.');
+            }
+        } catch (e) {
+            // Sin catálogo el editor cae a texto libre; se reintenta en el próximo refresco.
+            console.warn('[Conciliación] No se pudo cargar catalogo_demoras', e);
+        } finally {
+            _conciDemoraCatalogPromise = null;
+        }
+        return _conciDemoraCatalogByMovement;
+    })();
+    return _conciDemoraCatalogPromise;
+}
+
+// Todas las opciones del catálogo, sin acotar por dirección.
+//
+// Decisión del 11/08/2026: aunque catalogo_demoras clasifica por tipo_movimiento,
+// LLEGADAS solo tiene 5 códigos contra 100 de SALIDAS, y filtrar por dirección
+// dejaba a los capturistas sin poder registrar demoras de llegada que no fueran
+// meteorología o repercusión. Se ofrecen los 105 en cualquier fila. Si algún día
+// se completa la clasificación, aquí es donde se vuelve a acotar por movimiento.
+function _conciDemoraAllOptions() {
+    const catalog = _conciDemoraCatalogByMovement || {};
+    const merged = new Map();
+    [...(catalog.LLEGADAS || []), ...(catalog.SALIDAS || []), ...(catalog.GENERAL || [])].forEach(option => {
+        const previous = merged.get(option.codigo);
+        if (!previous) { merged.set(option.codigo, { ...option }); return; }
+        // Mismo código clasificado en dos movimientos: queda una sola entrada que
+        // conserva el texto de ambas para no perder motivos ni capacidad de búsqueda.
+        if (!previous.detalle) previous.detalle = option.detalle;
+        else if (option.detalle && !previous.detalle.includes(option.detalle)) previous.detalle += ` · ${option.detalle}`;
+        previous.search += ` ${option.search}`;
+    });
+    return Array.from(merged.values())
+        .sort((a, b) => a.codigo.localeCompare(b.codigo, 'es'));
+}
+
 // Países por IATA provenientes de public.catalogo_aeropuertos. Se conserva en
 // memoria durante la sesión y se usa antes que el CSV local para clasificar rutas.
 let _conciAirportCountryByIata = new Map();
@@ -19827,6 +19944,7 @@ async function loadConciliacionManifiestos(options = {}) {
             _ensureConciAirlineOverrides(),
             _ensureConciMatriculaCatalog(),
             _ensureConciAircraftTypeMap(),
+            _ensureConciDemoraCatalog(client),
         ]);
 
         if (requestSeq !== _conciLoadRequestSeq) return;
@@ -22037,6 +22155,31 @@ function _conciEnsureEditStyles() {
             color: #94a3b8;
             font-size: 0.8rem;
         }
+
+        /* Sugerencias de CÓDIGO DEMORA: mismo panel que AERONAVE, pero con una
+           segunda línea opcional (motivo/descripción) bajo la causa. */
+        .conci-demora-suggest-body {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 1px;
+        }
+        .conci-demora-suggest-body .conci-aeronave-suggest-name { flex: none; }
+        .conci-demora-suggest-sub {
+            font-size: 0.7rem;
+            line-height: 1.25;
+            color: #64748b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .conci-aeronave-suggest-item.conci-aeronave-suggest-active .conci-demora-suggest-sub {
+            color: #1d4ed8;
+        }
+        #table-conci-manifiestos td[data-col].conci-cell-invalid-code {
+            box-shadow: inset 0 0 0 2px #dc3545;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -22532,6 +22675,11 @@ function _conciIsAeronaveColumn(column) {
     return _conciNormalizedColumnName(column) === 'aeronave';
 }
 
+function _conciIsCodigoDemoraColumn(column) {
+    const key = _conciNormalizedColumnName(column);
+    return key === 'codigo demora' || key === 'codigo de demora';
+}
+
 function _conciNormalizeManifestType(value) {
     const key = _conciNormalizedColumnName(value);
     if (/lleg|arr/.test(key)) return 'Llegada';
@@ -22845,6 +22993,227 @@ function _conciActivateAeronaveEditor(td, currentRaw) {
     input.addEventListener('blur', () => closeEditor(true, false));
 
     input.focus();
+}
+
+// Panel de sugerencias del editor de CÓDIGO DEMORA. Reutiliza el estilo del de
+// AERONAVE (tarjeta flotante con ícono y resaltado) pero es un nodo aparte para
+// que ambos editores puedan convivir sin pisarse.
+function _conciDemoraSuggestEl() {
+    let el = document.getElementById('conci-demora-suggest');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'conci-demora-suggest';
+        el.className = 'conci-aeronave-suggest d-none';
+        document.body.appendChild(el);
+    }
+    return el;
+}
+
+// Dirección del vuelo de la fila, con el mismo criterio que los pills
+// Prefijo sobre `codigo` primero (escribir "A" lista todos los que empiezan con
+// A); si eso no da nada, respaldo por causa/descripción para quien no recuerda el
+// código. Las opciones ya vienen ordenadas por código ascendente.
+//
+// El catálogo incluye un código "R" cuyo propio motivo dice "Agregar antes de
+// cada código de demora de una causa anterior": no se captura solo, se antepone
+// a otro código (RCTB, RAAM…). Esas combinaciones no existen como fila propia,
+// así que se generan al vuelo para que el combo las ofrezca y las acepte.
+const _CONCI_DEMORA_PREFIX_CODE = 'R';
+
+function _conciDemoraPrefixVariants(options, query) {
+    const q = _conciDemoraSearchText(query);
+    if (q.length < 2 || q[0] !== _conciDemoraSearchText(_CONCI_DEMORA_PREFIX_CODE)) return [];
+    if (!options.some(option => option.codigo === _CONCI_DEMORA_PREFIX_CODE)) return [];
+    const base = q.slice(1);
+    return options
+        .filter(option => option.codigo !== _CONCI_DEMORA_PREFIX_CODE
+            && _conciDemoraSearchText(option.codigo).startsWith(base))
+        .map(option => ({
+            codigo: `${_CONCI_DEMORA_PREFIX_CODE}${option.codigo}`,
+            label: `${_CONCI_DEMORA_PREFIX_CODE} + ${option.label}`,
+            detalle: `Repercusión antepuesta a ${option.codigo}${option.detalle ? ' · ' + option.detalle : ''}`,
+            search: `${_conciDemoraSearchText(_CONCI_DEMORA_PREFIX_CODE)}${option.search}`
+        }));
+}
+
+function _conciDemoraFilterOptions(options, query) {
+    const q = _conciDemoraSearchText(String(query || '').trim());
+    if (!q) return options.slice(0, 60);
+    const byPrefix = options.filter(option => _conciDemoraSearchText(option.codigo).startsWith(q));
+    const variants = _conciDemoraPrefixVariants(options, q);
+    if (byPrefix.length || variants.length) return byPrefix.concat(variants).slice(0, 60);
+    return options.filter(option => option.search.includes(q)).slice(0, 60);
+}
+
+// Editor de la columna CÓDIGO DEMORA: combobox con autocompletado contra
+// public.catalogo_demoras, filtrado por la dirección de la fila. Se guarda sólo
+// el `codigo` (igual que antes) y no se admiten códigos fuera del catálogo.
+function _conciActivateDemoraCodeEditor(td, currentRaw) {
+    const options = _conciDemoraAllOptions();
+    const code = String(currentRaw || '').trim().toUpperCase();
+    const optionByCode = new Map(options.map(option => [option.codigo, option]));
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'form-control form-control-sm conci-cell-input';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.placeholder = 'Código o causa…';
+    input.value = code;
+
+    td.classList.add('conci-cell-active');
+    td._conciEditorStartRaw = code;
+    td.textContent = '';
+    td.appendChild(input);
+
+    const suggest = _conciDemoraSuggestEl();
+    let activeIndex = -1;
+    let currentMatches = [];
+
+    const positionSuggest = () => {
+        const r = input.getBoundingClientRect();
+        suggest.style.left = `${Math.round(r.left)}px`;
+        suggest.style.top = `${Math.round(r.bottom + 4)}px`;
+        suggest.style.width = `${Math.max(Math.round(r.width), 300)}px`;
+    };
+
+    const closeSuggest = () => {
+        suggest.classList.add('d-none');
+        suggest.innerHTML = '';
+        activeIndex = -1;
+        currentMatches = [];
+        suggest.removeEventListener('mousedown', onSuggestMouseDown);
+        window.removeEventListener('scroll', positionSuggest, true);
+        window.removeEventListener('resize', positionSuggest);
+    };
+
+    const setActive = (idx) => {
+        const items = suggest.querySelectorAll('.conci-aeronave-suggest-item');
+        items.forEach(item => item.classList.remove('conci-aeronave-suggest-active'));
+        activeIndex = idx;
+        if (idx >= 0 && items[idx]) {
+            items[idx].classList.add('conci-aeronave-suggest-active');
+            items[idx].scrollIntoView({ block: 'nearest' });
+        }
+    };
+
+    const renderSuggest = (query) => {
+        const q = String(query || '').trim().toLowerCase();
+        currentMatches = _conciDemoraFilterOptions(options, q);
+
+        if (!options.length) {
+            suggest.innerHTML = '<div class="conci-aeronave-suggest-empty">Catálogo de demoras no disponible</div>';
+        } else {
+            suggest.innerHTML = currentMatches.length ? currentMatches.map((option, i) => `
+                <div class="conci-aeronave-suggest-item" data-idx="${i}">
+                    <span class="conci-aeronave-suggest-icon"><i class="fas fa-clock"></i></span>
+                    <span class="conci-demora-suggest-body">
+                        <span class="conci-aeronave-suggest-name">${_conciAeronaveHighlight(option.label, q)}</span>
+                        ${option.detalle ? `<span class="conci-demora-suggest-sub">${_conciCatalogEsc(option.detalle)}</span>` : ''}
+                    </span>
+                    <span class="conci-aeronave-suggest-code">${_conciCatalogEsc(option.codigo)}</span>
+                </div>`).join('') : '<div class="conci-aeronave-suggest-empty">Sin resultados</div>';
+        }
+
+        positionSuggest();
+        suggest.classList.remove('d-none');
+        setActive(-1);
+        suggest.addEventListener('mousedown', onSuggestMouseDown);
+        window.addEventListener('scroll', positionSuggest, true);
+        window.addEventListener('resize', positionSuggest);
+    };
+
+    const pickMatch = (option) => { input.value = option.codigo; };
+
+    function onSuggestMouseDown(event) {
+        const item = event.target.closest('.conci-aeronave-suggest-item');
+        if (!item) return;
+        event.preventDefault(); // evita el blur del input antes de procesar el clic
+        const option = currentMatches[parseInt(item.dataset.idx, 10)];
+        if (option) { pickMatch(option); closeEditor(true, false); }
+    }
+
+    // Acepta el código exacto, la etiqueta completa "CÓDIGO — causa" y, si lo
+    // escrito filtra a una sola opción, esa única coincidencia.
+    const resolveInput = (raw) => {
+        const text = String(raw || '').trim();
+        if (!text) return { codigo: '', option: null, ok: true };
+        const upper = text.toUpperCase();
+        if (optionByCode.has(upper)) return { codigo: upper, option: optionByCode.get(upper), ok: true };
+        const head = upper.split(/[—–-]/)[0].trim();
+        if (optionByCode.has(head)) return { codigo: head, option: optionByCode.get(head), ok: true };
+        // Combinación "R" + código (repercusión), válida aunque no sea fila del catálogo.
+        const variant = _conciDemoraPrefixVariants(options, upper).find(v => v.codigo === upper);
+        if (variant) return { codigo: upper, option: variant, ok: true };
+        const matches = _conciDemoraFilterOptions(options, text);
+        if (matches.length === 1) return { codigo: matches[0].codigo, option: matches[0], ok: true };
+        return { codigo: '', option: null, ok: false };
+    };
+
+    let closed = false;
+    const closeEditor = (accept, move) => {
+        if (closed) return;
+        closed = true;
+        td._conciCloseEditor = null;
+        closeSuggest();
+
+        if (!accept) {
+            _conciCommitCellRaw(td, code, move, code);
+            return;
+        }
+        // Sin catálogo cargado no se bloquea la captura: se guarda tal cual.
+        if (!options.length) {
+            const typed = _conciNormalizeEditableCellText(input.value).toUpperCase();
+            _conciCommitCellRaw(td, typed, move, typed);
+            return;
+        }
+        const resolved = resolveInput(input.value);
+        if (!resolved.ok) {
+            // Código inexistente: se descarta y la celda vuelve a su valor previo.
+            _conciCommitCellRaw(td, code, move, code);
+            td.classList.add('conci-cell-invalid-code');
+            setTimeout(() => td.classList.remove('conci-cell-invalid-code'), 1500);
+            if (typeof showNotification === 'function') {
+                showNotification(`"${String(input.value).trim()}" no existe en el catálogo de códigos de demora.`, 'warning');
+            }
+            return;
+        }
+        _conciCommitCellRaw(td, resolved.codigo, move, resolved.codigo);
+        if (resolved.option) td.title = resolved.option.label;
+    };
+    td._conciCloseEditor = closeEditor;
+
+    // No se fuerza mayúsculas al teclear (movería el cursor al final): el filtrado
+    // es insensible a mayúsculas y el valor se normaliza al confirmar.
+    input.addEventListener('input', () => renderSuggest(input.value));
+    input.addEventListener('focus', () => { renderSuggest(input.value); input.select(); });
+    input.addEventListener('keydown', event => {
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            if (suggest.classList.contains('d-none')) renderSuggest(input.value);
+            else setActive(Math.min(activeIndex + 1, currentMatches.length - 1));
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            setActive(Math.max(activeIndex - 1, 0));
+        } else if (event.key === 'Enter') {
+            event.preventDefault();
+            if (activeIndex >= 0 && currentMatches[activeIndex]) pickMatch(currentMatches[activeIndex]);
+            closeEditor(true, 'next');
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            closeEditor(false, false);
+        } else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+            // →/← se comportan igual que Tab/Shift+Tab, como en el editor de AERONAVE.
+            event.preventDefault();
+            const goingBack = event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey);
+            if (!goingBack && activeIndex >= 0 && currentMatches[activeIndex]) pickMatch(currentMatches[activeIndex]);
+            closeEditor(true, goingBack ? 'prev' : 'next');
+        }
+    });
+    input.addEventListener('blur', () => closeEditor(true, false));
+
+    input.focus();
+    input.select();
 }
 
 function _conciIsOperationTypeColumn(column) {
@@ -23278,6 +23647,10 @@ function _conciActivateCellEditor(td) {
     }
     if (_conciIsAeronaveColumn(col)) {
         _conciActivateAeronaveEditor(td, currentRaw);
+        return;
+    }
+    if (_conciIsCodigoDemoraColumn(col)) {
+        _conciActivateDemoraCodeEditor(td, currentRaw);
         return;
     }
     // Editor amigable para columnas de fecha / fecha+hora: calendario + hora 24h.
