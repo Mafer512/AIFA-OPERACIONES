@@ -35806,7 +35806,12 @@ FF
     <script src="js/muebles-bienes.js?v=4"></script>
     <script src="js/email-analisis.js"></script>
     <script src="js/agenda.js?v=8"></script>
-    <script src="js/agenda-assistant.js?v=1"></script>
+    <!-- Asistente AIFA (tool calling + voz). Sustituye a js/agenda-assistant.js,
+         que se conserva en el repositorio por si se necesita volver atrás.
+         El orden importa: datos → motor → interfaz. -->
+    <script src="js/asistente-aifa-datos.js?v=1"></script>
+    <script src="js/asistente-aifa.js?v=1"></script>
+    <script src="js/asistente-aifa-ui.js?v=1"></script>
     <script src="js/coyh-asistencia.js?v=1"></script>
     <script src="js/ssei-derrames.js?v=3"></script>
     <script src="js/ssei-emergencias.js?v=4"></script>
