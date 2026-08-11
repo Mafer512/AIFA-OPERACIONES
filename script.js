@@ -17289,6 +17289,8 @@ function _conciColorForUser(name) {
 }
 let _conciCellClickHandler = null;   // delegated click handler for edit-mode cells
 let _conciTabNavigationHandler = null; // captura Tab: avanza de campo (da la vuelta a la fila siguiente/anterior)
+let _conciArrowNavigationHandler = null; // flechas cuando no hay editor abierto (si no, el contenedor hace scroll)
+let _conciAnchorCell = null;         // última celda visitada: origen de la navegación con flechas
 let _conciAirlineCatalogLoaded = false;
 let _conciAirlineCodeMap = new Map();
 let _conciAirlineMasterCodeMap = new Map();
@@ -22405,6 +22407,54 @@ function _conciFocusBelow(td) {
     }
 }
 
+// Mueve el foco a la celda contigua desde `td`, con el mismo criterio que aplica
+// _conciCommitCellRaw al navegar desde un editor abierto (incluido el salto al
+// filtro de la columna cuando ya no hay fila arriba).
+function _conciMoveFromCell(td, key) {
+    if (key === 'ArrowRight' || key === 'ArrowLeft') {
+        const target = key === 'ArrowRight' ? _conciGetNextEditableCell(td) : _conciGetPrevEditableCell(td);
+        if (!target) return;
+        target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        _conciActivateCellEditor(target);
+        return;
+    }
+    if (key === 'ArrowDown') _conciFocusBelow(td);
+    else if (key === 'ArrowUp') _conciFocusFilterOrAbove(td);
+}
+
+// Navegación con flechas cuando NO hay un editor de celda abierto.
+//
+// Dentro de un editor cada tecla ya está manejada por el propio input, pero al
+// quedarse sin editor —al salir con Escape, al cerrarse por blur, o al pararse
+// en una celda de solo lectura, que no abre editor— el foco se pierde y las
+// flechas las acaba consumiendo el contenedor de la tabla, que desplaza el
+// scroll horizontal en vez de mover el foco. Este manejador cubre ese hueco
+// tomando como origen la última celda visitada.
+//
+// Va en document porque, sin foco en la tabla, el evento no llega al tbody. Se
+// ignora cualquier tecla originada en un campo (editores, filtros de columna,
+// buscador) para no interferir con lo que ya funciona.
+function _conciHandleGridArrowNavigation(ev) {
+    if (!_conciEditMode) return;
+    if (ev.defaultPrevented) return;
+    if (ev.ctrlKey || ev.altKey || ev.metaKey || ev.shiftKey) return;
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(ev.key)) return;
+
+    const target = ev.target;
+    if (target && typeof target.closest === 'function'
+        && target.closest('input, select, textarea, [contenteditable="true"]')) return;
+
+    const anchor = _conciAnchorCell;
+    if (!anchor || !anchor.isConnected) return;
+    const table = document.getElementById('table-conci-manifiestos');
+    if (!table || !table.contains(anchor)) return;
+
+    // Se consume la tecla aunque no haya a dónde moverse (en el borde de la
+    // tabla): de lo contrario el contenedor volvería a hacer scroll.
+    ev.preventDefault();
+    _conciMoveFromCell(anchor, ev.key);
+}
+
 function _conciApplyAirlineCellPreview(td, value) {
     if (!td || !/aerol[ií]nea|airline/i.test(String(td.dataset.col || ''))) return;
     const raw = String(value || '').trim();
@@ -22809,11 +22859,20 @@ function _conciActivateRoutingEditor(td, currentRaw) {
     td._conciCloseEditor = closeEditor;
     select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
-        if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
+        if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'down'); }
         else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
         else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
             closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
+        }
+        else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            // Sin esto el <select> nativo cambia de opción con ↑/↓ y dispara
+            // 'change', confirmando un valor sólo por pasar el foco durante la
+            // navegación. Se bloquea la mutación y se sigue navegando de celda:
+            // como no hubo un 'change' real, userChanged queda en false y la
+            // celda se cierra con su valor original.
+            event.preventDefault();
+            closeEditor(true, event.key === 'ArrowUp' ? 'up' : 'down');
         }
     });
     select.addEventListener('blur', () => closeEditor(true, false));
@@ -22953,11 +23012,27 @@ function _conciActivateAeronaveEditor(td, currentRaw) {
         closed = true;
         td._conciCloseEditor = null;
         closeSuggest();
-        if (!accept) {
-            _conciCommitCellRaw(td, code, move, currentName || code);
+        const keepCurrent = () => _conciCommitCellRaw(td, code, move, currentName || code);
+        if (!accept) { keepCurrent(); return; }
+
+        const typed = _conciNormalizeEditableCellText(input.value);
+        if (!typed) { _conciCommitCellRaw(td, '', move, ''); return; }  // vaciar sigue permitido
+
+        const resolved = _conciResolveAeronaveInput(typed);
+        // Sin catálogo cargado no se bloquea la captura; y un valor heredado que
+        // no está en el catálogo se deja pasar mientras el usuario no lo toque,
+        // para no interrumpir la navegación por filas ya existentes.
+        const unchanged = resolved.code === code;
+        if (!resolved.name && _conciAircraftTypeOptions.length && !unchanged) {
+            // Modelo inexistente: se descarta y la celda vuelve a su valor previo.
+            keepCurrent();
+            td.classList.add('conci-cell-invalid-code');
+            setTimeout(() => td.classList.remove('conci-cell-invalid-code'), 1500);
+            if (typeof showNotification === 'function') {
+                showNotification(`"${typed}" no existe en el catálogo de aeronaves.`, 'warning');
+            }
             return;
         }
-        const resolved = _conciResolveAeronaveInput(input.value);
         const finalCode = resolved.code || code;
         const finalName = resolved.name || (finalCode ? (_conciAircraftTypeByCode.get(finalCode) || finalCode) : '');
         _conciCommitCellRaw(td, finalCode, move, finalName);
@@ -22967,26 +23042,25 @@ function _conciActivateAeronaveEditor(td, currentRaw) {
     input.addEventListener('input', () => renderSuggest(input.value));
     input.addEventListener('focus', () => { renderSuggest(''); input.select(); });
     input.addEventListener('keydown', event => {
-        if (event.key === 'ArrowDown') {
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            // Las flechas sólo navegan entre celdas y nunca tocan el valor.
+            // Antes movían el resaltado de la lista y ese resaltado se
+            // confirmaba solo al salir con Tab/→, cambiando el dato sin que el
+            // usuario eligiera nada. Para elegir una sugerencia: clic, o
+            // escribirla y confirmar con Enter.
             event.preventDefault();
-            if (suggest.classList.contains('d-none')) renderSuggest(input.value);
-            else setActive(Math.min(activeIndex + 1, currentMatches.length - 1));
-        } else if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            setActive(Math.max(activeIndex - 1, 0));
+            closeEditor(true, event.key === 'ArrowUp' ? 'up' : 'down');
         } else if (event.key === 'Enter') {
             event.preventDefault();
-            if (activeIndex >= 0 && currentMatches[activeIndex]) pickMatch(currentMatches[activeIndex]);
-            closeEditor(true, 'next');
+            closeEditor(true, 'down');
         } else if (event.key === 'Escape') {
             event.preventDefault();
             closeEditor(false, false);
         } else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-            // →/← se comportan igual que Tab/Shift+Tab: confirman la sugerencia
-            // activa (si hay) y pasan de campo siempre, sin condición de cursor.
+            // →/← se comportan igual que Tab/Shift+Tab: pasan de campo sin
+            // confirmar ninguna sugerencia.
             event.preventDefault();
             const goingBack = event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey);
-            if (!goingBack && activeIndex >= 0 && currentMatches[activeIndex]) pickMatch(currentMatches[activeIndex]);
             closeEditor(true, goingBack ? 'prev' : 'next');
         }
     });
@@ -23188,25 +23262,22 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
     input.addEventListener('input', () => renderSuggest(input.value));
     input.addEventListener('focus', () => { renderSuggest(input.value); input.select(); });
     input.addEventListener('keydown', event => {
-        if (event.key === 'ArrowDown') {
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            // Igual que en el editor de AERONAVE: las flechas sólo navegan
+            // entre celdas y nunca confirman una sugerencia.
             event.preventDefault();
-            if (suggest.classList.contains('d-none')) renderSuggest(input.value);
-            else setActive(Math.min(activeIndex + 1, currentMatches.length - 1));
-        } else if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            setActive(Math.max(activeIndex - 1, 0));
+            closeEditor(true, event.key === 'ArrowUp' ? 'up' : 'down');
         } else if (event.key === 'Enter') {
             event.preventDefault();
-            if (activeIndex >= 0 && currentMatches[activeIndex]) pickMatch(currentMatches[activeIndex]);
-            closeEditor(true, 'next');
+            closeEditor(true, 'down');
         } else if (event.key === 'Escape') {
             event.preventDefault();
             closeEditor(false, false);
         } else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-            // →/← se comportan igual que Tab/Shift+Tab, como en el editor de AERONAVE.
+            // →/← se comportan igual que Tab/Shift+Tab, como en el editor de
+            // AERONAVE: pasan de campo sin confirmar ninguna sugerencia.
             event.preventDefault();
             const goingBack = event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey);
-            if (!goingBack && activeIndex >= 0 && currentMatches[activeIndex]) pickMatch(currentMatches[activeIndex]);
             closeEditor(true, goingBack ? 'prev' : 'next');
         }
     });
@@ -23319,11 +23390,20 @@ function _conciActivateManifestTypeEditor(td, currentRaw) {
     td._conciCloseEditor = closeEditor;
     select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
-        if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
+        if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'down'); }
         else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
         else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
             closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
+        }
+        else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            // Sin esto el <select> nativo cambia de opción con ↑/↓ y dispara
+            // 'change', confirmando un valor sólo por pasar el foco durante la
+            // navegación. Se bloquea la mutación y se sigue navegando de celda:
+            // como no hubo un 'change' real, userChanged queda en false y la
+            // celda se cierra con su valor original.
+            event.preventDefault();
+            closeEditor(true, event.key === 'ArrowUp' ? 'up' : 'down');
         }
     });
     select.addEventListener('blur', () => closeEditor(true, false));
@@ -23371,13 +23451,18 @@ function _conciActivateOperationTypeEditor(td, currentRaw) {
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
             event.preventDefault();
-            closeEditor(true, 'next');
+            closeEditor(true, 'down');
         } else if (event.key === 'Escape') {
             event.preventDefault();
             closeEditor(false, false);
         } else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
             closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
+        } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            // Ver nota en los otros editores <select>: ↑/↓ no deben cambiar la
+            // opción por el simple hecho de pasar el foco.
+            event.preventDefault();
+            closeEditor(true, event.key === 'ArrowUp' ? 'up' : 'down');
         }
     });
     select.addEventListener('blur', () => closeEditor(true, false));
@@ -23626,6 +23711,9 @@ function _conciQueueAutoSave(tr) {
 function _conciActivateCellEditor(td) {
     if (!td || td.querySelector('.conci-cell-input, .conci-cell-dt')) return;
 
+    // Origen de la navegación con flechas, se abra o no un editor debajo.
+    _conciAnchorCell = td;
+
     const col = td.dataset.col || '';
     if (_conciIsMatriculaStatusColumn(col) || _conciIsProtectedEditColumn(col) || _conciIsCalculatedColumn(col)) return;
     if (_conciIsPassengerColumn(col) && _conciRowElementIsCargo(td)) return;
@@ -23696,7 +23784,7 @@ function _conciActivateCellEditor(td) {
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            closeEditor(true, 'next');
+            closeEditor(true, 'down');
         } else if (e.key === 'Escape') {
             e.preventDefault();
             closeEditor(false, false);
@@ -23960,7 +24048,7 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
     const onKeydown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            closeEditor(true, 'next');
+            closeEditor(true, 'down');
         } else if (e.key === 'Escape') {
             e.preventDefault();
             closeEditor(false, false);
@@ -24066,6 +24154,9 @@ function _conciSetTableEditableState(enabled) {
                 if (ev.target.closest('.conci-cell-input, .conci-cell-dt')) return;
                 const td = ev.target.closest('td[data-col]');
                 if (!td || !tbody.contains(td)) return;
+                // Se recuerda también en celdas de solo lectura, que no abren
+                // editor: así las flechas siguen navegando desde ahí.
+                _conciAnchorCell = td;
                 _conciActivateCellEditor(td);
             };
         }
@@ -24097,6 +24188,9 @@ function _conciSetTableEditableState(enabled) {
             };
         }
         tbody.addEventListener('keydown', _conciTabNavigationHandler, true);
+
+        if (!_conciArrowNavigationHandler) _conciArrowNavigationHandler = _conciHandleGridArrowNavigation;
+        document.addEventListener('keydown', _conciArrowNavigationHandler);
 
         tbody.querySelectorAll('td[data-col]').forEach(td => {
             const isProtected = _conciIsProtectedEditColumn(td.dataset.col);
@@ -24130,6 +24224,8 @@ function _conciSetTableEditableState(enabled) {
     } else {
         if (_conciCellClickHandler) tbody.removeEventListener('click', _conciCellClickHandler);
         if (_conciTabNavigationHandler) tbody.removeEventListener('keydown', _conciTabNavigationHandler, true);
+        if (_conciArrowNavigationHandler) document.removeEventListener('keydown', _conciArrowNavigationHandler);
+        _conciAnchorCell = null;
 
         tbody.querySelectorAll('td[data-col]').forEach(td => {
             if (typeof td._conciCloseEditor === 'function') td._conciCloseEditor(true, false);
