@@ -22219,17 +22219,15 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                 } else if (meta.isAirline) {
                     const airlineMeta = resolveAirlineMeta(rawStr);
                     if (airlineMeta) {
-                        const bg = airlineMeta.color || '#6c757d';
-                        const fg = airlineMeta.textColor || '#ffffff';
-                        td.style.setProperty('background', bg, 'important');
-                        td.style.setProperty('color', fg, 'important');
-                        td.style.fontWeight = '700';
                         td.style.textAlign = 'center';
                         td.textContent = String(airlineMeta.name || rawStr).toUpperCase();
                         if (rawStr && rawStr.toUpperCase() !== String(airlineMeta.name || '').toUpperCase()) td.title = rawStr;
                     } else {
                         td.textContent = rawStr;
                     }
+                    // El color lo aplica el mismo helper que usa el editor, para
+                    // que abrir la celda no pueda repintarla de otro color.
+                    _conciApplyAirlineCellPreview(td);
                 } else if (meta.isAeronave) {
                     const code = rawStr.toUpperCase();
                     const name = code ? _conciAircraftTypeByCode.get(code) : '';
@@ -22871,16 +22869,40 @@ function _conciHandleGridArrowNavigation(ev) {
     _conciMoveFromCell(anchor, ev.key);
 }
 
-function _conciApplyAirlineCellPreview(td, value) {
+// Color de la celda de aerolínea. La fuente de verdad es SIEMPRE el valor crudo
+// de la propia celda, nunca un texto que pase el llamador.
+//
+// Antes cada llamador mandaba una forma distinta del dato: el nombre mostrado al
+// abrir el editor ("VOLARIS"), el texto tecleado, o el valor crudo al confirmar
+// ("Y4"). _conciResolveAirlineMeta busca primero por código IATA y solo después
+// por alias/nombre, así que esas dos formas recorren ramas distintas y pueden
+// caer en capas distintas del catálogo (data/airlines.json vs public.airlines vs
+// conciliacion_catalogo_aerolineas), cada una con su propio color. Resultado: la
+// misma aerolínea cambiaba de color al abrirse el editor de la celda.
+function _conciApplyAirlineCellPreview(td) {
     if (!td || !/aerol[ií]nea|airline/i.test(String(td.dataset.col || ''))) return;
-    const raw = String(value || '').trim();
+    const raw = String(
+        td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
+    ).trim();
     const meta = _conciResolveAirlineMeta(raw);
-    const bg = meta?.color || '#6c757d';
-    const fg = meta?.textColor || '#ffffff';
+    const input = td.querySelector('.conci-cell-input');
+
+    // Sin coincidencia en el catálogo no se pinta nada, igual que el render.
+    // Antes aquí se aplicaba un gris #6c757d que el render nunca ponía, así que
+    // una aerolínea desconocida se agrisaba al entrar a la celda.
+    if (!meta) {
+        ['background', 'color', 'font-weight'].forEach(prop => {
+            td.style.removeProperty(prop);
+            if (input) input.style.removeProperty(prop);
+        });
+        return;
+    }
+
+    const bg = meta.color || '#6c757d';
+    const fg = meta.textColor || '#ffffff';
     td.style.setProperty('background', bg, 'important');
     td.style.setProperty('color', fg, 'important');
     td.style.fontWeight = '700';
-    const input = td.querySelector('.conci-cell-input');
     if (input) {
         input.style.setProperty('background', bg, 'important');
         input.style.setProperty('color', fg, 'important');
@@ -24455,7 +24477,9 @@ function _conciActivateCellEditor(td) {
     td._conciEditorStartRaw = currentRaw;
     td.textContent = '';
     td.appendChild(input);
-    if (isAirlineCol) _conciApplyAirlineCellPreview(td, input.value);
+    // Se recalcula desde el valor crudo de la celda: abrir el editor no debe
+    // cambiar el color que ya mostraba la celda.
+    if (isAirlineCol) _conciApplyAirlineCellPreview(td);
 
     let closed = false;
     const closeEditor = (accept, move) => {
@@ -24495,7 +24519,9 @@ function _conciActivateCellEditor(td) {
         const tr = td.closest('tr');
         _conciStageCellDraft(td, input.value);
         _conciQueueAutoSave(tr);
-        if (isAirlineCol) _conciApplyAirlineCellPreview(td, input.value);
+        // _conciStageCellDraft ya dejó lo tecleado en td.dataset.pendingRaw, así
+        // que la vista previa en vivo sigue funcionando leyendo de la celda.
+        if (isAirlineCol) _conciApplyAirlineCellPreview(td);
         _conciRefreshMatriculaValidationForRow(tr);
         _conciUpdateSummaryLiveCell(td, input.value);
         _conciRefreshCalculatedCellsForRow(tr, { [col]: input.value });
@@ -24551,7 +24577,7 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
         td.textContent = isAirlineCol
             ? String(committedMeta?.name || nextRaw).toUpperCase()
             : (displayText !== undefined ? displayText : nextRaw);
-        _conciApplyAirlineCellPreview(td, nextRaw);
+        _conciApplyAirlineCellPreview(td);
     }
     if (didChange) {
         _conciRecordUndo(td, previousRaw, nextRaw);
