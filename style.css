@@ -20239,6 +20239,324 @@ button > i:only-child {
    scrollbar-gutter: stable both-edges;
 }
 
+/* ==========================================================================
+   Conciliacion > Manifiestos: espacio de trabajo tipo hoja de calculo
+   Se activa por JS exclusivamente cuando la seccion y la pestana estan visibles.
+   ========================================================================== */
+body.conci-manifest-workspace {
+   height: 100vh;
+   overflow: hidden !important;
+}
+
+body.conci-manifest-workspace > #main-app,
+body.conci-manifest-workspace .app-body {
+   height: 100vh;
+   min-height: 0;
+   overflow: hidden;
+}
+
+/* Estos bloques siguen en el DOM y reaparecen al salir de Manifiestos. */
+body.conci-manifest-workspace .header,
+body.conci-manifest-workspace #ag-today-bar,
+body.conci-manifest-workspace .sidebar,
+body.conci-manifest-workspace #sidebar-overlay {
+   display: none !important;
+}
+
+body.conci-manifest-workspace .main-content {
+   display: flex;
+   flex-direction: column;
+   width: 100% !important;
+   height: 100vh;
+   min-height: 0;
+   margin-left: 0 !important;
+   padding: .4rem !important;
+   overflow: hidden !important;
+}
+
+body.conci-manifest-workspace #conciliacion-section.active,
+body.conci-manifest-workspace .conci-workspace-shell,
+body.conci-manifest-workspace #conciliacion-content,
+body.conci-manifest-workspace .conci-tab-content,
+body.conci-manifest-workspace #pane-conci-comercial.active,
+body.conci-manifest-workspace .conci-manifest-pane-body,
+body.conci-manifest-workspace .conci-manifest-card,
+body.conci-manifest-workspace .conci-manifest-data {
+   display: flex;
+   flex: 1 1 auto;
+   flex-direction: column;
+   min-height: 0;
+}
+
+body.conci-manifest-workspace #conciliacion-section.active,
+body.conci-manifest-workspace .conci-workspace-shell {
+   width: 100%;
+   height: 100%;
+   overflow: hidden;
+}
+
+body.conci-manifest-workspace #conciliacion-section.active {
+   position: fixed;
+   inset: 0;
+   z-index: 1500;
+   background: var(--body-bg, #f4f7fb);
+}
+
+body.conci-manifest-workspace .conci-section-heading {
+   display: none !important;
+}
+
+body.conci-manifest-workspace #conciliacion-tabs {
+   flex: 0 0 auto;
+   gap: .25rem;
+   padding: .25rem .75rem 0 !important;
+}
+
+body.conci-manifest-workspace #conciliacion-tabs .nav-link {
+   padding: .35rem .75rem;
+   font-size: .8rem;
+}
+
+body.conci-manifest-workspace .conci-tabs-menu-item {
+   padding: 0 0 .25rem .75rem;
+}
+
+body.conci-manifest-workspace .conci-manifest-pane-body {
+   padding: .35rem !important;
+   overflow: hidden;
+}
+
+body.conci-manifest-workspace .conci-manifest-toolbar,
+body.conci-manifest-workspace .conci-manifest-filters {
+   flex: 0 0 auto;
+   padding: .35rem .55rem !important;
+   gap: .35rem !important;
+}
+
+body.conci-manifest-workspace .conci-manifest-toolbar .btn,
+body.conci-manifest-workspace .conci-manifest-filters .btn,
+body.conci-manifest-workspace .conci-manifest-toolbar .form-control,
+body.conci-manifest-workspace .conci-manifest-toolbar .input-group-text {
+   min-height: 28px;
+   padding-top: .2rem;
+   padding-bottom: .2rem;
+   font-size: .75rem;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip {
+   flex: 0 0 auto;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip > .row {
+   padding-top: .3rem !important;
+   padding-bottom: .3rem !important;
+}
+
+body.conci-manifest-workspace .ops-kpi-card {
+   min-height: 52px;
+   padding: .35rem .55rem;
+}
+
+body.conci-manifest-workspace .ops-kpi-value {
+   font-size: 1rem;
+}
+
+body.conci-manifest-workspace #conci-manifiestos-loading,
+body.conci-manifest-workspace #conci-manifiestos-error {
+   flex: 0 0 auto;
+}
+
+/* El indicador de carga flota sobre la tabla: nunca altera su posicion ni alto. */
+body.conci-manifest-workspace .conci-manifest-data {
+   position: relative;
+}
+
+body.conci-manifest-workspace #conci-manifiestos-loading:not(.d-none) {
+   position: absolute;
+   inset: 0;
+   z-index: 30;
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   justify-content: center;
+   padding: 0 !important;
+   pointer-events: none;
+   background: rgba(255, 255, 255, .42);
+   backdrop-filter: blur(1px);
+}
+
+body.dark-mode.conci-manifest-workspace #conci-manifiestos-loading:not(.d-none) {
+   background: rgba(15, 23, 42, .42);
+}
+
+body.conci-manifest-workspace #conci-manifiestos-scroll {
+   flex: 1 1 0;
+   width: 100%;
+   height: auto !important;
+   min-height: 0;
+   max-height: none !important;
+   overflow: auto !important;
+   overscroll-behavior: contain;
+}
+
+body.conci-manifest-workspace #table-conci-manifiestos thead th {
+   position: sticky;
+   top: 0;
+   z-index: 10;
+}
+
+body.conci-manifest-workspace #table-conci-manifiestos tbody td {
+   padding-top: .18rem;
+   padding-bottom: .18rem;
+   line-height: 1.15;
+}
+
+/* Itinerario comparte el mismo workspace; conserva sus controles y tabla. */
+body.conci-itinerary-workspace #pane-conci-itinerario.active {
+   display: flex;
+   flex: 1 1 auto;
+   flex-direction: column;
+   min-height: 0;
+   padding: .35rem !important;
+   overflow: hidden;
+}
+
+body.conci-itinerary-workspace #itinerario-toolbar,
+body.conci-itinerary-workspace #itinerario-summary-strip {
+   flex: 0 0 auto;
+   margin-bottom: .35rem !important;
+}
+
+body.conci-itinerary-workspace #itinerario-toolbar {
+   gap: .35rem !important;
+}
+
+body.conci-itinerary-workspace #itinerario-toolbar .btn,
+body.conci-itinerary-workspace #itinerario-toolbar .form-control {
+   min-height: 28px;
+   padding-top: .2rem;
+   padding-bottom: .2rem;
+   font-size: .75rem;
+}
+
+body.conci-itinerary-workspace #itinerario-summary-strip .row {
+   margin-right: 0;
+   margin-left: 0;
+}
+
+body.conci-itinerary-workspace #conciliacion-csv-view,
+body.conci-itinerary-workspace #conciliacion-csv-view > .row,
+body.conci-itinerary-workspace #conciliacion-csv-view > .row > .col-12,
+body.conci-itinerary-workspace #conciliacion-csv-view .card {
+   display: flex;
+   flex: 1 1 auto;
+   flex-direction: column;
+   min-height: 0;
+}
+
+body.conci-itinerary-workspace #conciliacion-csv-view {
+   overflow: hidden;
+}
+
+body.conci-itinerary-workspace #conciliacion-csv-view > .row {
+   margin: 0;
+}
+
+body.conci-itinerary-workspace #conciliacion-csv-view > .row > .col-12 {
+   margin-bottom: 0 !important;
+   padding: 0;
+}
+
+body.conci-itinerary-workspace #container-ops-flights-csv {
+   flex: 1 1 0;
+   width: 100%;
+   height: auto !important;
+   min-height: 0;
+   max-height: none !important;
+   overflow: auto !important;
+   overscroll-behavior: contain;
+}
+
+body.conci-itinerary-workspace #table-ops-flights-csv thead tr:first-child th {
+   position: sticky;
+   top: 0;
+   z-index: 10;
+}
+
+body.conci-itinerary-workspace #table-ops-flights-csv thead tr.csv-filter-row th {
+   position: sticky;
+   top: var(--csv-head-row1-height, 32px);
+   z-index: 9;
+}
+
+body.conci-itinerary-workspace #ops-flights-count-footer {
+   flex: 0 0 auto;
+}
+
+@media (max-height: 820px) {
+   body.conci-itinerary-workspace #itinerario-summary-strip .ops-kpi-sub,
+   body.conci-itinerary-workspace #itinerario-summary-strip .ops-kpi-icon {
+      display: none;
+   }
+   body.conci-itinerary-workspace #itinerario-summary-strip .ops-kpi-card {
+      min-height: 38px;
+   }
+}
+
+@media (max-width: 991.98px) {
+   body.conci-itinerary-workspace #itinerario-toolbar {
+      flex-wrap: nowrap !important;
+      overflow-x: auto;
+      overflow-y: hidden;
+   }
+   body.conci-itinerary-workspace #itinerario-toolbar > * {
+      flex: 0 0 auto;
+   }
+}
+
+body.conci-manifest-workspace #navdeck-back {
+   display: none !important;
+}
+
+.conci-toolbar-menu-btn {
+   display: inline-flex;
+   align-items: center;
+   white-space: nowrap;
+   background: linear-gradient(135deg, #2563eb, #1e3a8a);
+   border-color: transparent;
+   font-weight: 700;
+   box-shadow: 0 2px 6px rgba(30, 58, 138, .24);
+}
+
+.conci-toolbar-menu-btn:hover,
+.conci-toolbar-menu-btn:focus {
+   background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+   border-color: transparent;
+}
+
+@media (max-height: 820px) {
+   body.conci-manifest-workspace .ops-kpi-sub,
+   body.conci-manifest-workspace .ops-kpi-icon {
+      display: none;
+   }
+   body.conci-manifest-workspace .ops-kpi-card {
+      min-height: 38px;
+   }
+}
+
+@media (max-width: 991.98px) {
+   body.conci-manifest-workspace .conci-manifest-toolbar,
+   body.conci-manifest-workspace .conci-manifest-filters {
+      flex-wrap: nowrap !important;
+      overflow-x: auto;
+      overflow-y: hidden;
+   }
+   body.conci-manifest-workspace .conci-manifest-toolbar > *,
+   body.conci-manifest-workspace .conci-manifest-filters > * {
+      flex: 0 0 auto;
+   }
+}
+
 /* Modales y offcanvas nunca exceden el viewport disponible. */
 .modal-dialog:not(.modal-fullscreen) {
    width: auto;
