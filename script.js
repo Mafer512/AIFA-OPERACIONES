@@ -24869,8 +24869,105 @@ function _conciRestaurarBorradores() {
         }
     });
     _conciBorradoresEscribir(datos);
+    // Las filas nuevas necesitan volver a existir antes de poder rellenarlas.
+    repuestas += _conciRestaurarFilasNuevas(datos);
     _conciActualizarIndicadorBorradores();
+    // Si algo quedo pendiente, que no dependa de que el usuario lo toque.
+    if (repuestas) _conciProgramarReintento();
     return repuestas;
+}
+
+// ── Reintento hasta que la base confirme ─────────────────────────────────────
+//
+// Un guardado que falla se reintentaba solo en tres situaciones: si llegaba
+// otra edicion de la misma fila, si volvia la red, o si se redibujaba la tabla.
+// Faltaba la mas comun de todas: que FALLE ESTANDO EN LINEA -- un error
+// pasajero del servidor, un tiempo de espera agotado, una politica de permisos
+// que tardo en refrescar. En ese caso la fila se quedaba en "Pendiente de
+// guardar" indefinidamente, esperando a que alguien la volviera a tocar.
+//
+// Ahora hay un reintento propio que insiste solo, con espera creciente para no
+// castigar a un servidor que ya esta sufriendo: 15 s, 30 s, 60 s, y de ahi cada
+// 2 minutos mientras quede algo pendiente. En cuanto todo queda guardado, se
+// apaga y vuelve a empezar desde el intervalo corto.
+
+const _CONCI_REINTENTO_MIN_MS = 15000;
+const _CONCI_REINTENTO_MAX_MS = 120000;
+let _conciReintentoTimer = null;
+let _conciReintentoEspera = _CONCI_REINTENTO_MIN_MS;
+
+function _conciProgramarReintento() {
+    if (_conciReintentoTimer) return;
+    _conciReintentoTimer = setTimeout(() => {
+        _conciReintentoTimer = null;
+        const filas = _conciReintentarPendientes();
+        if (filas > 0) {
+            _conciReintentoEspera = Math.min(_conciReintentoEspera * 2, _CONCI_REINTENTO_MAX_MS);
+            _conciProgramarReintento();
+        } else {
+            _conciReintentoEspera = _CONCI_REINTENTO_MIN_MS;
+        }
+    }, _conciReintentoEspera);
+}
+
+// Un guardado exitoso significa que el servidor volvio a responder: la proxima
+// vez que algo falle conviene reintentar pronto, no a los dos minutos.
+function _conciReiniciarEsperaReintento() {
+    _conciReintentoEspera = _CONCI_REINTENTO_MIN_MS;
+}
+
+// ── Recuperar filas nuevas que nunca llegaron a guardarse ────────────────────
+//
+// Las capturas sobre filas que ya existen se reponen solas. Una fila NUEVA no
+// tenia como: al recargar, la fila ya no esta en la tabla y no habia nada donde
+// reponer sus datos. Quedaban guardadas en el borrador local pero sin forma de
+// volver a la pantalla, que es otra manera de perderlas.
+//
+// Aqui se reconstruye la fila y se rellenan sus celdas. Se avisa siempre: una
+// fila que reaparece sola sin explicacion desconcierta mas de lo que ayuda.
+function _conciRestaurarFilasNuevas(datos) {
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (!tbody || !_conciCanCurrentUserEdit()) return 0;
+    let recuperadas = 0;
+
+    Object.keys(datos || {}).forEach(clave => {
+        if (!clave.startsWith('nueva:')) return;
+        const celdas = datos[clave]?.celdas || {};
+        if (!Object.keys(celdas).length) return;
+        // Si esa fila ya esta en pantalla (por ejemplo tras otro render), no se
+        // duplica.
+        const yaEsta = [...tbody.querySelectorAll('tr[data-conci-borrador-clave]')]
+            .some(tr => tr.dataset.conciBorradorClave === clave);
+        if (yaEsta) return;
+
+        _conciAddBlankRow();
+        const tr = tbody.lastElementChild;
+        if (!tr || tr.dataset.conciNew !== '1') return;
+        tr.dataset.conciBorradorClave = clave;
+
+        Object.keys(celdas).forEach(col => {
+            const td = [...tr.querySelectorAll('td[data-col]')].find(c => c.dataset.col === col);
+            if (!td) return;
+            const valor = String(celdas[col] ?? '');
+            td.textContent = valor;
+            td.dataset.pendingRaw = valor;
+            td.dataset.dirty = '1';
+            td.classList.add('conci-cell-borrador');
+            td.title = 'Captura pendiente de guardar, recuperada de esta misma computadora.';
+        });
+        tr.dataset.dirty = '1';
+        _conciRefreshCalculatedCellsForRow(tr);
+        _conciQueueAutoSave(tr);
+        recuperadas++;
+    });
+
+    if (recuperadas && typeof showNotification === 'function') {
+        const texto = recuperadas === 1
+            ? 'Se recuperó 1 fila que se había capturado sin llegar a guardarse.'
+            : `Se recuperaron ${recuperadas} filas que se habían capturado sin llegar a guardarse.`;
+        showNotification(texto, 'warning');
+    }
+    return recuperadas;
 }
 
 // Vuelve a intentar el guardado de todo lo que siga pendiente en pantalla.
@@ -26305,6 +26402,8 @@ async function _conciAutoSaveRow(tr, options = {}) {
                     tr.title = `Pendiente de guardar: ${msg}`;
                     tr.classList.add('table-secondary');
                     console.warn('[Conciliación] fila (Solo Vuelos) pendiente de guardar:', result.error);
+                    // Insiste solo hasta que la base lo acepte.
+                    _conciProgramarReintento();
                     if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
                     return;
                 }
@@ -26358,6 +26457,8 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 tr.title = `Pendiente de guardar: ${msg}`;
                 tr.classList.add('table-secondary');
                 console.warn('[Conciliación] fila pendiente de guardar:', result.error);
+                // Insiste solo hasta que la base lo acepte.
+                _conciProgramarReintento();
                 if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
                 return;
             }
@@ -26407,6 +26508,8 @@ async function _conciAutoSaveRow(tr, options = {}) {
             tr.title = `Pendiente de guardar: ${msg}`;
             tr.classList.add('table-secondary');
             console.warn('[Conciliación] error de guardado automático:', error);
+            // Insiste solo hasta que la base lo acepte.
+            _conciProgramarReintento();
             if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
         } finally {
             tr.classList.remove('conci-row-saving');
@@ -26419,6 +26522,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
             // guardada. Invalidar aquí garantiza que la próxima vista siempre
             // consulte el estado real, nunca una copia obsoleta.
             if (didWriteSuccessfully) {
+                _conciReiniciarEsperaReintento();
                 _conciRenderCache.clear();
                 _conciRenderedKey = '';
             }

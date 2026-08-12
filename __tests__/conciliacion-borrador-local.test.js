@@ -41,6 +41,10 @@ const api = new Function('document', 'localStorage', 'CSS', 'console', 'encolado
   function _conciFechaUnicaDelFiltro() { return '2026-08-11'; }
   function _conciQueueAutoSave(tr) { encolados.push(tr); }
   function _conciRefreshCalculatedCellsForRow(tr) { recalculadas.push(tr); }
+  // Recrear filas nuevas y reintentar tienen su propia suite
+  // (conciliacion-nunca-perder); aquí solo hacen falta como dependencias.
+  function _conciRestaurarFilasNuevas() { return 0; }
+  function _conciProgramarReintento() {}
   ${constante('_CONCI_BORRADORES_KEY')}
   ${constante('_CONCI_BORRADORES_VIGENCIA_MS')}
   ${extraer('_conciBorradoresLeer')}
@@ -219,15 +223,18 @@ describe('restaura al volver a entrar', () => {
     expect(api._conciBorradoresLeer()['id:99']).toBeDefined();
   });
 
-  test('las filas nuevas no se reponen solas, pero no se pierden', () => {
-    // Reponerlas obligaría a entrar en modo edición por sorpresa.
+  test('el borrador de una fila nueva se conserva para poder recuperarla', () => {
+    // Recrear la fila corre por cuenta de _conciRestaurarFilasNuevas (ver la
+    // suite conciliacion-nunca-perder). Lo que importa aquí es que este paso no
+    // la descarte por el camino.
     window.localStorage.setItem(CLAVE, JSON.stringify({
       'nueva:abc': { ts: Date.now(), celdas: { 'TOTAL PAX': '80' } },
     }));
     pintarFila({ rowId: '42' });
 
-    expect(api._conciRestaurarBorradores()).toBe(0);
+    api._conciRestaurarBorradores();
     expect(api._conciBorradoresPendientes().celdas).toBe(1);
+    expect(api._conciBorradoresLeer()['nueva:abc']).toBeDefined();
   });
 });
 
