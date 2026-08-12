@@ -23308,6 +23308,27 @@ function _conciRefreshCalculatedCellsForRow(tr, changedValues = {}) {
         const hasCargaComponent = String(readCell(cargaNacCell) ?? '').trim() !== ''
             || String(readCell(cargaIntCell) ?? '').trim() !== '';
         if (hasCargaComponent) renderNumber(cargaTotalCell, readNumber(cargaNacCell) + readNumber(cargaIntCell));
+        else {
+            // Al cargar una fila histórica sin desglose se conserva el total ya
+            // almacenado. Pero si el usuario acaba de vaciar nacional o
+            // internacional y ya no queda ningún componente, también debe
+            // borrarse el total calculado. Se marca dirty para que el
+            // autoguardado envíe NULL en vez de omitir la columna vacía.
+            const changedKeys = Object.keys(changedValues).map(_conciNormalizedColumnName);
+            const cargaComponentChanged = changedKeys.some(key =>
+                /^kgs?\.?\s*de\s*carga\s+(nacional|internacional)$/.test(key)
+            );
+            if (cargaComponentChanged) {
+                const previousTotal = String(
+                    cargaTotalCell.dataset.origRaw ?? cargaTotalCell.dataset.raw ?? cargaTotalCell.textContent ?? ''
+                ).trim();
+                cargaTotalCell.textContent = '';
+                cargaTotalCell.dataset.raw = '';
+                cargaTotalCell.dataset.pendingRaw = '';
+                if (previousTotal !== '') cargaTotalCell.dataset.dirty = '1';
+                else cargaTotalCell.removeAttribute('data-dirty');
+            }
+        }
     }
     _conciRefreshManifestDateOrderValidation(tr, changedValues);
 }
