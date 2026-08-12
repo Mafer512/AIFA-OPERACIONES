@@ -92,6 +92,7 @@
 
     let currentData = [];
     let columnFilters = {};
+    let quickFlightFilter = '';
     let csvExcelFilters = {}; // field -> Set<string> of allowed values; absent key = no filter
     let dateMode = 'relative';
     let relStart = -4;
@@ -164,6 +165,10 @@
             getDateFields: () => DATE_FIELDS,
             getLastImportYear: () => lastImportYear,
             clearAllFilters: clearAllCsvFilters,
+            setQuickFlightFilter: (value) => {
+                quickFlightFilter = String(value || '').trim();
+                applyAndRender();
+            },
             enterEditMode: () => itinEnterEditMode(),
             saveBulkEdits: () => itinSaveBulkEdits(),
             cancelBulkEdits: () => itinCancelBulkEdits()
@@ -298,6 +303,39 @@
                 _filterDebounce = setTimeout(applyAndRender, 250);
             });
         });
+
+        const quickFlightInput = document.getElementById('itin-quick-flight');
+        const quickFlightClear = document.getElementById('btn-itin-quick-flight-clear');
+        if (quickFlightInput && quickFlightInput.dataset.bound !== '1') {
+            quickFlightInput.dataset.bound = '1';
+            let quickTimer;
+            quickFlightInput.addEventListener('input', () => {
+                clearTimeout(quickTimer);
+                quickTimer = setTimeout(() => {
+                    quickFlightFilter = quickFlightInput.value.trim();
+                    applyAndRender();
+                }, 180);
+            });
+            quickFlightInput.addEventListener('keydown', event => {
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    quickFlightInput.value = '';
+                    quickFlightFilter = '';
+                    applyAndRender();
+                } else if (event.key === 'Enter') {
+                    event.preventDefault();
+                    quickFlightFilter = quickFlightInput.value.trim();
+                    applyAndRender();
+                    document.querySelector('#tbody-ops-flights-csv tr')?.scrollIntoView({ block: 'nearest' });
+                }
+            });
+            quickFlightClear?.addEventListener('click', () => {
+                quickFlightInput.value = '';
+                quickFlightFilter = '';
+                applyAndRender();
+                quickFlightInput.focus();
+            });
+        }
 
         const btnSave = document.getElementById('btn-save-ops-itinerary-csv');
         const fileInput = document.getElementById('ops-itinerary-csv-file');
@@ -1366,6 +1404,7 @@
         _flightTotalCount = 0;
         currentData = [];
         columnFilters = {};
+        quickFlightFilter = '';
         csvExcelFilters = {};
         dateMode = 'relative';
         relStart = -4;
@@ -1406,6 +1445,9 @@
         document.querySelectorAll('.csv-excel-dropdown').forEach(el => el.remove());
         // Clear text filters
         columnFilters = {};
+        quickFlightFilter = '';
+        const quickFlightInput = document.getElementById('itin-quick-flight');
+        if (quickFlightInput) quickFlightInput.value = '';
         document.querySelectorAll('#table-ops-flights-csv .csv-filter-row input').forEach(inp => { inp.value = ''; });
         // Clear Excel dropdown filters
         csvExcelFilters = {};
@@ -1905,6 +1947,12 @@
 
     function applyFilters(rows) {
         return rows.filter(row => {
+            if (quickFlightFilter) {
+                const needle = quickFlightFilter.toLowerCase().replace(/\s+/g, '');
+                const arrival = String(row['[Arr] Flight Designator'] || '').toLowerCase().replace(/\s+/g, '');
+                const departure = String(row['[Dep] Flight Designator'] || '').toLowerCase().replace(/\s+/g, '');
+                if (!arrival.includes(needle) && !departure.includes(needle)) return false;
+            }
             // Text-input filters (filter row)
             for (const [field, search] of Object.entries(columnFilters)) {
                 if (!search) continue;

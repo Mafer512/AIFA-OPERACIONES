@@ -21079,8 +21079,8 @@ FF
 
                 <!-- Conciliación Section -->
                 <div id="conciliacion-section" class="content-section">
-                    <div class="card shadow-sm">
-                        <div class="card-header border-bottom bg-white d-flex align-items-center justify-content-between py-3">
+                    <div class="card shadow-sm conci-workspace-shell">
+                        <div class="card-header border-bottom bg-white d-flex align-items-center justify-content-between py-3 conci-section-heading">
                             <h2 class="section-title mb-0 fs-4 fw-bold text-primary"><i class="fas fa-tasks me-2"></i>Conciliación</h2>
                             <a href="#" class="btn btn-sm btn-outline-primary" onclick="event.preventDefault();showSection('portal-digitalizacion')">
                                 <i class="fas fa-cloud-upload-alt me-1"></i>Ir al Portal Digital
@@ -21100,9 +21100,16 @@ FF
                                                 <i class="fas fa-file-alt me-2 text-success"></i>Manifiestos
                                             </button>
                                         </li>
+                                        <li class="nav-item ms-auto d-flex align-items-center conci-tabs-menu-item" role="presentation">
+                                            <button class="btn btn-sm btn-primary conci-toolbar-menu-btn" id="btn-conci-main-menu" type="button"
+                                                onclick="window.conciReturnToMainMenu &amp;&amp; window.conciReturnToMainMenu()"
+                                                title="Volver al menú principal" aria-label="Volver al menú principal">
+                                                <i class="fas fa-grip me-1"></i>Menú
+                                            </button>
+                                        </li>
                                     </ul>
 
-                                    <div class="tab-content">
+                                    <div class="tab-content conci-tab-content">
 
                                     <!--  Tab: Itinerario  -->
                                     <div class="tab-pane fade show active p-4" id="pane-conci-itinerario" role="tabpanel">
@@ -21151,6 +21158,15 @@ FF
                                         <span class="flex-grow-1"></span>
 
                                         <!-- Acciones -->
+                                        <div class="input-group input-group-sm shadow-sm" id="itin-quick-flight-group" style="width:240px">
+                                            <span class="input-group-text bg-white text-primary" title="Buscador rápido de vuelo"><i class="fas fa-magnifying-glass"></i></span>
+                                            <input type="text" class="form-control" id="itin-quick-flight"
+                                                placeholder="Buscar # de vuelo..." autocomplete="off"
+                                                title="Busca simultáneamente en los números de vuelo de llegada y salida. Ctrl+B o Ctrl+F enfoca este campo.">
+                                            <button class="btn btn-outline-secondary" type="button" id="btn-itin-quick-flight-clear" title="Limpiar búsqueda de vuelo">
+                                                <i class="fas fa-xmark"></i>
+                                            </button>
+                                        </div>
                                         <button class="btn btn-sm btn-outline-secondary" title="Recargar vuelos"
                                             onclick="window.opsFlights && window.opsFlights.refreshFlights()">
                                             <i class="fas fa-sync-alt me-1"></i>Actualizar
@@ -21612,11 +21628,11 @@ FF
 
                                     <!--  Tab: Manifiestos  -->
                                     <div class="tab-pane fade" id="pane-conci-comercial" role="tabpanel">
-                                        <div class="p-4">
+                                        <div class="p-4 conci-manifest-pane-body">
 
                                             <!-- Conciliación Manifiestos Table -->
-                                            <div class="card border-0 shadow-sm">
-                                                <div class="card-header bg-white border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                            <div class="card border-0 shadow-sm conci-manifest-card">
+                                                <div class="card-header bg-white border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2 conci-manifest-toolbar">
                                                     <h6 class="mb-0 fw-semibold"><i class="fas fa-file-alt me-2 text-success"></i>Conciliación Manifiestos</h6>
                                                     <div class="d-flex gap-2 align-items-center flex-wrap">
                                                         <!-- Selector de periodo de fechas -->
@@ -21709,7 +21725,7 @@ FF
                                                         <span class="badge bg-secondary" id="badge-conci-manifiestos-count" style="display:none"></span>
                                                     </div>
                                                 </div>
-                                                <div class="px-3 py-2 border-bottom bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                                <div class="px-3 py-2 border-bottom bg-light d-flex justify-content-between align-items-center flex-wrap gap-2 conci-manifest-filters">
                                                     <div class="d-flex gap-3 flex-wrap align-items-center" style="font-size:0.78rem">
                                                         <span class="conci-count-pill" id="conci-pill-llegadas" role="button" tabindex="0" title="Filtrar solo llegadas" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:999px;font-weight:600;background:#e8eaf6;color:#3949ab;border:1px solid #c5cae9"><i class="fas fa-plane-arrival"></i> Llegadas <span class="badge bg-indigo" style="background:#3949ab" id="conci-count-llegadas">0</span></span>
                                                         <span class="conci-count-pill" id="conci-pill-salidas" role="button" tabindex="0" title="Filtrar solo salidas" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:999px;font-weight:600;background:#e0f2f1;color:#00695c;border:1px solid #b2dfdb"><i class="fas fa-plane-departure"></i> Salidas <span class="badge" style="background:#00695c" id="conci-count-salidas">0</span></span>
@@ -21753,7 +21769,7 @@ FF
                                                         </div>
                                                     </div>
                                                 </div>
-                                                <div class="card-body p-0">
+                                                <div class="card-body p-0 conci-manifest-data">
                                                     <!-- Resumen KPI — se muestra cuando hay datos cargados -->
                                                     <div id="manifiestos-summary-strip" class="d-none border-bottom bg-white">
                                                         <div class="row g-2 px-3 py-3">
@@ -21804,7 +21820,7 @@ FF
                                                         <p class="small mb-0">Cargando manifiestos...</p>
                                                     </div>
                                                     <div id="conci-manifiestos-error" class="alert alert-danger m-3 d-none"></div>
-                                                    <div class="table-responsive" id="conci-manifiestos-scroll" style="max-height:calc(100vh - 420px);overflow-y:auto;overflow-x:auto;-webkit-overflow-scrolling:touch;">
+                                                    <div class="table-responsive" id="conci-manifiestos-scroll">
                                                         <table id="table-conci-manifiestos" class="table table-sm table-bordered align-middle mb-0" style="font-size:0.82rem;width:100%;table-layout:auto;">
                                                             <thead></thead>
                                                             <tbody></tbody>

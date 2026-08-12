@@ -7079,6 +7079,11 @@ function showSection(sectionKey, linkEl) {
         document.querySelectorAll('.content-section').forEach(sec => sec.classList.remove('active'));
         const target = document.getElementById(targetId);
         if (target) target.classList.add('active');
+        // Mantener el modo de altura completa sincronizado incluso cuando se
+        // navega mediante botones internos y no desde un elemento del menu.
+        if (typeof _conciUpdateWorkspaceMode === 'function') {
+            setTimeout(_conciUpdateWorkspaceMode, 0);
+        }
         if (targetKey) currentSectionKey = targetKey;
         // RBAC v2: fijar el nivel de acceso EFECTIVO del módulo activo en el body
         // (sec-access-admin|edit|capture|read) para que las reglas CSS .requires-*
@@ -21426,10 +21431,67 @@ let _conciScrollResizeTimer = null;
 function _conciSyncScrollHeight() {
     const wrap = document.getElementById('conci-manifiestos-scroll');
     if (!wrap || wrap.offsetParent === null) return; // pestaña oculta: nada que medir
+    if (document.body.classList.contains('conci-manifest-workspace')) {
+        wrap.style.maxHeight = '';
+        return;
+    }
     const top = wrap.getBoundingClientRect().top;
     const available = window.innerHeight - top - 16;
-    wrap.style.maxHeight = `${Math.max(available, 360)}px`;
+    wrap.style.maxHeight = `${Math.max(available, 240)}px`;
 }
+
+// La vista de Manifiestos funciona como una hoja de cálculo de altura completa.
+// Sólo cambia el layout: los nodos, controles y listeners existentes se conservan.
+function _conciUpdateWorkspaceMode() {
+    const section = document.getElementById('conciliacion-section');
+    const manifestPane = document.getElementById('pane-conci-comercial');
+    const itineraryPane = document.getElementById('pane-conci-itinerario');
+    const enabled = !!(section?.classList.contains('active') &&
+        (manifestPane?.classList.contains('active') || itineraryPane?.classList.contains('active')));
+    document.body.classList.toggle('conci-manifest-workspace', enabled);
+    document.body.classList.toggle('conci-itinerary-workspace',
+        !!(enabled && itineraryPane?.classList.contains('active')));
+    requestAnimationFrame(_conciSyncScrollHeight);
+}
+
+window.conciReturnToMainMenu = function () {
+    document.body.classList.remove('conci-manifest-workspace', 'conci-itinerary-workspace');
+    if (typeof window._navdeckShowMenu === 'function') {
+        window._navdeckShowMenu();
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    ['tab-conci-comercial', 'tab-conci-itinerario'].forEach(id => {
+        document.getElementById(id)?.addEventListener('shown.bs.tab', _conciUpdateWorkspaceMode);
+    });
+    document.querySelectorAll('.menu-item[data-section]').forEach(link => {
+        link.addEventListener('click', () => setTimeout(_conciUpdateWorkspaceMode, 0));
+    });
+    _conciUpdateWorkspaceMode();
+});
+
+// Ctrl+B / Ctrl+F abre el buscador rápido de la pestaña activa de Conciliación.
+// Fuera de estas dos vistas no se intercepta el comportamiento del navegador.
+document.addEventListener('keydown', event => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+    const key = String(event.key || '').toLowerCase();
+    if (key !== 'b' && key !== 'f') return;
+    const section = document.getElementById('conciliacion-section');
+    if (!section?.classList.contains('active')) return;
+
+    const manifestActive = document.getElementById('pane-conci-comercial')?.classList.contains('active');
+    const itineraryActive = document.getElementById('pane-conci-itinerario')?.classList.contains('active');
+    const input = manifestActive
+        ? document.getElementById('conci-quick-flight')
+        : itineraryActive ? document.getElementById('itin-quick-flight') : null;
+    if (!input) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    input.focus();
+    input.select();
+}, true);
 window.addEventListener('resize', () => {
     clearTimeout(_conciScrollResizeTimer);
     _conciScrollResizeTimer = setTimeout(_conciSyncScrollHeight, 120);
