@@ -1093,6 +1093,22 @@ FF
         #table-conci-manifiestos td[data-col].conci-cell-borrador {
             box-shadow: inset 0 -2px 0 #f0ad4e;
         }
+        /* El <input type="date"> real sigue siendo la fuente de verdad en ISO,
+           pero no se ve: delante va un campo de texto con formato dd/mm/aaaa
+           fijo para todos. No se usa display:none porque showPicker() necesita
+           un elemento renderizado para anclar el calendario. */
+        .conci-fecha-iso {
+            position: absolute;
+            left: 8px;
+            bottom: 0;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            border: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .conci-fecha-mask { font-variant-numeric: tabular-nums; }
         #table-conci-manifiestos tbody tr {
             cursor: pointer;
             transition: background-color .15s ease;
@@ -3417,8 +3433,12 @@ FF
                                             <div class="d-flex justify-content-between mb-3">
                                                 <div class="input-group w-auto">
                                                     <span class="input-group-text">Fecha</span>
-                                                    <input type="date" class="form-control" id="filter-itinerary-date"
-                                                        aria-label="Filtrar por fecha">
+                                                    <input type="text" class="form-control conci-fecha-mask" data-conci-fecha-para="filter-itinerary-date"
+                                                            placeholder="dd/mm/aaaa" inputmode="numeric" maxlength="10" autocomplete="off" style="width:120px"
+                                                            title="Filtrar por fecha" aria-label="Filtrar por fecha">
+                                                        <button class="btn btn-outline-secondary conci-fecha-calendario" type="button" data-conci-fecha-para="filter-itinerary-date"
+                                                            title="Abrir calendario" aria-label="Abrir calendario" tabindex="-1"><i class="far fa-calendar-alt"></i></button>
+                                                        <input type="date" id="filter-itinerary-date" class="conci-fecha-iso" tabindex="-1" aria-hidden="true">
                                                 </div>
                                                 <div class="d-flex gap-2">
                                                     <button class="btn btn-info btn-sm text-white"
@@ -21674,13 +21694,21 @@ FF
                                                         <!-- Selector de periodo de fechas -->
                                                         <div class="input-group input-group-sm" style="width:auto">
                                                             <span class="input-group-text text-muted" title="Periodo de fechas"><i class="fas fa-calendar-week"></i></span>
-                                                            <input type="date" class="form-control form-control-sm" id="filter-conci-fecha-desde" style="width:138px;"
-                                                                title="Fecha inicio">
+                                                            <input type="text" class="form-control form-control-sm conci-fecha-mask" data-conci-fecha-para="filter-conci-fecha-desde"
+                                                                placeholder="dd/mm/aaaa" inputmode="numeric" maxlength="10" autocomplete="off" style="width:104px"
+                                                                title="Fecha inicio" aria-label="Fecha inicio">
+                                                            <button class="btn btn-outline-secondary conci-fecha-calendario" type="button" data-conci-fecha-para="filter-conci-fecha-desde"
+                                                                title="Abrir calendario" aria-label="Abrir calendario de Fecha inicio" tabindex="-1"><i class="far fa-calendar-alt"></i></button>
                                                             <span class="input-group-text text-muted" style="font-size:.85rem">&#8212;</span>
-                                                            <input type="date" class="form-control form-control-sm" id="filter-conci-fecha-hasta" style="width:138px;"
-                                                                title="Fecha fin (dejar vac\u00edo para un solo d\u00eda)">
+                                                            <input type="text" class="form-control form-control-sm conci-fecha-mask" data-conci-fecha-para="filter-conci-fecha-hasta"
+                                                                placeholder="dd/mm/aaaa" inputmode="numeric" maxlength="10" autocomplete="off" style="width:104px"
+                                                                title="Fecha fin (dejar vacío para un solo día)" aria-label="Fecha fin">
+                                                            <button class="btn btn-outline-secondary conci-fecha-calendario" type="button" data-conci-fecha-para="filter-conci-fecha-hasta"
+                                                                title="Abrir calendario" aria-label="Abrir calendario de Fecha fin" tabindex="-1"><i class="far fa-calendar-alt"></i></button>
+                                                            <input type="date" id="filter-conci-fecha-desde" class="conci-fecha-iso" tabindex="-1" aria-hidden="true">
+                                                            <input type="date" id="filter-conci-fecha-hasta" class="conci-fecha-iso" tabindex="-1" aria-hidden="true">
                                                         </div>
-                                                        <!-- Selectores heredados (ocultos, usados por el JS interno) -->
+                                                                                                                <!-- Selectores heredados (ocultos, usados por el JS interno) -->
                                                         <div style="display:none" aria-hidden="true">
                                                             <select id="filter-conci-manifiestos-year">
                                                                 <option value="2026" selected>2026</option>

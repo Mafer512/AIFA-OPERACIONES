@@ -17240,6 +17240,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnConciMatriculaCatalog) btnConciMatriculaCatalog.addEventListener('click', _conciOpenMatriculaCatalog);
     if (btnConciUndo) btnConciUndo.addEventListener('click', _conciUndoLastChange);
     if (btnConciClearFilters) btnConciClearFilters.addEventListener('click', _conciClearAllTableFilters);
+    // Formato dd/mm/aaaa fijo en los filtros de fecha, tanto de Manifiestos
+    // como de Itinerario de Vuelos, sin depender del idioma del navegador.
+    _conciInitCamposFecha(document);
     _conciInitQuickFlightSearch();
     window.addEventListener('admin-mode-changed', _conciRefreshEditToolbar);
     window.addEventListener('airline-catalog-updated', () => {
@@ -22666,6 +22669,122 @@ function _conciIsValidIsoDateInput(value) {
 // caso normal de captura: teclear "101026" deja "10/10/2026" al instante, sin
 // escribir el siglo. Si se siguen tecleando dígitos el año se toma tal cual
 // (3-4 dígitos), para poder registrar cualquier otro año en el mismo campo.
+// ── Campos de fecha con formato fijo dd/mm/aaaa ──────────────────────────────
+//
+// Los filtros de fecha eran <input type="date"> nativos, y el formato que
+// muestra ese control NO lo decide la pagina: lo decide el idioma del navegador
+// de cada quien. En un equipo en espanol se ve 11/08/2026 y en uno en ingles el
+// MISMO campo muestra 08/11/2026. Para un modulo donde la fecha define a que dia
+// pertenece un manifiesto, esa ambiguedad es un riesgo real.
+//
+// La solucion conserva el <input type="date"> como fuente de verdad en ISO
+// (yyyy-mm-dd), oculto, y le pone delante un campo de texto con la misma
+// mascara que ya usan las celdas de captura. Asi:
+//   • todo el codigo que lee o escribe .value sigue igual, sin tocar una linea;
+//   • lo que se ve es dd/mm/aaaa para todos, sin importar el navegador;
+//   • el calendario sigue disponible con el boton de al lado.
+//
+// Escribir .value por codigo no dispara ningun evento, asi que se intercepta el
+// asignador de esa propiedad en cada campo: cualquier asignacion actualiza
+// tambien lo que se ve, sin que los sitios que la hacen tengan que enterarse.
+
+function _conciSincronizarCampoFecha(mask, iso) {
+    if (!mask || !iso) return;
+    const visible = _conciIsoToMaskedDate(iso.value);
+    if (mask.value !== visible) mask.value = visible;
+}
+
+function _conciInterceptarValorIso(iso, alCambiar) {
+    if (iso._conciValorInterceptado) return;
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    if (!descriptor || typeof descriptor.set !== 'function') return;
+    Object.defineProperty(iso, 'value', {
+        configurable: true,
+        enumerable: true,
+        get() { return descriptor.get.call(this); },
+        set(valor) {
+            descriptor.set.call(this, valor);
+            alCambiar();
+        },
+    });
+    iso._conciValorInterceptado = true;
+    iso._conciAsignarValorNativo = (valor) => descriptor.set.call(iso, valor);
+}
+
+function _conciInitCamposFecha(raiz) {
+    const ambito = raiz || document;
+    ambito.querySelectorAll('input[data-conci-fecha-para]').forEach(mask => {
+        if (mask.dataset.conciFechaLista === '1') return;
+        const iso = document.getElementById(mask.dataset.conciFechaPara);
+        if (!iso) return;
+        mask.dataset.conciFechaLista = '1';
+
+        const sincronizar = () => _conciSincronizarCampoFecha(mask, iso);
+        sincronizar();
+        _conciInterceptarValorIso(iso, sincronizar);
+        // El calendario nativo escribe el valor por dentro, sin pasar por el
+        // asignador interceptado, pero si dispara "change".
+        iso.addEventListener('change', sincronizar);
+
+        // Mientras se teclea solo se da forma; no se toca el valor real hasta
+        // que la fecha este completa, para no recargar la tabla a media captura.
+        mask.addEventListener('input', () => {
+            const cursorAlFinal = mask.selectionStart === mask.value.length;
+            mask.value = _conciFormatDateMask(mask.value);
+            if (cursorAlFinal) {
+                try { mask.setSelectionRange(mask.value.length, mask.value.length); } catch (_) { /* sin soporte */ }
+            }
+            if (_conciMaskedDateToIso(mask.value)) _conciAplicarFechaMask(mask, iso);
+        });
+
+        // Al salir del campo se completa el anio ("11/08/26" -> "11/08/2026") y
+        // se confirma. Una fecha incompleta se descarta: es mejor un campo vacio
+        // que un filtro apuntando a un dia que nadie quiso.
+        const confirmar = () => {
+            mask.value = _conciExpandDateMaskYear(mask.value);
+            _conciAplicarFechaMask(mask, iso);
+        };
+        mask.addEventListener('blur', confirmar);
+        mask.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') { ev.preventDefault(); confirmar(); }
+            else if (ev.key === 'Escape') { sincronizar(); mask.blur(); }
+        });
+    });
+
+    ambito.querySelectorAll('button[data-conci-fecha-para]').forEach(boton => {
+        if (boton.dataset.conciFechaLista === '1') return;
+        const iso = document.getElementById(boton.dataset.conciFechaPara);
+        if (!iso) return;
+        boton.dataset.conciFechaLista = '1';
+        boton.addEventListener('click', () => {
+            // showPicker es lo correcto en navegadores modernos; el click sobre
+            // el campo es el respaldo donde no exista.
+            if (typeof iso.showPicker === 'function') {
+                try { iso.showPicker(); return; } catch (_) { /* sigue al respaldo */ }
+            }
+            iso.focus();
+            iso.click();
+        });
+    });
+}
+
+// Lleva lo tecleado al campo ISO y avisa a quien escuche. Se usa el asignador
+// nativo para no re-sincronizar la mascara mientras el usuario escribe en ella.
+function _conciAplicarFechaMask(mask, iso) {
+    const nuevoIso = _conciMaskedDateToIso(mask.value);
+    const vacio = String(mask.value || '').trim() === '';
+    const destino = vacio ? '' : nuevoIso;
+    if (!vacio && !nuevoIso) {
+        // Fecha incompleta o imposible (32/13/2026): se deja lo que el usuario
+        // ve para que lo corrija, sin mover el filtro.
+        return;
+    }
+    if (iso.value === destino) return;
+    const asignar = iso._conciAsignarValorNativo || ((v) => { iso.value = v; });
+    asignar(destino);
+    iso.dispatchEvent(new Event('change', { bubbles: true }));
+}
+
 function _conciFormatDateMask(value) {
     const digits = String(value || '').replace(/\D/g, '').slice(0, 8);
     if (digits.length <= 2) return digits;
