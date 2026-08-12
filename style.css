@@ -18020,6 +18020,14 @@ body.dark-mode #table-conci-manifiestos thead tr.conci-filter-row .conci-col-fil
     font-size: 0.82rem;
 }
 
+/* TIPO DE MANIFIESTO: se muestra siempre en mayúsculas, tanto la celda como el
+   <select> de edición. Es solo presentación — el valor guardado sigue siendo
+   'Llegada'/'Salida', que es lo que compara _conciNormalizeManifestType. */
+#table-conci-manifiestos tbody td.conci-manifest-type-cell,
+#table-conci-manifiestos .conci-manifest-type-input {
+    text-transform: uppercase;
+}
+
 /* -- Daily flights tables (Arrivals / Departures) ------------------------ */
 body.dark-mode #table-daily-flights-arrivals thead tr:first-child th,
 body.dark-mode #table-daily-flights-departures thead tr:first-child th {

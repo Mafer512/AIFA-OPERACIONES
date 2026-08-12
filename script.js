@@ -22196,6 +22196,11 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                 td.dataset.conciColumnKey = c;
                 if (_conciHiddenColumns.has(c)) td.classList.add('d-none');
                 td.dataset.col = c;
+                // La celda imprime el valor tal cual viene de la base, donde el
+                // tipo de manifiesto está en mayúsculas por la importación. Al
+                // editar se guarda 'Llegada'/'Salida', así que sin esto una fila
+                // ya editada quedaba en minúsculas junto a las demás.
+                if (_conciIsManifestTypeColumn(c)) td.classList.add('conci-manifest-type-cell');
                 if (_conciIsCalculatedColumn(c)) {
                     td.dataset.conciReadonly = '1';
                     td.title = 'Campo calculado: no se puede modificar.';
@@ -23812,8 +23817,13 @@ function _conciActivateManifestTypeEditor(td, currentRaw) {
     select.appendChild(placeholder);
     ['Llegada', 'Salida'].forEach(value => {
         const option = document.createElement('option');
+        // El value conserva el formato interno ('Llegada'/'Salida') porque es lo
+        // que se guarda y lo que compara _conciNormalizeManifestType; solo la
+        // etiqueta visible va en mayúsculas para igualar a la celda. Se hace en
+        // JS y no con CSS porque Windows dibuja el desplegable del <select> de
+        // forma nativa y ahí text-transform no siempre se aplica.
         option.value = value;
-        option.textContent = value;
+        option.textContent = value.toUpperCase();
         select.appendChild(option);
     });
     select.value = _conciNormalizeManifestType(currentRaw);
