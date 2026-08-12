@@ -1067,6 +1067,32 @@ FF
             will-change: transform;
             transform: translateZ(0);
         }
+        /* Columnas fijas al desplazar en horizontal (fecha, aerolínea, vuelo).
+           El left de cada una lo calcula _conciSyncColumnasFijas con el ancho
+           real, porque las columnas se pueden redimensionar y ocultar. */
+        #table-conci-manifiestos td.conci-col-fija,
+        #table-conci-manifiestos th.conci-col-fija {
+            position: sticky;
+            z-index: 4;
+        }
+        /* El encabezado de una columna fija se cruza con la fila sticky
+           superior: tiene que quedar por encima de ambas capas. */
+        #table-conci-manifiestos thead tr:first-child th.conci-col-fija { z-index: 8; }
+        #table-conci-manifiestos thead tr.conci-filter-row th.conci-col-fija { z-index: 7; }
+        /* Las celdas del cuerpo necesitan fondo opaco: si no, el contenido que
+           se desplaza por debajo se transparenta encima. Los tonos por fila ya
+           lo dan; esto cubre el caso de una fila sin tono asignado. */
+        #table-conci-manifiestos tbody td.conci-col-fija { background: #ffffff; }
+        /* Borde que separa el bloque fijo de lo que se desplaza. */
+        #table-conci-manifiestos .conci-col-fija-ultima {
+            box-shadow: 2px 0 4px -1px rgba(0,0,0,.18);
+            border-right: 2px solid #adb5bd !important;
+        }
+        /* Celda repuesta desde el borrador local: se capturó, no llegó a la
+           base y se recuperó al volver a entrar. Se reintenta sola. */
+        #table-conci-manifiestos td[data-col].conci-cell-borrador {
+            box-shadow: inset 0 -2px 0 #f0ad4e;
+        }
         #table-conci-manifiestos tbody tr {
             cursor: pointer;
             transition: background-color .15s ease;
@@ -1086,6 +1112,16 @@ FF
             color: #adb5bd !important;
             cursor: not-allowed;
             font-style: italic;
+        }
+        /* Valor guardado que no cuadra con sus rubros (TOTAL EXENTOS /
+           PAX QUE PAGAN TUA). La celda muestra el valor correcto; el aviso
+           es porque la base conserva el anterior hasta el proximo guardado. */
+        #table-conci-manifiestos td[data-col].conci-cell-tua-descuadre {
+            background: #fff3cd !important;
+            color: #664d03 !important;
+            font-weight: 600;
+            box-shadow: inset 3px 0 0 #f0ad4e;
+            cursor: help;
         }
         #table-conci-manifiestos tbody tr:hover > td {
             background: #eef1f4 !important;
@@ -21723,6 +21759,7 @@ FF
                                                             <i class="fas fa-undo me-1"></i>Deshacer
                                                         </button>
                                                         <span class="badge bg-secondary" id="badge-conci-manifiestos-count" style="display:none"></span>
+                                                        <span id="conci-pendientes-indicador" class="badge d-none" style="background:#fff3cd;color:#664d03;border:1px solid #f0ad4e;font-weight:600"></span>
                                                     </div>
                                                 </div>
                                                 <div class="px-3 py-2 border-bottom bg-light d-flex justify-content-between align-items-center flex-wrap gap-2 conci-manifest-filters">
@@ -21751,6 +21788,8 @@ FF
                                                                 <i class="fas fa-file-excel me-1"></i>Exportar Excel
                                                             </button>
                                                             <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="dropdownExportConci" style="font-size:0.85rem;">
+                                                                <li><h6 class="dropdown-header py-1" style="font-size:0.72rem;line-height:1.25;font-weight:600;">Exporta el día completo<br><span class="fw-normal text-muted">Los filtros de la tabla no se aplican</span></h6></li>
+                                                                <li><hr class="dropdown-divider my-1"></li>
                                                                 <li><a class="dropdown-item" href="#" onclick="window.conciExportExcel &amp;&amp; window.conciExportExcel('pax'); return false;"><i class="fas fa-users text-primary me-2"></i>Pasajeros</a></li>
                                                                 <li><a class="dropdown-item" href="#" onclick="window.conciExportExcel &amp;&amp; window.conciExportExcel('carga'); return false;"><i class="fas fa-box-open text-warning me-2"></i>Carga</a></li>
                                                             </ul>

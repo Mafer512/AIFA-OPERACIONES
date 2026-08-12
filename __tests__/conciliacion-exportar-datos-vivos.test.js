@@ -187,3 +187,43 @@ describe('regresión', () => {
     expect(exportFn).toContain('en el día cargado');
   });
 });
+
+describe('alcance: se exporta el día completo', () => {
+  // Decisión del área (12 ago 2026): exportar TODO el día, no lo filtrado.
+  // Estas pruebas la fijan para que no cambie por accidente.
+  const exportFn = source.slice(
+    source.indexOf('async function _conciExportToExcel'),
+    source.indexOf('\n}\n', source.indexOf('async function _conciExportToExcel'))
+  );
+
+  test('no consulta los filtros de columna', () => {
+    expect(exportFn).not.toMatch(/_conciColFilters|_conciExcelFilters/);
+  });
+
+  test('no consulta los filtros de píldora (llegadas, salidas, sobrecupo)', () => {
+    expect(exportFn).not.toMatch(/_conciClassFilter|_conciDirFilter|_conciOvercapFilter/);
+  });
+
+  test('no descarta las filas ocultas por un filtro', () => {
+    // Las filas filtradas siguen en el DOM con display:none; se incluyen.
+    expect(exportFn).not.toMatch(/style\.display|offsetParent/);
+  });
+
+  test('lo único que separa las dos hojas es pasajeros contra carga', () => {
+    expect(exportFn).toContain('_conciRowIsCargo');
+  });
+
+  test('las filas ocultas por un filtro sí llegan a la exportación', () => {
+    api.setData([{ 'AEROLINEA': 'VIVA AEROBUS' }, { 'AEROLINEA': 'CARGOLUX' }]);
+    const tbody = renderTable([
+      { _index: 0, cells: { 'AEROLINEA': { raw: 'VIVA AEROBUS' } } },
+      { _index: 1, cells: { 'AEROLINEA': { raw: 'CARGOLUX' } } },
+    ]);
+    // El filtro esconde la segunda fila, como hace _conciApplyPillFilter.
+    tbody.querySelectorAll('tr')[1].style.display = 'none';
+
+    const rows = api._conciGetExportRows();
+    expect(rows).toHaveLength(2);
+    expect(rows.map(r => r['AEROLINEA'])).toEqual(['VIVA AEROBUS', 'CARGOLUX']);
+  });
+});

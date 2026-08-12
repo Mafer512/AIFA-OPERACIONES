@@ -17219,6 +17219,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // marcada como "Pendiente de guardar" con su valor viviendo únicamente en
     // la pantalla, y puede quedarse así indefinidamente. Justo esas eran las
     // que se perdían en silencio al recargar, sin ningún aviso.
+    // Al recuperar la conexion se reintenta solo lo que quedo pendiente: la
+    // causa mas comun de un guardado fallido es justo una caida de red, y sin
+    // esto el capturador tendria que tocar cada celda otra vez para reintentar.
+    window.addEventListener('online', () => {
+        const filas = _conciReintentarPendientes();
+        if (filas && typeof showNotification === 'function') {
+            const cuantas = filas === 1 ? '1 fila' : filas + ' filas';
+            showNotification('Conexión restablecida: reintentando ' + cuantas + ' sin guardar.', 'info');
+        }
+    });
+
     window.addEventListener('beforeunload', (e) => {
         if (_conciHasUnsavedCaptures()) {
             e.preventDefault();
@@ -17436,6 +17447,8 @@ function _conciRenderColumnVisibilityMenu(columns) {
 }
 
 function _conciApplyColumnVisibility() {
+    // El ancho visible cambia: hay que recalcular los topes de las columnas fijas.
+    requestAnimationFrame(_conciSyncColumnasFijas);
     const table = document.getElementById('table-conci-manifiestos');
     if (table) {
         table.querySelectorAll('[data-conci-column-key]').forEach(cell => {
@@ -18070,6 +18083,101 @@ async function _ensureConciMatriculaCatalog() {
     } finally {
         _conciMatriculaCatalogLoaded = true;
     }
+}
+
+// ── Coherencia de los campos que alimentan el TUA ────────────────────────────
+//
+// Capturando celda por celda estos campos no se pueden descuadrar: TOTAL
+// EXENTOS y PAX QUE PAGAN TUA son columnas calculadas, se recalculan solas y
+// no se dejan editar (ver _conciIsCalculatedColumn / _conciActivateCellEditor).
+//
+// El hueco esta en el dato que NO pasa por esos editores:
+//   • lo que entra por "Importar" desde Excel/CSV, que se guarda tal cual;
+//   • lo que ya estaba guardado de antes.
+//
+// Y ese hueco es dificil de ver, porque la tabla recalcula al renderizar (ver
+// la llamada a _conciRefreshCalculatedCellsForRow en el render): en pantalla
+// SIEMPRE se ve la cifra correcta aunque la guardada sea otra. Quien lee la
+// base directo -- otras areas, reportes, el portal -- si se lleva la mala.
+//
+// Estas funciones calculan lo que deberia valer cada campo y marcan las filas
+// cuyo valor GUARDADO no coincide, para que se puedan corregir.
+
+function _conciTuaCampos(columns) {
+    const cols = Array.isArray(columns) ? columns : [];
+    const buscar = (patron) => cols.find(col => patron.test(_conciNormalizedColumnName(col))) || null;
+    return {
+        tipo: buscar(/^tipo(?: de)? manifiesto$/),
+        totalPax: buscar(/^total pax$/),
+        totalExentos: buscar(/^total exentos$/),
+        paxTua: buscar(/^pax que pagan tua$/),
+        exentos: [
+            buscar(/^diplomaticos$/),
+            buscar(/^en comision$/),
+            buscar(/^infantes$/),
+            buscar(/^transitos$/),
+            buscar(/^conexiones$/),
+            buscar(/^otros exentos$/),
+        ].filter(Boolean),
+    };
+}
+
+// Mismas reglas que _conciRefreshCalculatedCellsForRow, para que lo que se
+// valida sea exactamente lo que la captura produce.
+function _conciTuaValoresEsperados(row, campos) {
+    const numero = (col) => {
+        if (!col) return 0;
+        const raw = String(row?.[col] ?? '').trim().replace(/,/g, '');
+        if (!raw) return 0;
+        const n = Number(raw.replace(/[^0-9.-]/g, ''));
+        return Number.isFinite(n) ? n : 0;
+    };
+    const totalExentos = campos.exentos.reduce((suma, col) => suma + numero(col), 0);
+    const totalPax = numero(campos.totalPax);
+    // Los pasajeros de llegada no pagan TUA: solo aplica a salidas.
+    const esLlegada = /lleg|arr/i.test(String(campos.tipo ? row?.[campos.tipo] : '') || '');
+    const paxTua = (esLlegada && totalPax > 0) ? 0 : (totalPax - totalExentos);
+    return { totalExentos, paxTua, totalPax, esLlegada };
+}
+
+// Devuelve los campos cuyo valor guardado no coincide con el esperado.
+// Una celda vacia no cuenta como descuadre: es un campo sin capturar todavia,
+// no un dato equivocado.
+function _conciTuaDescuadres(row, campos) {
+    if (!row || !campos || (!campos.totalExentos && !campos.paxTua)) return [];
+    const esperado = _conciTuaValoresEsperados(row, campos);
+    const descuadres = [];
+    const comparar = (col, valorEsperado) => {
+        if (!col) return;
+        const crudo = String(row[col] ?? '').trim();
+        if (crudo === '') return;
+        const guardado = Number(crudo.replace(/,/g, '').replace(/[^0-9.-]/g, ''));
+        if (!Number.isFinite(guardado) || guardado === valorEsperado) return;
+        descuadres.push({ columna: col, guardado, esperado: valorEsperado });
+    };
+    comparar(campos.totalExentos, esperado.totalExentos);
+    comparar(campos.paxTua, esperado.paxTua);
+    return descuadres;
+}
+
+function _conciApplyTuaCoherence(rows, columns) {
+    const campos = _conciTuaCampos(columns);
+    if (!campos.totalExentos && !campos.paxTua) return 0;
+    let conDescuadre = 0;
+    (rows || []).forEach(row => {
+        const descuadres = _conciTuaDescuadres(row, campos);
+        row._conci_tua_descuadre = descuadres.length > 0;
+        row._conci_tua_detalle = descuadres;
+        if (descuadres.length) conDescuadre++;
+    });
+    if (conDescuadre) {
+        console.warn(
+            `[Conciliación] ${conDescuadre} fila(s) tienen guardado un TOTAL EXENTOS o PAX QUE PAGAN TUA `
+            + 'que no cuadra con sus rubros. En pantalla se muestra el valor correcto (se recalcula al '
+            + 'cargar), pero la base conserva el anterior hasta que la fila se vuelva a guardar.'
+        );
+    }
+    return conDescuadre;
 }
 
 function _conciApplyMatriculaCatalogValidation(rows, columns) {
@@ -19036,6 +19144,22 @@ function _conciRenderHrsCumplidasCell(td, value) {
     }
 }
 
+// Marca las celdas cuyo valor GUARDADO no cuadra con sus rubros. La celda
+// muestra el valor correcto (la tabla recalcula al cargar); el aviso existe
+// porque la base todavia tiene el otro, y esa es la que leen otras areas.
+function _conciRenderDescuadreTua(tr, row) {
+    const descuadres = Array.isArray(row?._conci_tua_detalle) ? row._conci_tua_detalle : [];
+    if (!descuadres.length) return;
+    descuadres.forEach(({ columna, guardado, esperado }) => {
+        const td = tr.querySelector(`td[data-col="${(columna || '').replace(/"/g, '\\"')}"]`);
+        if (!td) return;
+        td.classList.add('conci-cell-tua-descuadre');
+        td.title = `La base tiene guardado ${guardado} y por sus rubros deberia ser ${esperado}. `
+            + 'Se corrige sola en cuanto se guarde cualquier cambio de esta fila.';
+    });
+    tr.dataset.tuaDescuadre = '1';
+}
+
 function _conciRenderFactorOcupacionCell(td, factorText, isOvercapacity, diff) {
     if (!td) return;
     const text = String(factorText || '').trim();
@@ -19750,6 +19874,33 @@ function _conciResetModuleState() {
 // personal captura manifiestos del día que acaba de cerrar, así que al
 // entrar a la pestaña el filtro debe apuntar directo a ayer, sin importar
 // qué otros días tengan registros cargados.
+// El selector de anio heredado trae sus opciones escritas a mano en el HTML
+// (2025 y 2026). Un <select> al que se le asigna un valor que no esta entre sus
+// opciones se queda en blanco, asi que en enero de 2027 la fecha por defecto de
+// una fila nueva dejaba de calcularse y varias rutas empezaban a operar con un
+// anio invalido -- justo en la captura del cierre anual. Esto crea la opcion
+// que falte antes de asignarla.
+function _conciAsegurarAnioEnSelector(selector, anio) {
+    if (!selector || !Number.isFinite(Number(anio))) return;
+    const valor = String(anio);
+    const existe = [...selector.options].some(opcion => opcion.value === valor);
+    if (existe) return;
+    const opcion = document.createElement('option');
+    opcion.value = valor;
+    opcion.textContent = valor;
+    selector.appendChild(opcion);
+}
+
+// Fecha del filtro cuando este apunta a un solo dia; cadena vacia si hay un
+// rango de varios dias (no hay una fecha "del filtro" que se pueda suponer).
+function _conciFechaUnicaDelFiltro() {
+    const desde = String(document.getElementById('filter-conci-fecha-desde')?.value || '').trim();
+    if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(desde)) return '';
+    const hasta = String(document.getElementById('filter-conci-fecha-hasta')?.value || '').trim();
+    if (hasta && hasta !== desde) return '';
+    return desde;
+}
+
 function _conciApplyTodayFilters() {
     const yearEl  = document.getElementById('filter-conci-manifiestos-year');
     const monthEl = document.getElementById('filter-conci-manifiestos-month');
@@ -19763,6 +19914,7 @@ function _conciApplyTodayFilters() {
     const m = yesterday.getMonth() + 1;
     const d = yesterday.getDate();
 
+    _conciAsegurarAnioEnSelector(yearEl, y);
     if (yearEl)  yearEl.value  = y;
     if (monthEl) monthEl.value = m;
     if (dayEl)   dayEl.value   = d;
@@ -19808,6 +19960,7 @@ async function loadConciliacionManifiestos(options = {}) {
         day = dStart.getDate();
         // Sync hidden dropdowns so that autoLatestDate and other internal code
         // that reads them still works correctly.
+        _conciAsegurarAnioEnSelector(yearEl, year);
         if (yearEl) yearEl.value = year;
         if (monthEl) monthEl.value = month;
         if (dayEl) dayEl.value = day;
@@ -20003,6 +20156,9 @@ async function loadConciliacionManifiestos(options = {}) {
 
         const { rows, columns } = _conciBuildEnriched(filteredManifest, filteredVuelos, schemaRows);
         _conciApplyMatriculaCatalogValidation(rows, columns);
+        // Marca las filas cuyo TOTAL EXENTOS / PAX QUE PAGAN TUA guardado no
+        // cuadra con sus rubros (importaciones y datos antiguos).
+        _conciApplyTuaCoherence(rows, columns);
 
         // Filtro fino por día: se conserva la fila solo si su HR. DE OPERACIÓN cae en el
         // día seleccionado (con respaldo a SLOT ASIGNADO / FECHA cuando no hay hora de
@@ -21193,6 +21349,20 @@ function _conciImportSignature(row, columns, fallbackYear) {
     return `${aerolinea}|${vuelo}|${dateKey}|${direction}|${ruta}`;
 }
 
+// Reescribe TOTAL EXENTOS y PAX QUE PAGAN TUA de un payload con la misma regla
+// que usa la captura (ver _conciRefreshCalculatedCellsForRow). Solo toca la fila
+// si trae algun rubro de pasajeros: una fila de carga no se altera.
+function _conciTuaRecalcularPayload(payload) {
+    if (!payload) return payload;
+    const campos = _conciTuaCampos(Object.keys(payload));
+    const traeRubros = campos.exentos.length > 0 || campos.totalPax;
+    if (!traeRubros) return payload;
+    const esperado = _conciTuaValoresEsperados(payload, campos);
+    if (campos.totalExentos) payload[campos.totalExentos] = esperado.totalExentos;
+    if (campos.paxTua) payload[campos.paxTua] = esperado.paxTua;
+    return payload;
+}
+
 function _conciImportBuildRows(rawRows, columnMap, identityColumns, fallbackYear) {
     const uniqueRows = [];
     const invalidRows = [];
@@ -21209,6 +21379,11 @@ function _conciImportBuildRows(rawRows, columnMap, identityColumns, fallbackYear
 
         const manifestType = _conciImportNormalizeManifestType(payload[identityColumns.tipo]);
         if (manifestType) payload[identityColumns.tipo] = manifestType;
+        // El archivo puede traer TOTAL EXENTOS o PAX QUE PAGAN TUA descuadrados
+        // respecto de sus propios rubros. Capturando celda por celda eso no puede
+        // pasar (son columnas calculadas y bloqueadas), asi que se aplica aqui la
+        // misma regla y la importacion guarda datos coherentes desde el principio.
+        _conciTuaRecalcularPayload(payload);
         const signature = _conciImportSignature(payload, identityColumns, fallbackYear);
         if (!signature) {
             invalidRows.push(rowIndex + 2);
@@ -21545,6 +21720,56 @@ function _updateManifiestosSummaryStrip(data, columns) {
 // y la tabla queda "fija" en ese rango: solo su contenido interno se
 // desplaza (vertical y horizontal), nunca la página completa.
 let _conciScrollResizeTimer = null;
+// ── Columnas fijas al desplazar horizontalmente ──────────────────────────────
+//
+// La tabla tiene mas de cuarenta columnas. Al desplazarse a la derecha para
+// capturar pasajeros o kilos se perdian de vista la fecha, la aerolinea y el
+// numero de vuelo, o sea la identidad de la fila: se capturaba a ciegas,
+// confiando en no haberse cambiado de renglon. Es el error de captura mas facil
+// de cometer y el mas dificil de detectar despues.
+//
+// El encabezado ya se quedaba fijo en vertical; esto hace lo mismo en
+// horizontal para esas tres columnas.
+const _CONCI_COLUMNAS_FIJAS = [/^fecha$/, /^aerolinea$/, /^# de vuelo$/];
+
+function _conciEsColumnaFija(columna) {
+    const key = _conciNormalizedColumnName(columna);
+    return _CONCI_COLUMNAS_FIJAS.some(patron => patron.test(key));
+}
+
+// Los desplazamientos se calculan del ancho real de cada columna, no de un
+// valor fijo: las columnas se pueden redimensionar y ocultar. Una columna
+// oculta mide 0 y por eso desaparece sola del calculo.
+function _conciSyncColumnasFijas() {
+    const tabla = document.getElementById('table-conci-manifiestos');
+    if (!tabla || tabla.offsetParent === null) return;
+    const thead = tabla.querySelector('thead');
+    if (!thead) return;
+
+    const encabezados = [...thead.querySelectorAll('tr:first-child th[data-conci-column-key]')];
+    let acumulado = 0;
+    const offsets = new Map();
+    encabezados.forEach(th => {
+        const columna = th.dataset.conciColumnKey;
+        if (!_conciEsColumnaFija(columna)) return;
+        offsets.set(columna, acumulado);
+        acumulado += th.getBoundingClientRect().width;
+    });
+
+    const ultima = [...offsets.keys()].pop() || null;
+    tabla.querySelectorAll('[data-conci-column-key]').forEach(celda => {
+        const columna = celda.dataset.conciColumnKey;
+        if (!offsets.has(columna)) {
+            celda.classList.remove('conci-col-fija', 'conci-col-fija-ultima');
+            celda.style.removeProperty('left');
+            return;
+        }
+        celda.classList.add('conci-col-fija');
+        celda.classList.toggle('conci-col-fija-ultima', columna === ultima);
+        celda.style.left = `${Math.round(offsets.get(columna))}px`;
+    });
+}
+
 function _conciSyncScrollHeight() {
     const wrap = document.getElementById('conci-manifiestos-scroll');
     if (!wrap || wrap.offsetParent === null) return; // pestaña oculta: nada que medir
@@ -21611,7 +21836,10 @@ document.addEventListener('keydown', event => {
 }, true);
 window.addEventListener('resize', () => {
     clearTimeout(_conciScrollResizeTimer);
-    _conciScrollResizeTimer = setTimeout(_conciSyncScrollHeight, 120);
+    _conciScrollResizeTimer = setTimeout(() => {
+        _conciSyncScrollHeight();
+        _conciSyncColumnasFijas();
+    }, 120);
 });
 
 function _renderConciManifiestosTable(data, columns, fallbackYear) {
@@ -21827,6 +22055,9 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
             table.style.setProperty('--conci-head-h', Math.ceil(headerRow.getBoundingClientRect().height) + 'px');
         }
         _conciSyncScrollHeight();
+        _conciSyncColumnasFijas();
+        // Repone las capturas que quedaron pendientes de guardar y las reintenta.
+        _conciRestaurarBorradores();
     });
 
     // Encabezado fijo vía CSS (position:sticky). Sin manipulación de transform
@@ -22094,6 +22325,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
 
             // Recalcula las formulas tanto al cargar como durante la captura.
             _conciRefreshCalculatedCellsForRow(tr);
+            _conciRenderDescuadreTua(tr, row);
 
             // ── Celda de validación Itinerario ─────────────────────────────────
             {
@@ -22699,6 +22931,43 @@ function _conciShouldPersistCalculatedColumn(column) {
 
 // Columnas de captura de pasajeros. En vuelos de carga (incluye mixtos
 // clasificados como carga) no aplican y se bloquea su edición.
+// Contadores que la base guarda como numero. Un solo caracter no numerico en
+// cualquiera de ellos hace que Postgres rechace el UPDATE completo, y el
+// mecanismo de auto-correccion responde descartando TODAS las columnas
+// numericas del envio (ver _conciWriteRowSafe): un dedazo puede tirar catorce
+// campos de golpe. Filtrando la entrada en la celda, ese plan B casi nunca
+// tiene que activarse.
+//
+// "# DE VUELO" queda fuera a proposito aunque la base lo guarde como numero:
+// los designadores reales traen letras ("VB 9999") y bloquearlas impediria
+// capturar. Ese caso lo sigue resolviendo _conciWriteRowSafe.
+function _conciIsNumericCaptureColumn(column) {
+    const key = _conciNormalizedColumnName(column);
+    return /^total pax$/.test(key)
+        || /^diplomaticos$/.test(key)
+        || /^en comision$/.test(key)
+        || /^infantes$/.test(key)
+        || /^transitos$/.test(key)
+        || /^conexiones$/.test(key)
+        || /^otros exentos$/.test(key)
+        || /^total exentos$/.test(key)
+        || /^pax que pagan tua$/.test(key)
+        || /^correo$/.test(key)
+        || /^kgs?.? de equipaje$/.test(key)
+        || /^kgs?.? de carga (nacional|internacional)$/.test(key)
+        || /^kgs?.? de carga total$/.test(key);
+}
+
+// Deja solo digitos y un punto decimal. No usa <input type="number"> porque
+// ese oculta lo que el usuario tecleo cuando el valor es invalido, y aqui
+// interesa que la celda muestre siempre lo que hay.
+function _conciSoloNumero(valor) {
+    const limpio = String(valor ?? '').replace(/[^0-9.]/g, '');
+    const punto = limpio.indexOf('.');
+    if (punto === -1) return limpio;
+    return limpio.slice(0, punto + 1) + limpio.slice(punto + 1).replace(/[.]/g, '');
+}
+
 function _conciIsPassengerColumn(column) {
     const key = _conciNormalizedColumnName(column);
     return /^total\s+pax$/.test(key)
@@ -23867,8 +24136,14 @@ function _conciStageCellDraft(td, rawValue) {
     if (td.dataset.origRaw === undefined) td.dataset.origRaw = currentRaw;
     const origRaw = _conciNormalizeEditableCellText(td.dataset.origRaw);
     td.dataset.pendingRaw = nextRaw;
-    if (nextRaw !== origRaw) td.dataset.dirty = '1';
-    else td.removeAttribute('data-dirty');
+    if (nextRaw !== origRaw) {
+        td.dataset.dirty = '1';
+        // Desde el primer tecleo queda a salvo en esta computadora.
+        if (typeof _conciBorradorGuardarCelda === 'function') _conciBorradorGuardarCelda(td, nextRaw);
+    } else {
+        td.removeAttribute('data-dirty');
+        if (typeof _conciBorradorQuitarCelda === 'function') _conciBorradorQuitarCelda(td);
+    }
 
     const tr = td.closest('tr');
     if (tr) {
@@ -23885,6 +24160,214 @@ function _conciQueueAutoSave(tr) {
         tr._conciAutoSaveTimer = null;
         _conciAutoSaveRow(tr, { keepEditorsOpen: true });
     }, _CONCI_AUTOSAVE_INPUT_DELAY_MS);
+}
+
+// ── Borrador local de capturas sin guardar ───────────────────────────────────
+//
+// El autoguardado por celda escribe a Supabase sin esperar. Cuando esa
+// escritura falla (red caida, permisos, tipo incompatible) la fila se queda
+// marcada como "Pendiente de guardar" y su valor vive UNICAMENTE en el DOM: una
+// recarga, un cierre de pestaña o un vencimiento de sesion se lo llevaba sin
+// dejar rastro. El aviso al salir avisa, pero no rescata nada si el usuario
+// acepta salir o si el navegador cierra la pestaña por otra via.
+//
+// Aqui cada celda capturada queda en localStorage desde el primer tecleo y solo
+// se borra cuando Supabase confirma ese valor exacto. Al volver a entrar, lo que
+// quedo pendiente se repone en su fila y se reintenta guardar solo.
+//
+// El borrador NO es una segunda fuente de verdad: solo guarda lo que todavia no
+// esta en la base. En cuanto la base lo confirma, desaparece.
+
+const _CONCI_BORRADORES_KEY = 'aifa-conciliacion-borradores-v1';
+// Un borrador viejo es mas peligroso que util: puede resucitar una captura que
+// alguien mas ya corrigio. Dos dias cubre un fin de semana largo sin ir mas alla.
+const _CONCI_BORRADORES_VIGENCIA_MS = 48 * 60 * 60 * 1000;
+
+function _conciBorradoresLeer() {
+    try {
+        const crudo = localStorage.getItem(_CONCI_BORRADORES_KEY);
+        if (!crudo) return {};
+        const datos = JSON.parse(crudo);
+        return (datos && typeof datos === 'object') ? datos : {};
+    } catch (_) {
+        // Almacenamiento lleno, deshabilitado o con basura: la captura sigue
+        // funcionando sin red de seguridad, que es mejor que no funcionar.
+        return {};
+    }
+}
+
+function _conciBorradoresEscribir(datos) {
+    try {
+        const claves = Object.keys(datos);
+        if (!claves.length) localStorage.removeItem(_CONCI_BORRADORES_KEY);
+        else localStorage.setItem(_CONCI_BORRADORES_KEY, JSON.stringify(datos));
+        return true;
+    } catch (error) {
+        console.warn('[Conciliación] no se pudo guardar el borrador local:', error);
+        return false;
+    }
+}
+
+// Descarta lo vencido. Devuelve los borradores vigentes.
+function _conciBorradoresPurgar(datos) {
+    const vivos = datos || _conciBorradoresLeer();
+    const ahora = Date.now();
+    let cambio = false;
+    Object.keys(vivos).forEach(clave => {
+        const entrada = vivos[clave];
+        const ts = Number(entrada?.ts);
+        if (!Number.isFinite(ts) || (ahora - ts) > _CONCI_BORRADORES_VIGENCIA_MS
+            || !entrada?.celdas || !Object.keys(entrada.celdas).length) {
+            delete vivos[clave];
+            cambio = true;
+        }
+    });
+    if (cambio) _conciBorradoresEscribir(vivos);
+    return vivos;
+}
+
+// Clave estable de la fila. Las filas ya guardadas se identifican por su id; las
+// que aun no existen en la base reciben una propia que se conserva en el <tr>,
+// para que sus celdas se agrupen en un solo borrador.
+function _conciBorradorClaveFila(tr) {
+    if (!tr) return '';
+    const rowId = String(tr.dataset.rowId || '').trim();
+    if (rowId) return `id:${rowId}`;
+    if (!tr.dataset.conciBorradorClave) {
+        tr.dataset.conciBorradorClave = `nueva:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+    return tr.dataset.conciBorradorClave;
+}
+
+function _conciBorradorGuardarCelda(td, valor) {
+    const tr = td?.closest?.('tr');
+    const col = td?.dataset?.col;
+    if (!tr || !col) return;
+    const clave = _conciBorradorClaveFila(tr);
+    if (!clave) return;
+    const datos = _conciBorradoresLeer();
+    const entrada = datos[clave] || { celdas: {} };
+    entrada.celdas[col] = String(valor ?? '');
+    entrada.ts = Date.now();
+    entrada.fecha = (typeof _conciFechaUnicaDelFiltro === 'function' ? _conciFechaUnicaDelFiltro() : '')
+        || entrada.fecha || '';
+    entrada.esNueva = tr.dataset.conciNew === '1';
+    datos[clave] = entrada;
+    _conciBorradoresEscribir(datos);
+    _conciActualizarIndicadorBorradores();
+}
+
+function _conciBorradorQuitarCelda(td) {
+    const tr = td?.closest?.('tr');
+    const col = td?.dataset?.col;
+    if (!tr || !col) return;
+    const clave = _conciBorradorClaveFila(tr);
+    const datos = _conciBorradoresLeer();
+    const entrada = datos[clave];
+    if (!entrada?.celdas) return;
+    if (!(col in entrada.celdas)) return;
+    delete entrada.celdas[col];
+    if (!Object.keys(entrada.celdas).length) delete datos[clave];
+    _conciBorradoresEscribir(datos);
+    _conciActualizarIndicadorBorradores();
+}
+
+// Una fila nueva que ya se guardo cambia de clave (pasa a tener id): su borrador
+// anterior deja de corresponder a nada y hay que retirarlo.
+function _conciBorradorTrasladarFilaNueva(tr, nuevoId) {
+    const claveVieja = tr?.dataset?.conciBorradorClave;
+    if (!claveVieja) return;
+    const datos = _conciBorradoresLeer();
+    if (datos[claveVieja]) {
+        delete datos[claveVieja];
+        _conciBorradoresEscribir(datos);
+    }
+    delete tr.dataset.conciBorradorClave;
+    if (nuevoId) tr.dataset.rowId = String(nuevoId);
+    _conciActualizarIndicadorBorradores();
+}
+
+function _conciBorradoresPendientes() {
+    const datos = _conciBorradoresPurgar();
+    let celdas = 0;
+    Object.values(datos).forEach(entrada => {
+        celdas += Object.keys(entrada?.celdas || {}).length;
+    });
+    return { filas: Object.keys(datos).length, celdas, datos };
+}
+
+// Repone en la tabla las capturas que quedaron pendientes y las vuelve a
+// encolar. Solo toca filas que ya existen en la vista actual: reponer una fila
+// nueva obligaria a entrar en modo edicion por sorpresa, asi que esas se
+// conservan y se reportan en el indicador para recuperarlas a proposito.
+function _conciRestaurarBorradores() {
+    const tabla = document.getElementById('table-conci-manifiestos');
+    if (!tabla) return 0;
+    const { datos } = _conciBorradoresPendientes();
+    let repuestas = 0;
+    Object.keys(datos).forEach(clave => {
+        if (!clave.startsWith('id:')) return;
+        const rowId = clave.slice(3);
+        const tr = [...tabla.querySelectorAll('tbody tr[data-row-id]')]
+            .find(fila => String(fila.dataset.rowId || '') === rowId);
+        if (!tr) return;
+        const entrada = datos[clave];
+        let algunaRepuesta = false;
+        Object.keys(entrada.celdas || {}).forEach(col => {
+            const td = [...tr.querySelectorAll('td[data-col]')]
+                .find(celda => celda.dataset.col === col);
+            if (!td) return;
+            const pendiente = String(entrada.celdas[col] ?? '');
+            const actual = _conciNormalizeEditableCellText(td.dataset.raw ?? td.textContent);
+            // Si la base ya tiene ese mismo valor, el borrador cumplio su
+            // funcion y sobra.
+            if (_conciNormalizeEditableCellText(pendiente) === actual) {
+                delete entrada.celdas[col];
+                return;
+            }
+            td.textContent = pendiente;
+            td.dataset.pendingRaw = pendiente;
+            td.dataset.dirty = '1';
+            td.classList.add('conci-cell-borrador');
+            td.title = 'Captura pendiente de guardar, recuperada de esta misma computadora.';
+            algunaRepuesta = true;
+            repuestas++;
+        });
+        if (algunaRepuesta) {
+            tr.dataset.dirty = '1';
+            _conciRefreshCalculatedCellsForRow(tr);
+            _conciQueueAutoSave(tr);
+        }
+    });
+    _conciBorradoresEscribir(datos);
+    _conciActualizarIndicadorBorradores();
+    return repuestas;
+}
+
+// Vuelve a intentar el guardado de todo lo que siga pendiente en pantalla.
+function _conciReintentarPendientes() {
+    const tabla = document.getElementById('table-conci-manifiestos');
+    if (!tabla) return 0;
+    const filas = [...tabla.querySelectorAll('tbody tr')]
+        .filter(tr => tr.querySelector('td[data-dirty="1"]'));
+    filas.forEach(tr => _conciQueueAutoSave(tr));
+    return filas.length;
+}
+
+function _conciActualizarIndicadorBorradores() {
+    const el = document.getElementById('conci-pendientes-indicador');
+    if (!el) return;
+    const { filas, celdas } = _conciBorradoresPendientes();
+    if (!celdas) {
+        el.classList.add('d-none');
+        el.removeAttribute('title');
+        return;
+    }
+    el.classList.remove('d-none');
+    const textoCeldas = celdas === 1 ? '1 captura sin guardar' : `${celdas} capturas sin guardar`;
+    el.textContent = textoCeldas;
+    el.title = `${textoCeldas} en ${filas === 1 ? '1 fila' : `${filas} filas`}. `
+        + 'Se reintenta solo; están guardadas en esta computadora hasta que la base las confirme.';
 }
 
 function _conciActivateCellEditor(td) {
@@ -23932,6 +24415,26 @@ function _conciActivateCellEditor(td) {
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'form-control form-control-sm conci-cell-input';
+    // Columnas de conteo: se filtra la entrada para que nunca salga de aqui un
+    // valor que la base vaya a rechazar.
+    const esNumerica = _conciIsNumericCaptureColumn(col);
+    if (esNumerica) {
+        input.inputMode = 'decimal';
+        input.addEventListener('beforeinput', (e) => {
+            if (typeof e.data !== 'string' || e.data === '') return;
+            if (_conciSoloNumero(e.data) !== e.data) e.preventDefault();
+        });
+        // Respaldo para pegado y para navegadores sin beforeinput fiable.
+        input.addEventListener('input', () => {
+            const limpio = _conciSoloNumero(input.value);
+            if (limpio === input.value) return;
+            const pos = input.selectionStart;
+            const quitados = input.value.length - limpio.length;
+            input.value = limpio;
+            const nueva = Math.max(0, (pos ?? limpio.length) - quitados);
+            try { input.setSelectionRange(nueva, nueva); } catch (_) { /* sin soporte */ }
+        });
+    }
     const isAirlineCol = /aerol[ií]nea|airline/i.test(col);
     const currentAirlineMeta = isAirlineCol ? _conciResolveAirlineMeta(currentRaw) : null;
     input.value = isAirlineCol
@@ -25087,6 +25590,9 @@ function _conciSettleSavedCells(tr, cells, savedCellValues, savedColumns) {
         if (currentRaw !== savedRaw) return;
         td.dataset.origRaw = savedRaw;
         td.removeAttribute('data-dirty');
+        // Confirmado por la base: el borrador ya no hace falta.
+        td.classList.remove('conci-cell-borrador');
+        if (typeof _conciBorradorQuitarCelda === 'function') _conciBorradorQuitarCelda(td);
     });
     if (tr.querySelector(`td[data-dirty='1']`)) tr.dataset.dirty = '1';
     else tr.removeAttribute('data-dirty');
@@ -25183,13 +25689,16 @@ async function _conciAutoSaveRow(tr, options = {}) {
     });
     const settleSavedCells = (savedColumns) =>
         _conciSettleSavedCells(tr, cells, savedCellValues, savedColumns);
-    // Si la fila nueva sólo tiene el mes capturado, usa la fecha actualmente
-    // seleccionada en el filtro como fecha inicial del registro.
+    // Una fila nueva sin fecha capturada hereda la del filtro, pero SOLO cuando
+    // el filtro apunta a un unico dia. Con un rango activo (del 1 al 15, por
+    // ejemplo) se tomaba siempre el dia de inicio, sin importar en que parte de
+    // la tabla se estuviera trabajando: el manifiesto quedaba archivado en una
+    // fecha que no era la suya, y el error es casi invisible porque la fila se
+    // ve bien. Con rango se deja vacia a proposito: un campo sin capturar salta
+    // a la vista, un valor plausible y falso no.
     if (tr.dataset.conciNew === '1' && !payload.FECHA) {
-        const year = Number(document.getElementById('filter-conci-manifiestos-year')?.value);
-        const month = Number(document.getElementById('filter-conci-manifiestos-month')?.value);
-        const day = Number(document.getElementById('filter-conci-manifiestos-day')?.value);
-        if (year && month && day) payload.FECHA = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const fecha = _conciFechaUnicaDelFiltro();
+        if (fecha) payload.FECHA = fecha;
     }
     // Autocompleta CAPTURÓ con el usuario en sesión la primera vez que esta
     // fila recibe una captura real — así siempre se sabe quién capturó los
@@ -25321,6 +25830,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
             didWriteSuccessfully = true;
             const inserted = Array.isArray(result.data) ? result.data[0] : result.data;
             if (!rowId && inserted?.id !== undefined && inserted?.id !== null) {
+                _conciBorradorTrasladarFilaNueva(tr, inserted.id);
                 tr.dataset.rowId = String(inserted.id);
                 tr.dataset.conciSummaryPersisted = '1';
                 tr.removeAttribute('data-conci-new');

@@ -94,6 +94,10 @@ describe('captura de celdas en Conciliacion > Manifiestos', () => {
       '_conciBroadcastCellInput',
       '_conciStageCellDraft',
       '_conciQueueAutoSave',
+      '_conciIsCodigoDemoraColumn',
+      '_conciActivateDemoraCodeEditor',
+      '_conciIsNumericCaptureColumn',
+      '_conciSoloNumero',
       'document',
       activationSource + '; return _conciActivateCellEditor;'
     )(
@@ -120,6 +124,10 @@ describe('captura de celdas en Conciliacion > Manifiestos', () => {
       broadcastCellInput,
       stageCellDraft,
       queueAutoSave,
+      () => false,
+      jest.fn(),
+      () => false,
+      value => String(value ?? ''),
       document
     );
 
