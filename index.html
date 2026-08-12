@@ -119,10 +119,10 @@
     <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
     <link rel="dns-prefetch" href="//code.jquery.com">
     <link rel="dns-prefetch" href="//cdn.datatables.net">
-    <link
+    <link media="print" onload="this.media='all'"
         href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+    <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="style.css?v=20260804-airline-stats-v2">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
@@ -132,27 +132,12 @@
     <link rel="apple-touch-icon" sizes="180x180" href="images/icons/aifa-app-icon-512.png?v=20251126">
     <link rel="manifest" href="manifest.webmanifest?v=20251126">
     
-    <!-- Staged loading: critical first, secondary as prefetch -->
+    <!-- Solo se precargan recursos visibles en el acceso inicial. -->
     <link rel="preload" as="image" href="images/Slot.jpeg" fetchpriority="high">
     <link rel="preload" as="image" href="images/aifa-logo.png" fetchpriority="high">
     <link rel="preload" as="image" href="images/nlu-operacion.png">
     <link rel="preload" as="image" href="images/emblema-aviacion.png">
-    <link rel="prefetch" as="image" href="images/torre.jpg">
-    <link rel="prefetch" as="image" href="images/Aviones%20pax.jpeg">
-    <link rel="prefetch" as="image" href="images/Pax.jpeg">
-    <link rel="prefetch" as="image" href="images/Aeronaves%20carga.jpg">
-    <link rel="prefetch" as="image" href="images/Carga%20a%C3%A9rea.jpg">
-    <link rel="prefetch" as="image" href="images/Aviones%20FBO.png">
-    <link rel="prefetch" as="image" href="images/Pasajero%20FBO.jpg">
-
-    <!-- Preload de los 5 scripts mas pesados (descarga en paralelo desde el primer byte del HTML).
-         No altera el orden de ejecución: los <script> tags más abajo siguen mandando.
-         Los hrefs DEBEN coincidir EXACTAMENTE con el src del script para que el navegador reuse el preload. -->
-    <link rel="preload" as="script" href="script.js?v=20260805-conci-cargo-nopax" fetchpriority="high">
-    <link rel="preload" as="script" href="js/manifiestos.js">
-    <link rel="preload" as="script" href="js/data-management.js">
-    <link rel="preload" as="script" href="js/analisis-operaciones.js?v=47">
-    <link rel="preload" as="script" href="js/manifiestos-analisis.js">
+    <!-- Los recursos de modulos internos se solicitan al abrir cada seccion. -->
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
@@ -184,9 +169,9 @@
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     
     <!-- DataTables -->
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/fixedheader/3.4.0/css/fixedHeader.bootstrap5.min.css">
+    <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+    <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+    <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdn.datatables.net/fixedheader/3.4.0/css/fixedHeader.bootstrap5.min.css">
     <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
@@ -21733,6 +21718,15 @@ FF
                                                         <span class="conci-count-pill conci-pill-sobrecupo-alert d-none" id="conci-pill-sobrecupo" role="button" tabindex="0" title="Filtrar solo vuelos con sobrecupo (pax capturados por encima de la capacidad máxima)" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:999px;font-weight:700;background:#ffebee;color:#c62828;border:1px solid #ef9a9a"><i class="fas fa-triangle-exclamation"></i> Sobrecupo <span class="badge" style="background:#c62828" id="conci-count-sobrecupo">0</span></span>
                                                     </div>
                                                     <div class="d-flex gap-2 align-items-center">
+                                                        <div class="input-group input-group-sm shadow-sm" id="conci-quick-flight-group" style="width:240px">
+                                                            <span class="input-group-text bg-white text-primary" title="Buscador rápido de vuelo"><i class="fas fa-magnifying-glass"></i></span>
+                                                            <input type="text" class="form-control" id="conci-quick-flight"
+                                                                placeholder="Buscar # de vuelo…" autocomplete="off"
+                                                                title="Escribe el número de vuelo: filtra la columna &quot;# DE VUELO&quot; y coloca el cursor en el primer campo de captura. Enter salta a la captura, Esc limpia.">
+                                                            <button class="btn btn-outline-secondary" type="button" id="btn-conci-quick-flight-clear" title="Limpiar búsqueda de vuelo">
+                                                                <i class="fas fa-xmark"></i>
+                                                            </button>
+                                                        </div>
                                                         <button class="btn btn-sm btn-outline-secondary shadow-sm" type="button" id="btn-conci-clear-filters" title="Quitar todos los filtros aplicados a la tabla">
                                                             <i class="fas fa-filter-circle-xmark me-1"></i>Limpiar filtros
                                                         </button>
@@ -21834,8 +21828,8 @@ FF
                         <div class="card-body px-0">
                             <div class="gso-media-wrapper mb-4 px-3 px-md-0">
                                 <div class="ratio ratio-16x9 gso-hero">
-                                    <video class="gso-hero-media" src="videos/Aterrizaje%20Cargo.mp4" autoplay muted
-                                        loop playsinline preload="metadata"
+                                    <video class="gso-hero-media" src="videos/Aterrizaje%20Cargo.mp4" data-autoplay-on-visible muted
+                                        loop playsinline preload="none"
                                         aria-label="Gerencia de Seguridad Operacional"></video>
                                     <div class="gso-hero-overlay">
                                         <div class="gso-hero-inner">
@@ -26459,7 +26453,7 @@ FF
 
             <!-- ═════════ HERO ═════════ -->
             <div class="agf-hero">
-                <video class="agf-hero-video" autoplay muted loop playsinline preload="metadata"
+                <video class="agf-hero-video" data-autoplay-on-visible muted loop playsinline preload="none"
                        poster="images/Aviones%20FBO.png"
                        onerror="this.style.display='none'"
                        aria-label="Terminal de Aviación General y FBO del AIFA">
@@ -26621,7 +26615,7 @@ FF
 
                 <!-- ── Showcase destacado con slogan de venta ── -->
                 <div class="agf-showcase" data-bs-toggle="modal" data-bs-target="#agfVideoModal" data-modal-start="55">
-                    <video class="agf-showcase-video agf-clip-seg" data-start="55" data-end="83" autoplay muted loop playsinline preload="metadata" poster="images/Aviones%20FBO.png"
+                    <video class="agf-showcase-video agf-clip-seg" data-start="55" data-end="83" data-autoplay-on-visible muted loop playsinline preload="none" poster="images/Aviones%20FBO.png"
                            onerror="this.style.display='none'">
                         <source src="videos/FBO%20AIFA%20-%20Trim.mp4#t=55,83" type="video/mp4">
                     </video>
@@ -26636,7 +26630,7 @@ FF
 
                 <!-- ── Segundo showcase: interiores y salas (5:09–5:47) ── -->
                 <div class="agf-showcase reverse mt-3" data-bs-toggle="modal" data-bs-target="#agfVideoModal" data-modal-start="309">
-                    <video class="agf-showcase-video agf-clip-seg" data-start="309" data-end="347" autoplay muted loop playsinline preload="metadata" poster="images/Pasajero%20FBO.jpg"
+                    <video class="agf-showcase-video agf-clip-seg" data-start="309" data-end="347" data-autoplay-on-visible muted loop playsinline preload="none" poster="images/Pasajero%20FBO.jpg"
                            onerror="this.style.display='none'">
                         <source src="videos/FBO%20AIFA%20-%20Trim.mp4#t=309,347" type="video/mp4">
                     </video>
@@ -26657,7 +26651,7 @@ FF
                 <!-- ── Clip: sala de descanso para pilotos (2:05–3:15) ── -->
                 <div class="agf-clip agf-clip-wide mt-3" data-bs-toggle="modal" data-bs-target="#agfVideoModal" data-modal-start="125">
                     <img src="images/Aviones%20FBO.png" alt="Sala de descanso para pilotos con vista a la pista" loading="lazy">
-                    <video class="agf-clip-seg" data-start="125" data-end="195" muted loop playsinline preload="metadata" poster="images/Aviones%20FBO.png"
+                    <video class="agf-clip-seg" data-start="125" data-end="195" muted loop playsinline preload="none" poster="images/Aviones%20FBO.png"
                            onerror="this.style.display='none'">
                         <source src="videos/FBO%20AIFA%20-%20Trim.mp4#t=125,195" type="video/mp4">
                     </video>
@@ -26684,7 +26678,7 @@ FF
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                     </div>
                     <div class="modal-body">
-                        <video id="agfFullVideo" controls playsinline preload="auto" poster="images/Aviones%20FBO.png">
+                        <video id="agfFullVideo" controls playsinline preload="none" poster="images/Aviones%20FBO.png">
                             <source src="videos/FBO%20AIFA%20-%20Trim.mp4" type="video/mp4">
                             Tu navegador no soporta la reproducción de video.
                         </video>
@@ -29408,8 +29402,12 @@ FF
                                                             <button type="button" class="btn btn-sm btn-outline-primary" id="airline-stats-export" title="Exportar tabla en CSV"><i class="fas fa-download me-1"></i>CSV</button>
                                                         </div>
                                                         <div class="airline-stats-summary" id="airline-stats-summary" aria-live="polite"></div>
-                                                        <div class="airline-stats-chart-wrap"><canvas id="airline-stats-chart"></canvas></div>
-                                                        <div class="table-responsive mt-3">
+                                                        <div class="airline-stats-chart-wrap">
+                                                            <div class="airline-stats-chart-canvas" id="airline-stats-chart-canvas">
+                                                                <canvas id="airline-stats-chart"></canvas>
+                                                            </div>
+                                                        </div>
+                                                        <div class="table-responsive mt-3 airline-stats-table-wrap">
                                                             <table class="table table-hover table-bordered table-sm align-middle mb-0" id="airline-stats-table">
                                                                 <thead class="table-light"></thead><tbody></tbody>
                                                             </table>
@@ -35836,7 +35834,8 @@ FF
     <script src="js/comparativa.js"></script>
     <script src="js/insights.js"></script>
     <script src="js/comparativa-historica.js"></script>
-    <script src="js/estadistico-aerolineas.js?v=20260804-v8"></script>
+    <script src="js/estadistico-aerolineas-core.js?v=20260805-v1"></script>
+    <script src="js/estadistico-aerolineas.js?v=20260805-v9"></script>
     <script src="js/yoy-general.js"></script>
     <script src="js/yoy-cargo.js"></script>
     <script src="js/parte-ops-flights.js?v=20260804-conci-cache-reset"></script>
@@ -35972,7 +35971,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260805-conci-cargo-nopax" defer></script>
+    <script src="script.js?v=20260811-conci-teclado-sin-cambios" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>
@@ -37390,9 +37389,27 @@ window.AeropuertosModule = (function () {
 
         document.querySelectorAll('video:not([autoplay])').forEach(function (video) {
             if (!video.hasAttribute('preload')) {
-                video.setAttribute('preload', 'metadata');
+                video.setAttribute('preload', 'none');
             }
         });
+
+        // Los videos de secciones ocultas no descargan ni decodifican contenido
+        // hasta que realmente entran en el viewport.
+        var deferredVideos = document.querySelectorAll('video[data-autoplay-on-visible]');
+        if ('IntersectionObserver' in window) {
+            var videoObserver = new IntersectionObserver(function (entries) {
+                entries.forEach(function (entry) {
+                    var video = entry.target;
+                    if (entry.isIntersecting) {
+                        video.preload = 'metadata';
+                        video.play().catch(function () { });
+                    } else {
+                        video.pause();
+                    }
+                });
+            }, { rootMargin: '200px 0px', threshold: 0.05 });
+            deferredVideos.forEach(function (video) { videoObserver.observe(video); });
+        }
     }
 
     if (document.readyState === 'loading') {

@@ -74,6 +74,8 @@ describe('captura de celdas en Conciliacion > Manifiestos', () => {
       '_conciIsMatriculaStatusColumn',
       '_conciIsProtectedEditColumn',
       '_conciIsCalculatedColumn',
+      '_conciIsPassengerColumn',
+      '_conciRowElementIsCargo',
       '_conciNormalizeEditableCellText',
       '_conciBeginCellPresence',
       '_conciIsOperationTypeColumn',
@@ -95,6 +97,8 @@ describe('captura de celdas en Conciliacion > Manifiestos', () => {
       'document',
       activationSource + '; return _conciActivateCellEditor;'
     )(
+      () => false,
+      () => false,
       () => false,
       () => false,
       () => false,

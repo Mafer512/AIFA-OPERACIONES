@@ -2,6 +2,7 @@
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
+const compression = require('compression');
 const fs = require('fs');
 const crypto = require('crypto');
 const multer = require('multer');
@@ -93,6 +94,88 @@ async function computeAppVersionToken() {
   return crypto.createHash('sha1').update(signatures.join('|')).digest('hex').slice(0, 16);
 }
 
+// ── Versionado automático de assets en el HTML ───────────────────────────────
+// Los .js y .css se sirven con Cache-Control immutable (30 días), así que un
+// archivo modificado sólo llega al navegador si cambia su URL. Eso se venía
+// haciendo subiendo a mano el ?v= de cada etiqueta, y era fácil olvidarlo: el
+// cambio quedaba publicado en el servidor pero invisible durante un mes, porque
+// el recargador de /api/app-version sólo renueva el HTML, no la URL del script.
+//
+// Ahora el ?v= de cada asset local que ya lo traía se reescribe al vuelo con la
+// huella (tamaño + mtime) de ESE archivo, de modo que cambiar script.js sólo
+// invalida script.js. El HTML se sirve con no-cache, así que cada carga recibe
+// los tokens vigentes. Los ?v= escritos en index.html quedan como respaldo: sólo
+// se usan si el archivo no existe en disco.
+const ASSET_VERSION_PATTERN = '(\\s(?:src|href)=")([^"?#:]+\\.(?:js|css))\\?v=[^"]*(")';
+
+// El token sale del CONTENIDO, no del mtime: un despliegue que reescribe los
+// archivos sin cambiarlos (un checkout, por ejemplo) conserva el mismo token y
+// no obliga a redescargar nada. El contenido sólo se lee cuando tamaño o mtime
+// cambian, así que en régimen normal esto cuesta un stat por archivo.
+const _assetTokenCache = new Map();
+
+function assetVersionToken(relPath) {
+  try {
+    const target = path.join(ROOT, relPath.replace(/^\/+/, ''));
+    const stat = fs.statSync(target);
+    const statSignature = `${stat.size}:${Math.floor(stat.mtimeMs)}`;
+    const cached = _assetTokenCache.get(relPath);
+    if (cached && cached.statSignature === statSignature) return cached.token;
+
+    const token = crypto.createHash('sha1').update(fs.readFileSync(target)).digest('hex').slice(0, 12);
+    _assetTokenCache.set(relPath, { statSignature, token });
+    return token;
+  } catch (err) {
+    return null;
+  }
+}
+
+let _indexSource = { mtimeMs: -1, raw: '', assets: [] };
+let _indexRendered = { signature: '', html: '' };
+
+function loadIndexSource() {
+  const indexPath = path.join(ROOT, 'index.html');
+  const stat = fs.statSync(indexPath);
+  if (stat.mtimeMs !== _indexSource.mtimeMs) {
+    const raw = fs.readFileSync(indexPath, 'utf8');
+    const found = raw.matchAll(new RegExp(ASSET_VERSION_PATTERN, 'g'));
+    _indexSource = { mtimeMs: stat.mtimeMs, raw, assets: [...new Set([...found].map(m => m[2]))] };
+  }
+  return _indexSource;
+}
+
+// Se re-renderiza sólo cuando cambia el HTML o la huella de algún asset, para no
+// recorrer el index completo (~1.5 MB) en cada carga de página.
+function renderIndexHtml() {
+  const source = loadIndexSource();
+  const tokens = new Map(source.assets.map(asset => [asset, assetVersionToken(asset)]));
+  const signature = `${source.mtimeMs}|` +
+    source.assets.map(asset => `${asset}=${tokens.get(asset) || ''}`).join(',');
+  if (signature !== _indexRendered.signature) {
+    const html = source.raw.replace(new RegExp(ASSET_VERSION_PATTERN, 'g'),
+      (match, pre, asset, post) => {
+        const token = tokens.get(asset);
+        return token ? `${pre}${asset}?v=${token}${post}` : match;
+      });
+    _indexRendered = { signature, html };
+  }
+  return _indexRendered.html;
+}
+
+// Envía index.html con los ?v= ya resueltos. Si algo falla, devuelve false para
+// que el llamador caiga al archivo en disco y la página nunca deje de servirse.
+function sendRenderedIndex(res) {
+  try {
+    const html = renderIndexHtml();
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('html').send(html);
+    return true;
+  } catch (err) {
+    console.error('No se pudo renderizar index.html con versiones automáticas', err);
+    return false;
+  }
+}
+
 // CORS restringido a orígenes conocidos. Las peticiones same-origin (la propia
 // SPA) y herramientas sin cabecera Origin no se ven afectadas; solo se limita el
 // acceso cross-origin desde dominios no autorizados.
@@ -112,11 +195,17 @@ const corsOptions = {
   }
 };
 app.use(cors(corsOptions));
+// Reduce de forma importante el peso de HTML, CSS, JS, JSON y SVG.
+app.use(compression({ threshold: 1024 }));
 app.use(express.json({ limit: '256kb' }));
 
 // Cabeceras de cache + seguridad para assets y respuestas.
 app.use((req, res, next) => {
-  res.setHeader('Cache-Control', 'no-store');
+  // El documento y la API deben revalidarse; los recursos con version en la URL
+  // pueden permanecer en cache. express.static completa esta politica abajo.
+  if (req.path === '/' || req.path.endsWith('.html') || req.path.startsWith('/api/')) {
+    res.setHeader('Cache-Control', 'no-cache');
+  }
   // Sin CSP: la SPA usa scripts inline y múltiples CDNs (Bootstrap, Chart.js,
   // PDF.js, Tesseract, SheetJS); una CSP estricta requiere una allowlist probada.
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -312,11 +401,32 @@ api.delete('/parte-operaciones/custom/:date', requireAuth, async (req, res) => {
 
 app.use('/api', api);
 
+// Intercepta el documento antes del static para inyectar los ?v= automáticos.
+// Se comprueba la ruta a mano (sin patrones de router) por las diferencias de
+// path-to-regexp en Express 5.
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  if (req.path !== '/' && req.path !== '/index.html') return next();
+  if (!sendRenderedIndex(res)) return next();
+});
+
 // Serve all static files from the repository root
-app.use(express.static(ROOT, { index: 'index.html' }));
+app.use(express.static(ROOT, {
+  index: 'index.html',
+  etag: true,
+  lastModified: true,
+  maxAge: DEV ? 0 : '30d',
+  immutable: !DEV,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  }
+}));
 
 // Fallback for SPA routes: use a generic middleware (avoids path-to-regexp issues on Express 5)
 app.use((req, res) => {
+  if (sendRenderedIndex(res)) return;
   res.sendFile(path.join(ROOT, 'index.html'));
 });
 
