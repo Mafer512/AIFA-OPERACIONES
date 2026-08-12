@@ -17207,9 +17207,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // usuario recarga o cierra la pestaña mientras esas escrituras siguen en
     // vuelo, el navegador las cancela y la fila se pierde sin ningún error
     // visible. Este guard evita justo eso: avisa antes de dejar la página si
-    // hay guardados de Conciliación Manifiestos todavía pendientes.
+    // hay capturas de Conciliación Manifiestos que todavía no están a salvo.
+    //
+    // Antes solo miraba las escrituras en vuelo, y ese era el hueco: una fila
+    // cuyo guardado FALLÓ (red caída, permisos, tipo incompatible) se queda
+    // marcada como "Pendiente de guardar" con su valor viviendo únicamente en
+    // la pantalla, y puede quedarse así indefinidamente. Justo esas eran las
+    // que se perdían en silencio al recargar, sin ningún aviso.
     window.addEventListener('beforeunload', (e) => {
-        if (_conciPendingAutoSaveCount > 0) {
+        if (_conciHasUnsavedCaptures()) {
             e.preventDefault();
             e.returnValue = '';
         }
@@ -17258,6 +17264,31 @@ function _conciHasPendingLocalEdits() {
         'td.conci-cell-active, .conci-cell-input, .conci-cell-dt, '
         + 'td[data-dirty="1"], tr[data-dirty="1"], tr.conci-row-saving'
     );
+}
+
+// ¿Hay capturas que todavía no están a salvo en la base?
+//
+// Es más estricta que _conciHasPendingLocalEdits(), que también da por
+// "ocupada" la tabla cuando hay un editor abierto. Eso es lo correcto para
+// decidir si se aplaza un refresco remoto — no se le puede reemplazar el tbody
+// a alguien que tiene una celda abierta — pero es demasiado amplio para avisar
+// al salir de la página: una celda abierta en la que nadie escribió no tiene
+// nada que perder, y un aviso que salta sin motivo enseña a ignorarlo.
+//
+// Aquí solo cuenta lo que de verdad se perdería al recargar:
+//   • escrituras en vuelo, aún sin confirmar por Supabase;
+//   • celdas con un valor tecleado distinto al guardado, que incluye las de
+//     una fila cuyo guardado falló: esas nunca llegan a marcarse como
+//     guardadas y pueden quedarse pendientes indefinidamente.
+//
+// Se mira el estado sucio a nivel de CELDA, no de fila: una fila en blanco
+// recién agregada nace marcada como sucia, pero mientras no se capture nada en
+// sus celdas no hay ningún dato que rescatar y no debe disparar el aviso.
+function _conciHasUnsavedCaptures() {
+    if (_conciPendingAutoSaveCount > 0) return true;
+    const table = document.getElementById('table-conci-manifiestos');
+    if (!table) return false;
+    return !!table.querySelector('td[data-dirty="1"], tr.conci-row-saving');
 }
 
 function _conciDeferRefreshForLocalEdits(options = {}) {
@@ -19402,6 +19433,33 @@ function _conciVueloToRow(vRow, tipo, outputCols, colm, hasManifestSchema) {
 
 // Build enriched rows merging manifest + vuelos data
 // schemaRows = full unfiltered manifest (for column schema even when filteredManifest is empty)
+// Columnas de la tabla de Conciliación Manifiestos, en el orden en que se
+// muestran. El nombre de cada columna es también la llave con la que se
+// escribe en la base al capturar, así que tiene que coincidir EXACTAMENTE con
+// el nombre de la columna en "Conciliación Manifiestos" — un acento perdido
+// aquí hace que esa celda apunte a una columna inexistente y la captura no se
+// guarde.
+//
+// Antes existían dos copias de esta lista: una para cuando el día ya tenía
+// manifiestos capturados y otra para cuando no tenía ninguno. La segunda había
+// quedado con cuatro nombres dañados por un problema de codificación
+// ("HR. DE OPERACKN", "HR. MÈXIMA DE ENTREGA", "CDIGO DEMORA", "MATRíCULA"),
+// y era justo la que se usaba al abrir el día recién cerrado — el arranque de
+// cada turno de captura. Ahora hay una sola lista para los dos casos, para que
+// no puedan volver a divergir.
+const _CONCI_OUTPUT_COLUMNS = [
+    "CIERRE SUBSECRETARIA", "MES", "FECHA", "TIPO DE MANIFIESTO", "AEROLINEA",
+    "TIPO DE OPERACIÓN", "AERONAVE", "MATRÍCULA", "ESTATUS MATRÍCULA", "# DE VUELO",
+    "DESTINO / ORIGEN", "RUTA", "SLOT ASIGNADO", "SLOT COORDINADO", "HR. DE INICIO O TERMINO DE PERNOCTA",
+    "HR. DE EMBARQUE O DESEMBARQUE", "HR. DE OPERACIÓN", "HR. MÁXIMA DE ENTREGA", "HR. DE RECEPCIÓN",
+    "HRS. CUMPLIDAS", "TOTAL PAX", "DIPLOMATICOS", "EN COMISION",
+    "INFANTES", "TRANSITOS", "CONEXIONES", "OTROS EXENTOS", "TOTAL EXENTOS", "PAX QUE PAGAN TUA",
+    "KGS. DE EQUIPAJE", "KGS. DE CARGA NACIONAL", "KGS. DE CARGA INTERNACIONAL", "KG DE CARGA TOTAL", "CORREO",
+    "PUNTUALIDAD / CANCELACIÓN", "DEMORA +- 15 MIN.", "CÓDIGO DEMORA",
+    "OBSERVACIONES", "CAPTURÓ", "CAPACIDAD MÁXIMA", "FACTOR DE OCUPACIÓN", "id", "EVIDENCIA",
+    "Hora y Fecha Generación", "_fuente"
+];
+
 function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
     const _schemaSource = (schemaRows && schemaRows.length > 0) ? schemaRows : manifestRows;
     const _sysCols = new Set(['id', 'created_at', 'updated_at']);
@@ -19441,33 +19499,11 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
         if (found) colm[key] = found;
     }
 
-    // Determine output columns
-    let outputCols;
-    if (hasManifest) {
-        outputCols = [
-            "CIERRE SUBSECRETARIA", "MES", "FECHA", "TIPO DE MANIFIESTO", "AEROLINEA",
-            "TIPO DE OPERACIÓN", "AERONAVE", "MATRÍCULA", "ESTATUS MATRÍCULA", "# DE VUELO",
-            "DESTINO / ORIGEN", "RUTA", "SLOT ASIGNADO", "SLOT COORDINADO", "HR. DE INICIO O TERMINO DE PERNOCTA",
-            "HR. DE EMBARQUE O DESEMBARQUE", "HR. DE OPERACIÓN", "HR. MÁXIMA DE ENTREGA", "HR. DE RECEPCIÓN",
-            "HRS. CUMPLIDAS", "TOTAL PAX", "DIPLOMATICOS", "EN COMISION",
-            "INFANTES", "TRANSITOS", "CONEXIONES", "OTROS EXENTOS", "TOTAL EXENTOS", "PAX QUE PAGAN TUA",
-            "KGS. DE EQUIPAJE", "KGS. DE CARGA NACIONAL", "KGS. DE CARGA INTERNACIONAL", "KG DE CARGA TOTAL", "CORREO", "PUNTUALIDAD / CANCELACIÓN", "DEMORA +- 15 MIN.", "CÓDIGO DEMORA",
-            "OBSERVACIONES", "CAPTURÓ", "CAPACIDAD MÁXIMA", "FACTOR DE OCUPACIÓN", "id", "EVIDENCIA", "Hora y Fecha Generación", "_fuente"
-        ];
-        if (!outputCols.includes('Hora y Fecha Generación')) outputCols.push('Hora y Fecha Generación');
-        if (!outputCols.includes('_fuente')) outputCols.push('_fuente');
-    } else {
-              outputCols = [
-            "CIERRE SUBSECRETARIA", "MES", "FECHA", "TIPO DE MANIFIESTO", "AEROLINEA",
-            "TIPO DE OPERACIÓN", "AERONAVE", "MATRíCULA", "ESTATUS MATRÍCULA", "# DE VUELO",
-            "DESTINO / ORIGEN", "RUTA", "SLOT ASIGNADO", "SLOT COORDINADO", "HR. DE INICIO O TERMINO DE PERNOCTA",
-            "HR. DE EMBARQUE O DESEMBARQUE", "HR. DE OPERACKN", "HR. MÈXIMA DE ENTREGA", "HR. DE RECEPCIÓN",
-            "HRS. CUMPLIDAS", "TOTAL PAX", "DIPLOMATICOS", "EN COMISION",
-            "INFANTES", "TRANSITOS", "CONEXIONES", "OTROS EXENTOS", "TOTAL EXENTOS", "PAX QUE PAGAN TUA",
-            "KGS. DE EQUIPAJE", "KGS. DE CARGA NACIONAL", "KGS. DE CARGA INTERNACIONAL", "KG DE CARGA TOTAL", "CORREO", "PUNTUALIDAD / CANCELACIÓN", "DEMORA +- 15 MIN.", "CDIGO DEMORA",
-            "OBSERVACIONES", "CAPTURÓ", "CAPACIDAD MÁXIMA", "FACTOR DE OCUPACIÓN", "id", "EVIDENCIA", "Hora y Fecha Generación", "_fuente"
-        ];
-    }
+    // Las columnas son las mismas haya o no manifiestos capturados para la
+    // fecha: la tabla se ve igual y, sobre todo, cada celda escribe en la
+    // misma columna de la base en los dos casos. Se copia para que quien la
+    // reciba pueda reordenarla u ocultar columnas sin alterar la constante.
+    const outputCols = _CONCI_OUTPUT_COLUMNS.slice();
 
     // Identity index for vuelos rows (used to track which were matched, without
     // relying on a DB id being present).
@@ -20675,7 +20711,7 @@ const _CONCI_EXPORT_COLS_PAX = [
     { h: 'DEMORA +- 15 MIN.', t: 'text', a: ['DEMORA +- 15 MIN.', 'DEMORA +-15 MIN', 'DEMORA +- 15 MIN'] },
     { h: 'CÓDIGO DEMORA', t: 'text', a: ['CÓDIGO DEMORA', 'CODIGO DEMORA'] },
     { h: 'OBSERVACIONES', t: 'textwrap', a: ['OBSERVACIONES'] },
-    { h: 'CAPTURÓ,', t: 'text', a: ['CAPTURÓ', 'CAPTURO'] },
+    { h: 'CAPTURÓ', t: 'text', a: ['CAPTURÓ', 'CAPTURO'] },
 ];
 
 const _CONCI_EXPORT_COLS_CARGA = [
@@ -20741,17 +20777,80 @@ function _conciHexToArgb(hex) {
     return 'FF000000';
 }
 
+// Valor real de una celda de la tabla, con la MISMA regla que usa el
+// autoguardado (ver _conciAutoSaveRow): si hay un editor abierto manda lo que
+// el usuario está escribiendo; en la columna de routing, dataset.raw guarda el
+// nombre de ciudad ya resuelto para mostrar ("QUITO") y el valor real vive en
+// dataset.routeRaw ("MEX-UIO"). Exportar con el mismo criterio con el que se
+// guarda es lo que hace que el Excel coincida con la base.
+function _conciExportCellRaw(td) {
+    const col = td.dataset.col;
+    const liveInput = td.querySelector('input, textarea, select');
+    const fallbackRaw = _conciIsRoutingColumn(col)
+        ? (td.dataset.routeRaw ?? td.dataset.raw ?? td.textContent)
+        : (td.dataset.raw ?? td.textContent);
+    return liveInput ? liveInput.value : (td.dataset.pendingRaw ?? fallbackRaw);
+}
+
+// Filas a exportar, tomadas de lo que está vivo en pantalla.
+//
+// Antes esto salía de _conciRenderCache. Esa caché se limpia en cada guardado
+// exitoso — con razón, para que la vista nunca muestre datos viejos — y nada
+// la vuelve a llenar hasta recargar la tabla, así que exportar justo después
+// de capturar respondía "No hay datos cargados para exportar". Y mientras la
+// caché sí existía, era una foto anterior: podía exportar sin lo recién
+// capturado. Las dos caras del mismo problema desaparecen leyendo la tabla.
+//
+// Se exporta el día completo, no solo lo filtrado: las filas ocultas por un
+// filtro siguen en el DOM (se ocultan con display:none) y aquí se incluyen a
+// propósito, para no cambiar el alcance del reporte con este arreglo.
+function _conciGetExportRows() {
+    const rows = (_conciManifestosAllData || []).map((row, index) => {
+        const overrides = _conciSummaryLiveOverrides.get(String(index));
+        return overrides ? { ...row, ...overrides } : row;
+    });
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (!tbody) return rows;
+
+    // Lo capturado en esta sesión sobre filas ya cargadas, aunque el guardado
+    // todavía no lo haya confirmado.
+    tbody.querySelectorAll('tr[data-row-index]').forEach(tr => {
+        const index = Number(tr.dataset.rowIndex);
+        if (!Number.isInteger(index) || !rows[index]) return;
+        const patch = {};
+        tr.querySelectorAll('td[data-col]').forEach(td => {
+            patch[td.dataset.col] = _conciExportCellRaw(td);
+        });
+        rows[index] = { ...rows[index], ...patch };
+    });
+
+    // Filas creadas en esta sesión: no existen en el conjunto cargado, así que
+    // se agregan. Su data-row-index es "new" (no numérico), por lo que el
+    // recorrido anterior no las tocó y no se duplican.
+    tbody.querySelectorAll('tr[data-conci-new="1"], tr[data-conci-summary-persisted="1"]').forEach(tr => {
+        const row = {};
+        tr.querySelectorAll('td[data-col]').forEach(td => {
+            row[td.dataset.col] = _conciExportCellRaw(td);
+        });
+        row._fuente = tr.dataset.rowFuente || '';
+        rows.push(row);
+    });
+
+    return rows;
+}
+
 async function _conciExportToExcel(kind) {
     if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
         alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
         return;
     }
-    const cached = _conciRenderCache.get(_conciRenderedKey);
-    if (!cached || !Array.isArray(cached.rows) || cached.rows.length === 0) {
+    const rows = _conciGetExportRows();
+    if (!rows.length) {
         alert('No hay datos cargados para exportar.');
         return;
     }
-    const { rows, columns, year } = cached;
+    const columns = _conciManifestosSummaryColumns;
+    const year = _conciEditFallbackYear;
     const cols = (Array.isArray(columns) && columns.length) ? columns : Object.keys(rows[0] || {});
     const optypeCol  = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
     const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
@@ -20760,7 +20859,9 @@ async function _conciExportToExcel(kind) {
     const defs = isCarga ? _CONCI_EXPORT_COLS_CARGA : _CONCI_EXPORT_COLS_PAX;
     const dataRows = rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga);
     if (!dataRows.length) {
-        alert(`No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en la vista actual.`);
+        // Decía "en la vista actual", lo que daba a entender que respeta los
+        // filtros de la tabla. No los respeta: exporta el día completo.
+        alert(`No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
         return;
     }
 
@@ -21262,53 +21363,6 @@ async function _conciImportManifiestosFile(file) {
     }
 }
 
-// ── KPI Summary strip para la pestaña Manifiestos ─────────────────────────────
-// Cuenta TODAS las filas (manifiestos capturados + vuelos del itinerario).
-function _updateManifiestosSummaryStripLegacy(data, columns) {
-    const strip = document.getElementById('manifiestos-summary-strip');
-    if (!strip) return;
-    if (!data || data.length === 0) { strip.classList.add('d-none'); return; }
-
-    const cols = columns || (data.length ? Object.keys(data[0]) : []);
-    const _airlineCol  = cols.find(c => /aerol[ií]nea|airline/i.test(c))          || null;
-    const _optypeCol   = cols.find(c => /tipo.*oper|service\s*type/i.test(c))      || null;
-    const _totalPaxCol = cols.find(c => /^total\s*pax$/i.test(c.trim()))           || null;
-    const _kgsCarCol   = cols.find(c => /carga\s*total/i.test(c.trim())) || cols.find(c => /kgs?\.?\s*(de\s*)?carga/i.test(c.trim())) || null;
-
-    let paxOps = 0, totalPax = 0, cargoOps = 0, kgsCarga = 0;
-
-    for (const row of data) {
-        // Clasificar la fila como carga o pasajeros
-        const isCargo = _conciRowIsCargo(row, _optypeCol, _airlineCol);
-
-        if (isCargo) {
-            cargoOps++;
-        } else {
-            paxOps++;
-            // Sumar pasajeros (TOTAL PAX para manifiestos, [Arr/Dep] Boarded en "Solo Vuelos")
-            if (_totalPaxCol) {
-                const v = parseInt(String(row[_totalPaxCol] || '').replace(/[^0-9]/g, ''), 10) || 0;
-                totalPax += v;
-            }
-        }
-
-        // KGS. DE CARGA: sumar en cualquier fila que tenga valor (solo las cargueras lo tendrán)
-        if (_kgsCarCol) {
-            const v = parseFloat(String(row[_kgsCarCol] || '').replace(/[^0-9.]/g, '')) || 0;
-            kgsCarga += v;
-        }
-    }
-
-    const fmt = n => n.toLocaleString('es-MX');
-    const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-    setEl('mf-sum-pax-ops',   fmt(paxOps));
-    setEl('mf-sum-total-pax', fmt(totalPax));
-    setEl('mf-sum-cargo-ops', fmt(cargoOps));
-    setEl('mf-sum-kgs-carga', kgsCarga > 0 ? fmt(Math.round(kgsCarga)) : 'N/D');
-
-    strip.classList.remove('d-none');
-}
-
 function _conciSummaryColumnKey(value) {
     return String(value || '')
         .normalize('NFD')
@@ -21326,6 +21380,68 @@ function _conciSummaryNumber(value) {
 
 function _conciSummaryFindColumn(columns, predicate) {
     return (columns || []).find(column => predicate(_conciSummaryColumnKey(column))) || null;
+}
+
+// Una celda "capturada" es la que trae algo escrito, aunque sea un 0. Sirve
+// para distinguir "se capturaron 0 kg" de "nadie ha capturado kilos todavía":
+// son cosas muy distintas para quien arma el reporte del día.
+function _conciSummaryHasValue(value) {
+    return value !== null && value !== undefined && String(value).trim() !== '';
+}
+
+// Localiza las columnas de kilogramos de carga de la tabla.
+//
+// Antes esto era una sola búsqueda "la primera columna que hable de KG y de
+// CARGA", y como el orden de columnas es NACIONAL → INTERNACIONAL → TOTAL,
+// siempre ganaba la nacional: la tarjeta ignoraba la carga internacional y el
+// total. En un aeropuerto donde la mayor parte de la carga es internacional,
+// eso se veía en pantalla como decenas de operaciones de carga y "N/D" en
+// kilogramos.
+//
+// KGS. DE EQUIPAJE queda fuera a propósito: es equipaje de pasajeros, no carga.
+function _conciSummaryCargoColumns(columns) {
+    const cols = columns || [];
+    const total = _conciSummaryFindColumn(cols, key => key.includes('CARGATOTAL'));
+    const nacional = _conciSummaryFindColumn(cols, key => key.includes('CARGANACIONAL'));
+    const internacional = _conciSummaryFindColumn(cols, key => key.includes('CARGAINTERNACIONAL'));
+    // Respaldo para conjuntos de datos que no traigan ninguna de las tres
+    // (por ejemplo un Excel externo con otro encabezado).
+    const generico = (total || nacional || internacional)
+        ? null
+        : _conciSummaryFindColumn(cols, key =>
+            key.includes('CARGA')
+            && !key.includes('EQUIPAJE')
+            && (key.includes('KG') || key.includes('KILO') || key.includes('PESO'))
+        );
+    return { total, nacional, internacional, generico };
+}
+
+// Kilogramos de carga de UNA fila. Si viene capturado el total, ese manda; si
+// no, se suman nacional e internacional. Nunca los tres a la vez: el total ya
+// incluye a los otros dos y se contarían doble.
+//
+// Devuelve también si la fila tenía algo capturado, para que el llamador pueda
+// mostrar 0 cuando se capturó cero y "N/D" cuando nadie capturó nada.
+function _conciSummaryCargoKgs(row, cargoCols) {
+    if (!row || !cargoCols) return { kgs: 0, captured: false };
+    const { total, nacional, internacional, generico } = cargoCols;
+
+    if (total && _conciSummaryHasValue(row[total])) {
+        return { kgs: _conciSummaryNumber(row[total]), captured: true };
+    }
+    const tieneNacional = nacional && _conciSummaryHasValue(row[nacional]);
+    const tieneInternacional = internacional && _conciSummaryHasValue(row[internacional]);
+    if (tieneNacional || tieneInternacional) {
+        return {
+            kgs: (tieneNacional ? _conciSummaryNumber(row[nacional]) : 0)
+                + (tieneInternacional ? _conciSummaryNumber(row[internacional]) : 0),
+            captured: true,
+        };
+    }
+    if (generico && _conciSummaryHasValue(row[generico])) {
+        return { kgs: _conciSummaryNumber(row[generico]), captured: true };
+    }
+    return { kgs: 0, captured: false };
 }
 
 function _conciReadLiveTableRow(tr) {
@@ -21386,16 +21502,14 @@ function _updateManifiestosSummaryStrip(data, columns) {
         (key.includes('TIPO') && key.includes('OPER')) || key.includes('SERVICETYPE')
     );
     const totalPaxCol = _conciSummaryFindColumn(cols, key => key === 'TOTALPAX' || key.includes('TOTALPAX'));
-    const kgsCarCol = _conciSummaryFindColumn(cols, key =>
-        (key.includes('CARGA') && (key.includes('KG') || key.includes('KILO') || key.includes('PESO')))
-        || key.includes('KILOGRAMOSCARGA')
-    );
+    const cargoCols = _conciSummaryCargoColumns(cols);
 
     let paxOps = 0, totalPax = 0, cargoOps = 0, kgsCarga = 0;
+    let kgsCapturados = false;
     for (const row of rows) {
         const isCargoByType = _conciRowIsCargo(row, optypeCol, airlineCol);
         const paxValue = totalPaxCol ? _conciSummaryNumber(row[totalPaxCol]) : 0;
-        const kgsValue = kgsCarCol ? _conciSummaryNumber(row[kgsCarCol]) : 0;
+        const kgs = _conciSummaryCargoKgs(row, cargoCols);
 
         if (isCargoByType) {
             cargoOps++;
@@ -21405,7 +21519,8 @@ function _updateManifiestosSummaryStrip(data, columns) {
         }
         // Los KGS son una métrica independiente; no cambian la categoría ni
         // el número de operaciones.
-        kgsCarga += kgsValue;
+        kgsCarga += kgs.kgs;
+        if (kgs.captured) kgsCapturados = true;
     }
 
     const fmt = n => n.toLocaleString('es-MX');
@@ -21413,7 +21528,9 @@ function _updateManifiestosSummaryStrip(data, columns) {
     setEl('mf-sum-pax-ops', fmt(paxOps));
     setEl('mf-sum-total-pax', fmt(totalPax));
     setEl('mf-sum-cargo-ops', fmt(cargoOps));
-    setEl('mf-sum-kgs-carga', kgsCarga > 0 ? fmt(Math.round(kgsCarga)) : 'N/D');
+    // "N/D" solo cuando de verdad nadie capturó kilos. Si se capturaron y suman
+    // cero, se muestra 0: es un dato, no una ausencia de dato.
+    setEl('mf-sum-kgs-carga', kgsCapturados ? fmt(Math.round(kgsCarga)) : 'N/D');
     strip.classList.remove('d-none');
 }
 
