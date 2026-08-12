@@ -1109,6 +1109,69 @@ FF
             pointer-events: none;
         }
         .conci-fecha-mask { font-variant-numeric: tabular-nums; }
+        /* ── Colaboración en vivo ──────────────────────────────────────────
+           Quién está en la tabla ahora mismo. El punto verde late mientras el
+           canal está conectado; cada avatar toma el color de esa persona, el
+           mismo con el que se resalta la celda que tiene abierta. */
+        .conci-presencia { display: inline-flex; align-items: center; gap: 3px; }
+        .conci-presencia-punto {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: #22c55e; margin-right: 4px; flex: none;
+            animation: conciPresenciaLatido 2.4s ease-in-out infinite;
+        }
+        @keyframes conciPresenciaLatido {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,.55); }
+            50% { box-shadow: 0 0 0 4px rgba(34,197,94,0); }
+        }
+        .conci-presencia-avatar {
+            width: 24px; height: 24px; border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-size: .62rem; font-weight: 700; letter-spacing: .02em;
+            color: #fff; background: var(--conci-persona-color, #64748b);
+            border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25);
+            margin-left: -6px; cursor: default; user-select: none; flex: none;
+            transition: transform .15s ease;
+        }
+        .conci-presencia-avatar:first-of-type { margin-left: 0; }
+        .conci-presencia-avatar:hover { transform: translateY(-2px) scale(1.08); z-index: 2; }
+        /* Quien está capturando ahora mismo lleva un anillo de su color. */
+        .conci-presencia-avatar.conci-presencia-activo {
+            box-shadow: 0 0 0 2px var(--conci-persona-color, #64748b), 0 1px 3px rgba(0,0,0,.25);
+        }
+        .conci-presencia-avatar.conci-presencia-mas { background: #94a3b8; }
+
+        /* Rastro de un cambio recién guardado por otra persona: la celda queda
+           teñida de su color unos segundos con su nombre encima, para que el
+           dato no cambie en silencio delante de quien está capturando. */
+        #table-conci-manifiestos tbody td.conci-cell-estela {
+            position: relative;
+            background: color-mix(in srgb, var(--conci-estela-color, #1976d2) 16%, transparent) !important;
+            box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--conci-estela-color, #1976d2) 55%, transparent);
+            animation: conciEstelaEntrada .45s ease-out;
+        }
+        @keyframes conciEstelaEntrada {
+            0% { background: color-mix(in srgb, var(--conci-estela-color, #1976d2) 55%, transparent) !important; }
+            100% { background: color-mix(in srgb, var(--conci-estela-color, #1976d2) 16%, transparent) !important; }
+        }
+        #table-conci-manifiestos tbody td.conci-cell-estela .conci-estela-autor {
+            position: absolute; top: -8px; right: 2px;
+            font-size: .58rem; line-height: 1; font-weight: 700;
+            color: #fff; background: var(--conci-estela-color, #1976d2);
+            padding: 2px 5px; border-radius: 999px; white-space: nowrap;
+            box-shadow: 0 1px 3px rgba(0,0,0,.3); z-index: 2; pointer-events: none;
+            animation: conciEstelaDesvanece 12s linear forwards;
+        }
+        @keyframes conciEstelaDesvanece {
+            0%, 70% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .conci-presencia-punto,
+            #table-conci-manifiestos tbody td.conci-cell-estela,
+            #table-conci-manifiestos tbody td.conci-cell-estela .conci-estela-autor {
+                animation: none;
+            }
+        }
         #table-conci-manifiestos tbody tr {
             cursor: pointer;
             transition: background-color .15s ease;
@@ -21787,6 +21850,7 @@ FF
                                                             <i class="fas fa-undo me-1"></i>Deshacer
                                                         </button>
                                                         <span class="badge bg-secondary" id="badge-conci-manifiestos-count" style="display:none"></span>
+                                                        <span id="conci-presencia" class="conci-presencia d-none" aria-label="Personas trabajando en esta tabla ahora"></span>
                                                         <span id="conci-pendientes-indicador" class="badge d-none" style="background:#fff3cd;color:#664d03;border:1px solid #f0ad4e;font-weight:600"></span>
                                                     </div>
                                                 </div>

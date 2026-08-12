@@ -22061,6 +22061,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         _conciSyncColumnasFijas();
         // Repone las capturas que quedaron pendientes de guardar y las reintenta.
         _conciRestaurarBorradores();
+        _conciRepintarEstelas();
     });
 
     // Encabezado fijo vía CSS (position:sticky). Sin manipulación de transform
@@ -24094,14 +24095,17 @@ async function _conciInitLiveCollab() {
 
     channel.on('presence', { event: 'sync' }, _conciHandlePresenceSync);
     channel.on('broadcast', { event: 'cell-input' }, ({ payload }) => _conciHandleRemoteCellInput(payload));
+    channel.on('broadcast', { event: 'cell-saved' }, ({ payload }) => _conciHandleRemoteCellSaved(payload));
     channel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
             _conciLiveReady = true;
+            _conciRenderBarraPresencia();
             try {
                 await channel.track({ user: _conciLiveDisplayName, color: _conciLiveColor, rowId: null, col: null });
             } catch (_) { /* ignora: sólo afecta la señalización en vivo, no el guardado real */ }
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
             _conciLiveReady = false;
+            _conciRenderBarraPresencia();
         }
     });
 }
@@ -24155,6 +24159,169 @@ function _conciBroadcastCellInput(td, value) {
     } catch (_) { /* señalización en vivo, no crítica */ }
 }
 
+// ── Quién está conectado y qué está tocando ──────────────────────────────────
+//
+// El modulo ya resaltaba la celda que otro tiene abierta y mostraba en vivo lo
+// que va tecleando. Faltaban las dos mitades que hacen que se sienta como
+// trabajar en una hoja compartida:
+//
+//   1. Saber QUIEN esta en la pestana ahora mismo, sin tener que descubrirlo
+//      porque una celda se puso de color.
+//   2. Ver el rastro de lo que ACABA de cambiar y de quien fue. Antes, cuando
+//      un companero guardaba, la tabla se refrescaba en silencio: el dato
+//      cambiaba delante de los ojos sin decir quien ni donde.
+//
+// La atribucion no sale del payload de Postgres (que no trae usuario) sino del
+// mismo canal de presencia: quien guarda anuncia lo que guardo. Es el unico
+// camino que da nombre y color sin tocar el esquema de la base.
+
+const _CONCI_ESTELA_MS = 12000;          // cuanto dura visible el rastro de un cambio
+const _conciEstelaPorCelda = new Map();  // "rowId|col" -> { user, color, ts, timer }
+
+function _conciPresenciaConectados() {
+    if (!_conciLiveChannel) return [];
+    let state = {};
+    try { state = _conciLiveChannel.presenceState() || {}; } catch (_) { return []; }
+    const porPersona = new Map();
+    Object.keys(state).forEach(clave => {
+        (state[clave] || []).forEach(entrada => {
+            if (!entrada) return;
+            const nombre = String(entrada.user || 'Usuario').trim();
+            const previo = porPersona.get(nombre);
+            const editando = entrada.col ? String(entrada.col) : '';
+            // Si la misma persona tiene dos pestañas, manda la que está capturando.
+            if (!previo || (!previo.editando && editando)) {
+                porPersona.set(nombre, {
+                    nombre,
+                    color: entrada.color || _conciColorForUser(nombre),
+                    editando,
+                    esYo: clave === _conciLiveClientId,
+                });
+            }
+        });
+    });
+    // Uno mismo primero, el resto por nombre: el orden no debe bailar en cada sync.
+    return [...porPersona.values()].sort((a, b) => {
+        if (a.esYo !== b.esYo) return a.esYo ? -1 : 1;
+        return a.nombre.localeCompare(b.nombre, 'es');
+    });
+}
+
+function _conciRenderBarraPresencia() {
+    const cont = document.getElementById('conci-presencia');
+    if (!cont) return;
+    const gente = _conciPresenciaConectados();
+    if (!gente.length) { cont.innerHTML = ''; cont.classList.add('d-none'); return; }
+    cont.classList.remove('d-none');
+
+    const avatares = gente.slice(0, 6).map(p => {
+        const iniciales = _conciInitialsFromName(p.nombre) || '?';
+        const detalle = p.editando ? `capturando ${p.editando}` : 'viendo la tabla';
+        const titulo = `${p.nombre}${p.esYo ? ' (tú)' : ''} — ${detalle}`;
+        return `<span class="conci-presencia-avatar${p.editando ? ' conci-presencia-activo' : ''}"
+            style="--conci-persona-color:${escapeHTML(p.color)}"
+            title="${escapeHTML(titulo)}" aria-label="${escapeHTML(titulo)}">${escapeHTML(iniciales)}</span>`;
+    }).join('');
+
+    const sobran = gente.length - 6;
+    const extra = sobran > 0
+        ? `<span class="conci-presencia-avatar conci-presencia-mas" title="${escapeHTML(gente.slice(6).map(p => p.nombre).join(', '))}">+${sobran}</span>`
+        : '';
+
+    cont.innerHTML = `<span class="conci-presencia-punto" title="Colaboración en vivo activa"></span>${avatares}${extra}`;
+}
+
+// Anuncia al resto las columnas que acaban de guardarse en una fila, para que
+// puedan atribuir el cambio. Se manda despues de que la base confirma, no
+// antes: lo que se muestra como cambiado es lo que de verdad quedo guardado.
+function _conciBroadcastCambioGuardado(rowId, columnas) {
+    if (!_conciLiveChannel || !_conciLiveReady) return;
+    const cols = [...new Set((columnas || []).filter(Boolean))];
+    if (!rowId || !cols.length) return;
+    try {
+        _conciLiveChannel.send({
+            type: 'broadcast',
+            event: 'cell-saved',
+            payload: {
+                rowId: String(rowId),
+                cols,
+                user: _conciLiveDisplayName,
+                color: _conciLiveColor,
+            },
+        });
+    } catch (_) { /* señalización en vivo, no crítica */ }
+}
+
+function _conciHandleRemoteCellSaved(payload) {
+    if (!payload || !payload.rowId || !Array.isArray(payload.cols)) return;
+    payload.cols.forEach(col => {
+        _conciMarcarEstela(String(payload.rowId), String(col), {
+            user: payload.user || 'Alguien',
+            color: payload.color || _conciColorForUser(payload.user || ''),
+        });
+    });
+}
+
+// Deja la celda marcada con el color de quien la cambio y una etiqueta con su
+// nombre que se desvanece sola. Se guarda tambien en un mapa para poder
+// repintar el rastro cuando la tabla se vuelva a renderizar (un refresco
+// remoto reconstruye el tbody y se llevaria las marcas por delante).
+function _conciMarcarEstela(rowId, col, autor) {
+    const clave = `${rowId}|${col}`;
+    const previo = _conciEstelaPorCelda.get(clave);
+    if (previo?.timer) clearTimeout(previo.timer);
+    const registro = { ...autor, ts: Date.now(), timer: null };
+    registro.timer = setTimeout(() => {
+        _conciEstelaPorCelda.delete(clave);
+        _conciPintarEstela(rowId, col, null);
+    }, _CONCI_ESTELA_MS);
+    _conciEstelaPorCelda.set(clave, registro);
+    _conciPintarEstela(rowId, col, registro);
+}
+
+function _conciPintarEstela(rowId, col, registro) {
+    const tabla = document.getElementById('table-conci-manifiestos');
+    if (!tabla) return;
+    const td = _conciFindLiveCell(tabla, rowId, col);
+    if (!td) return;
+    const etiqueta = td.querySelector('.conci-estela-autor');
+    if (!registro) {
+        td.classList.remove('conci-cell-estela');
+        td.style.removeProperty('--conci-estela-color');
+        if (etiqueta) etiqueta.remove();
+        return;
+    }
+    // Una celda que este usuario tiene abierta no se le pinta encima.
+    if (td.classList.contains('conci-cell-active')) return;
+    td.classList.add('conci-cell-estela');
+    td.style.setProperty('--conci-estela-color', registro.color);
+    const nombre = String(registro.user || '').trim().split(/\s+/)[0] || 'Alguien';
+    if (etiqueta) {
+        etiqueta.textContent = nombre;
+    } else {
+        const chip = document.createElement('span');
+        chip.className = 'conci-estela-autor';
+        chip.textContent = nombre;
+        td.appendChild(chip);
+    }
+    td.title = `${registro.user} acaba de cambiar este campo`;
+}
+
+// Repinta el rastro vigente. Se llama tras renderizar la tabla, porque el
+// tbody se reconstruye entero y se lleva las marcas por delante.
+function _conciRepintarEstelas() {
+    const ahora = Date.now();
+    _conciEstelaPorCelda.forEach((registro, clave) => {
+        if ((ahora - registro.ts) > _CONCI_ESTELA_MS) {
+            if (registro.timer) clearTimeout(registro.timer);
+            _conciEstelaPorCelda.delete(clave);
+            return;
+        }
+        const sep = clave.indexOf('|');
+        _conciPintarEstela(clave.slice(0, sep), clave.slice(sep + 1), registro);
+    });
+}
+
 function _conciHandlePresenceSync() {
     if (!_conciLiveChannel) return;
     let state = {};
@@ -24171,6 +24338,7 @@ function _conciHandlePresenceSync() {
     });
     _conciRemotePresenceByCell = map;
     _conciApplyRemotePresenceHighlights();
+    _conciRenderBarraPresencia();
 }
 
 // Recorre la tabla visible y marca/desmarca las celdas que otros usuarios
@@ -26007,6 +26175,9 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 Object.keys(result.payload || writePayload).filter(col => !droppedSet.has(col))
             );
             settleSavedCells(confirmedColumns);
+            // Avisa al resto qué campos acaban de cambiar y quién lo hizo, para
+            // que puedan verlo atribuido en vez de que el dato mute en silencio.
+            _conciBroadcastCambioGuardado(tr.dataset.rowId, [...confirmedColumns]);
             tr.classList.remove('table-warning');
             if (droppedSet.size) {
                 const colList = [...droppedSet].join(', ');
