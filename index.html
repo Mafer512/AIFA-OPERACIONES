@@ -1113,7 +1113,7 @@ FF
            Quién está en la tabla ahora mismo. El punto verde late mientras el
            canal está conectado; cada avatar toma el color de esa persona, el
            mismo con el que se resalta la celda que tiene abierta. */
-        .conci-presencia { display: inline-flex; align-items: center; gap: 3px; }
+        .conci-presencia { display: inline-flex; align-items: center; gap: 3px; flex: none; }
         .conci-presencia-punto {
             width: 7px; height: 7px; border-radius: 50%;
             background: #22c55e; margin-right: 4px; flex: none;
@@ -21752,7 +21752,7 @@ FF
                                             <!-- Conciliación Manifiestos Table -->
                                             <div class="card border-0 shadow-sm conci-manifest-card">
                                                 <div class="card-header bg-white border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2 conci-manifest-toolbar">
-                                                    <h6 class="mb-0 fw-semibold"><i class="fas fa-file-alt me-2 text-success"></i>Conciliación Manifiestos</h6>
+                                                    <div class="d-flex align-items-center gap-2 flex-nowrap"><h6 class="mb-0 fw-semibold"><i class="fas fa-file-alt me-2 text-success"></i>Conciliación Manifiestos</h6><span id="conci-presencia" class="conci-presencia d-none" aria-label="Personas trabajando en esta tabla ahora"></span></div>
                                                     <div class="d-flex gap-2 align-items-center flex-wrap">
                                                         <!-- Selector de periodo de fechas -->
                                                         <div class="input-group input-group-sm" style="width:auto">
@@ -21850,7 +21850,6 @@ FF
                                                             <i class="fas fa-undo me-1"></i>Deshacer
                                                         </button>
                                                         <span class="badge bg-secondary" id="badge-conci-manifiestos-count" style="display:none"></span>
-                                                        <span id="conci-presencia" class="conci-presencia d-none" aria-label="Personas trabajando en esta tabla ahora"></span>
                                                         <span id="conci-pendientes-indicador" class="badge d-none" style="background:#fff3cd;color:#664d03;border:1px solid #f0ad4e;font-weight:600"></span>
                                                     </div>
                                                 </div>

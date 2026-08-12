@@ -22252,7 +22252,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                         ? (isArr ? parts[0] : parts[parts.length - 1])
                         : (parts[0] || '');
                     const catalogCity = code ? _conciAirportStoredValue(_conciAirportCatalogByIata.get(code)) : '';
-                    const city = catalogCity || (code ? iataToCity(code) : rawStr);
+                    const city = _conciCiudadBonita(catalogCity || (code ? iataToCity(code) : rawStr));
                     const shown = city || rawStr;
                     td.textContent = shown;
                     td.dataset.routeRaw = rawStr;
@@ -23395,8 +23395,28 @@ function _conciAirportOptionsForOperation(operationType) {
         });
 }
 
+// "MANZANILLO" -> "Manzanillo"; "PANAMA CITY" -> "Panama City".
+//
+// Solo se corrige lo que viene TODO en mayusculas: un nombre que ya trae
+// minusculas se respeta tal cual, para no estropear los que estan bien
+// escritos ("Ciudad del Carmen") ni los que llevan mayuscula interior.
+// Las siglas de tres letras o menos se dejan como estan (JFK, LAX).
+function _conciCiudadBonita(texto) {
+    const limpio = String(texto || '').trim();
+    if (!limpio) return limpio;
+    if (/[a-záéíóúüñ]/.test(limpio)) return limpio;
+    if (limpio.replace(/[^A-Za-zÁÉÍÓÚÜÑ]/g, "").length <= 3) return limpio;
+    const CONECTORES = new Set(['de', 'del', 'la', 'las', 'los', 'el', 'y', 'da', 'do', 'dos', 'of']);
+    return limpio.toLowerCase()
+        .replace(/([a-záéíóúüñ][a-záéíóúüñ]*)/g, (palabra, _p, indice) => (
+            indice > 0 && CONECTORES.has(palabra)
+                ? palabra
+                : palabra.charAt(0).toUpperCase() + palabra.slice(1)
+        ));
+}
+
 function _conciAirportStoredValue(airport) {
-    return String(airport?.ciudad || airport?.nombre || airport?.iata || '').trim();
+    return _conciCiudadBonita(String(airport?.ciudad || airport?.nombre || airport?.iata || '').trim());
 }
 
 function _conciAirportOptionLabel(airport) {
@@ -24578,11 +24598,22 @@ function _conciApplyRemotePresenceHighlights() {
     });
 }
 
+// ¿Alguien tiene esta celda abierta ahora mismo?
+//
+// Se consultan las DOS señales. El broadcast llega al instante y la presencia
+// unos segundos despues; mirar solo la presencia hacia que el sync borrara el
+// resaltado que el broadcast acababa de pintar, y el recuadro parpadeaba o no
+// llegaba a verse.
 function _conciCellStillClaimed(td) {
     const tr = td.closest('tr');
     const rowId = tr ? String(tr.dataset.rowId || '').trim() : '';
     if (!rowId) return false;
-    return _conciRemotePresenceByCell.has(`${rowId}|${td.dataset.col || ''}`);
+    const clave = `${rowId}|${td.dataset.col || ''}`;
+    if (_conciRemotePresenceByCell.has(clave)) return true;
+    for (const foco of _conciFocoRemotoPorCliente.values()) {
+        if (`${foco.rowId}|${foco.col}` === clave) return true;
+    }
+    return false;
 }
 
 // Preview en vivo de lo que un compañero está tecleando en el editor de
