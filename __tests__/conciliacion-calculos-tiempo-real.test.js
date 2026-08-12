@@ -65,6 +65,7 @@ describe('calculos en tiempo real de Conciliacion > Manifiestos', () => {
     'HR. MAXIMA DE ENTREGA',
     'TOTAL EXENTOS',
     'PAX QUE PAGAN TUA',
+    'KG DE CARGA TOTAL',
   ])('reconoce %s como columna calculada', (column) => {
     expect(isCalculatedColumn(column)).toBe(true);
   });
@@ -72,6 +73,7 @@ describe('calculos en tiempo real de Conciliacion > Manifiestos', () => {
   test.each([
     'TOTAL EXENTOS',
     'PAX QUE PAGAN TUA',
+    'KG DE CARGA TOTAL',
   ])('persiste %s aunque sea una columna calculada', (column) => {
     expect(shouldPersistCalculatedColumn(column)).toBe(true);
   });
@@ -132,5 +134,32 @@ describe('calculos en tiempo real de Conciliacion > Manifiestos', () => {
 
     expect(exemptionsCell.textContent).toBe('28');
     expect(payingPaxCell.textContent).toBe('152');
+  });
+
+  test('borra KG DE CARGA TOTAL al vaciar el ultimo componente capturado', () => {
+    const row = document.createElement('tr');
+    document.body.appendChild(row);
+    const nationalCell = addCell(row, 'KGS. DE CARGA NACIONAL', '4');
+    addCell(row, 'KGS. DE CARGA INTERNACIONAL', '');
+    const totalCell = addCell(row, 'KG DE CARGA TOTAL', '4');
+    totalCell.dataset.origRaw = '4';
+
+    refreshRow(row, { [nationalCell.dataset.col]: '' });
+
+    expect(totalCell.textContent).toBe('');
+    expect(totalCell.dataset.pendingRaw).toBe('');
+    expect(totalCell.dataset.dirty).toBe('1');
+  });
+
+  test('conserva el total historico al renderizar una fila sin desglose', () => {
+    const row = document.createElement('tr');
+    document.body.appendChild(row);
+    addCell(row, 'KGS. DE CARGA NACIONAL', '');
+    addCell(row, 'KGS. DE CARGA INTERNACIONAL', '');
+    const totalCell = addCell(row, 'KG DE CARGA TOTAL', '4');
+
+    refreshRow(row);
+
+    expect(totalCell.textContent).toBe('4');
   });
 });
