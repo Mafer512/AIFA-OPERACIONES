@@ -300,11 +300,11 @@ describe('captura de celdas en Conciliacion > Manifiestos', () => {
     const load = jest.fn();
     const renderCache = new Map([['old', {}]]);
     const realtime = new Function(
-      '_conciPendingRemoteRefresh', '_conciHasPendingLocalEdits',
+      '_conciPendingRemoteRefresh', '_conciHasPendingLocalEdits', '_conciRecargaYaCubierta',
       '_conciRenderCache', '_conciRenderedKey', 'loadConciliacionManifiestos', 'document',
       refreshSource
         + '; return { remote: _conciHandleRemoteTableChange, maybe: _conciMaybeApplyDeferredRemoteRefresh, pending: () => _conciPendingRemoteRefresh };'
-    )(false, () => hasPendingEdits, renderCache, 'old', load, document);
+    )(false, () => hasPendingEdits, () => false, renderCache, 'old', load, document);
 
     realtime.remote();
 

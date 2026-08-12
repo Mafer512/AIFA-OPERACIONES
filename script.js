@@ -17330,6 +17330,9 @@ let _conciLiveClientId = '';        // id aleatorio de esta pestaña/sesión
 let _conciLiveDisplayName = '';
 let _conciLiveColor = '';
 let _conciRemotePresenceByCell = new Map(); // "rowId|col" -> [{user,color,clientId}]
+// Ultima celda anunciada por cada pestana conectada, para poder apagar el
+// resaltado anterior en cuanto alguien se mueve a otra celda.
+let _conciFocoRemotoPorCliente = new Map(); // clientId -> { rowId, col }
 const _CONCI_LIVE_COLORS = ['#e53935', '#8e24aa', '#3949ab', '#00897b', '#43a047', '#fb8c00', '#6d4c41', '#00acc1'];
 function _conciColorForUser(name) {
     const s = String(name || '');
@@ -20017,8 +20020,12 @@ async function loadConciliacionManifiestos(options = {}) {
         }
     }
 
-    _conciSetRefreshLoading(true);
-    if (loading) { loading.classList.remove('d-none'); }
+    // El indicador de carga solo se muestra cuando la carga la pidio esta
+    // persona. Un cambio de un companero no debe bloquear la pantalla: antes,
+    // cada guardado ajeno tapaba la tabla con "Cargando manifiestos...".
+    const cargaSilenciosa = config.fromRemoteSync === true;
+    _conciSetRefreshLoading(!cargaSilenciosa);
+    if (loading && !cargaSilenciosa) { loading.classList.remove('d-none'); }
     if (errorEl) errorEl.classList.add('d-none');
 
     try {
@@ -24096,6 +24103,7 @@ async function _conciInitLiveCollab() {
     channel.on('presence', { event: 'sync' }, _conciHandlePresenceSync);
     channel.on('broadcast', { event: 'cell-input' }, ({ payload }) => _conciHandleRemoteCellInput(payload));
     channel.on('broadcast', { event: 'cell-saved' }, ({ payload }) => _conciHandleRemoteCellSaved(payload));
+    channel.on('broadcast', { event: 'cell-focus' }, ({ payload }) => _conciHandleRemoteFoco(payload));
     channel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
             _conciLiveReady = true;
@@ -24133,6 +24141,9 @@ function _conciBeginCellPresence(td) {
     const rowId = tr ? String(tr.dataset.rowId || '').trim() : '';
     if (!rowId) return;
     _conciSetPresenceCell(rowId, td.dataset.col || '');
+    // presence.track lo reparte el servidor agrupado y tarda; el broadcast
+    // llega al instante y es lo que hace que el resaltado se sienta inmediato.
+    _conciBroadcastFoco(rowId, td.dataset.col || '');
 }
 
 // Transmite (con throttle) el valor que el usuario va escribiendo en el
@@ -24157,6 +24168,136 @@ function _conciBroadcastCellInput(td, value) {
             payload: { rowId, col: td.dataset.col || '', value: String(value ?? ''), user: _conciLiveDisplayName }
         });
     } catch (_) { /* señalización en vivo, no crítica */ }
+}
+
+// ── Sincronizacion sin recargar la tabla ─────────────────────────────────────
+//
+// Antes, CUALQUIER guardado de cualquier persona disparaba una recarga completa:
+// se volvia a consultar la base, se mostraba "Cargando manifiestos..." y se
+// reconstruia el tbody entero. Con varias personas capturando a la vez eso
+// significaba una pantalla bloqueandose cada pocos segundos, encima de los datos
+// que uno esta escribiendo.
+//
+// Asi no funciona una hoja compartida. Lo que hacen las hojas colaborativas es
+// aplicar el cambio EXACTO que llego, en las celdas que cambiaron, sin volver a
+// pedir nada: el que guarda ya sabe que guardo y lo anuncia con los valores.
+// La recarga completa queda solo para lo que de verdad la necesita (una fila
+// nueva, una borrada, o un cambio en una fila que no esta a la vista).
+//
+// Ventana en la que un cambio ya aplicado a mano hace innecesaria la recarga que
+// anuncia Postgres por su cuenta unos instantes despues.
+const _CONCI_VENTANA_PARCHE_MS = 6000;
+let _conciUltimoParcheTs = 0;
+
+// Aplica en su celda el valor que otra persona acaba de guardar. Devuelve true
+// si se pudo aplicar; false cuando la fila no esta a la vista y hace falta la
+// recarga de siempre.
+function _conciAplicarCambioRemoto(rowId, col, valor) {
+    const tabla = document.getElementById('table-conci-manifiestos');
+    if (!tabla) return false;
+    const td = _conciFindLiveCell(tabla, rowId, col);
+    if (!td) return false;
+    // Una celda que esta persona tiene abierta no se toca: su captura manda.
+    if (td.classList.contains('conci-cell-active') || td.dataset.dirty === '1') return true;
+
+    const texto = String(valor ?? '');
+    td.dataset.raw = texto;
+    td.dataset.origRaw = texto;
+    delete td.dataset.pendingRaw;
+
+    let visible = texto;
+    try {
+        const fila = _conciReadLiveTableRow(td.closest('tr'));
+        visible = _conciFormatDisplayValue(col, texto, fila, _conciEditFechaCol, _conciEditFallbackYear) || texto;
+    } catch (_) { /* si el formateador no aplica, se muestra el valor crudo */ }
+
+    // Se conserva la etiqueta de autoria si ya estaba puesta.
+    const etiqueta = td.querySelector('.conci-estela-autor');
+    td.textContent = visible;
+    if (etiqueta) td.appendChild(etiqueta);
+
+    const tr = td.closest('tr');
+    if (tr) {
+        _conciRefreshCalculatedCellsForRow(tr);
+        _conciRefreshMatriculaValidationForRow(tr);
+    }
+    return true;
+}
+
+// La recarga completa se anuncia por Postgres unos instantes despues del
+// broadcast. Si el cambio ya se aplico a mano, esa recarga solo serviria para
+// parpadear la pantalla.
+function _conciRecargaYaCubierta() {
+    return (Date.now() - _conciUltimoParcheTs) < _CONCI_VENTANA_PARCHE_MS;
+}
+
+// ── Presencia inmediata ──────────────────────────────────────────────────────
+//
+// El resaltado de "aqui esta capturando fulano" viajaba solo por presence.track,
+// que el servidor agrupa y reparte cada cierto tiempo: tardaba segundos en
+// aparecer. Un broadcast se entrega al instante, asi que el foco se anuncia por
+// los dos caminos: el broadcast pinta ya, y la presencia sigue siendo la fuente
+// de verdad para limpiar cuando alguien cierra la pestana.
+function _conciBroadcastFoco(rowId, col) {
+    if (!_conciLiveChannel || !_conciLiveReady) return;
+    try {
+        _conciLiveChannel.send({
+            type: 'broadcast',
+            event: 'cell-focus',
+            payload: {
+                rowId: rowId ? String(rowId) : '',
+                col: col ? String(col) : '',
+                user: _conciLiveDisplayName,
+                color: _conciLiveColor,
+                clientId: _conciLiveClientId,
+            },
+        });
+    } catch (_) { /* señalización en vivo, no crítica */ }
+}
+
+function _conciHandleRemoteFoco(payload) {
+    if (!payload || payload.clientId === _conciLiveClientId) return;
+    const anterior = _conciFocoRemotoPorCliente.get(payload.clientId);
+    if (anterior) _conciQuitarFocoRemoto(anterior.rowId, anterior.col);
+
+    if (!payload.rowId || !payload.col) {
+        _conciFocoRemotoPorCliente.delete(payload.clientId);
+        return;
+    }
+    _conciFocoRemotoPorCliente.set(payload.clientId, { rowId: payload.rowId, col: payload.col });
+    _conciPintarFocoRemoto(payload.rowId, payload.col, payload);
+}
+
+function _conciPintarFocoRemoto(rowId, col, autor) {
+    const tabla = document.getElementById('table-conci-manifiestos');
+    if (!tabla) return;
+    const td = _conciFindLiveCell(tabla, rowId, col);
+    if (!td || td.classList.contains('conci-cell-active')) return;
+    td.classList.add('conci-cell-remote-editing');
+    td.style.setProperty('--conci-remote-color', autor.color || '#1976d2');
+    td.title = `Capturando ahora: ${autor.user || 'Usuario'}`;
+    if (!td.querySelector('.conci-remote-badge')) {
+        const badge = document.createElement('span');
+        badge.className = 'conci-remote-badge';
+        badge.style.background = autor.color || '#1976d2';
+        badge.textContent = String(autor.user || 'U').trim().split(/\s+/)[0];
+        td.appendChild(badge);
+    }
+}
+
+function _conciQuitarFocoRemoto(rowId, col) {
+    const tabla = document.getElementById('table-conci-manifiestos');
+    if (!tabla) return;
+    const td = _conciFindLiveCell(tabla, rowId, col);
+    if (!td) return;
+    // Presence sigue siendo la fuente de verdad: si esa celda continua
+    // reclamada por alguien, no se limpia.
+    if (_conciCellStillClaimed(td)) return;
+    td.classList.remove('conci-cell-remote-editing');
+    td.style.removeProperty('--conci-remote-color');
+    td.removeAttribute('title');
+    const badge = td.querySelector('.conci-remote-badge');
+    if (badge) badge.remove();
 }
 
 // ── Quién está conectado y qué está tocando ──────────────────────────────────
@@ -24234,7 +24375,7 @@ function _conciRenderBarraPresencia() {
 // Anuncia al resto las columnas que acaban de guardarse en una fila, para que
 // puedan atribuir el cambio. Se manda despues de que la base confirma, no
 // antes: lo que se muestra como cambiado es lo que de verdad quedo guardado.
-function _conciBroadcastCambioGuardado(rowId, columnas) {
+function _conciBroadcastCambioGuardado(rowId, columnas, valores) {
     if (!_conciLiveChannel || !_conciLiveReady) return;
     const cols = [...new Set((columnas || []).filter(Boolean))];
     if (!rowId || !cols.length) return;
@@ -24245,6 +24386,9 @@ function _conciBroadcastCambioGuardado(rowId, columnas) {
             payload: {
                 rowId: String(rowId),
                 cols,
+                // Los valores viajan con el aviso para que quien lo recibe
+                // pueda aplicarlos sin volver a consultar la base.
+                valores: valores || {},
                 user: _conciLiveDisplayName,
                 color: _conciLiveColor,
             },
@@ -24254,6 +24398,18 @@ function _conciBroadcastCambioGuardado(rowId, columnas) {
 
 function _conciHandleRemoteCellSaved(payload) {
     if (!payload || !payload.rowId || !Array.isArray(payload.cols)) return;
+    const valores = payload.valores || {};
+    let todoAplicado = true;
+    payload.cols.forEach(col => {
+        if (Object.prototype.hasOwnProperty.call(valores, col)) {
+            if (!_conciAplicarCambioRemoto(payload.rowId, col, valores[col])) todoAplicado = false;
+        } else {
+            todoAplicado = false;
+        }
+    });
+    // Si todo se pudo aplicar aqui, la recarga completa que Postgres anuncia
+    // en un momento ya no aporta nada y solo haria parpadear la pantalla.
+    if (todoAplicado) _conciUltimoParcheTs = Date.now();
     payload.cols.forEach(col => {
         _conciMarcarEstela(String(payload.rowId), String(col), {
             user: payload.user || 'Alguien',
@@ -24435,6 +24591,8 @@ function _conciHandleRemoteTableChange() {
 function _conciMaybeApplyDeferredRemoteRefresh() {
     if (!_conciPendingRemoteRefresh) return;
     if (_conciHasPendingLocalEdits()) return;
+    // El cambio ya se aplico celda por celda: recargar solo parpadearia.
+    if (_conciRecargaYaCubierta()) { _conciPendingRemoteRefresh = false; return; }
     _conciPendingRemoteRefresh = false;
     _conciRenderCache.clear();
     _conciRenderedKey = '';
@@ -24884,6 +25042,7 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     // Deja de anunciar esta celda como "en captura" para el resto de usuarios
     // conectados.
     _conciSetPresenceCell(null, null);
+    _conciBroadcastFoco(null, null);
     if (move === 'next') {
         const nextCell = _conciGetNextEditableCell(td);
         if (nextCell) {
@@ -26177,7 +26336,9 @@ async function _conciAutoSaveRow(tr, options = {}) {
             settleSavedCells(confirmedColumns);
             // Avisa al resto qué campos acaban de cambiar y quién lo hizo, para
             // que puedan verlo atribuido en vez de que el dato mute en silencio.
-            _conciBroadcastCambioGuardado(tr.dataset.rowId, [...confirmedColumns]);
+            const valoresConfirmados = {};
+            confirmedColumns.forEach(col => { valoresConfirmados[col] = writePayload[col]; });
+            _conciBroadcastCambioGuardado(tr.dataset.rowId, [...confirmedColumns], valoresConfirmados);
             tr.classList.remove('table-warning');
             if (droppedSet.size) {
                 const colList = [...droppedSet].join(', ');
