@@ -57,7 +57,7 @@
         DEC: 11
     };
     const LOCAL_AIRPORT_CODES = new Set(['NLU', 'MMSM']);
-    const FLIGHT_IDENTITY_COLUMNS = 'id,arr_movement_key,dep_movement_key';
+    const FLIGHT_IDENTITY_COLUMNS = 'id,arr_movement_key,arr_movement_slot,dep_movement_key,dep_movement_slot';
     const FLIGHT_FULL_SELECT = [
         'id',
         ...HEADERS.map(header => `"${header.replace(/"/g, '""')}"`)
@@ -478,19 +478,34 @@
             if (identityError) {
                 throw new Error(
                     'La protección de duplicados aún no está instalada en Supabase. ' +
-                    'Ejecuta la migración 010_flight_movement_uniqueness.sql antes de importar. ' +
+                    'Ejecuta las migraciones 010_flight_movement_uniqueness.sql y ' +
+                    '022_flight_movement_slot.sql antes de importar. ' +
                     `Detalle: ${identityError.message}`
                 );
             }
 
+            // Dos índices sobre lo ya guardado:
+            //  • existingIdByMovement: identidad completa (llave + hora) -> ids.
+            //    Es la unidad que la base protege con UNIQUE.
+            //  • existingByBaseKey: llave sin hora -> movimientos guardados.
+            //    Sirve para reconocer un movimiento al que el AODB le cambió la
+            //    hora programada entre una exportación y otra.
             const existingIdByMovement = new Map();
+            const existingByBaseKey = new Map();
             const existingKeysById = new Map();
             (existingIdentityRows || []).forEach(row => {
                 const id = String(row.id);
-                existingKeysById.set(id, { arr: row.arr_movement_key || null, dep: row.dep_movement_key || null });
-                [row.arr_movement_key, row.dep_movement_key].filter(Boolean).forEach(key => {
-                    if (!existingIdByMovement.has(key)) existingIdByMovement.set(key, new Set());
-                    existingIdByMovement.get(key).add(id);
+                const arrIdentity = movementIdentity(row.arr_movement_key, row.arr_movement_slot);
+                const depIdentity = movementIdentity(row.dep_movement_key, row.dep_movement_slot);
+                existingKeysById.set(id, { arr: arrIdentity || null, dep: depIdentity || null });
+                [
+                    { key: row.arr_movement_key, slot: row.arr_movement_slot, identity: arrIdentity },
+                    { key: row.dep_movement_key, slot: row.dep_movement_slot, identity: depIdentity }
+                ].filter(entry => entry.identity).forEach(entry => {
+                    if (!existingIdByMovement.has(entry.identity)) existingIdByMovement.set(entry.identity, new Set());
+                    existingIdByMovement.get(entry.identity).add(id);
+                    if (!existingByBaseKey.has(entry.key)) existingByBaseKey.set(entry.key, []);
+                    existingByBaseKey.get(entry.key).push({ id, slot: entry.slot || '' });
                 });
             });
 
@@ -509,8 +524,8 @@
             let duplicatesInFile = 0;
             let resolvedCancelledInFile = 0;
             preparedRows.forEach(item => {
-                const ownerIndexes = new Set(item.movementKeys
-                    .map(key => fileOwnerByMovement.get(key))
+                const ownerIndexes = new Set(item.movementIdentities
+                    .map(identity => fileOwnerByMovement.get(identity))
                     .filter(index => index !== undefined));
                 if (ownerIndexes.size > 1) {
                     throw new Error(`La fila ${item.sourceRow} enlaza movimientos que pertenecen a turnarounds distintos dentro del archivo.`);
@@ -518,8 +533,8 @@
                 if (ownerIndexes.size === 1) {
                     const ownerIndex = [...ownerIndexes][0];
                     const previous = uniquePrepared[ownerIndex];
-                    const sameTurnaround = previous.movementKeys.length === item.movementKeys.length
-                        && previous.movementKeys.every(key => item.movementKeys.includes(key));
+                    const sameTurnaround = previous.movementIdentities.length === item.movementIdentities.length
+                        && previous.movementIdentities.every(identity => item.movementIdentities.includes(identity));
                     if (!sameTurnaround) {
                         const itemCancelled = isExcludedStatus(item.payload);
                         const previousCancelled = isExcludedStatus(previous.payload);
@@ -533,30 +548,42 @@
                             // La fila que ya estaba guardada era la
                             // cancelada/no-operando: la reemplaza la vigente.
                             uniquePrepared[ownerIndex] = item;
-                            item.movementKeys.forEach(key => fileOwnerByMovement.set(key, ownerIndex));
+                            item.movementIdentities.forEach(identity => fileOwnerByMovement.set(identity, ownerIndex));
                             resolvedCancelledInFile++;
                             return;
                         }
-                        throw new Error(`La fila ${item.sourceRow} reutiliza un movimiento con un enlace de llegada/salida diferente.`);
+                        const shared = item.movementIdentities.filter(identity => previous.movementIdentities.includes(identity));
+                        throw new Error(
+                            `La fila ${item.sourceRow} reutiliza un movimiento (${shared.join(', ')}) ` +
+                            `con un enlace de llegada/salida diferente al de la fila ${previous.sourceRow}.`
+                        );
                     }
                     uniquePrepared[ownerIndex] = item;
-                    item.movementKeys.forEach(key => fileOwnerByMovement.set(key, ownerIndex));
+                    item.movementIdentities.forEach(identity => fileOwnerByMovement.set(identity, ownerIndex));
                     duplicatesInFile++;
                     return;
                 }
                 const newIndex = uniquePrepared.length;
                 uniquePrepared.push(item);
-                item.movementKeys.forEach(key => fileOwnerByMovement.set(key, newIndex));
+                item.movementIdentities.forEach(identity => fileOwnerByMovement.set(identity, newIndex));
             });
+
+            // A qué registro guardado corresponde cada movimiento del archivo.
+            // Primero por identidad exacta (llave + hora programada) y, para lo
+            // que sobre, emparejando por orden de hora dentro de la misma llave:
+            // así un cambio de horario del AODB sigue actualizando el mismo
+            // registro en vez de crear un duplicado, y la segunda rotación del
+            // día del mismo vuelo se reconoce como un movimiento aparte.
+            const arrMatchByItem = resolveMovementMatches(uniquePrepared, 'arr', existingByBaseKey);
+            const depMatchByItem = resolveMovementMatches(uniquePrepared, 'dep', existingByBaseKey);
 
             const insertItems = [];
             const updateItems = [];
             const ambiguousItems = [];
             uniquePrepared.forEach(item => {
-                const matchedIds = new Set();
-                item.movementKeys.forEach(key => {
-                    (existingIdByMovement.get(key) || []).forEach(id => matchedIds.add(id));
-                });
+                const matchedIds = new Set(
+                    [arrMatchByItem.get(item), depMatchByItem.get(item)].filter(Boolean)
+                );
                 if (matchedIds.size > 1) {
                     ambiguousItems.push({ item, matchedIds });
                     return;
@@ -605,14 +632,11 @@
                     // enlace nuevo; el enlace de salida obsoleto del otro
                     // registro se libera más abajo (ver liberación de
                     // llaves obsoletas) para que no choque con el nuevo.
-                    if (item.arrKey) {
-                        const arrActiveIds = [...(existingIdByMovement.get(item.arrKey) || [])]
-                            .filter(id => activeIds.includes(id));
-                        if (arrActiveIds.length === 1) {
-                            updateItems.push({ id: arrActiveIds[0], ...item });
-                            resolvedTurnaroundReassignInDb++;
-                            return;
-                        }
+                    const arrMatchedId = arrMatchByItem.get(item);
+                    if (arrMatchedId && activeIds.includes(arrMatchedId)) {
+                        updateItems.push({ id: arrMatchedId, ...item });
+                        resolvedTurnaroundReassignInDb++;
+                        return;
                     }
                     throw new Error(
                         `La fila ${item.sourceRow} coincide con más de un registro existente. ` +
@@ -641,7 +665,7 @@
             updateItemsById.forEach(entries => {
                 if (entries.length === 1) { dedupedUpdateItems.push(entries[0]); return; }
                 const existingKeys = existingKeysById.get(entries[0].id) || {};
-                const arrMatch = entries.find(e => e.arrKey && e.arrKey === existingKeys.arr);
+                const arrMatch = entries.find(e => e.arrIdentity && e.arrIdentity === existingKeys.arr);
                 const winner = arrMatch || entries[0];
                 dedupedUpdateItems.push(winner);
                 entries.forEach(e => {
@@ -666,11 +690,11 @@
             const ARR_CLEAR_FIELDS = HEADERS.filter(h => h.startsWith('[Arr]'));
             const DEP_CLEAR_FIELDS = HEADERS.filter(h => h.startsWith('[Dep]'));
             const staleKeyClears = new Map(); // id -> Set('arr' | 'dep')
-            const markStaleHolders = (key, ownTargetId) => {
-                if (!key) return;
-                const holders = existingIdByMovement.get(key);
+            const markStaleHolders = (identity, ownTargetId) => {
+                if (!identity) return;
+                const holders = existingIdByMovement.get(identity);
                 if (!holders) return;
-                const side = key.split('|')[3] === 'A' ? 'arr' : 'dep';
+                const side = identity.split('|')[3] === 'A' ? 'arr' : 'dep';
                 holders.forEach(holderId => {
                     if (holderId === ownTargetId) return;
                     if (!staleKeyClears.has(holderId)) staleKeyClears.set(holderId, new Set());
@@ -678,8 +702,8 @@
                 });
             };
             updateItems.forEach(entry => {
-                markStaleHolders(entry.arrKey, entry.id);
-                markStaleHolders(entry.depKey, entry.id);
+                markStaleHolders(entry.arrIdentity, entry.id);
+                markStaleHolders(entry.depIdentity, entry.id);
             });
 
             const existingFullById = new Map();
@@ -1704,6 +1728,24 @@
         return candidates.length ? toLocalDateKey(candidates[0]) : '';
     }
 
+    // Hora programada del movimiento ('10AUG 23:05' -> '23:05'). Replica
+    // _aifa_movement_slot del lado de la base.
+    function scheduledSlotKey(value) {
+        const match = String(value || '').trim().match(/(\d{1,2}):(\d{2})/);
+        if (!match) return '';
+        return `${match[1].padStart(2, '0')}:${match[2]}`;
+    }
+
+    // Identidad completa de un movimiento: la llave de negocio más su hora
+    // programada. Es lo que la base protege con UNIQUE (ver migración 022) y
+    // por lo tanto lo que hay que comparar para decidir si dos filas son el
+    // mismo movimiento. Sin la hora, dos rotaciones del mismo vuelo/ruta en el
+    // mismo día (XN 1107 MTY-NLU a las 01:55 y a las 23:05 del 10AUG) se leen
+    // como una sola y la importación aborta.
+    function movementIdentity(key, slot) {
+        return key ? `${key}@${slot || ''}` : '';
+    }
+
     function normalizeIdentityToken(value) {
         return String(value || '')
             .normalize('NFD')
@@ -1755,23 +1797,77 @@
         const depDesignator = normalizeValue(row['[Dep] Flight Designator']);
         const arrKey = movementIdentityKey(row, 'A', referenceDate);
         const depKey = movementIdentityKey(row, 'D', referenceDate);
+        const arrSlot = scheduledSlotKey(row['[Arr] SIBT']);
+        const depSlot = scheduledSlotKey(row['[Dep] SOBT']);
         const invalidMovements = [];
         if (arrDesignator && !arrKey) invalidMovements.push(`fila ${sourceRow} (llegada)`);
         if (depDesignator && !depKey) invalidMovements.push(`fila ${sourceRow} (salida)`);
         if (!arrDesignator && !depDesignator) invalidMovements.push(`fila ${sourceRow} (sin movimiento)`);
+        const arrIdentity = movementIdentity(arrKey, arrSlot);
+        const depIdentity = movementIdentity(depKey, depSlot);
         return {
             sourceRow,
             invalidMovements,
             arrKey,
             depKey,
-            movementKeys: [arrKey, depKey].filter(Boolean),
+            arrSlot,
+            depSlot,
+            arrIdentity,
+            depIdentity,
+            movementIdentities: [arrIdentity, depIdentity].filter(Boolean),
             payload: {
                 ...row,
                 import_reference_date: toLocalDateKey(referenceDate),
                 arr_scheduled_date: arrKey ? scheduledDateKey(row['[Arr] SIBT'], referenceDate) : null,
-                dep_scheduled_date: depKey ? scheduledDateKey(row['[Dep] SOBT'], referenceDate) : null
+                dep_scheduled_date: depKey ? scheduledDateKey(row['[Dep] SOBT'], referenceDate) : null,
+                arr_movement_slot: arrSlot,
+                dep_movement_slot: depSlot
             }
         };
+    }
+
+    // Empareja los movimientos de un lado (llegada o salida) del archivo con
+    // los ya guardados en la base, agrupando por llave de negocio (sin hora):
+    //
+    //   1. Coincidencia exacta de identidad (misma llave y misma hora
+    //      programada). Es la reimportación normal del mismo archivo.
+    //   2. Lo que sobra se empareja por orden de hora. Así, si el AODB movió el
+    //      horario programado de un vuelo entre dos exportaciones, se sigue
+    //      actualizando ese mismo registro en vez de duplicarlo.
+    //
+    // Un movimiento del archivo sin pareja se queda sin id: es un vuelo nuevo.
+    // Eso es justo lo que ocurre con la segunda rotación del día de un mismo
+    // vuelo (XN 1107 MTY-NLU a las 01:55 y a las 23:05 del 10AUG): comparten
+    // llave, pero cada una toma su propio registro en vez de chocar.
+    function resolveMovementMatches(items, side, existingByBaseKey) {
+        const keyProp = side === 'arr' ? 'arrKey' : 'depKey';
+        const slotProp = side === 'arr' ? 'arrSlot' : 'depSlot';
+        const bySlot = (a, b) => String(a).localeCompare(String(b));
+
+        const itemsByBaseKey = new Map();
+        items.forEach(item => {
+            const baseKey = item[keyProp];
+            if (!baseKey) return;
+            if (!itemsByBaseKey.has(baseKey)) itemsByBaseKey.set(baseKey, []);
+            itemsByBaseKey.get(baseKey).push(item);
+        });
+
+        const matches = new Map();
+        itemsByBaseKey.forEach((fileItems, baseKey) => {
+            const candidates = (existingByBaseKey.get(baseKey) || []).slice();
+            const pending = [];
+            fileItems.forEach(item => {
+                const exactIndex = candidates.findIndex(candidate => candidate.slot === item[slotProp]);
+                if (exactIndex >= 0) matches.set(item, candidates.splice(exactIndex, 1)[0].id);
+                else pending.push(item);
+            });
+            pending.sort((a, b) => bySlot(a[slotProp], b[slotProp]));
+            candidates.sort((a, b) => bySlot(a.slot, b.slot));
+            pending.forEach((item, index) => {
+                if (candidates[index]) matches.set(item, candidates[index].id);
+            });
+        });
+        return matches;
     }
 
     function chunkArray(list, size) {
