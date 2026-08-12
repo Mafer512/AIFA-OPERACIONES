@@ -35804,12 +35804,42 @@ FF
     <script src="js/muebles-bienes.js?v=4"></script>
     <script src="js/email-analisis.js"></script>
     <script src="js/agenda.js?v=8"></script>
-    <!-- Asistente AIFA (tool calling + voz). Sustituye a js/agenda-assistant.js,
-         que se conserva en el repositorio por si se necesita volver atrás.
-         El orden importa: datos → motor → interfaz. -->
-    <script src="js/asistente-aifa-datos.js?v=1"></script>
-    <script src="js/asistente-aifa.js?v=1"></script>
-    <script src="js/asistente-aifa-ui.js?v=1"></script>
+    <!-- AIFONSO — Asistente AIFA (tool calling + voz). Sustituye a
+         js/agenda-assistant.js, que se conserva en el repositorio por si se
+         necesita volver atrás.
+
+         SOLO DESARROLLO LOCAL. Sigue en BETA, así que no debe llegar a quien
+         usa la plataforma a diario: en producción no se descarga ni un byte de
+         estos archivos y el botón flotante no existe. Para seguir puliéndolo,
+         basta con abrir el sitio desde localhost.
+
+         Se carga por código en vez de con etiquetas <script src> fijas porque
+         esas se descargan siempre, sin importar dónde esté publicada la página.
+
+         Si algún día hace falta probarlo desde otra máquina (por ejemplo el
+         servidor de desarrollo visto desde la red interna), agrega ese host a
+         HOSTS_LOCALES. Para publicarlo de verdad, sustituye todo este bloque
+         por las tres etiquetas <script src> de siempre. -->
+    <script>
+        (function () {
+            var HOSTS_LOCALES = ['localhost', '127.0.0.1', '::1', '[::1]'];
+            var host = location.hostname;
+            // hostname vacío = archivo abierto directo del disco (file://).
+            var esLocal = host === '' || HOSTS_LOCALES.indexOf(host) !== -1;
+            if (!esLocal) return;
+
+            // El orden importa: datos → motor → interfaz. Un <script> creado
+            // por código es async por omisión, lo que los ejecutaría en
+            // desorden; async=false conserva el orden de inserción.
+            ['js/asistente-aifa-datos.js', 'js/asistente-aifa.js', 'js/asistente-aifa-ui.js']
+                .forEach(function (archivo) {
+                    var s = document.createElement('script');
+                    s.src = archivo + '?v=beta-local';
+                    s.async = false;
+                    document.head.appendChild(s);
+                });
+        })();
+    </script>
     <script src="js/coyh-asistencia.js?v=1"></script>
     <script src="js/ssei-derrames.js?v=3"></script>
     <script src="js/ssei-emergencias.js?v=4"></script>
