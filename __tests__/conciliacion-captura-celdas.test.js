@@ -24,6 +24,36 @@ function sourceBetween(startMarker, endMarker) {
 }
 
 describe('captura de celdas en Conciliacion > Manifiestos', () => {
+  test('codigo de demora admite hasta cinco selecciones unicas y concatena sus descripciones', () => {
+    const helpersSource = sourceBetween(
+      'function _conciDemoraOptionDescription',
+      'function _conciNormalizeManifestType'
+    );
+    const helpers = new Function(
+      `${helpersSource}; return { _conciParseDemoraCodes, _conciDemoraDescriptionsForCodes };`
+    )();
+    const codes = helpers._conciParseDemoraCodes('01, 02; 01 | 03\n04, 05');
+    expect(codes).toEqual(['01', '02', '03', '04', '05']);
+    expect(helpers._conciDemoraDescriptionsForCodes(codes, [
+      { codigo: '01', titulo: 'Clima' },
+      { codigo: '02', titulo: 'Tripulación' },
+      { codigo: '03', titulo: 'Equipaje' },
+      { codigo: '04', titulo: 'Mantenimiento' },
+      { codigo: '05', titulo: 'Tráfico' },
+    ])).toBe('Clima; Tripulación; Equipaje; Mantenimiento; Tráfico');
+  });
+
+  test('al quitar todos los codigos la descripcion de demora queda vacia', () => {
+    const helpersSource = sourceBetween(
+      'function _conciDemoraOptionDescription',
+      'function _conciNormalizeManifestType'
+    );
+    const descriptions = new Function(
+      `${helpersSource}; return _conciDemoraDescriptionsForCodes;`
+    )();
+    expect(descriptions([], [{ codigo: '01', titulo: 'Clima' }])).toBe('');
+  });
+
   test.each([
     '_conciInitLiveCollab',
     '_conciSetPresenceCell',

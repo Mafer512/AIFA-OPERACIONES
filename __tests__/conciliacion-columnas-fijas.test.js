@@ -88,10 +88,10 @@ const celdas = (col) =>
   [...document.querySelectorAll(`[data-conci-column-key="${col}"]`)];
 
 describe('qué columnas se fijan', () => {
-  test('fecha, aerolínea y número de vuelo', () => {
-    expect(api._conciEsColumnaFija('FECHA')).toBe(true);
-    expect(api._conciEsColumnaFija('AEROLINEA')).toBe(true);
-    expect(api._conciEsColumnaFija('# DE VUELO')).toBe(true);
+  test('fecha, aerolínea y número de vuelo se desplazan con la tabla', () => {
+    expect(api._conciEsColumnaFija('FECHA')).toBe(false);
+    expect(api._conciEsColumnaFija('AEROLINEA')).toBe(false);
+    expect(api._conciEsColumnaFija('# DE VUELO')).toBe(false);
   });
 
   test('ninguna otra', () => {
@@ -100,71 +100,34 @@ describe('qué columnas se fijan', () => {
   });
 
   test('no le afectan acentos ni mayúsculas', () => {
-    expect(api._conciEsColumnaFija('Fecha')).toBe(true);
-    expect(api._conciEsColumnaFija('AEROLÍNEA')).toBe(true);
+    expect(api._conciEsColumnaFija('Fecha')).toBe(false);
+    expect(api._conciEsColumnaFija('AEROLÍNEA')).toBe(false);
   });
 });
 
-describe('desplazamientos calculados', () => {
+describe('desplazamiento horizontal uniforme', () => {
   beforeEach(() => { render(); api._conciSyncColumnasFijas(); });
 
-  test('la primera fijada arranca pegada al borde', () => {
-    celdas('FECHA').forEach(c => expect(c.style.left).toBe('0px'));
-  });
-
-  test('las siguientes se acumulan con el ancho real de las anteriores', () => {
-    celdas('AEROLINEA').forEach(c => expect(c.style.left).toBe('90px'));      // FECHA
-    celdas('# DE VUELO').forEach(c => expect(c.style.left).toBe('220px'));    // + AEROLINEA
-  });
-
-  test('se aplica al encabezado, a la fila de filtros y al cuerpo', () => {
-    const fijadas = celdas('FECHA');
-    expect(fijadas).toHaveLength(3);
-    fijadas.forEach(c => expect(c.classList.contains('conci-col-fija')).toBe(true));
-  });
-
-  test('las columnas que se desplazan no se tocan', () => {
-    celdas('MATRÍCULA').forEach(c => {
-      expect(c.classList.contains('conci-col-fija')).toBe(false);
-      expect(c.style.left).toBe('');
+  test('títulos, filtros y datos no reciben posición fija', () => {
+    ['FECHA', 'AEROLINEA', '# DE VUELO', 'MATRÍCULA'].forEach(col => {
+      celdas(col).forEach(c => {
+        expect(c.classList.contains('conci-col-fija')).toBe(false);
+        expect(c.classList.contains('conci-col-fija-ultima')).toBe(false);
+        expect(c.style.left).toBe('');
+      });
     });
-  });
-
-  test('solo la última fijada lleva el borde separador', () => {
-    celdas('# DE VUELO').forEach(c => expect(c.classList.contains('conci-col-fija-ultima')).toBe(true));
-    celdas('FECHA').forEach(c => expect(c.classList.contains('conci-col-fija-ultima')).toBe(false));
-    celdas('AEROLINEA').forEach(c => expect(c.classList.contains('conci-col-fija-ultima')).toBe(false));
-  });
-});
-
-describe('columnas ocultas', () => {
-  test('una columna fija oculta no ocupa espacio en el cálculo', () => {
-    // Ocultar AEROLINEA (ancho 0) deja a # DE VUELO justo detrás de FECHA.
-    render({ ocultas: ['AEROLINEA'] });
-    api._conciSyncColumnasFijas();
-    expect(celdas('# DE VUELO')[0].style.left).toBe('90px');
-  });
-
-  test('ocultar una columna que se desplaza no altera los topes', () => {
-    render({ ocultas: ['MATRÍCULA'] });
-    api._conciSyncColumnasFijas();
-    expect(celdas('# DE VUELO')[0].style.left).toBe('220px');
   });
 });
 
 describe('recálculo', () => {
-  test('al cambiar los anchos, los topes se rehacen sin dejar residuos', () => {
+  test('al cambiar anchos no se agregan posiciones fijas', () => {
     render();
     api._conciSyncColumnasFijas();
-    expect(celdas('# DE VUELO')[0].style.left).toBe('220px');
-
-    // La fecha se ensancha (el usuario redimensionó la columna).
     document.querySelector('tr.cabecera [data-conci-column-key="FECHA"]')
       .getBoundingClientRect = () => ({ width: 150 });
     api._conciSyncColumnasFijas();
-
-    expect(celdas('AEROLINEA')[0].style.left).toBe('150px');
-    expect(celdas('# DE VUELO')[0].style.left).toBe('280px');
+    expect(celdas('AEROLINEA')[0].style.left).toBe('');
+    expect(celdas('# DE VUELO')[0].style.left).toBe('');
   });
 
   test('sin tabla en pantalla no revienta', () => {
