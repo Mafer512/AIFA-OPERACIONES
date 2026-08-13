@@ -18732,6 +18732,7 @@ function _conciDemoraAccumulateRow(bucket, row) {
 function _conciDemoraFinalizeBucket(bucket) {
     return Array.from(bucket.values()).map(entry => ({
         codigo: entry.codigo,
+        titulo: entry.titulo || '',
         label: entry.titulo ? `${entry.codigo} — ${entry.titulo}` : entry.codigo,
         detalle: entry.detalles.join(' · '),
         search: entry.search
@@ -23593,6 +23594,22 @@ function _conciIsCodigoDemoraColumn(column) {
     return key === 'codigo demora' || key === 'codigo de demora';
 }
 
+function _conciIsObservacionesColumn(column) {
+    return _conciNormalizedColumnName(column) === 'observaciones';
+}
+
+// Texto de OBSERVACIONES a partir de una opción del catálogo de demoras:
+// prefiere el título (causa/descripción sin el código) y, si la opción no lo
+// trae (p. ej. quedó armada a mano en algún flujo viejo), lo recupera
+// separando el código del label "CÓDIGO — título".
+function _conciDemoraOptionDescription(option) {
+    if (!option) return '';
+    if (option.titulo) return option.titulo;
+    const label = String(option.label || '');
+    const idx = label.indexOf(' — ');
+    return idx >= 0 ? label.slice(idx + 3).trim() : '';
+}
+
 function _conciNormalizeManifestType(value) {
     const key = _conciNormalizedColumnName(value);
     if (/lleg|arr/.test(key)) return 'Llegada';
@@ -23987,6 +24004,7 @@ function _conciDemoraPrefixVariants(options, query) {
             && _conciDemoraSearchText(option.codigo).startsWith(base))
         .map(option => ({
             codigo: `${_CONCI_DEMORA_PREFIX_CODE}${option.codigo}`,
+            titulo: option.titulo || '',
             label: `${_CONCI_DEMORA_PREFIX_CODE} + ${option.label}`,
             detalle: `Repercusión antepuesta a ${option.codigo}${option.detalle ? ' · ' + option.detalle : ''}`,
             search: `${_conciDemoraSearchText(_CONCI_DEMORA_PREFIX_CODE)}${option.search}`
@@ -24135,6 +24153,25 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
             }
             return;
         }
+        // Autocompleta OBSERVACIONES con la causa del código elegido, sin pisar
+        // una nota que el capturista ya haya escrito a mano en esa celda. Se
+        // hace ANTES de confirmar esta celda: OBSERVACIONES es la columna
+        // siguiente en la tabla, así que si el foco avanza hacia allá (Tab/
+        // Enter), su editor se abre ya con este texto en vez de perderlo por
+        // el blur forzado que dispararía pisarlo después de abierto.
+        if (resolved.codigo && resolved.option) {
+            const description = _conciDemoraOptionDescription(resolved.option);
+            const tr = td.closest('tr');
+            const obsCell = tr && Array.from(tr.querySelectorAll('td[data-col]'))
+                .find(cell => _conciIsObservacionesColumn(cell.dataset.col));
+            if (description && obsCell && !obsCell.classList.contains('conci-cell-active')) {
+                const obsCurrent = _conciNormalizeEditableCellText(
+                    obsCell.dataset.pendingRaw ?? obsCell.dataset.raw ?? obsCell.textContent
+                );
+                if (!obsCurrent) _conciCommitCellRaw(obsCell, description, undefined, description);
+            }
+        }
+
         _conciCommitCellRaw(td, resolved.codigo, move, resolved.codigo);
         if (resolved.option) td.title = resolved.option.label;
     };
