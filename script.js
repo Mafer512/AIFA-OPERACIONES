@@ -24281,6 +24281,67 @@ function _conciActivateOperationTypeEditor(td, currentRaw) {
 // la base de datos por sí mismo — es sólo señalización efímera entre
 // pestañas conectadas; el guardado real sigue siendo el autoguardado por
 // celda de siempre.
+// ── Reconexion del canal en vivo ─────────────────────────────────────────────
+//
+// Un WebSocket se cae: un bache de red, el proxy de la oficina, la maquina que
+// se suspende. Antes eso era definitivo -- al llegar CHANNEL_ERROR, TIMED_OUT o
+// CLOSED solo se marcaba _conciLiveReady = false y ahi se quedaba. Y como
+// _conciInitLiveCollab devuelve temprano si ya existe un canal, ni siquiera
+// volviendo a llamarla se recuperaba.
+//
+// El sintoma era exactamente ese: al principio se veia todo, y a los pocos
+// minutos dejaba de verse donde capturaba el companero. Los cursores ajenos
+// caducan a los 25 s sin latido, asi que tras la caida se apagaban solos y ya
+// no volvia a encenderse ninguno.
+//
+// Ahora se reintenta con espera creciente (1 s, 2 s, 4 s... hasta 30 s) y, al
+// volver, se reanuncia la presencia y el cursor propio para que las demas
+// pantallas repinten de inmediato.
+let _conciLiveReintentos = 0;
+let _conciReconexionTimer = null;
+
+function _conciProgramarReconexion() {
+    if (_conciReconexionTimer) return;
+    const espera = Math.min(1000 * Math.pow(2, _conciLiveReintentos), 30000);
+    _conciLiveReintentos++;
+    _conciReconexionTimer = setTimeout(() => {
+        _conciReconexionTimer = null;
+        _conciReconectarLive();
+    }, espera);
+}
+
+async function _conciReconectarLive() {
+    const anterior = _conciLiveChannel;
+    _conciLiveChannel = null;
+    _conciLiveReady = false;
+    if (anterior) {
+        try { await window.supabaseClient?.removeChannel(anterior); } catch (_) { /* ya estaba muerto */ }
+    }
+    // Los cursores ajenos se vacian: mientras estuvimos fuera pudieron moverse
+    // o irse, y es peor mostrar posiciones viejas que ninguna.
+    _conciFocoRemotoPorCliente.clear();
+    _conciRepintarFocos();
+    await _conciInitLiveCollab();
+}
+
+let _conciVigilanciaLista = false;
+// Volver a la pestaña o recuperar la red son los dos momentos en que mas vale
+// la pena comprobar que el canal sigue vivo, sin esperar a la siguiente espera.
+function _conciVigilarConexionLive() {
+    if (_conciVigilanciaLista) return;
+    _conciVigilanciaLista = true;
+    const revisar = () => {
+        if (!document.getElementById('table-conci-manifiestos')) return;
+        if (_conciLiveReady) return;
+        _conciLiveReintentos = 0;   // fue un evento del usuario: reintenta ya
+        if (_conciReconexionTimer) { clearTimeout(_conciReconexionTimer); _conciReconexionTimer = null; }
+        _conciReconectarLive();
+    };
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) revisar(); });
+    window.addEventListener('online', revisar);
+    window.addEventListener('focus', revisar);
+}
+
 async function _conciInitLiveCollab() {
     if (_conciLiveChannel) return;
     let client = window.supabaseClient;
@@ -24305,14 +24366,22 @@ async function _conciInitLiveCollab() {
     channel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
             _conciLiveReady = true;
+            _conciLiveReintentos = 0;
             _conciRenderBarraPresencia();
             _conciIniciarLatidoFoco();
+            _conciVigilarConexionLive();
             try {
                 await channel.track({ user: _conciLiveDisplayName, color: _conciLiveColor, rowId: null, col: null });
             } catch (_) { /* ignora: sólo afecta la señalización en vivo, no el guardado real */ }
+            // Se reanuncia la celda propia: tras una reconexión, las demás
+            // pantallas ya habían dado este cursor por perdido.
+            if (_conciMiFocoActual.rowId && _conciMiFocoActual.col) {
+                _conciEnviarFoco(_conciMiFocoActual.rowId, _conciMiFocoActual.col);
+            }
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
             _conciLiveReady = false;
             _conciRenderBarraPresencia();
+            _conciProgramarReconexion();
         }
     });
 }
@@ -24677,7 +24746,12 @@ function _conciRenderBarraPresencia() {
         ? `<span class="conci-presencia-avatar conci-presencia-mas" title="${escapeHTML(gente.slice(6).map(p => p.nombre).join(', '))}">+${sobran}</span>`
         : '';
 
-    cont.innerHTML = `<span class="conci-presencia-punto" title="Colaboración en vivo activa"></span>${avatares}${extra}`;
+    // El punto dice la verdad sobre la conexión: si el canal se cayó, lo que
+    // se ve en pantalla puede estar viejo y conviene saberlo.
+    const estado = _conciLiveReady
+        ? { clase: '', titulo: 'Colaboración en vivo activa' }
+        : { clase: ' conci-presencia-punto-caido', titulo: 'Sin conexión en vivo: reintentando…' };
+    cont.innerHTML = `<span class="conci-presencia-punto${estado.clase}" title="${escapeHTML(estado.titulo)}"></span>${avatares}${extra}`;
 }
 
 // Anuncia al resto las columnas que acaban de guardarse en una fila, para que
