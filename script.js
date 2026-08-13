@@ -22230,7 +22230,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                 for (const tr of _conciVisibleBodyRows()) {
                     const cell = _conciGetCellInRow(tr, col);
                     if (cell) {
-                        cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                        _conciAsegurarCeldaVisible(cell, 'vertical');
                         _conciActivateCellEditor(cell);
                         break;
                     }
@@ -23122,7 +23122,7 @@ function _conciGetFilterInputForColumn(col) {
 function _conciFocusFilterOrAbove(td) {
     const above = _conciGetCellAbove(td);
     if (above) {
-        above.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        _conciAsegurarCeldaVisible(above, 'vertical');
         _conciActivateCellEditor(above);
         return;
     }
@@ -23139,7 +23139,7 @@ function _conciFocusFilterOrAbove(td) {
 function _conciFocusBelow(td) {
     const below = _conciGetCellBelow(td);
     if (below) {
-        below.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        _conciAsegurarCeldaVisible(below, 'vertical');
         _conciActivateCellEditor(below);
     }
 }
@@ -23147,11 +23147,55 @@ function _conciFocusBelow(td) {
 // Mueve el foco a la celda contigua desde `td`, con el mismo criterio que aplica
 // _conciCommitCellRaw al navegar desde un editor abierto (incluido el salto al
 // filtro de la columna cuando ya no hay fila arriba).
+// Deja una celda a la vista moviendo SOLO el eje que hace falta.
+//
+// scrollIntoView, incluso pidiendo "nearest" en los dos ejes, decide por su
+// cuenta y mueve los dos. Con las columnas fijas eso se volvio un problema:
+// una celda que queda por debajo de ellas cuenta como no visible, asi que el
+// navegador desplaza la tabla en HORIZONTAL para revelarla. Bajando rapido con
+// la flecha, en cuanto se pasaba del ultimo renglon a la vista, la tabla se
+// iba de lado sola.
+//
+// Aqui se calcula a mano: moverse en vertical solo ajusta el alto, moverse en
+// horizontal solo el ancho, y en los dos casos se descuenta lo que tapan el
+// encabezado fijo y las columnas fijas, para que el cursor nunca acabe
+// escondido debajo de ellos.
+function _conciAnchoColumnasFijas(cont) {
+    let ancho = 0;
+    cont.querySelectorAll('thead tr:first-child th.conci-col-fija').forEach(th => {
+        ancho += th.getBoundingClientRect().width;
+    });
+    return ancho;
+}
+
+function _conciAsegurarCeldaVisible(td, eje) {
+    const cont = document.getElementById('conci-manifiestos-scroll');
+    if (!cont || !td || !td.isConnected) return;
+    const caja = td.getBoundingClientRect();
+    const marco = cont.getBoundingClientRect();
+
+    if (eje !== 'horizontal') {
+        const thead = cont.querySelector('#table-conci-manifiestos thead');
+        const tapa = thead ? thead.getBoundingClientRect().height : 0;
+        const arriba = marco.top + tapa;
+        if (caja.top < arriba) cont.scrollTop -= (arriba - caja.top);
+        else if (caja.bottom > marco.bottom) cont.scrollTop += (caja.bottom - marco.bottom);
+    }
+
+    if (eje !== 'vertical') {
+        // Una columna fija esta siempre a la vista: no hay nada que ajustar.
+        if (td.classList.contains('conci-col-fija')) return;
+        const izquierda = marco.left + _conciAnchoColumnasFijas(cont);
+        if (caja.left < izquierda) cont.scrollLeft -= (izquierda - caja.left);
+        else if (caja.right > marco.right) cont.scrollLeft += (caja.right - marco.right);
+    }
+}
+
 function _conciMoveFromCell(td, key) {
     if (key === 'ArrowRight' || key === 'ArrowLeft') {
         const target = key === 'ArrowRight' ? _conciGetNextEditableCell(td) : _conciGetPrevEditableCell(td);
         if (!target) return;
-        target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        _conciAsegurarCeldaVisible(target, 'horizontal');
         _conciActivateCellEditor(target);
         return;
     }
@@ -25774,15 +25818,15 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     if (move === 'next') {
         const nextCell = _conciGetNextEditableCell(td);
         if (nextCell) {
-            // Mantiene visible la siguiente celda aun cuando la tabla tenga
-            // desplazamiento horizontal y deja el cursor listo para capturar.
-            nextCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            // Tab cambia de columna: se ajustan los dos ejes, pero a mano, sin
+            // dejar que el navegador decida cuanto desplazar de lado.
+            _conciAsegurarCeldaVisible(nextCell, 'ambos');
             _conciActivateCellEditor(nextCell);
         }
     } else if (move === 'prev') {
         const prevCell = _conciGetPrevEditableCell(td);
         if (prevCell) {
-            prevCell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            _conciAsegurarCeldaVisible(prevCell, 'ambos');
             _conciActivateCellEditor(prevCell);
         }
     } else if (move === 'up') {
