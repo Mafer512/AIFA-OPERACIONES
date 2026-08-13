@@ -1117,7 +1117,15 @@ FF
            Quién está en la tabla ahora mismo. El punto verde late mientras el
            canal está conectado; cada avatar toma el color de esa persona, el
            mismo con el que se resalta la celda que tiene abierta. */
-        .conci-presencia { display: inline-flex; align-items: center; gap: 3px; flex: none; }
+        .conci-presencia {
+            display: inline-flex; align-items: center; gap: 3px; flex: none;
+            width: 145px; min-width: 145px; height: 28px; overflow: visible;
+            contain: layout;
+        }
+        /* El espacio se conserva aun sin usuarios. Así, cuando alguien entra o
+           sale, la cabecera no cambia de ancho, no envuelve controles y la
+           página no "brinca" ni parpadea en pantallas de laptop. */
+        .conci-presencia.conci-presencia-vacia { visibility: hidden; pointer-events: none; }
         .conci-presencia-punto {
             width: 7px; height: 7px; border-radius: 50%;
             background: #22c55e; margin-right: 4px; flex: none;
@@ -21787,7 +21795,7 @@ FF
                                             <!-- Conciliación Manifiestos Table -->
                                             <div class="card border-0 shadow-sm conci-manifest-card">
                                                 <div class="card-header bg-white border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2 conci-manifest-toolbar">
-                                                    <div class="d-flex align-items-center gap-2 flex-nowrap"><h6 class="mb-0 fw-semibold"><i class="fas fa-file-alt me-2 text-success"></i>Conciliación Manifiestos</h6><span id="conci-presencia" class="conci-presencia d-none" aria-label="Personas trabajando en esta tabla ahora"></span></div>
+                                                    <div class="d-flex align-items-center gap-2 flex-nowrap"><h6 class="mb-0 fw-semibold"><i class="fas fa-file-alt me-2 text-success"></i>Conciliación Manifiestos</h6><span id="conci-presencia" class="conci-presencia conci-presencia-vacia" aria-label="Personas trabajando en esta tabla ahora"></span></div>
                                                     <div class="d-flex gap-2 align-items-center flex-wrap">
                                                         <!-- Selector de periodo de fechas -->
                                                         <div class="input-group input-group-sm" style="width:auto">
@@ -21898,10 +21906,10 @@ FF
                                                     </div>
                                                     <div class="d-flex gap-2 align-items-center">
                                                         <div class="btn-group btn-group-sm shadow-sm" role="group" aria-label="Filtrar manifiestos por estado de captura">
-                                                            <button class="btn btn-outline-success" type="button" id="conci-pill-capturados" title="Mostrar manifiestos con CIERRE SUBSECRETARIA registrado">
+                                                            <button class="btn btn-outline-success" type="button" id="conci-pill-capturados" title="Mostrar manifiestos con HR. DE RECEPCIÓN registrada">
                                                                 <i class="fas fa-circle-check me-1"></i>Capturados <span class="badge bg-success ms-1" id="conci-count-capturados">0</span>
                                                             </button>
-                                                            <button class="btn btn-outline-danger" type="button" id="conci-pill-sin-capturar" title="Mostrar manifiestos sin CIERRE SUBSECRETARIA">
+                                                            <button class="btn btn-outline-danger" type="button" id="conci-pill-sin-capturar" title="Mostrar manifiestos sin HR. DE RECEPCIÓN">
                                                                 <i class="fas fa-circle-xmark me-1"></i>Sin capturar <span class="badge bg-danger ms-1" id="conci-count-sin-capturar">0</span>
                                                             </button>
                                                         </div>

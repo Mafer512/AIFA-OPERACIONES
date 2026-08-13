@@ -226,7 +226,8 @@ describe('lo que ya funcionaba sigue igual', () => {
   test('sin nadie conectado la barra se esconde', () => {
     pintar();
     api._conciRenderBarraPresencia();
-    expect(cont().classList.contains('d-none')).toBe(true);
+    expect(cont().classList.contains('d-none')).toBe(false);
+    expect(cont().classList.contains('conci-presencia-vacia')).toBe(true);
   });
 
   test('un nombre con HTML no se inyecta', () => {

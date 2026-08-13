@@ -156,6 +156,7 @@ describe('integración en el módulo', () => {
   });
 
   test('la barra de avatares no se deja encoger', () => {
-    expect(html).toContain('.conci-presencia { display: inline-flex; align-items: center; gap: 3px; flex: none; }');
+    expect(html).toMatch(/\.conci-presencia\s*\{[^}]*display:\s*inline-flex[^}]*flex:\s*none[^}]*width:\s*145px/s);
+    expect(html).toContain('.conci-presencia.conci-presencia-vacia');
   });
 });

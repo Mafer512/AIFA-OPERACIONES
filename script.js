@@ -20469,7 +20469,7 @@ function _conciUpdateResumen(data, columns) {
     const tipoCol    = cols.find(c => /tipo.*manif/i.test(c)) || null;
     const optypeCol  = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
     const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
-    const cierreCol = cols.find(c => _conciNormalizedColumnName(c) === 'cierre subsecretaria') || null;
+    const recepcionCol = cols.find(c => _conciNormalizedColumnName(c) === 'hr de recepcion') || null;
     for (const r of (data || [])) {
         const f = String(r && r._fuente || '');
         if (f === 'Manifiestos + Vuelos') empate++;
@@ -20489,7 +20489,10 @@ function _conciUpdateResumen(data, columns) {
             if (isArr) paxArr++; else if (isDep) paxDep++;
         }
         if (r && r._conci_overcapacity) sobrecupo++;
-        if (cierreCol && String(r?.[cierreCol] ?? '').trim()) capturados++;
+        // HR. DE RECEPCIÓN es la autoridad del estado de captura. CIERRE
+        // SUBSECRETARIA ya no basta por sí solo: con recepción es capturado,
+        // sin recepción es pendiente, aunque el cierre tenga valor.
+        if (recepcionCol && String(r?.[recepcionCol] ?? '').trim()) capturados++;
         else sinCapturar++;
     }
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = String(val); };
@@ -20619,13 +20622,13 @@ function _conciRowPassesPillFilter(tr) {
         if (tr.dataset.rowOvercap !== '1') return false;
     }
     if (_conciCaptureFilter) {
-        const cierreCell = [...tr.querySelectorAll('td[data-col]')]
-            .find(td => _conciNormalizedColumnName(td.dataset.col) === 'cierre subsecretaria');
-        const cierre = _conciNormalizeEditableCellText(
-            cierreCell?.dataset.pendingRaw ?? cierreCell?.dataset.raw ?? cierreCell?.textContent ?? ''
+        const recepcionCell = [...tr.querySelectorAll('td[data-col]')]
+            .find(td => _conciNormalizedColumnName(td.dataset.col) === 'hr de recepcion');
+        const recepcion = _conciNormalizeEditableCellText(
+            recepcionCell?.dataset.pendingRaw ?? recepcionCell?.dataset.raw ?? recepcionCell?.textContent ?? ''
         );
-        if (_conciCaptureFilter === 'capturados' && !cierre) return false;
-        if (_conciCaptureFilter === 'sin-capturar' && cierre) return false;
+        if (_conciCaptureFilter === 'capturados' && !recepcion) return false;
+        if (_conciCaptureFilter === 'sin-capturar' && recepcion) return false;
     }
     return true;
 }
@@ -25214,9 +25217,11 @@ function _conciRenderBarraPresencia() {
 
     if (!gente.length) {
         cont.textContent = '';
-        cont.classList.add('d-none');
+        cont.classList.add('conci-presencia-vacia');
+        cont.classList.remove('d-none');
         return;
     }
+    cont.classList.remove('conci-presencia-vacia');
     cont.classList.remove('d-none');
 
     // El punto se conserva entre repintados para que su animación siga corriendo.

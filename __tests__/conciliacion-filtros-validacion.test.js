@@ -195,6 +195,11 @@ describe('limpieza conjunta de filtros de Manifiestos', () => {
               colFilters: _conciColFilters,
               excelFilters: _conciExcelFilters,
             };
+          },
+          capture: function (value) {
+            _conciClassFilter = null;
+            _conciDirFilter = null;
+            _conciCaptureFilter = value;
           }
         };`
     )(
@@ -226,5 +231,26 @@ describe('limpieza conjunta de filtros de Manifiestos', () => {
     expect(row.style.display).toBe('');
     expect(updateExcelIcons).toHaveBeenCalled();
     expect(updatePillStyles).toHaveBeenCalled();
+  });
+
+  test('HR. DE RECEPCION tiene prioridad sobre CIERRE SUBSECRETARIA', () => {
+    document.body.innerHTML = `
+      <table id="table-conci-manifiestos"><tbody>
+        <tr id="solo-recepcion" data-row-index="0"><td data-col="CIERRE SUBSECRETARIA"></td><td data-col="HR. DE RECEPCIÓN" data-raw="12/08/2026 10:00"></td></tr>
+        <tr id="solo-cierre" data-row-index="1"><td data-col="CIERRE SUBSECRETARIA" data-raw="12/08/2026">12/08/2026</td><td data-col="HR. DE RECEPCIÓN"></td></tr>
+        <tr id="ambos" data-row-index="2"><td data-col="CIERRE SUBSECRETARIA" data-raw="12/08/2026"></td><td data-col="HR. DE RECEPCIÓN" data-raw="12/08/2026 11:00"></td></tr>
+      </tbody></table>`;
+    const filterSource = sourceBetween('let _conciClassFilter = null', 'function _showConciExcelFilter');
+    const api = new Function('document', '_updateConciExcelFilterIcons', '_conciUpdatePillActiveStyles', '_conciNormalizedColumnName', '_conciNormalizeEditableCellText', filterSource + `
+      return { apply: _conciApplyPillFilter, set: value => { _conciCaptureFilter = value; } };
+    `)(document, () => {}, () => {}, value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9#]+/g, ' ').trim().toLowerCase(), value => String(value || '').trim());
+
+    api.set('capturados'); api.apply();
+    expect(document.getElementById('solo-recepcion').style.display).toBe('');
+    expect(document.getElementById('solo-cierre').style.display).toBe('none');
+    expect(document.getElementById('ambos').style.display).toBe('');
+    api.set('sin-capturar'); api.apply();
+    expect(document.getElementById('solo-recepcion').style.display).toBe('none');
+    expect(document.getElementById('solo-cierre').style.display).toBe('');
   });
 });
