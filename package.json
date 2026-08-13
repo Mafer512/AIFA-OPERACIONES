@@ -2,9 +2,10 @@
   "name": "aifa-operaciones",
   "version": "1.0.0",
   "description": "Dashboard y herramientas de operaciones AIFA",
-  "main": "script.js",
+  "main": "server.js",
   "scripts": {
     "dev": "node server.js",
+    "build": "node --check server.js",
     "start": "node server.js",
     "test": "jest"
   },
@@ -19,6 +20,9 @@
   ],
   "author": "Isaac Azhael López Cancino",
   "license": "ISC",
+  "engines": {
+    "node": "22.x"
+  },
   "bugs": {
     "url": "https://github.com/isaacazhael161f-creator/AIFA-OPERACIONES/issues"
   },

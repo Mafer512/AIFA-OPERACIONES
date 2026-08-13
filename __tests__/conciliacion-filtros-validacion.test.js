@@ -130,6 +130,15 @@ describe('validador de fechas por tipo de manifiesto', () => {
 });
 
 describe('limpieza conjunta de filtros de Manifiestos', () => {
+  test('reconoce HR. DE RECEPCION con o sin punto y con acento', () => {
+    const normalizerSource = sourceBetween('function _conciNormalizedColumnName', 'function _conciIsProtectedEditColumn');
+    const receptionSource = sourceBetween('function _conciIsReceptionColumn', 'function _conciUpdateResumen');
+    const isReception = new Function(`${normalizerSource}\n${receptionSource}; return _conciIsReceptionColumn;`)();
+    expect(isReception('HR. DE RECEPCIÓN')).toBe(true);
+    expect(isReception('HR DE RECEPCION')).toBe(true);
+    expect(isReception('CIERRE SUBSECRETARIA')).toBe(false);
+  });
+
   test('el toolbar incluye Limpiar filtros junto a la exportación', () => {
     expect(indexSource).toContain('id="btn-conci-clear-filters"');
     expect(indexSource).toContain('Limpiar filtros');
@@ -175,6 +184,7 @@ describe('limpieza conjunta de filtros de Manifiestos', () => {
       '_conciUpdatePillActiveStyles',
       '_conciNormalizedColumnName',
       '_conciNormalizeEditableCellText',
+      '_conciIsReceptionColumn',
       filterSource + `
         return {
           apply: _conciApplyPillFilter,
@@ -207,7 +217,8 @@ describe('limpieza conjunta de filtros de Manifiestos', () => {
       updateExcelIcons,
       updatePillStyles,
       value => String(value || '').toLowerCase(),
-      value => String(value || '').trim()
+      value => String(value || '').trim(),
+      value => /^hr\.?\s+de\s+recepcion$/.test(String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase())
     );
 
     api.seed();
@@ -241,9 +252,9 @@ describe('limpieza conjunta de filtros de Manifiestos', () => {
         <tr id="ambos" data-row-index="2"><td data-col="CIERRE SUBSECRETARIA" data-raw="12/08/2026"></td><td data-col="HR. DE RECEPCIÓN" data-raw="12/08/2026 11:00"></td></tr>
       </tbody></table>`;
     const filterSource = sourceBetween('let _conciClassFilter = null', 'function _showConciExcelFilter');
-    const api = new Function('document', '_updateConciExcelFilterIcons', '_conciUpdatePillActiveStyles', '_conciNormalizedColumnName', '_conciNormalizeEditableCellText', filterSource + `
+    const api = new Function('document', '_updateConciExcelFilterIcons', '_conciUpdatePillActiveStyles', '_conciNormalizedColumnName', '_conciNormalizeEditableCellText', '_conciIsReceptionColumn', filterSource + `
       return { apply: _conciApplyPillFilter, set: value => { _conciCaptureFilter = value; } };
-    `)(document, () => {}, () => {}, value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9#]+/g, ' ').trim().toLowerCase(), value => String(value || '').trim());
+    `)(document, () => {}, () => {}, value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase(), value => String(value || '').trim(), value => /^hr\.?\s+de\s+recepcion$/.test(String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()));
 
     api.set('capturados'); api.apply();
     expect(document.getElementById('solo-recepcion').style.display).toBe('');

@@ -20458,6 +20458,10 @@ async function loadConciliacionManifiestos(options = {}) {
     }
 }
 
+function _conciIsReceptionColumn(column) {
+    return /^hr\.?\s+de\s+recepcion$/.test(_conciNormalizedColumnName(column));
+}
+
 function _conciUpdateResumen(data, columns) {
     let empate = 0, soloManifiesto = 0, soloVuelos = 0;
     let llegadas = 0, salidas = 0, pax = 0, carga = 0;
@@ -20469,7 +20473,7 @@ function _conciUpdateResumen(data, columns) {
     const tipoCol    = cols.find(c => /tipo.*manif/i.test(c)) || null;
     const optypeCol  = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
     const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
-    const recepcionCol = cols.find(c => _conciNormalizedColumnName(c) === 'hr de recepcion') || null;
+    const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
     for (const r of (data || [])) {
         const f = String(r && r._fuente || '');
         if (f === 'Manifiestos + Vuelos') empate++;
@@ -20623,7 +20627,7 @@ function _conciRowPassesPillFilter(tr) {
     }
     if (_conciCaptureFilter) {
         const recepcionCell = [...tr.querySelectorAll('td[data-col]')]
-            .find(td => _conciNormalizedColumnName(td.dataset.col) === 'hr de recepcion');
+            .find(td => _conciIsReceptionColumn(td.dataset.col));
         const recepcion = _conciNormalizeEditableCellText(
             recepcionCell?.dataset.pendingRaw ?? recepcionCell?.dataset.raw ?? recepcionCell?.textContent ?? ''
         );
