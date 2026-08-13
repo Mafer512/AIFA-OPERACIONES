@@ -2275,6 +2275,11 @@ function applySectionPermissions(userName) {
 
     const role = sessionStorage.getItem('user_role') || 'viewer';
     const isColabOnly = ['colab_viewer', 'colab_editor'].includes(role);
+    // Conciliación es un módulo base para toda sesión válida (la base de datos
+    // conserva sus propios permisos RLS). Mantener esta regla igual que
+    // js/permissions.js evita que una capa la muestre y la otra la vuelva a
+    // ocultar durante el arranque.
+    const authenticatedCoreSections = ['conciliacion'];
 
     // admin y superadmin: acceso total siempre, sin importar allowed_sections
     const isFullAdmin = ['admin', 'superadmin'].includes(role);
@@ -2293,31 +2298,33 @@ function applySectionPermissions(userName) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed) && parsed.length > 0) {
                 explicitWhitelist = parsed.map(s => normalizeSectionKey(s)).filter(Boolean);
+                authenticatedCoreSections.forEach(sectionKey => {
+                    if (!explicitWhitelist.includes(sectionKey)) explicitWhitelist.push(sectionKey);
+                });
             }
         }
     } catch (_) {}
     const hasExplicitWhitelist = explicitWhitelist.length > 0;
 
-    // Roles de solo-Colaboradores: ocultar todo el menú excepto la sección de
-    // colaboradores — SOLO cuando NO hay lista explícita de módulos. Si el admin
-    // designó módulos concretos, se respeta esa lista (bloque de whitelist abajo).
+    // Roles de solo-Colaboradores: conservar Colaboradores y los módulos base
+    // autenticados. Si el admin designó módulos concretos, se respeta esa lista
+    // ampliada con el mismo núcleo autenticado.
     if (isColabOnly && !hasExplicitWhitelist) {
         document.querySelectorAll('.menu-item[data-section]').forEach(item => {
-            if (item.dataset.section !== 'colaboradores') {
+            if (item.dataset.section !== 'colaboradores' && !authenticatedCoreSections.includes(item.dataset.section)) {
                 item.classList.add('perm-hidden');
             }
         });
         document.querySelectorAll('.content-section').forEach(sectionEl => {
             const key = (sectionEl.id || '').replace(/-section$/, '');
-            if (key !== 'colaboradores') {
+            if (key !== 'colaboradores' && !authenticatedCoreSections.includes(key)) {
                 sectionEl.classList.add('perm-hidden');
                 sectionEl.classList.remove('active');
             }
         });
         hideEmptySidebarGroups();
-        // Navegar a colaboradores automáticamente
-        const colabLink = document.querySelector('.menu-item[data-section="colaboradores"]');
-        if (typeof showSection === 'function' && colabLink) showSection('colaboradores', colabLink);
+        // No navegar automáticamente: showMainApp restaurará el hash solicitado
+        // (#conciliacion incluido) y sólo usará el menú cuando no exista ruta.
         return;
     }
 
@@ -2347,6 +2354,11 @@ function applySectionPermissions(userName) {
 
     // Preferir Supabase; caer en legacy si no hay Supabase
     const rawWhitelist = supabaseList.length ? supabaseList : legacyList;
+    if (rawWhitelist.length) {
+        authenticatedCoreSections.forEach(sectionKey => {
+            if (!rawWhitelist.includes(sectionKey)) rawWhitelist.push(sectionKey);
+        });
+    }
 
     // Permitir siempre la sección de historia y biblioteca SOLO en whitelist legacy (no Supabase)
     if (rawWhitelist.length && !supabaseList.length) {
@@ -2560,6 +2572,8 @@ async function refreshUserPermissionsFromServer() {
                 permissions: roleData.permissions || {}
             });
         } catch (_) {}
+        const routeKey = String(location.hash || '').replace(/^#/, '').trim();
+        if (routeKey) restoreSectionFromNavigation(routeKey);
     } catch (_) {}
 }
 
@@ -3737,6 +3751,83 @@ const SESSION_USER = 'currentUser';
 let supabaseAuthBridgeBound = false;
 const OPERACIONES_ACCESS_ERROR = 'Tu usuario no tiene acceso asignado al aplicativo AIFA Operaciones.';
 const GLOBAL_APPLICATION_ROLES = ['superuser', 'superadmin'];
+const AUTH_RESTORE_TIMEOUT_MS = 10000;
+const LAST_SECTION_STORAGE_KEY = 'aifa.navigation.last_section';
+const LAST_TAB_STORAGE_PREFIX = 'aifa.navigation.last_tab.';
+
+function withAuthRestoreTimeout(promise, timeoutMs = AUTH_RESTORE_TIMEOUT_MS) {
+    let timeoutId;
+    const timeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('La validación de sesión tardó demasiado.')), timeoutMs);
+    });
+    return Promise.race([Promise.resolve(promise), timeout])
+        .finally(() => clearTimeout(timeoutId));
+}
+
+function hideAuthBootScreen() {
+    const boot = document.getElementById('auth-boot-screen');
+    if (boot) boot.style.display = 'none';
+}
+
+function rememberActiveSection(sectionKey) {
+    if (!sectionKey || !/^[a-z0-9-]+$/i.test(sectionKey)) return;
+    try { sessionStorage.setItem(LAST_SECTION_STORAGE_KEY, sectionKey); } catch (_) { }
+}
+
+function rememberActiveTab(tabButton) {
+    if (!tabButton?.id) return;
+    const section = tabButton.closest?.('.content-section');
+    const sectionKey = String(section?.id || '').replace(/-section$/, '');
+    if (!sectionKey) return;
+    try { sessionStorage.setItem(`${LAST_TAB_STORAGE_PREFIX}${sectionKey}`, tabButton.id); } catch (_) { }
+}
+
+function restoreActiveTab(sectionKey, sectionElement) {
+    if (!sectionKey || !sectionElement) return false;
+    let tabId = '';
+    try { tabId = sessionStorage.getItem(`${LAST_TAB_STORAGE_PREFIX}${sectionKey}`) || ''; } catch (_) { }
+    if (!tabId || !/^[a-z0-9_-]+$/i.test(tabId)) return false;
+    const tabButton = document.getElementById(tabId);
+    if (!tabButton || !sectionElement.contains(tabButton) || tabButton.disabled) return false;
+    try {
+        if (typeof bootstrap !== 'undefined' && bootstrap.Tab) {
+            bootstrap.Tab.getOrCreateInstance(tabButton).show();
+        } else {
+            tabButton.click();
+        }
+        return true;
+    } catch (_) { return false; }
+}
+
+function restoreSectionFromNavigation(sectionKey) {
+    const key = String(sectionKey || '').trim();
+    if (!key || !/^[a-z0-9-]+$/i.test(key)) return false;
+    const target = document.getElementById(`${resolveSectionHostKey(key)}-section`);
+    if (!target) return false;
+    const isAuthenticatedCore = key === 'conciliacion';
+    if (!isAuthenticatedCore && !isSectionAllowed(key)) return false;
+
+    if (isAuthenticatedCore) target.classList.remove('perm-hidden', 'd-none-auth');
+    const links = [...document.querySelectorAll(`.menu-item[data-section="${key}"]`)];
+    if (isAuthenticatedCore) links.forEach(link => link.classList.remove('perm-hidden', 'd-none-auth'));
+    const link = links.find(item =>
+        !item.classList.contains('perm-hidden') && !item.classList.contains('d-none-auth')
+    ) || links[0] || null;
+
+    try { showSection(key, link); } catch (_) {
+        document.querySelectorAll('.content-section').forEach(sec => sec.classList.remove('active'));
+        target.classList.add('active');
+        currentSectionKey = key;
+        history.replaceState(null, '', `#${key}`);
+    }
+    document.body.classList.add('navdeck-active');
+    target.classList.add('active');
+    rememberActiveSection(key);
+    setTimeout(() => restoreActiveTab(key, target), 60);
+    return true;
+}
+
+document.addEventListener('shown.bs.tab', event => rememberActiveTab(event.target));
 
 /** Autorización de AIFA: nunca usar user_roles para roles normales de Operaciones. */
 async function getOperacionesAccess(user) {
@@ -3762,12 +3853,16 @@ async function getOperacionesAccess(user) {
 }
 
 async function rejectOperacionesAccess() {
-    try { await window.supabaseClient?.auth?.signOut(); } catch (_) {}
+    // Responder visualmente antes de cualquier llamada remota. Si signOut se
+    // queda esperando red, el usuario no debe quedar frente a una página vacía.
     try { sessionStorage.clear(); } catch (_) {}
     document.getElementById('main-app')?.classList.add('hidden');
     document.getElementById('login-screen')?.classList.remove('hidden');
+    hideAuthBootScreen();
+    try { hideGlobalLoader(); } catch (_) { }
     const msg = document.getElementById('login-error') || document.getElementById('login-msg');
     if (msg) { msg.textContent = OPERACIONES_ACCESS_ERROR; msg.classList.remove('d-none'); msg.classList.add('text-danger'); }
+    try { window.supabaseClient?.auth?.signOut()?.catch(() => { }); } catch (_) {}
 }
 
 function cacheSupabaseSession(session) {
@@ -7085,6 +7180,7 @@ function showSection(sectionKey, linkEl) {
             setTimeout(_conciUpdateWorkspaceMode, 0);
         }
         if (targetKey) currentSectionKey = targetKey;
+        rememberActiveSection(targetKey);
         // RBAC v2: fijar el nivel de acceso EFECTIVO del módulo activo en el body
         // (sec-access-admin|edit|capture|read) para que las reglas CSS .requires-*
         // oculten controles según el nivel del usuario EN ESE módulo.
@@ -7104,13 +7200,20 @@ function showSection(sectionKey, linkEl) {
         // Hook: Operaciones Totales — activar sub-pestaña correcta
         if (displayKey === 'operaciones-totales') {
             setTimeout(() => {
-                const subTabId = linkEl?.dataset?.subTab || 'comparativa-yoy-tab';
-                const subTabEl = document.getElementById(subTabId);
-                if (subTabEl) {
-                    const bsTab = bootstrap.Tab.getOrCreateInstance(subTabEl);
-                    bsTab.show();
+                if (!restoreActiveTab(targetKey, target)) {
+                    const subTabId = linkEl?.dataset?.subTab || 'comparativa-yoy-tab';
+                    const subTabEl = document.getElementById(subTabId);
+                    if (subTabEl) {
+                        const bsTab = bootstrap.Tab.getOrCreateInstance(subTabEl);
+                        bsTab.show();
+                    }
                 }
             }, 50);
+        } else {
+            // Conciliación y el resto de módulos también pueden contener tabs.
+            // Restaurarlos después de activar su sección evita volver siempre a
+            // la primera pestaña (p. ej. Itinerario en vez de Manifiestos).
+            setTimeout(() => restoreActiveTab(targetKey, target), 50);
         }
 
         // Hook específico para Historia
@@ -12563,13 +12666,26 @@ document.addEventListener('visibilitychange', () => {
 function showMainApp() {
     const login = document.getElementById('login-screen');
     const main = document.getElementById('main-app');
+    try { showGlobalLoader('Restaurando sesión...'); } catch (_) { }
+    // Conservar el destino de la URL antes de aplicar permisos. Durante un
+    // reload la aplicación todavía no tiene una sección activa autorizada y
+    // applySectionPermissions puede normalizar el hash al Inicio. Esta copia
+    // permite volver al apartado real solicitado una vez validada la sesión.
+    const requestedSectionKey = (() => {
+        try {
+            const key = String(location.hash || '').replace(/^#/, '').trim();
+            if (key && key !== 'recover' && /^[a-z0-9-]+$/i.test(key)) return key;
+            const remembered = sessionStorage.getItem(LAST_SECTION_STORAGE_KEY) || '';
+            return /^[a-z0-9-]+$/i.test(remembered) ? remembered : '';
+        } catch (_) { return ''; }
+    })();
     // Validar sesión firmada
     const token = sessionStorage.getItem(SESSION_TOKEN);
     const name = sessionStorage.getItem(SESSION_USER) || '';
     // Si no hay token válido, volver a login
-    verifyToken(token).then(async valid => {
+    withAuthRestoreTimeout(verifyToken(token)).then(async valid => {
         if (!valid) {
-            const restored = await restoreSessionFromSupabase();
+            const restored = await withAuthRestoreTimeout(restoreSessionFromSupabase());
             if (restored) {
                 showMainApp();
                 return;
@@ -12581,13 +12697,19 @@ function showMainApp() {
             } catch (_) { }
             if (main) main.classList.add('hidden');
             if (login) login.classList.remove('hidden');
+            hideAuthBootScreen();
+            try { hideGlobalLoader(); } catch (_) { }
             return;
         }
         // Incluso con token local válido, no mostrar el panel sin autorización
         // vigente en usuarios_aplicaciones (evita saltarse el control por caché).
         try {
-            const { data: sessionData } = await window.supabaseClient.auth.getSession();
-            const access = await getOperacionesAccess(sessionData?.session?.user);
+            const { data: sessionData } = await withAuthRestoreTimeout(
+                window.supabaseClient.auth.getSession()
+            );
+            const access = await withAuthRestoreTimeout(
+                getOperacionesAccess(sessionData?.session?.user)
+            );
             if (!access.allowed) { await rejectOperacionesAccess(); return; }
             sessionStorage.setItem('user_role', access.role || 'viewer');
             if (access.permissions && Array.isArray(access.permissions.allowed_sections)) {
@@ -12601,6 +12723,8 @@ function showMainApp() {
         const mainWasHidden = main ? main.classList.contains('hidden') : false;
         if (login) login.classList.add('hidden');
         if (main) main.classList.remove('hidden');
+        hideAuthBootScreen();
+        try { hideGlobalLoader(); } catch (_) { }
         // Usuario actual
         const userEl = document.getElementById('current-user');
         if (userEl) {
@@ -12674,11 +12798,28 @@ function showMainApp() {
             try {
                 const _loginRole = sessionStorage.getItem('user_role') || 'viewer';
                 const _isColabOnly = ['colab_viewer', 'colab_editor'].includes(_loginRole);
-                if (!_isColabOnly) {
-                    const startLink = document.querySelector('.menu-item[data-section="operaciones-totales"]');
-                    if (startLink && startLink.dataset?.section) {
-                        showSection(startLink.dataset.section, startLink);
-                    }
+                const requestedLink = requestedSectionKey
+                    ? document.querySelector(`.menu-item[data-section="${requestedSectionKey}"]`)
+                    : null;
+                const requestedSection = requestedSectionKey
+                    ? document.getElementById(`${requestedSectionKey}-section`)
+                    : null;
+                const requestedAllowed = !!requestedLink
+                    && !requestedLink.classList.contains('perm-hidden')
+                    && !(requestedSection && requestedSection.classList.contains('perm-hidden'))
+                    && isSectionAllowed(requestedSectionKey);
+                // Todo rol autenticado vuelve a la URL solicitada. Los roles de
+                // colaboración sólo permanecen en el menú cuando no existe una
+                // ruta previa válida.
+                const startLink = requestedAllowed
+                    ? requestedLink
+                    : (!_isColabOnly
+                        ? document.querySelector('.menu-item[data-section="operaciones-totales"]')
+                        : null);
+                if (requestedAllowed || requestedSectionKey === 'conciliacion') {
+                    restoreSectionFromNavigation(requestedSectionKey);
+                } else if (startLink && startLink.dataset?.section) {
+                    restoreSectionFromNavigation(startLink.dataset.section);
                 }
             } catch (_) { }
             try {
@@ -12711,36 +12852,22 @@ function showMainApp() {
     }).catch(() => {
         if (main) main.classList.add('hidden');
         if (login) login.classList.remove('hidden');
+        hideAuthBootScreen();
+        try { hideGlobalLoader(); } catch (_) { }
     });
 }
 
 function checkSession() {
-    try {
-        const token = sessionStorage.getItem(SESSION_TOKEN);
-        const name = sessionStorage.getItem(SESSION_USER);
-        if (token && name) {
-            // Validar token antes de mostrar
-            verifyToken(token)
-                .then(async valid => {
-                    if (valid) {
-                        showMainApp();
-                        return;
-                    }
-                    const restored = await restoreSessionFromSupabase();
-                    if (restored) showMainApp();
-                })
-                .catch(async () => {
-                    const restored = await restoreSessionFromSupabase();
-                    if (restored) showMainApp();
-                });
-            return;
-        }
-
-        // Fallback: si sessionStorage se perdió pero Supabase conserva sesión, restaurar
-        restoreSessionFromSupabase().then(restored => {
-            if (restored) showMainApp();
-        }).catch(() => { });
-    } catch (e) { /* ignore */ }
+    // Un único flujo decide qué pantalla mostrar. Antes checkSession validaba
+    // primero y luego showMainApp volvía a validar; durante esa doble espera el
+    // login (visible por defecto en el HTML) parpadeaba y, si no había sesión,
+    // algunas ramas no mostraban explícitamente ninguna pantalla. showMainApp
+    // ya restaura Supabase, valida permisos y muestra login sólo al fallar.
+    try { showMainApp(); } catch (_) {
+        document.getElementById('main-app')?.classList.add('hidden');
+        document.getElementById('login-screen')?.classList.remove('hidden');
+        hideAuthBootScreen();
+    }
 }
 
 // PDFs dinámicos (ligero)
