@@ -18351,9 +18351,11 @@ const _CONCI_ESTATUS_MATRICULA = ["ACTIVA", "NO IDENTIFICADA"];
 // capturista aprende a ignorarlo justo cuando aparece uno que si importa.
 function _conciEstatusMatricula(row, { catalogEntry, statusCol, optypeCol, airlineCol }) {
     if (catalogEntry) return 'ACTIVA';
+    const esCarga = _conciRowIsCargo(row, optypeCol, airlineCol);
+    if (!esCarga) return 'NO IDENTIFICADA';
     const capturado = _conciNormalizeEditableCellText(row?.[statusCol] || '').toUpperCase();
     if (_CONCI_ESTATUS_MATRICULA.includes(capturado)) return capturado;
-    return _conciRowIsCargo(row, optypeCol, airlineCol) ? 'ACTIVA' : 'NO IDENTIFICADA';
+    return 'ACTIVA';
 }
 
 function _conciApplyMatriculaCatalogValidation(rows, columns) {
@@ -18442,7 +18444,19 @@ function _conciRefreshMatriculaValidationForRow(tr) {
     if (!matriculaTd || !statusTd) return;
 
     const catalogEntry = _conciMatriculaCatalogMap.get(_conciNormalizeMatricula(_conciLiveCellValue(matriculaTd)));
-    const status = catalogEntry ? 'ACTIVA' : 'NO IDENTIFICADA';
+    // Se aplica la MISMA regla que al cargar la tabla, leyendo lo que hay en
+    // pantalla. Antes se recalculaba solo desde el catalogo y se pisaba la
+    // eleccion recien hecha.
+    const optypeTd = cells.find(td => /tipo.*oper|service\s*type/i.test(String(td.dataset.col || '')));
+    const filaViva = {
+        estatus: _conciLiveCellValue(statusTd),
+        optype: optypeTd ? _conciLiveCellValue(optypeTd) : '',
+        aerolinea: airlineTd ? _conciLiveCellValue(airlineTd) : '',
+    };
+    const status = _conciEstatusMatricula(
+        { estatus: filaViva.estatus, optype: filaViva.optype, aerolinea: filaViva.aerolinea },
+        { catalogEntry, statusCol: 'estatus', optypeCol: 'optype', airlineCol: 'aerolinea' }
+    );
     const mismatch = !!(catalogEntry && airlineTd
         && !_conciAirlinesMatch(_conciLiveCellValue(airlineTd), catalogEntry.aerolinea));
     _conciRenderMatriculaStatusCell(statusTd, status, mismatch, catalogEntry?.aerolinea || '');
@@ -25476,6 +25490,11 @@ function _conciActivateCellEditor(td) {
     );
     _conciBeginCellPresence(td);
     if (_conciIsMatriculaStatusColumn(col)) {
+        // Solo en vuelos de carga. En pasajeros el catalogo es la unica
+        // autoridad: sus matriculas si estan dadas de alta, y dejar corregir
+        // el estatus a mano seria tapar un dato que falta en el catalogo en
+        // vez de arreglarlo donde toca.
+        if (!_conciRowElementIsCargo(td)) return;
         _conciActivateMatriculaStatusEditor(td, currentRaw);
         return;
     }

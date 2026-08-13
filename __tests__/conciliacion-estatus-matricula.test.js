@@ -77,17 +77,23 @@ describe('lo capturado a mano se respeta', () => {
     expect(estatus(row)).toBe('NO IDENTIFICADA');
   });
 
-  test('un ACTIVA puesto a mano en pasajeros tampoco', () => {
+  test('en pasajeros NO se respeta: ahí manda solo el catálogo', () => {
+    // La columna está bloqueada en pasajeros, así que un valor capturado ahí
+    // solo puede venir de antes o de una importación, y no debe ganarle al
+    // catálogo: taparía un alta que falta hacer donde toca.
     const row = {
       'AEROLINEA': 'VIVA AEROBUS', 'TIPO DE OPERACIÓN': 'Nacional',
       'ESTATUS MATRÍCULA': 'ACTIVA',
     };
-    expect(estatus(row)).toBe('ACTIVA');
+    expect(estatus(row)).toBe('NO IDENTIFICADA');
   });
 
   test('acepta minúsculas y espacios de sobra', () => {
-    const row = { 'AEROLINEA': 'VIVA AEROBUS', 'ESTATUS MATRÍCULA': '  activa  ' };
-    expect(estatus(row)).toBe('ACTIVA');
+    const row = {
+      'AEROLINEA': 'CARGOLUX', 'TIPO DE OPERACIÓN': 'Carga',
+      'ESTATUS MATRÍCULA': '  no identificada  ',
+    };
+    expect(estatus(row)).toBe('NO IDENTIFICADA');
   });
 
   test('un valor que no es de la lista no cuenta como captura', () => {
@@ -101,6 +107,28 @@ describe('lo capturado a mano se respeta', () => {
   test('una celda vacía no cuenta como captura', () => {
     const row = { 'AEROLINEA': 'CARGOLUX', 'TIPO DE OPERACIÓN': 'Carga', 'ESTATUS MATRÍCULA': '' };
     expect(estatus(row)).toBe('ACTIVA');
+  });
+});
+
+describe('solo la carga se puede corregir', () => {
+  test('en pasajeros el combo ni se abre', () => {
+    const activar = source.slice(source.indexOf('function _conciActivateCellEditor'));
+    const guarda = activar.slice(
+      activar.indexOf('_conciIsMatriculaStatusColumn(col)'),
+      activar.indexOf('_conciIsOperationTypeColumn')
+    );
+    expect(guarda).toContain('if (!_conciRowElementIsCargo(td)) return;');
+  });
+
+  test('el repintado por fila usa la misma regla, no solo el catálogo', () => {
+    // Era la causa de que el cambio "tardara": se escribía el valor elegido y
+    // acto seguido se repintaba la celda recalculando solo desde el catálogo.
+    const fn = source.slice(
+      source.indexOf('function _conciRefreshMatriculaValidationForRow'),
+      source.indexOf('\n}\n', source.indexOf('function _conciRefreshMatriculaValidationForRow'))
+    );
+    expect(fn).toContain('_conciEstatusMatricula(');
+    expect(fn).not.toContain("const status = catalogEntry ? 'ACTIVA' : 'NO IDENTIFICADA';");
   });
 });
 
