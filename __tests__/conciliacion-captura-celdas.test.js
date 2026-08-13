@@ -32,6 +32,10 @@ describe('captura de celdas en Conciliacion > Manifiestos', () => {
     '_conciHandlePresenceSync',
     '_conciApplyRemotePresenceHighlights',
     '_conciCellStillClaimed',
+    // Pintor único de los cursores ajenos: si aparece dos veces, alguien volvió
+    // a partir el resaltado entre presencia y broadcast, que es justo lo que
+    // hacía que el recuadro no se viera.
+    '_conciRepintarFocos',
     '_conciHandleRemoteCellInput',
     '_conciHandleRemoteTableChange',
     '_conciMaybeApplyDeferredRemoteRefresh',
@@ -43,7 +47,7 @@ describe('captura de celdas en Conciliacion > Manifiestos', () => {
   test('los selectores de colaboracion admiten ids y columnas con espacios', () => {
     const findSource = sourceBetween(
       'function _conciFindLiveCell',
-      'function _conciApplyRemotePresenceHighlights'
+      'function _conciHandleRemoteCellInput'
     );
     const findLiveCell = new Function(
       findSource + '; return _conciFindLiveCell;'

@@ -31,9 +31,17 @@ function extraer(nombre) {
   return source.slice(inicio, source.indexOf('\n}\n', inicio) + 2);
 }
 
+function constante(nombre) {
+  const i = source.indexOf(`const ${nombre}`);
+  if (i === -1) throw new Error(`No se encontró ${nombre}`);
+  return source.slice(i, source.indexOf('\n', i) + 1);
+}
+
 const api = new Function('document', `
   let _conciRemotePresenceByCell = new Map();
   let _conciFocoRemotoPorCliente = new Map();
+  ${constante('_CONCI_CURSOR_VENCE_MS')}
+  ${extraer('_conciCursoresVigentes')}
   ${extraer('_conciCellStillClaimed')}
   ${extraer('_conciCiudadBonita')}
   ${extraer('_conciAirportStoredValue')}

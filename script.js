@@ -24149,6 +24149,7 @@ async function _conciInitLiveCollab() {
         if (status === 'SUBSCRIBED') {
             _conciLiveReady = true;
             _conciRenderBarraPresencia();
+            _conciIniciarLatidoFoco();
             try {
                 await channel.track({ user: _conciLiveDisplayName, color: _conciLiveColor, rowId: null, col: null });
             } catch (_) { /* ignora: sólo afecta la señalización en vivo, no el guardado real */ }
@@ -24280,6 +24281,7 @@ function _conciRecargaYaCubierta() {
 // los dos caminos: el broadcast pinta ya, y la presencia sigue siendo la fuente
 // de verdad para limpiar cuando alguien cierra la pestana.
 function _conciBroadcastFoco(rowId, col) {
+    _conciMiFocoActual = { rowId: rowId ? String(rowId) : '', col: col ? String(col) : '' };
     if (!_conciLiveChannel || !_conciLiveReady) return;
     try {
         _conciLiveChannel.send({
@@ -24296,49 +24298,139 @@ function _conciBroadcastFoco(rowId, col) {
     } catch (_) { /* señalización en vivo, no crítica */ }
 }
 
-function _conciHandleRemoteFoco(payload) {
-    if (!payload || payload.clientId === _conciLiveClientId) return;
-    const anterior = _conciFocoRemotoPorCliente.get(payload.clientId);
-    if (anterior) _conciQuitarFocoRemoto(anterior.rowId, anterior.col);
 
+
+
+// ── Cursores de los demas: una sola fuente y un solo pintor ──────────────────
+//
+// Antes esto tenia dos mecanismos peleandose. El broadcast pintaba el recuadro
+// al instante y el barrido de presencia lo borraba, porque empezaba con
+//
+//     if (!_conciRemotePresenceByCell.size || !_conciCellStillClaimed(td))
+//
+// y ese "||" corta antes de preguntar: con el mapa de presencia vacio -- que es
+// lo normal, porque presence tarda en propagarse -- limpiaba TODAS las celdas
+// sin llegar a comprobar si alguien las tenia tomadas. El resultado era que el
+// resaltado no aparecia casi nunca.
+//
+// Ahora hay una sola fuente de verdad (_conciFocoRemotoPorCliente) y un solo
+// pintor que reconcilia la tabla contra ella. Presence deja de pintar: solo
+// alimenta el mapa y la barra de avatares.
+//
+// Cada cliente reanuncia su cursor cada pocos segundos. Un broadcast se envia y
+// se olvida: sin ese latido, quien abre la pestana despues no veria a nadie
+// hasta que esa persona se moviera de celda. Y un cursor que deja de latir se
+// da por ido, para que una pestana cerrada de golpe no deje un recuadro
+// encendido para siempre.
+const _CONCI_LATIDO_MS = 7000;
+const _CONCI_CURSOR_VENCE_MS = 25000;   // ~3 latidos perdidos
+let _conciLatidoTimer = null;
+let _conciMiFocoActual = { rowId: '', col: '' };
+
+function _conciCursoresVigentes() {
+    const ahora = Date.now();
+    const porCelda = new Map();
+    _conciFocoRemotoPorCliente.forEach((foco, clientId) => {
+        if (!foco.rowId || !foco.col) return;
+        if (foco.ts && (ahora - foco.ts) > _CONCI_CURSOR_VENCE_MS) {
+            _conciFocoRemotoPorCliente.delete(clientId);
+            return;
+        }
+        porCelda.set(`${foco.rowId}|${foco.col}`, foco);
+    });
+    // La presencia es mas lenta pero sobrevive a un broadcast perdido: se usa
+    // como refuerzo, nunca como unica señal.
+    _conciRemotePresenceByCell.forEach((entradas, clave) => {
+        if (porCelda.has(clave)) return;
+        const entrada = entradas[0];
+        if (entrada) porCelda.set(clave, { user: entrada.user, color: entrada.color });
+    });
+    return porCelda;
+}
+
+// Reconcilia la tabla contra los cursores vigentes: apaga lo que sobra y
+// enciende lo que falta. Es el UNICO sitio que toca esas clases.
+function _conciRepintarFocos() {
+    const tabla = document.getElementById('table-conci-manifiestos');
+    if (!tabla) return;
+    const vigentes = _conciCursoresVigentes();
+
+    tabla.querySelectorAll('td.conci-cell-remote-editing').forEach(td => {
+        const tr = td.closest('tr');
+        const rowId = tr ? String(tr.dataset.rowId || '').trim() : '';
+        const clave = `${rowId}|${td.dataset.col || ''}`;
+        if (vigentes.has(clave)) return;
+        td.classList.remove('conci-cell-remote-editing');
+        td.style.removeProperty('--conci-remote-color');
+        td.removeAttribute('title');
+        const badge = td.querySelector('.conci-remote-badge');
+        if (badge) badge.remove();
+        // Si habia un preview de texto en vivo, restaura el valor real guardado.
+        if (td.dataset.conciLivePreviewOrig !== undefined) {
+            td.textContent = td.dataset.conciLivePreviewOrig;
+            delete td.dataset.conciLivePreviewOrig;
+        }
+    });
+
+    vigentes.forEach((autor, clave) => {
+        const sep = clave.indexOf('|');
+        const td = _conciFindLiveCell(tabla, clave.slice(0, sep), clave.slice(sep + 1));
+        if (!td || td.classList.contains('conci-cell-active')) return;
+        const color = autor.color || '#1976d2';
+        td.classList.add('conci-cell-remote-editing');
+        td.style.setProperty('--conci-remote-color', color);
+        td.title = `${autor.user || 'Usuario'} está aquí`;
+        let badge = td.querySelector('.conci-remote-badge');
+        if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'conci-remote-badge';
+            td.appendChild(badge);
+        }
+        badge.style.background = color;
+        badge.textContent = String(autor.user || 'U').trim().split(/\s+/)[0];
+    });
+}
+
+// Se conserva el nombre por compatibilidad con el resto del modulo: presence ya
+// no pinta por su cuenta, solo pide un repintado.
+function _conciApplyRemotePresenceHighlights() {
+    _conciRepintarFocos();
+}
+
+function _conciCellStillClaimed(td) {
+    const tr = td.closest('tr');
+    const rowId = tr ? String(tr.dataset.rowId || '').trim() : '';
+    if (!rowId) return false;
+    return _conciCursoresVigentes().has(`${rowId}|${td.dataset.col || ''}`);
+}
+
+function _conciHandleRemoteFoco(payload) {
+    if (!payload || !payload.clientId || payload.clientId === _conciLiveClientId) return;
     if (!payload.rowId || !payload.col) {
         _conciFocoRemotoPorCliente.delete(payload.clientId);
-        return;
+    } else {
+        _conciFocoRemotoPorCliente.set(payload.clientId, {
+            rowId: String(payload.rowId),
+            col: String(payload.col),
+            user: payload.user || 'Usuario',
+            color: payload.color || _conciColorForUser(payload.user || ''),
+            ts: Date.now(),
+        });
     }
-    _conciFocoRemotoPorCliente.set(payload.clientId, { rowId: payload.rowId, col: payload.col });
-    _conciPintarFocoRemoto(payload.rowId, payload.col, payload);
+    _conciRepintarFocos();
+    _conciRenderBarraPresencia();
 }
 
-function _conciPintarFocoRemoto(rowId, col, autor) {
-    const tabla = document.getElementById('table-conci-manifiestos');
-    if (!tabla) return;
-    const td = _conciFindLiveCell(tabla, rowId, col);
-    if (!td || td.classList.contains('conci-cell-active')) return;
-    td.classList.add('conci-cell-remote-editing');
-    td.style.setProperty('--conci-remote-color', autor.color || '#1976d2');
-    td.title = `Capturando ahora: ${autor.user || 'Usuario'}`;
-    if (!td.querySelector('.conci-remote-badge')) {
-        const badge = document.createElement('span');
-        badge.className = 'conci-remote-badge';
-        badge.style.background = autor.color || '#1976d2';
-        badge.textContent = String(autor.user || 'U').trim().split(/\s+/)[0];
-        td.appendChild(badge);
-    }
-}
-
-function _conciQuitarFocoRemoto(rowId, col) {
-    const tabla = document.getElementById('table-conci-manifiestos');
-    if (!tabla) return;
-    const td = _conciFindLiveCell(tabla, rowId, col);
-    if (!td) return;
-    // Presence sigue siendo la fuente de verdad: si esa celda continua
-    // reclamada por alguien, no se limpia.
-    if (_conciCellStillClaimed(td)) return;
-    td.classList.remove('conci-cell-remote-editing');
-    td.style.removeProperty('--conci-remote-color');
-    td.removeAttribute('title');
-    const badge = td.querySelector('.conci-remote-badge');
-    if (badge) badge.remove();
+// Reanuncia el cursor propio cada pocos segundos y limpia los ajenos vencidos.
+function _conciIniciarLatidoFoco() {
+    if (_conciLatidoTimer) return;
+    _conciLatidoTimer = setInterval(() => {
+        if (_conciMiFocoActual.rowId && _conciMiFocoActual.col) {
+            _conciBroadcastFoco(_conciMiFocoActual.rowId, _conciMiFocoActual.col);
+        }
+        // Aunque no haya cursor propio, hay que caducar los ajenos.
+        _conciRepintarFocos();
+    }, _CONCI_LATIDO_MS);
 }
 
 // ── Quién está conectado y qué está tocando ──────────────────────────────────
@@ -24557,46 +24649,6 @@ function _conciFindLiveCell(root, rowId, col) {
     return null;
 }
 
-function _conciApplyRemotePresenceHighlights() {
-    const table = document.getElementById('table-conci-manifiestos');
-    if (!table) return;
-    table.querySelectorAll('td.conci-cell-remote-editing').forEach(td => {
-        if (!_conciRemotePresenceByCell.size || !_conciCellStillClaimed(td)) {
-            td.classList.remove('conci-cell-remote-editing');
-            td.style.removeProperty('--conci-remote-color');
-            td.removeAttribute('title');
-            const badge = td.querySelector('.conci-remote-badge');
-            if (badge) badge.remove();
-            // Si había un preview de texto en vivo, restaura el valor real guardado.
-            if (td.dataset.conciLivePreviewOrig !== undefined) {
-                td.textContent = td.dataset.conciLivePreviewOrig;
-                delete td.dataset.conciLivePreviewOrig;
-            }
-        }
-    });
-    if (!_conciRemotePresenceByCell.size) return;
-    const tbody = table.querySelector('tbody');
-    if (!tbody) return;
-    _conciRemotePresenceByCell.forEach((entries, cellKey) => {
-        const sep = cellKey.indexOf('|');
-        const rowId = cellKey.slice(0, sep);
-        const col = cellKey.slice(sep + 1);
-        const td = _conciFindLiveCell(tbody, rowId, col);
-        if (!td || td.classList.contains('conci-cell-active')) return; // no pisar un editor propio abierto
-        const entry = entries[0];
-        td.classList.add('conci-cell-remote-editing');
-        td.style.setProperty('--conci-remote-color', entry.color || '#1976d2');
-        const names = entries.map(e => e.user || 'Usuario').join(', ');
-        td.title = `Capturando ahora: ${names}`;
-        if (!td.querySelector('.conci-remote-badge')) {
-            const badge = document.createElement('span');
-            badge.className = 'conci-remote-badge';
-            badge.style.background = entry.color || '#1976d2';
-            badge.textContent = String(entry.user || 'U').trim().split(/\s+/)[0];
-            td.appendChild(badge);
-        }
-    });
-}
 
 // ¿Alguien tiene esta celda abierta ahora mismo?
 //
@@ -24604,17 +24656,6 @@ function _conciApplyRemotePresenceHighlights() {
 // unos segundos despues; mirar solo la presencia hacia que el sync borrara el
 // resaltado que el broadcast acababa de pintar, y el recuadro parpadeaba o no
 // llegaba a verse.
-function _conciCellStillClaimed(td) {
-    const tr = td.closest('tr');
-    const rowId = tr ? String(tr.dataset.rowId || '').trim() : '';
-    if (!rowId) return false;
-    const clave = `${rowId}|${td.dataset.col || ''}`;
-    if (_conciRemotePresenceByCell.has(clave)) return true;
-    for (const foco of _conciFocoRemotoPorCliente.values()) {
-        if (`${foco.rowId}|${foco.col}` === clave) return true;
-    }
-    return false;
-}
 
 // Preview en vivo de lo que un compañero está tecleando en el editor de
 // texto libre (columnas sin select/fecha/routing dedicados). No toca
@@ -25001,6 +25042,13 @@ function _conciActivateCellEditor(td) {
 
     // Origen de la navegación con flechas, se abra o no un editor debajo.
     _conciAnchorCell = td;
+    // Se anuncia la posición aunque esta celda no abra editor: interesa ver
+    // dónde está parado un compañero, no solo cuándo escribe.
+    {
+        const trFoco = td.closest('tr');
+        const rowIdFoco = trFoco ? String(trFoco.dataset.rowId || '').trim() : '';
+        if (rowIdFoco) _conciBroadcastFoco(rowIdFoco, td.dataset.col || '');
+    }
 
     const col = td.dataset.col || '';
     if (_conciIsMatriculaStatusColumn(col) || _conciIsProtectedEditColumn(col) || _conciIsCalculatedColumn(col)) return;

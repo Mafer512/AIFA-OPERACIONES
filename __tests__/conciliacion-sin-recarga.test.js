@@ -52,13 +52,16 @@ const api = new Function('document', 'recalculadas', 'enviados', `
   function _conciReadLiveTableRow() { return {}; }
   function _conciRefreshCalculatedCellsForRow(tr) { recalculadas.push(tr); }
   function _conciRefreshMatriculaValidationForRow() {}
-  function _conciCellStillClaimed() { return false; }
+  function _conciRenderBarraPresencia() {}
+  function _conciColorForUser() { return '#1976d2'; }
+  let _conciMiFocoActual = { rowId: '', col: '' };
+  ${constante('_CONCI_CURSOR_VENCE_MS')}
   ${extraer('_conciFindLiveCell')}
   ${extraer('_conciAplicarCambioRemoto')}
   ${extraer('_conciRecargaYaCubierta')}
   ${extraer('_conciBroadcastFoco')}
-  ${extraer('_conciPintarFocoRemoto')}
-  ${extraer('_conciQuitarFocoRemoto')}
+  ${extraer('_conciCursoresVigentes')}
+  ${extraer('_conciRepintarFocos')}
   ${extraer('_conciHandleRemoteFoco')}
   return {
     _conciAplicarCambioRemoto, _conciRecargaYaCubierta, _conciBroadcastFoco,
