@@ -54,6 +54,8 @@ const api = new Function('document', 'enviados', `
   ${extraer('_conciApplyRemotePresenceHighlights')}
   ${extraer('_conciCellStillClaimed')}
   let _conciFocoThrottleTimer = null;
+  ${constante('_CONCI_FOCO_ESPERA_MS')}
+  ${constante('_CONCI_FOCO_SOLTAR_MS')}
   ${extraer('_conciBroadcastFoco')}
   ${extraer('_conciEnviarFoco')}
   ${extraer('_conciHandleRemoteFoco')}
@@ -199,6 +201,34 @@ describe('el cursor propio', () => {
     pintarTabla();
     api._conciHandleRemoteFoco({ clientId: 'yo', rowId: '42', col: 'TOTAL PAX', user: 'Ana' });
     expect(resaltada('42', 'TOTAL PAX')).toBe(false);
+  });
+});
+
+describe('el hueco entre dos celdas ya no apaga el recuadro', () => {
+  // Al pasar de una celda a otra con Tab o Enter, el módulo anuncia primero
+  // "ya no estoy en ninguna celda" y después activa la siguiente. Si ese
+  // "sin cursor" llegaba a enviarse, el recuadro del compañero se apagaba
+  // hasta el siguiente latido — hasta 7 s. Eso era el parpadeo.
+  test('soltar la celda espera más que moverse a otra', () => {
+    const fn = source.slice(
+      source.indexOf('function _conciBroadcastFoco'),
+      source.indexOf('function _conciEnviarFoco')
+    );
+    expect(fn).toContain('_CONCI_FOCO_SOLTAR_MS');
+    expect(fn).toContain('_CONCI_FOCO_ESPERA_MS');
+
+    const soltar = Number((source.match(/_CONCI_FOCO_SOLTAR_MS = (\d+)/) || [])[1]);
+    const mover = Number((source.match(/_CONCI_FOCO_ESPERA_MS = (\d+)/) || [])[1]);
+    expect(soltar).toBeGreaterThan(mover);
+  });
+
+  test('cerrar un editor ya no dispara un sync de presencia', () => {
+    // track() en cada cierre provocaba un sync completo, con su repintado,
+    // por cada movimiento de cursor.
+    const cierre = source.slice(source.indexOf('function _conciCommitCellRaw'));
+    const cuerpo = cierre.slice(0, cierre.indexOf('\n}\n'));
+    expect(cuerpo).not.toContain('_conciSetPresenceCell(null, null)');
+    expect(cuerpo).toContain('_conciBroadcastFoco(null, null)');
   });
 });
 

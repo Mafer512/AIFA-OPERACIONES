@@ -40,6 +40,8 @@ const api = new Function('document', 'presencia', 'estado', `
   ${extraer('_conciInitialsFromName')}
   ${extraer('_conciNormalizedColumnName')}
   ${extraer('_conciNormalizeEditableCellText')}
+  // La burbuja propia toma su celda de aquí, no del mapa de cursores ajenos.
+  let _conciMiFocoActual = { rowId: '', col: '' };
   ${extraer('_conciPresenciaConectados')}
   ${extraer('_conciVueloDeFila')}
   ${extraer('_conciTextoPresencia')}
@@ -47,6 +49,7 @@ const api = new Function('document', 'presencia', 'estado', `
   return {
     _conciRenderBarraPresencia, _conciVueloDeFila, _conciTextoPresencia,
     focos: () => _conciFocoRemotoPorCliente,
+    miFoco: (f) => { _conciMiFocoActual = f; },
     olvidarFirma: () => { _conciFirmaPresencia = ''; },
   };
 `)(document, { get state() { return presenceState; } }, { listo: true });
@@ -70,6 +73,7 @@ beforeEach(() => {
   document.body.innerHTML = '';
   api.focos().clear();
   api.olvidarFirma();
+  api.miFoco({ rowId: '', col: '' });
 });
 
 describe('sin parpadeo', () => {
@@ -160,6 +164,18 @@ describe('el vuelo en el que trabaja cada uno', () => {
     presenceState = { yo: [{ user: 'Isaac Lopez' }] };
     api._conciRenderBarraPresencia();
     expect(avatares()[0].title).toContain('(tú)');
+  });
+
+  test('la burbuja propia también dice qué está capturando', () => {
+    // Antes decía siempre "viendo la tabla": el aviso salía del mapa de
+    // cursores ajenos, que a propósito nunca contiene el propio. Quien miraba
+    // su propia burbuja para comprobar que esto servía, no veía nada.
+    pintar();
+    presenceState = { yo: [{ user: 'Isaac Lopez' }] };
+    api.miFoco({ rowId: '42', col: 'TOTAL PAX' });
+    api._conciRenderBarraPresencia();
+
+    expect(avatares()[0].title).toBe('Isaac Lopez (tú) — capturando TOTAL PAX del vuelo VB 9501');
   });
 
   test('el número de vuelo se lee de la fila correcta', () => {

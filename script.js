@@ -24512,14 +24512,21 @@ function _conciRecargaYaCubierta() {
 // los movimientos y se anuncia donde se acabo parando, no cada paso.
 let _conciFocoThrottleTimer = null;
 
+// Moverse a otra celda se anuncia rapido; soltar el cursor espera, porque casi
+// siempre viene seguido de otra celda y anunciar el hueco intermedio apagaba el
+// recuadro del companero.
+const _CONCI_FOCO_ESPERA_MS = 90;
+const _CONCI_FOCO_SOLTAR_MS = 600;
+
 function _conciBroadcastFoco(rowId, col) {
     _conciMiFocoActual = { rowId: rowId ? String(rowId) : '', col: col ? String(col) : '' };
     if (!_conciLiveChannel || !_conciLiveReady) return;
     if (_conciFocoThrottleTimer) clearTimeout(_conciFocoThrottleTimer);
+    const soltando = !_conciMiFocoActual.rowId || !_conciMiFocoActual.col;
     _conciFocoThrottleTimer = setTimeout(() => {
         _conciFocoThrottleTimer = null;
         _conciEnviarFoco(_conciMiFocoActual.rowId, _conciMiFocoActual.col);
-    }, 90);
+    }, soltando ? _CONCI_FOCO_SOLTAR_MS : _CONCI_FOCO_ESPERA_MS);
 }
 
 function _conciEnviarFoco(rowId, col) {
@@ -24705,7 +24712,10 @@ function _conciPresenciaConectados() {
             const previo = porPersona.get(nombre);
             // La celda ya no viaja en la presencia (era demasiado caro
             // reanunciarla en cada movimiento): sale del mapa de cursores.
-            const foco = _conciFocoRemotoPorCliente.get(clave);
+            const esYo = clave === _conciLiveClientId;
+            // El propio cursor no viaja por el mapa de ajenos: se toma de
+            // _conciMiFocoActual para que la burbuja de uno tambien lo diga.
+            const foco = esYo ? _conciMiFocoActual : _conciFocoRemotoPorCliente.get(clave);
             const editando = foco?.col ? String(foco.col) : (entrada.col ? String(entrada.col) : '');
             // Si la misma persona tiene dos pestañas, manda la que está capturando.
             if (!previo || (!previo.editando && editando)) {
@@ -24716,7 +24726,7 @@ function _conciPresenciaConectados() {
                     // La fila permite decir en qué vuelo está trabajando, no
                     // solo en qué columna.
                     rowId: foco?.rowId ? String(foco.rowId) : '',
-                    esYo: clave === _conciLiveClientId,
+                    esYo,
                 });
             }
         });
@@ -25574,8 +25584,8 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
         _conciAutoSaveRow(tr);
     }
     // Deja de anunciar esta celda como "en captura" para el resto de usuarios
-    // conectados.
-    _conciSetPresenceCell(null, null);
+    // conectados. Solo por broadcast: la presencia ya no lleva la celda, y
+    // llamar a track() aqui disparaba un sync completo en cada movimiento.
     _conciBroadcastFoco(null, null);
     if (move === 'next') {
         const nextCell = _conciGetNextEditableCell(td);

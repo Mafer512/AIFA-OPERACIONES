@@ -62,6 +62,8 @@ const api = new Function('document', 'recalculadas', 'enviados', `
   // El anuncio de cursor se agrupa (throttle) y delega el envío real en
   // _conciEnviarFoco; las pruebas comprueban el envío, no el temporizador.
   let _conciFocoThrottleTimer = null;
+  ${constante('_CONCI_FOCO_ESPERA_MS')}
+  ${constante('_CONCI_FOCO_SOLTAR_MS')}
   ${extraer('_conciBroadcastFoco')}
   ${extraer('_conciEnviarFoco')}
   ${extraer('_conciCursoresVigentes')}
