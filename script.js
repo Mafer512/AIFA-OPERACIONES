@@ -20462,13 +20462,14 @@ function _conciUpdateResumen(data, columns) {
     let empate = 0, soloManifiesto = 0, soloVuelos = 0;
     let llegadas = 0, salidas = 0, pax = 0, carga = 0;
     let paxArr = 0, paxDep = 0, cargaArr = 0, cargaDep = 0;
-    let sobrecupo = 0;
+    let sobrecupo = 0, capturados = 0, sinCapturar = 0;
     const cols = (Array.isArray(columns) && columns.length)
         ? columns
         : (data && data.length ? Object.keys(data[0]) : []);
     const tipoCol    = cols.find(c => /tipo.*manif/i.test(c)) || null;
     const optypeCol  = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
     const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
+    const cierreCol = cols.find(c => _conciNormalizedColumnName(c) === 'cierre subsecretaria') || null;
     for (const r of (data || [])) {
         const f = String(r && r._fuente || '');
         if (f === 'Manifiestos + Vuelos') empate++;
@@ -20488,6 +20489,8 @@ function _conciUpdateResumen(data, columns) {
             if (isArr) paxArr++; else if (isDep) paxDep++;
         }
         if (r && r._conci_overcapacity) sobrecupo++;
+        if (cierreCol && String(r?.[cierreCol] ?? '').trim()) capturados++;
+        else sinCapturar++;
     }
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = String(val); };
     set('conci-resumen-empate', empate);
@@ -20502,6 +20505,8 @@ function _conciUpdateResumen(data, columns) {
     set('conci-count-carga-arr', cargaArr);
     set('conci-count-carga-dep', cargaDep);
     set('conci-count-sobrecupo', sobrecupo);
+    set('conci-count-capturados', capturados);
+    set('conci-count-sin-capturar', sinCapturar);
     const sobrecupoPill = document.getElementById('conci-pill-sobrecupo');
     if (sobrecupoPill) sobrecupoPill.classList.toggle('d-none', sobrecupo === 0);
     if (sobrecupo === 0 && _conciOvercapFilter) {
@@ -20583,6 +20588,7 @@ function _conciNotifyOvercapacity(rows) {
 let _conciClassFilter = null; // 'pax' | 'carga' | null
 let _conciDirFilter = null;   // 'arr' | 'dep' | null
 let _conciOvercapFilter = false; // true = mostrar solo vuelos con sobrecupo
+let _conciCaptureFilter = null; // 'capturados' | 'sin-capturar' | null
 let _conciCountBreakdown = { paxArr: 0, paxDep: 0, cargaArr: 0, cargaDep: 0 };
 // Filtros de texto por columna (se aplican junto con los filtros por pill).
 let _conciColFilters = {};          // { colName: searchTerm }
@@ -20611,6 +20617,15 @@ function _conciRowPassesPillFilter(tr) {
     }
     if (_conciOvercapFilter) {
         if (tr.dataset.rowOvercap !== '1') return false;
+    }
+    if (_conciCaptureFilter) {
+        const cierreCell = [...tr.querySelectorAll('td[data-col]')]
+            .find(td => _conciNormalizedColumnName(td.dataset.col) === 'cierre subsecretaria');
+        const cierre = _conciNormalizeEditableCellText(
+            cierreCell?.dataset.pendingRaw ?? cierreCell?.dataset.raw ?? cierreCell?.textContent ?? ''
+        );
+        if (_conciCaptureFilter === 'capturados' && !cierre) return false;
+        if (_conciCaptureFilter === 'sin-capturar' && cierre) return false;
     }
     return true;
 }
@@ -20665,7 +20680,7 @@ function _conciApplyPillFilter() {
         if (ok) visible++;
     });
     let emptyRow = tbody.querySelector('tr.conci-filter-empty');
-    const anyFilter = !!(_conciClassFilter || _conciDirFilter || _conciOvercapFilter || Object.values(_conciColFilters).some(v => v && v.trim()) || Object.keys(_conciExcelFilters).length > 0);
+    const anyFilter = !!(_conciClassFilter || _conciDirFilter || _conciOvercapFilter || _conciCaptureFilter || Object.values(_conciColFilters).some(v => v && v.trim()) || Object.keys(_conciExcelFilters).length > 0);
     if (anyFilter && visible === 0) {
         if (!emptyRow) {
             emptyRow = document.createElement('tr');
@@ -20871,6 +20886,8 @@ function _conciClearAllTableFilters() {
     }
     _conciClassFilter = null;
     _conciDirFilter = null;
+    _conciOvercapFilter = false;
+    _conciCaptureFilter = null;
     _conciColFilters = {};
     _conciExcelFilters = {};
 
@@ -21015,6 +21032,8 @@ function _conciUpdatePillActiveStyles() {
         'conci-pill-pax':      _conciClassFilter === 'pax',
         'conci-pill-carga':    _conciClassFilter === 'carga',
         'conci-pill-sobrecupo': _conciOvercapFilter,
+        'conci-pill-capturados': _conciCaptureFilter === 'capturados',
+        'conci-pill-sin-capturar': _conciCaptureFilter === 'sin-capturar',
     };
     Object.keys(map).forEach((id) => {
         const el = document.getElementById(id);
@@ -21071,6 +21090,14 @@ function _conciBindCountPills() {
     });
     bind('conci-pill-sobrecupo', () => {
         _conciOvercapFilter = !_conciOvercapFilter;
+        _conciApplyPillFilter();
+    });
+    bind('conci-pill-capturados', () => {
+        _conciCaptureFilter = _conciCaptureFilter === 'capturados' ? null : 'capturados';
+        _conciApplyPillFilter();
+    });
+    bind('conci-pill-sin-capturar', () => {
+        _conciCaptureFilter = _conciCaptureFilter === 'sin-capturar' ? null : 'sin-capturar';
         _conciApplyPillFilter();
     });
 }
@@ -22624,7 +22651,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         _conciApplyRemotePresenceHighlights();
 
         // Re-aplica todos los filtros activos (pill + columna) a las filas recién agregadas.
-        if (_conciClassFilter || _conciDirFilter || _conciOvercapFilter || Object.values(_conciColFilters).some(v => v && v.trim())) _conciApplyPillFilter();
+        if (_conciClassFilter || _conciDirFilter || _conciOvercapFilter || _conciCaptureFilter || Object.values(_conciColFilters).some(v => v && v.trim())) _conciApplyPillFilter();
 
         if (idx >= data.length) {
             if (scrollWrap && scrollWrap._conciLazyHandler) {

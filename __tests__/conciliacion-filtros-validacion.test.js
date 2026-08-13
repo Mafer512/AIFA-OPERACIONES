@@ -135,6 +135,13 @@ describe('limpieza conjunta de filtros de Manifiestos', () => {
     expect(indexSource).toContain('Limpiar filtros');
   });
 
+  test('incluye botones para manifiestos capturados y sin capturar', () => {
+    expect(indexSource).toContain('id="conci-pill-capturados"');
+    expect(indexSource).toContain('id="conci-pill-sin-capturar"');
+    expect(indexSource).toContain('id="conci-count-capturados"');
+    expect(indexSource).toContain('id="conci-count-sin-capturar"');
+  });
+
   test('borra filtros de texto, Excel y pills, y vuelve a mostrar las filas', () => {
     document.body.innerHTML = `
       <span id="conci-pill-llegadas"></span>
@@ -166,6 +173,8 @@ describe('limpieza conjunta de filtros de Manifiestos', () => {
       'document',
       '_updateConciExcelFilterIcons',
       '_conciUpdatePillActiveStyles',
+      '_conciNormalizedColumnName',
+      '_conciNormalizeEditableCellText',
       filterSource + `
         return {
           apply: _conciApplyPillFilter,
@@ -173,6 +182,7 @@ describe('limpieza conjunta de filtros de Manifiestos', () => {
           seed: function () {
             _conciClassFilter = 'carga';
             _conciDirFilter = 'arr';
+            _conciCaptureFilter = 'capturados';
             _conciColFilters = { AEROLINEA: 'AMX' };
             _conciExcelFilters = { AEROLINEA: new Set(['AMX']) };
             _conciManifestosAllData = [{ AEROLINEA: 'VB' }];
@@ -181,12 +191,19 @@ describe('limpieza conjunta de filtros de Manifiestos', () => {
             return {
               classFilter: _conciClassFilter,
               dirFilter: _conciDirFilter,
+              captureFilter: _conciCaptureFilter,
               colFilters: _conciColFilters,
               excelFilters: _conciExcelFilters,
             };
           }
         };`
-    )(document, updateExcelIcons, updatePillStyles);
+    )(
+      document,
+      updateExcelIcons,
+      updatePillStyles,
+      value => String(value || '').toLowerCase(),
+      value => String(value || '').trim()
+    );
 
     api.seed();
     api.apply();
@@ -198,6 +215,7 @@ describe('limpieza conjunta de filtros de Manifiestos', () => {
     expect(api.state()).toEqual({
       classFilter: null,
       dirFilter: null,
+      captureFilter: null,
       colFilters: {},
       excelFilters: {},
     });
