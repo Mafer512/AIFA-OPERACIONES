@@ -18335,6 +18335,27 @@ function _conciApplyTuaCoherence(rows, columns) {
     return conDescuadre;
 }
 
+const _CONCI_ESTATUS_MATRICULA = ["ACTIVA", "NO IDENTIFICADA"];
+
+// Estatus de una matricula, en este orden:
+//
+//   1. Si esta en el catalogo, manda el catalogo: ACTIVA.
+//   2. Si no esta pero la fila ya trae un estatus capturado, se respeta. Es
+//      lo que permite corregirlo a mano sin que la siguiente carga lo pise.
+//   3. Si no hay nada: ACTIVA para vuelos de carga, NO IDENTIFICADA para el
+//      resto.
+//
+// El punto 3 viene de la operacion real: las matriculas de las cargueras casi
+// nunca estan en el catalogo, asi que la columna salia en rojo en casi todas
+// sus filas. Cuando el rojo es lo normal deja de significar algo, y el
+// capturista aprende a ignorarlo justo cuando aparece uno que si importa.
+function _conciEstatusMatricula(row, { catalogEntry, statusCol, optypeCol, airlineCol }) {
+    if (catalogEntry) return 'ACTIVA';
+    const capturado = _conciNormalizeEditableCellText(row?.[statusCol] || '').toUpperCase();
+    if (_CONCI_ESTATUS_MATRICULA.includes(capturado)) return capturado;
+    return _conciRowIsCargo(row, optypeCol, airlineCol) ? 'ACTIVA' : 'NO IDENTIFICADA';
+}
+
 function _conciApplyMatriculaCatalogValidation(rows, columns) {
     const cols = Array.isArray(columns) ? columns : [];
     const matriculaCol = cols.find(col => _conciSummaryColumnKey(col) === 'MATRICULA') || null;
@@ -18343,12 +18364,15 @@ function _conciApplyMatriculaCatalogValidation(rows, columns) {
     const capacidadCol = cols.find(col => /capacidad.*m[aá]xima/i.test(String(col))) || null;
     const totalPaxCol = cols.find(col => /^total\s*pax$/i.test(String(col).trim())) || null;
     const factorCol = cols.find(col => /factor.*ocupaci[oó]n/i.test(String(col))) || null;
+    const optypeCol = cols.find(col => /tipo.*oper|service\s*type/i.test(String(col))) || null;
     if (!matriculaCol || (!statusCol && !capacidadCol)) return;
 
     (rows || []).forEach(row => {
         const matricula = _conciNormalizeMatricula(row[matriculaCol]);
         const catalogEntry = matricula ? _conciMatriculaCatalogMap.get(matricula) : null;
-        if (statusCol) row[statusCol] = catalogEntry ? 'ACTIVA' : 'NO IDENTIFICADA';
+        if (statusCol) row[statusCol] = _conciEstatusMatricula(row, {
+            catalogEntry, statusCol, optypeCol, airlineCol,
+        });
         row._conci_matricula_mismatch = false;
         row._conci_matricula_catalog_airline = catalogEntry?.aerolinea || '';
         if (catalogEntry && airlineCol && statusCol) {
@@ -18390,7 +18414,8 @@ function _conciRenderMatriculaStatusCell(td, status, mismatch, expectedAirline) 
     if (!td) return;
     const safeStatus = status || 'NO IDENTIFICADA';
     td.dataset.raw = safeStatus;
-    td.dataset.conciReadonly = '1';
+    // Ya no se marca de solo lectura: se corrige con un combo de dos opciones.
+    delete td.dataset.conciReadonly;
     td.style.fontWeight = '700';
     td.style.textAlign = 'center';
     if (mismatch) {
@@ -24214,6 +24239,52 @@ function _conciActivateManifestTypeEditor(td, currentRaw) {
     select.addEventListener('blur', () => closeEditor(true, false));
     select.focus();
 }
+// Combo de dos opciones para el estatus de la matricula. Se puede corregir a
+// mano y lo capturado se respeta en las siguientes cargas (ver
+// _conciEstatusMatricula), salvo que la matricula llegue a darse de alta en el
+// catalogo: ahi manda el catalogo.
+function _conciActivateMatriculaStatusEditor(td, currentRaw) {
+    const select = document.createElement('select');
+    select.className = 'form-select form-select-sm conci-cell-input';
+    const fallbackRaw = _conciNormalizeEditableCellText(
+        td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
+    );
+    _CONCI_ESTATUS_MATRICULA.forEach(valor => {
+        const option = document.createElement('option');
+        option.value = valor;
+        option.textContent = valor;
+        select.appendChild(option);
+    });
+    const actual = _conciNormalizeEditableCellText(currentRaw).toUpperCase();
+    select.value = _CONCI_ESTATUS_MATRICULA.includes(actual) ? actual : 'ACTIVA';
+
+    td.classList.add('conci-cell-active');
+    td.textContent = '';
+    td.appendChild(select);
+
+    let closed = false;
+    // Igual que en los demas combos: abrir no confirma nada, solo un cambio real.
+    let userChanged = false;
+    const closeEditor = (accept, move) => {
+        if (closed) return;
+        closed = true;
+        td._conciCloseEditor = null;
+        const elegido = String(select.value || '').toUpperCase();
+        const nextRaw = accept && userChanged && _CONCI_ESTATUS_MATRICULA.includes(elegido)
+            ? elegido
+            : fallbackRaw;
+        _conciCommitCellRaw(td, nextRaw, move, nextRaw);
+    };
+    td._conciCloseEditor = closeEditor;
+    select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
+    select.addEventListener('keydown', event => {
+        if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'down'); }
+        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
+    });
+    select.addEventListener('blur', () => closeEditor(true, false));
+    select.focus();
+}
+
 function _conciActivateOperationTypeEditor(td, currentRaw) {
     const select = document.createElement('select');
     select.className = 'form-select form-select-sm conci-cell-input conci-operation-type-input';
@@ -25398,12 +25469,16 @@ function _conciActivateCellEditor(td) {
     }
 
     const col = td.dataset.col || '';
-    if (_conciIsMatriculaStatusColumn(col) || _conciIsProtectedEditColumn(col) || _conciIsCalculatedColumn(col)) return;
+    if (_conciIsProtectedEditColumn(col) || _conciIsCalculatedColumn(col)) return;
     if (_conciIsPassengerColumn(col) && _conciRowElementIsCargo(td)) return;
     const currentRaw = _conciNormalizeEditableCellText(
         td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
     );
     _conciBeginCellPresence(td);
+    if (_conciIsMatriculaStatusColumn(col)) {
+        _conciActivateMatriculaStatusEditor(td, currentRaw);
+        return;
+    }
     if (_conciIsOperationTypeColumn(col)) {
         _conciActivateOperationTypeEditor(td, currentRaw);
         return;
@@ -25904,7 +25979,7 @@ function _conciSetTableEditableState(enabled) {
             const isProtected = _conciIsProtectedEditColumn(td.dataset.col);
             const isCalculated = _conciIsCalculatedColumn(td.dataset.col);
             const isCargoPax = _conciIsPassengerColumn(td.dataset.col) && _conciRowElementIsCargo(td);
-            const isReadOnly = isProtected || isCalculated || isCargoPax || _conciIsMatriculaStatusColumn(td.dataset.col);
+            const isReadOnly = isProtected || isCalculated || isCargoPax;
             const editableRaw = _conciIsRoutingColumn(td.dataset.col) ? (td.dataset.routeRaw || td.dataset.raw || '') : (td.dataset.raw || '');
             const hasLocalDraft = td.dataset.dirty === '1'
                 || td.classList.contains('conci-cell-active')
@@ -26996,7 +27071,7 @@ function _conciAddBlankRow() {
         td.dataset.raw = '';
         td.dataset.origRaw = '';
         td.dataset.pendingRaw = '';
-        if (_conciIsProtectedEditColumn(col) || _conciIsMatriculaStatusColumn(col) || _conciIsCalculatedColumn(col)) {
+        if (_conciIsProtectedEditColumn(col) || _conciIsCalculatedColumn(col)) {
             td.dataset.conciReadonly = '1';
             td.title = _conciIsCalculatedColumn(col)
                 ? 'Campo calculado: no se puede modificar.'
