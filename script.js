@@ -24713,6 +24713,9 @@ function _conciPresenciaConectados() {
                     nombre,
                     color: entrada.color || _conciColorForUser(nombre),
                     editando,
+                    // La fila permite decir en qué vuelo está trabajando, no
+                    // solo en qué columna.
+                    rowId: foco?.rowId ? String(foco.rowId) : '',
                     esYo: clave === _conciLiveClientId,
                 });
             }
@@ -24725,33 +24728,118 @@ function _conciPresenciaConectados() {
     });
 }
 
+// Numero de vuelo de una fila, para poder decir en que esta trabajando cada
+// quien. Se lee de la tabla, no de la base: es lo que ya esta en pantalla.
+function _conciVueloDeFila(rowId) {
+    if (!rowId) return '';
+    const tabla = document.getElementById('table-conci-manifiestos');
+    if (!tabla) return '';
+    const fila = [...tabla.querySelectorAll('tbody tr[data-row-id]')]
+        .find(tr => String(tr.dataset.rowId || '') === String(rowId));
+    if (!fila) return '';
+    const celda = [...fila.querySelectorAll('td[data-col]')]
+        .find(td => /^#\s*de\s*vuelo$/.test(_conciNormalizedColumnName(td.dataset.col)));
+    if (!celda) return '';
+    return _conciNormalizeEditableCellText(celda.dataset.raw ?? celda.textContent);
+}
+
+function _conciTextoPresencia(p) {
+    if (!p.editando) return `${p.nombre}${p.esYo ? ' (tú)' : ''} — viendo la tabla`;
+    const vuelo = _conciVueloDeFila(p.rowId);
+    const donde = vuelo ? `${p.editando} del vuelo ${vuelo}` : p.editando;
+    return `${p.nombre}${p.esYo ? ' (tú)' : ''} — capturando ${donde}`;
+}
+
+// La barra se actualiza EN SITIO, no se reconstruye.
+//
+// Antes se rehacia el innerHTML completo en cada evento: cada sync de
+// presencia, cada movimiento de cursor ajeno y cada latido -- que con varias
+// personas conectadas llega cada pocos segundos. Rehacer el HTML destruye y
+// recrea los nodos, y eso reinicia las animaciones CSS desde cero: de ahi el
+// parpadeo constante de las burbujas.
+//
+// Ahora se compara contra lo ultimo pintado y, si nada cambio, no se toca el
+// DOM. Cuando si cambia, se reutilizan los nodos existentes y solo se parchea
+// lo que cambio, para que la animacion del punto no se reinicie.
+let _conciFirmaPresencia = '';
+
 function _conciRenderBarraPresencia() {
     const cont = document.getElementById('conci-presencia');
     if (!cont) return;
     const gente = _conciPresenciaConectados();
-    if (!gente.length) { cont.innerHTML = ''; cont.classList.add('d-none'); return; }
-    cont.classList.remove('d-none');
+    const visibles = gente.slice(0, 6);
+    const sobran = gente.length - visibles.length;
 
-    const avatares = gente.slice(0, 6).map(p => {
-        const iniciales = _conciInitialsFromName(p.nombre) || '?';
-        const detalle = p.editando ? `capturando ${p.editando}` : 'viendo la tabla';
-        const titulo = `${p.nombre}${p.esYo ? ' (tú)' : ''} — ${detalle}`;
-        return `<span class="conci-presencia-avatar${p.editando ? ' conci-presencia-activo' : ''}"
-            style="--conci-persona-color:${escapeHTML(p.color)}"
-            title="${escapeHTML(titulo)}" aria-label="${escapeHTML(titulo)}">${escapeHTML(iniciales)}</span>`;
-    }).join('');
-
-    const sobran = gente.length - 6;
-    const extra = sobran > 0
-        ? `<span class="conci-presencia-avatar conci-presencia-mas" title="${escapeHTML(gente.slice(6).map(p => p.nombre).join(', '))}">+${sobran}</span>`
-        : '';
-
-    // El punto dice la verdad sobre la conexión: si el canal se cayó, lo que
-    // se ve en pantalla puede estar viejo y conviene saberlo.
     const estado = _conciLiveReady
         ? { clase: '', titulo: 'Colaboración en vivo activa' }
-        : { clase: ' conci-presencia-punto-caido', titulo: 'Sin conexión en vivo: reintentando…' };
-    cont.innerHTML = `<span class="conci-presencia-punto${estado.clase}" title="${escapeHTML(estado.titulo)}"></span>${avatares}${extra}`;
+        : { clase: 'conci-presencia-punto-caido', titulo: 'Sin conexión en vivo: reintentando…' };
+
+    const datos = visibles.map(p => ({
+        iniciales: _conciInitialsFromName(p.nombre) || '?',
+        color: p.color,
+        activo: !!p.editando,
+        titulo: _conciTextoPresencia(p),
+    }));
+
+    // Si nada cambió, no se toca el DOM: es lo que evita el parpadeo.
+    const firma = JSON.stringify([estado.clase, sobran, datos]);
+    if (firma === _conciFirmaPresencia) return;
+    _conciFirmaPresencia = firma;
+
+    if (!gente.length) {
+        cont.textContent = '';
+        cont.classList.add('d-none');
+        return;
+    }
+    cont.classList.remove('d-none');
+
+    // El punto se conserva entre repintados para que su animación siga corriendo.
+    let punto = cont.querySelector('.conci-presencia-punto');
+    if (!punto) {
+        punto = document.createElement('span');
+        punto.className = 'conci-presencia-punto';
+        cont.insertBefore(punto, cont.firstChild);
+    }
+    punto.classList.toggle('conci-presencia-punto-caido', !_conciLiveReady);
+    if (punto.title !== estado.titulo) punto.title = estado.titulo;
+
+    const previos = [...cont.querySelectorAll('.conci-presencia-avatar')];
+    datos.forEach((d, i) => {
+        let av = previos[i];
+        if (!av) {
+            av = document.createElement('span');
+            av.className = 'conci-presencia-avatar';
+            cont.appendChild(av);
+        }
+        av.classList.remove('conci-presencia-mas');
+        av.classList.toggle('conci-presencia-activo', d.activo);
+        if (av.textContent !== d.iniciales) av.textContent = d.iniciales;
+        if (av.style.getPropertyValue('--conci-persona-color') !== d.color) {
+            av.style.setProperty('--conci-persona-color', d.color);
+        }
+        if (av.title !== d.titulo) {
+            av.title = d.titulo;
+            av.setAttribute('aria-label', d.titulo);
+        }
+    });
+
+    // El "+N" de quienes no caben, y la limpieza de los avatares sobrantes.
+    let indice = datos.length;
+    if (sobran > 0) {
+        let mas = previos[indice];
+        if (!mas) {
+            mas = document.createElement('span');
+            mas.className = 'conci-presencia-avatar';
+            cont.appendChild(mas);
+        }
+        mas.classList.add('conci-presencia-mas');
+        mas.classList.remove('conci-presencia-activo');
+        mas.textContent = `+${sobran}`;
+        mas.title = gente.slice(6).map(p => p.nombre).join(', ');
+        mas.style.removeProperty('--conci-persona-color');
+        indice++;
+    }
+    previos.slice(indice).forEach(el => el.remove());
 }
 
 // Anuncia al resto las columnas que acaban de guardarse en una fila, para que

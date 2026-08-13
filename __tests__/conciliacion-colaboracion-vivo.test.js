@@ -62,6 +62,13 @@ const api = new Function('document', 'window', 'setTimeout', 'clearTimeout', 'pr
     send: (m) => enviados.push(m),
   };
   ${extraer('_conciPresenciaConectados')}
+  // La barra se actualiza en sitio y compara contra lo último pintado para no
+  // parpadear; la firma tiene que existir en el arnés.
+  let _conciFirmaPresencia = '';
+  ${extraer('_conciNormalizedColumnName')}
+  ${extraer('_conciNormalizeEditableCellText')}
+  ${extraer('_conciVueloDeFila')}
+  ${extraer('_conciTextoPresencia')}
   ${extraer('_conciRenderBarraPresencia')}
   ${extraer('_conciBroadcastCambioGuardado')}
   ${extraer('_conciHandleRemoteCellSaved')}
