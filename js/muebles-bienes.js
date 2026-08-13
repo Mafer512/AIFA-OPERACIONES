@@ -30,6 +30,33 @@
         return notes.slice(0, assignedAt).includes(norm(row.numero_serie));
     }
 
+    // Ícono y color por familia (Font Awesome 6, ya cargado por index.html). Se
+    // resuelve por coincidencia sobre el nombre normalizado y no por igualdad
+    // exacta, para que una variante de captura (acentos, mayúsculas, sufijo de
+    // modelo distinto) siga cayendo en el ícono correcto. Gana la primera regla.
+    //
+    // El color va atado a la familia, nunca a su posición en la fila: si mañana
+    // se agrega o se retira una categoría, las demás conservan su color. Los
+    // hexadecimales son una paleta categórica validada (banda de luminosidad,
+    // piso de croma, separación para daltonismo y contraste sobre el blanco de
+    // la tarjeta). No los reemplaces sueltos: el orden es lo que garantiza que
+    // dos vecinas se distingan. Una familia nueva cae al gris neutro de "otros".
+    const FAMILY_STYLES = [
+        [/telecomunicacion/, 'tower-cell', '#1baf7a'],
+        [/ruggear|rg72/, 'mobile-screen-button', '#eda100'],
+        [/aereo|a120/, 'plane', '#e87ba4'],
+        [/\bbase\b/, 'tower-broadcast', '#008300'],
+        [/\bmovil\b/, 'car', '#4a3aa7'],
+        [/repetidor|uhf/, 'signal', '#e34948'],
+        [/\bkw\b|kenwood/, 'walkie-talkie', '#eb6834'],
+    ];
+    const ALL_STYLE = { icon: 'table-cells-large', color: '#2a78d6' };
+    const OTHER_STYLE = { icon: 'box', color: '#6c757d' };
+    function familyStyle(value) {
+        const match = FAMILY_STYLES.find(([pattern]) => pattern.test(norm(value)));
+        return match ? { icon: match[1], color: match[2] } : OTHER_STYLE;
+    }
+
     function ensureUI() {
         if ($('muebles-bienes-section')) return;
         const host = $('coord-auditoria-section')?.parentElement;
@@ -44,12 +71,7 @@
             <p class="text-white-50 mb-0">Inventario de equipos de radiocomunicación, telecomunicaciones y resguardos documentales</p>
             <button class="btn btn-sm btn-light rounded-circle position-absolute bottom-0 end-0 m-3" onclick="mueblesBienesModule.reload()" title="Actualizar"><i class="fas fa-sync-alt text-primary"></i></button>
           </div>
-          <div class="row g-3 mb-4">
-            ${kpi('total','boxes-stacked','primary','Total de unidades')}
-            ${kpi('asignados','user-check','success','Unidades asignadas')}
-            ${kpi('disponibles','warehouse','warning','Unidades disponibles')}
-            ${kpi('sin-doc','file-circle-xmark','danger','Bienes sin documento')}
-          </div>
+          <div id="mb-family-tabs" class="d-flex flex-nowrap align-items-stretch gap-3 overflow-auto py-2 mb-4" role="tablist" aria-label="Filtrar por tipo de equipo"></div>
           <div class="card border-0 shadow-sm rounded-4 mb-4"><div class="card-body p-3 d-flex flex-wrap gap-2 align-items-center">
             <div class="input-group flex-grow-1" style="max-width:390px"><span class="input-group-text bg-white"><i class="fas fa-search"></i></span><input id="mb-search" class="form-control" placeholder="Buscar serie, equipo, área, responsable…"></div>
             <select id="mb-filter-familia" class="form-select form-select-sm rounded-pill" style="width:auto"><option value="">Todos los equipos</option></select>
@@ -71,12 +93,8 @@
         </div>`);
         document.body.insertAdjacentHTML('beforeend', modalHTML());
         document.body.insertAdjacentHTML('beforeend', duplicateModalHTML());
-        document.head.insertAdjacentHTML('beforeend', `<style id="mb-doc-styles">.mb-doc-trigger{border:0}.mb-doc-clickable{cursor:pointer}.mb-doc-preview{position:fixed;z-index:12050;width:min(430px,calc(100vw - 20px));max-height:min(590px,calc(100vh - 20px));overflow:auto}.mb-preview-frame{height:300px;background:#e9ecef}.mb-preview-open iframe,.mb-preview-open img{pointer-events:none}.mb-doc-name{background:none;border:0;padding:0;color:inherit;font:inherit;text-align:left}.mb-card-visual{width:100%;height:112px;display:flex;align-items:center;justify-content:center}.mb-card-pdf-preview{padding:0!important;overflow:hidden;background:#eef4fb}.mb-card-pdf-thumb{display:block;width:100%;height:100%;object-fit:cover;object-position:center top;background:#fff}.mb-card-thumb-fallback{pointer-events:none}.mb-quick-uploading,.mb-quick-upload-success{background:#ecfdf3!important;box-shadow:0 0 0 3px rgba(25,135,84,.35),0 .5rem 1rem rgba(25,135,84,.16)!important}.mb-quick-uploading .mb-card-visual,.mb-quick-upload-success .mb-card-visual{background:linear-gradient(135deg,#e4f8eb,#d1f0dc)!important}.mb-quick-uploading .card-body,.mb-quick-uploading .card-footer,.mb-quick-upload-success .card-body,.mb-quick-upload-success .card-footer{background:transparent!important}.mb-quick-state{z-index:4;pointer-events:none}.mb-card-flash{animation:mbPdfFlash 4s ease}@keyframes mbPdfFlash{0%,45%{box-shadow:0 0 0 4px #20c997,0 12px 34px rgba(32,201,151,.35)!important}100%{box-shadow:var(--bs-box-shadow-sm)!important}}.mb-doc-flash{animation:mbBadgeFlash 4s ease}@keyframes mbBadgeFlash{0%,50%{background:#0d6efd!important;transform:scale(1.12)}100%{transform:none}}#mb-pdf-modal .modal-dialog{width:min(1500px,96vw);max-width:none;height:96vh;margin:2vh auto}#mb-pdf-modal .modal-content{height:100%;overflow:hidden}#mb-pdf-modal .modal-header{flex:0 0 auto}#mb-pdf-modal .mb-pdf-body{display:flex;flex-direction:column;min-height:0;overflow:hidden}#mb-pdf-modal .mb-pdf-toolbar{flex:0 0 auto;z-index:2}#mb-pdf-stage{position:relative;flex:1 1 auto;min-height:0;overflow:auto;background:#525659;overscroll-behavior:contain;touch-action:pan-x pan-y}#mb-pdf-canvas-wrap{box-sizing:border-box;display:flex;align-items:center;justify-content:center;min-width:100%;min-height:100%;width:max-content;height:max-content;padding:16px}#mb-pdf-canvas{display:block;flex:none;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.35)}#mb-pdf-loading,#mb-pdf-fallback{z-index:3}@media(max-width:767.98px){#mb-pdf-modal .modal-dialog{width:100vw;max-width:none;height:100vh;height:100dvh;margin:0}#mb-pdf-modal .modal-content{border:0;border-radius:0}#mb-pdf-modal .modal-header{padding:.5rem .75rem}#mb-pdf-modal .mb-pdf-toolbar{padding:.4rem!important;gap:.3rem!important}#mb-pdf-modal .mb-pdf-toolbar .btn{padding:.25rem .45rem}#mb-pdf-canvas-wrap{padding:8px}}</style>`);
+        document.head.insertAdjacentHTML('beforeend', `<style id="mb-doc-styles">.mb-family-tab{width:156px;padding:0;background:#fff;border-color:rgba(11,11,11,.1);cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease}.mb-family-tab .card-body{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:.15rem}.mb-family-tab-chip{display:flex;align-items:center;justify-content:center;width:38px;height:38px;margin-bottom:.4rem;border-radius:50%;background:#f1f3f7;background:color-mix(in srgb,var(--mb-tab-color) 14%,#fff)}.mb-family-tab-icon{font-size:1.05rem;line-height:1;color:var(--mb-tab-color)}.mb-family-tab-count{color:#0b0b0b;line-height:1.1}.mb-family-tab-label{color:#52514e;white-space:normal;overflow-wrap:anywhere;line-height:1.2;min-height:2.4em;display:flex;align-items:center}.mb-family-tab:hover{border-color:var(--mb-tab-color);transform:translateY(-2px)}.mb-family-tab:focus-visible{outline:2px solid var(--mb-tab-color);outline-offset:2px}.mb-family-tab-active{border-color:var(--mb-tab-color);background:#f7f9fc;background:color-mix(in srgb,var(--mb-tab-color) 7%,#fff);box-shadow:0 0 0 2px rgba(11,11,11,.12),0 .5rem 1rem rgba(11,11,11,.08)!important;box-shadow:0 0 0 2px color-mix(in srgb,var(--mb-tab-color) 34%,transparent),0 .5rem 1rem rgba(11,11,11,.08)!important}.mb-family-tab-active .mb-family-tab-chip{background:#e9edf5;background:color-mix(in srgb,var(--mb-tab-color) 26%,#fff)}@media(max-width:575.98px){.mb-family-tab{width:132px}.mb-family-tab .card-body{padding:.65rem!important}}@media(prefers-reduced-motion:reduce){.mb-family-tab{transition:none}.mb-family-tab:hover{transform:none}}.mb-doc-trigger{border:0}.mb-doc-clickable{cursor:pointer}.mb-doc-preview{position:fixed;z-index:12050;width:min(430px,calc(100vw - 20px));max-height:min(590px,calc(100vh - 20px));overflow:auto}.mb-preview-frame{height:300px;background:#e9ecef}.mb-preview-open iframe,.mb-preview-open img{pointer-events:none}.mb-doc-name{background:none;border:0;padding:0;color:inherit;font:inherit;text-align:left}.mb-card-visual{width:100%;height:112px;display:flex;align-items:center;justify-content:center}.mb-card-pdf-preview{padding:0!important;overflow:hidden;background:#eef4fb}.mb-card-pdf-thumb{display:block;width:100%;height:100%;object-fit:cover;object-position:center top;background:#fff}.mb-card-thumb-fallback{pointer-events:none}.mb-quick-uploading,.mb-quick-upload-success{background:#ecfdf3!important;box-shadow:0 0 0 3px rgba(25,135,84,.35),0 .5rem 1rem rgba(25,135,84,.16)!important}.mb-quick-uploading .mb-card-visual,.mb-quick-upload-success .mb-card-visual{background:linear-gradient(135deg,#e4f8eb,#d1f0dc)!important}.mb-quick-uploading .card-body,.mb-quick-uploading .card-footer,.mb-quick-upload-success .card-body,.mb-quick-upload-success .card-footer{background:transparent!important}.mb-quick-state{z-index:4;pointer-events:none}.mb-card-flash{animation:mbPdfFlash 4s ease}@keyframes mbPdfFlash{0%,45%{box-shadow:0 0 0 4px #20c997,0 12px 34px rgba(32,201,151,.35)!important}100%{box-shadow:var(--bs-box-shadow-sm)!important}}.mb-doc-flash{animation:mbBadgeFlash 4s ease}@keyframes mbBadgeFlash{0%,50%{background:#0d6efd!important;transform:scale(1.12)}100%{transform:none}}#mb-pdf-modal .modal-dialog{width:min(1500px,96vw);max-width:none;height:96vh;margin:2vh auto}#mb-pdf-modal .modal-content{height:100%;overflow:hidden}#mb-pdf-modal .modal-header{flex:0 0 auto}#mb-pdf-modal .mb-pdf-body{display:flex;flex-direction:column;min-height:0;overflow:hidden}#mb-pdf-modal .mb-pdf-toolbar{flex:0 0 auto;z-index:2}#mb-pdf-stage{position:relative;flex:1 1 auto;min-height:0;overflow:auto;background:#525659;overscroll-behavior:contain;touch-action:pan-x pan-y}#mb-pdf-canvas-wrap{box-sizing:border-box;display:flex;align-items:center;justify-content:center;min-width:100%;min-height:100%;width:max-content;height:max-content;padding:16px}#mb-pdf-canvas{display:block;flex:none;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.35)}#mb-pdf-loading,#mb-pdf-fallback{z-index:3}@media(max-width:767.98px){#mb-pdf-modal .modal-dialog{width:100vw;max-width:none;height:100vh;height:100dvh;margin:0}#mb-pdf-modal .modal-content{border:0;border-radius:0}#mb-pdf-modal .modal-header{padding:.5rem .75rem}#mb-pdf-modal .mb-pdf-toolbar{padding:.4rem!important;gap:.3rem!important}#mb-pdf-modal .mb-pdf-toolbar .btn{padding:.25rem .45rem}#mb-pdf-canvas-wrap{padding:8px}}</style>`);
         bindUI();
-    }
-
-    function kpi(id, icon, color, label) {
-        return `<div class="col-6 col-lg-3"><div class="card border-0 shadow-sm rounded-4 h-100"><div class="card-body text-center"><i class="fas fa-${icon} text-${color} fs-4"></i><div id="mb-kpi-${id}" class="fw-bold fs-3 text-${color}">—</div><div class="small text-muted fw-semibold">${label}</div></div></div></div>`;
     }
 
     function modalHTML() {
@@ -103,6 +121,15 @@
         const search = $('mb-search');
         search?.addEventListener('input', () => { cancelAnimationFrame(state.raf); state.raf = requestAnimationFrame(applyFilters); });
         ['mb-filter-familia','mb-filter-area','mb-filter-disponibilidad','mb-filter-doc'].forEach(id => $(id)?.addEventListener('change', applyFilters));
+        // Las pestañas escriben en el dropdown y disparan el mismo applyFilters,
+        // por eso no hace falta sincronizar nada a mano en sentido inverso.
+        $('mb-family-tabs')?.addEventListener('click', event => {
+            const btn = event.target.closest('[data-mb-family]');
+            if (!btn) return;
+            const familia = $('mb-filter-familia');
+            if (familia) familia.value = btn.dataset.mbFamily;
+            applyFilters();
+        });
         $('mb-clear')?.addEventListener('click', () => { search.value = ''; ['mb-filter-familia','mb-filter-area','mb-filter-disponibilidad','mb-filter-doc'].forEach(id => $(id).value = ''); applyFilters(); });
         $('mb-save')?.addEventListener('click', save);
         $('mb-doc-file')?.addEventListener('change', event => validateSelectedFile(event.target));
@@ -162,24 +189,99 @@
     }
 
     function populateFilters() {
-        fillSelect('mb-filter-familia', [...new Set(state.all.map(x => x.familia).filter(Boolean))].sort(), 'Todos los equipos');
+        refreshFamilyFilterUI();
         fillSelect('mb-filter-area', [...new Set(state.all.map(x => x.area_responsable).filter(Boolean))].sort(), 'Todas las áreas');
     }
     function fillSelect(id, values, first) { const el=$(id), current=el?.value||''; if(el){el.innerHTML=`<option value="">${first}</option>`+values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join(''); el.value=current;} }
 
+    function currentFilterValues() {
+        return {
+            q: norm($('mb-search')?.value),
+            familia: $('mb-filter-familia')?.value || '',
+            area: $('mb-filter-area')?.value || '',
+            availability: $('mb-filter-disponibilidad')?.value || '',
+            doc: $('mb-filter-doc')?.value || '',
+        };
+    }
+
+    // Mismo criterio de filtrado que usaba applyFilters, extraído para que los
+    // conteos de las pestañas y del dropdown no dupliquen la regla. `skip` omite
+    // un criterio: los conteos por familia lo usan para ignorar la familia ya
+    // seleccionada, de modo que cada opción diga a cuántas unidades llegarías si
+    // la eligieras, y no cero para todas las demás.
+    function rowMatches(row, f, skip) {
+        if (skip !== 'q' && f.q && !row._search.includes(f.q)) return false;
+        if (skip !== 'familia' && f.familia && row.familia !== f.familia) return false;
+        if (skip !== 'area' && f.area && row.area_responsable !== f.area) return false;
+        if (skip !== 'availability' && f.availability && (f.availability === 'disponible') !== isAvailable(row)) return false;
+        if (skip !== 'doc' && f.doc && (f.doc === 'si') !== (state.docs.get(row.id)?.length > 0)) return false;
+        return true;
+    }
+
+    function familyList() { return [...new Set(state.all.map(x => x.familia).filter(Boolean))].sort(); }
+
+    // Suma unidades (campo cantidad), no número de registros, igual que las
+    // tarjetas de resumen. El total incluye los bienes sin familia capturada,
+    // porque "Todos" sí los muestra, aunque no tengan pestaña propia.
+    function familyCounts() {
+        const f = currentFilterValues(), counts = new Map();
+        let total = 0;
+        state.all.forEach(row => {
+            if (!rowMatches(row, f, 'familia')) return;
+            const units = qty(row);
+            total += units;
+            if (row.familia) counts.set(row.familia, (counts.get(row.familia) || 0) + units);
+        });
+        return { counts, total };
+    }
+
+    // Dropdown y pestañas se pintan juntos desde el mismo conteo. La fuente de
+    // verdad de la selección es #mb-filter-familia, así que ambos quedan
+    // sincronizados por construcción.
+    function refreshFamilyFilterUI() {
+        const el = $('mb-filter-familia');
+        if (!el) return;
+        const selected = el.value, families = familyList(), { counts, total } = familyCounts();
+
+        el.innerHTML = `<option value="">Todos los equipos (${total})</option>`
+            + families.map(v => `<option value="${esc(v)}">${esc(v)} (${counts.get(v) || 0})</option>`).join('');
+        el.value = selected;
+
+        const tabs = $('mb-family-tabs');
+        if (!tabs) return;
+        // Tarjeta redondeada con ícono, número grande y label debajo: hereda el
+        // formato que tenían las tarjetas de resumen, ahora retiradas de la
+        // cabecera. Sigue siendo un <button>, así que el clic, el foco por
+        // teclado y el handler de #mb-family-tabs funcionan igual que antes.
+        const tab = (value, label, count, style) => {
+            const active = value === selected;
+            return `<button type="button" role="tab" aria-selected="${active}" data-mb-family="${esc(value)}" style="--mb-tab-color:${style.color}" class="mb-family-tab card border shadow-sm rounded-4 flex-shrink-0${active ? ' mb-family-tab-active' : ''}"><div class="card-body text-center p-3"><span class="mb-family-tab-chip"><i class="fas fa-${style.icon} mb-family-tab-icon"></i></span><div class="fw-bold fs-4 mb-family-tab-count">${count}</div><div class="small fw-semibold mb-family-tab-label">${esc(label)}</div></div></button>`;
+        };
+        tabs.innerHTML = tab('', 'Todos', total, ALL_STYLE)
+            + families.map(v => tab(v, v, counts.get(v) || 0, familyStyle(v))).join('');
+    }
+
     function applyFilters() {
-        const q = norm($('mb-search')?.value), familia=$('mb-filter-familia')?.value||'', area=$('mb-filter-area')?.value||'', availability=$('mb-filter-disponibilidad')?.value||'', doc=$('mb-filter-doc')?.value||'';
-        state.filtered = state.all.filter(row => (!q || row._search.includes(q)) && (!familia || row.familia === familia) && (!area || row.area_responsable === area) && (!availability || (availability === 'disponible') === isAvailable(row)) && (!doc || (doc === 'si') === (state.docs.get(row.id)?.length > 0)));
+        const f = currentFilterValues();
+        state.filtered = state.all.filter(row => rowMatches(row, f));
         render();
     }
 
+    // La cabecera ya no monta las cuatro tarjetas de resumen: esa fila la ocupan
+    // ahora las tarjetas de categoría, que traen su propio conteo desde
+    // familyCounts(). La función sobrevive protegida contra la ausencia de los
+    // nodos #mb-kpi-* para que render() no truene; si vuelve a montarse un bloque
+    // de indicadores, sigue alimentándolo sin cambios.
     function updateKPIs() {
+        const nodes = ['total','asignados','disponibles','sin-doc'].map(id => $(`mb-kpi-${id}`));
+        if (nodes.some(node => !node)) return;
         const total=state.all.reduce((a,r)=>a+qty(r),0), available=state.all.filter(isAvailable).reduce((a,r)=>a+qty(r),0), noDoc=state.all.filter(r=>!state.docs.get(r.id)?.length).reduce((a,r)=>a+qty(r),0);
-        $('mb-kpi-total').textContent=total; $('mb-kpi-asignados').textContent=total-available; $('mb-kpi-disponibles').textContent=available; $('mb-kpi-sin-doc').textContent=noDoc;
+        const [totalNode,assignedNode,availableNode,noDocNode]=nodes;
+        totalNode.textContent=total; assignedNode.textContent=total-available; availableNode.textContent=available; noDocNode.textContent=noDoc;
     }
 
     function render() {
-        updateKPIs(); const empty=!state.filtered.length;
+        updateKPIs(); refreshFamilyFilterUI(); const empty=!state.filtered.length;
         $('mb-empty')?.classList.toggle('d-none', !empty); $('mb-grid')?.classList.toggle('d-none', empty || state.view !== 'grid'); $('mb-table-wrap')?.classList.toggle('d-none', empty || state.view !== 'table');
         if (empty) { state.thumbnailObserver?.disconnect?.(); return; }
         $('mb-grid').innerHTML=state.filtered.map(cardHTML).join(''); $('mb-tbody').innerHTML=state.filtered.map(rowHTML).join('');
