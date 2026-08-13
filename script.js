@@ -19311,6 +19311,45 @@ function _conciPuntualidad(slotRaw, opRaw, fallbackYear) {
     return 'ANTES';
 }
 
+// DEMORA +- 15 MIN. = HR. DE OPERACIÓN - SLOT de referencia, en minutos.
+// SLOT COORDINADO tiene prioridad; sólo cuando está vacío se usa SLOT ASIGNADO.
+function _conciDemoraMinutos(slotAsignadoRaw, slotCoordinadoRaw, opRaw, fallbackYear) {
+    const referenceRaw = String(slotCoordinadoRaw || '').trim() || String(slotAsignadoRaw || '').trim();
+    const slotDate = _conciPartsToDate(_conciParseDateTimeParts(referenceRaw, fallbackYear));
+    const opDate = _conciPartsToDate(_conciParseDateTimeParts(opRaw, fallbackYear));
+    if (!slotDate || !opDate) return null;
+    const minutes = Math.round((opDate.getTime() - slotDate.getTime()) / 60000);
+    return Number.isFinite(minutes) ? minutes : null;
+}
+
+function _conciDemoraHorasMinutos(value) {
+    if (!Number.isFinite(value)) return '';
+    const absolute = Math.abs(Math.trunc(value));
+    const hours = Math.floor(absolute / 60);
+    const minutes = absolute % 60;
+    const sign = value < 0 ? '-' : (value > 0 ? '+' : '');
+    const parts = [];
+    if (hours) parts.push(`${hours} hr`);
+    if (minutes || !hours) parts.push(`${minutes} min`);
+    return `${sign}${parts.join(' ')}`;
+}
+
+function _conciRenderDemoraMinutosCell(td, value) {
+    if (!td) return;
+    const valid = Number.isFinite(value);
+    const text = valid ? `${value > 0 ? '+' : ''}${value}` : '-';
+    td.textContent = text;
+    td.dataset.raw = valid ? String(value) : '';
+    td.dataset.pendingRaw = valid ? String(value) : '';
+    td.removeAttribute('data-dirty');
+    td.style.fontWeight = valid ? '700' : '';
+    td.style.color = valid ? (Math.abs(value) > 15 ? '#c62828' : '#2e7d32') : '';
+    td.style.backgroundColor = valid ? (Math.abs(value) > 15 ? '#ffebee' : '#e8f5e9') : '';
+    td.title = valid
+        ? `${value} minuto(s) = ${_conciDemoraHorasMinutos(value)}: ${Math.abs(value) > 15 ? 'fuera' : 'dentro'} de la tolerancia de ±15 minutos.`
+        : 'Falta HR. DE OPERACIÓN o un SLOT válido.';
+}
+
 // HR. MÁXIMA DE ENTREGA — reproduce la fórmula de Excel =SI.ERROR(P+30/24,"-"):
 // P = HR. DE OPERACIÓN. En Excel 1 = 1 día, así que 30/24 equivale a 30 horas; la
 // hora máxima de entrega es la hora de operación + 30 horas. Si la hora no es una
@@ -21929,15 +21968,10 @@ function _updateManifiestosSummaryStrip(data, columns) {
 let _conciScrollResizeTimer = null;
 // ── Columnas fijas al desplazar horizontalmente ──────────────────────────────
 //
-// La tabla tiene mas de cuarenta columnas. Al desplazarse a la derecha para
-// capturar pasajeros o kilos se perdian de vista la fecha, la aerolinea y el
-// numero de vuelo, o sea la identidad de la fila: se capturaba a ciegas,
-// confiando en no haberse cambiado de renglon. Es el error de captura mas facil
-// de cometer y el mas dificil de detectar despues.
-//
-// El encabezado ya se quedaba fijo en vertical; esto hace lo mismo en
-// horizontal para esas tres columnas.
-const _CONCI_COLUMNAS_FIJAS = [/^fecha$/, /^aerolinea$/, /^# de vuelo$/];
+// Ninguna columna queda fija horizontalmente: encabezado, filtro y datos deben
+// desplazarse juntos para evitar que FECHA, AEROLÍNEA o # DE VUELO se empalmen
+// sobre las columnas que el usuario está consultando.
+const _CONCI_COLUMNAS_FIJAS = [];
 
 function _conciEsColumnaFija(columna) {
     const key = _conciNormalizedColumnName(columna);
@@ -21966,7 +22000,11 @@ function _conciSyncColumnasFijas() {
     const ultima = [...offsets.keys()].pop() || null;
     tabla.querySelectorAll('[data-conci-column-key]').forEach(celda => {
         const columna = celda.dataset.conciColumnKey;
-        if (!offsets.has(columna)) {
+        // Los filtros deben desplazarse junto con su columna. Si también se
+        // vuelven sticky, los tres inputs de FECHA/AEROLÍNEA/# DE VUELO quedan
+        // flotando sobre los filtros visibles al mover la tabla a la derecha.
+        const esFiltro = !!celda.closest('tr.conci-filter-row');
+        if (!offsets.has(columna) || esFiltro) {
             celda.classList.remove('conci-col-fija', 'conci-col-fija-ultima');
             celda.style.removeProperty('left');
             return;
@@ -22104,7 +22142,9 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     const _hrOperacionCol  = displayCols.find(c => /hr\.?\s*de\s*oper/i.test(c)) || null;
     const _hrRecepcionCol  = displayCols.find(c => /hr\.?\s*de\s*recep/i.test(c)) || null;
     const _slotAsignadoCol = displayCols.find(c => /slot\s*asignad/i.test(c)) || null;
+    const _slotCoordinadoCol = displayCols.find(c => /slot\s*coordinad/i.test(c)) || null;
     const _puntualidadCol  = displayCols.find(c => /puntualidad|cancelaci/i.test(c)) || null;
+    const _demora15Col = displayCols.find(c => /demora\s*\+\s*-?\s*15\s*min/i.test(c)) || null;
     const _hrMaxEntregaCol = displayCols.find(c => /hr\.?\s*m[aá]xima\s*de\s*entrega/i.test(c)) || null;
     // Columna "FACTOR DE OCUPACIÓN": pax/capacidad — se resalta en rojo cuando hay sobrecupo.
     const _factorOcupacionCol = displayCols.find(c => /factor.*ocupaci[oó]n/i.test(c)) || null;
@@ -22339,6 +22379,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         isOptype:    c === _optypeCol,
         isHrsCumplidas: c === _hrsCumplidasCol && !!_hrOperacionCol && !!_hrRecepcionCol,
         isPuntualidad: c === _puntualidadCol && !!_slotAsignadoCol && !!_hrOperacionCol,
+        isDemora15: c === _demora15Col && !!_hrOperacionCol,
         isHrMaxEntrega: c === _hrMaxEntregaCol && !!_hrOperacionCol,
         isMes: c === _mesCol,
         isEvidencia: /evidencia/i.test(c),
@@ -22495,6 +22536,14 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                         td.textContent = '-';
                         td.dataset.raw = '-';
                     }
+                } else if (meta.isDemora15) {
+                    const demora = _conciDemoraMinutos(
+                        _slotAsignadoCol ? row[_slotAsignadoCol] : '',
+                        _slotCoordinadoCol ? row[_slotCoordinadoCol] : '',
+                        _hrOperacionCol ? row[_hrOperacionCol] : '',
+                        fallbackYear
+                    );
+                    _conciRenderDemoraMinutosCell(td, demora);
                 } else if (meta.isHrMaxEntrega) {
                     const opRaw = _hrOperacionCol ? row[_hrOperacionCol] : '';
                     const maxEntrega = _conciHrMaximaEntrega(opRaw, row, _fechaCol, fallbackYear);
@@ -23310,6 +23359,7 @@ function _conciIsCalculatedColumn(column) {
     const key = _conciNormalizedColumnName(column);
     return /hrs?\.?\s*cumplidas/.test(key)
         || /puntualidad|cancelacion/.test(key)
+        || /demora\s*\+\s*-?\s*15\s*min/.test(key)
         || /hr\.?\s*maxima\s*de\s*entrega/.test(key)
         || /^total\s+exentos$/.test(key)
         || /^pax\s+que\s+pagan\s+tua$/.test(key)
@@ -23321,7 +23371,8 @@ function _conciIsCalculatedColumn(column) {
 
 function _conciShouldPersistCalculatedColumn(column) {
     const key = _conciNormalizedColumnName(column);
-    return /^total\s+exentos$/.test(key) || /^pax\s+que\s+pagan\s+tua$/.test(key) || /^kgs?\.?\s*de\s*carga\s+total$/.test(key);
+    return /^total\s+exentos$/.test(key) || /^pax\s+que\s+pagan\s+tua$/.test(key) || /^kgs?\.?\s*de\s*carga\s+total$/.test(key)
+        || /demora\s*\+\s*-?\s*15\s*min/.test(key);
 }
 
 // Columnas de captura de pasajeros. En vuelos de carga (incluye mixtos
@@ -23495,8 +23546,10 @@ function _conciRefreshCalculatedCellsForRow(tr, changedValues = {}) {
     const operationCell = findCell(/hr\.?\s*de\s*oper/);
     const receptionCell = findCell(/hr\.?\s*de\s*recep/);
     const slotCell = findCell(/slot\s*asignad/);
+    const slotCoordinadoCell = findCell(/slot\s*coordinad/);
     const hoursCell = findCell(/hrs?\.?\s*cumplidas/);
     const statusCell = findCell(/puntualidad|cancelacion/);
+    const demora15Cell = findCell(/demora\s*\+\s*-?\s*15\s*min/);
     const diplomaticosCell = findCell(/^diplomaticos$/);
     const comisionCell = findCell(/^en\s+comision$/);
     const infantesCell = findCell(/^infantes$/);
@@ -23515,6 +23568,12 @@ function _conciRefreshCalculatedCellsForRow(tr, changedValues = {}) {
     if (statusCell) {
         const status = _conciPuntualidad(readCell(slotCell), operationRaw, _conciEditFallbackYear);
         _conciRenderPuntualidadCell(statusCell, status);
+    }
+    if (demora15Cell) {
+        const demora = _conciDemoraMinutos(
+            readCell(slotCell), readCell(slotCoordinadoCell), operationRaw, _conciEditFallbackYear
+        );
+        _conciRenderDemoraMinutosCell(demora15Cell, demora);
     }
 
     const totalExentos = [
@@ -23608,6 +23667,49 @@ function _conciDemoraOptionDescription(option) {
     const label = String(option.label || '');
     const idx = label.indexOf(' — ');
     return idx >= 0 ? label.slice(idx + 3).trim() : '';
+}
+
+const _CONCI_DEMORA_MAX_CODES = 5;
+
+function _conciParseDemoraCodes(raw) {
+    const seen = new Set();
+    return String(raw || '')
+        .split(/[,;|\n]+/)
+        .map(value => value.trim().toUpperCase())
+        .filter(code => code && !seen.has(code) && seen.add(code));
+}
+
+function _conciDemoraDescriptionsForCodes(codes, options) {
+    const optionByCode = new Map((options || []).map(option => [String(option.codigo || '').toUpperCase(), option]));
+    return (codes || [])
+        .map(code => {
+            const normalized = String(code || '').toUpperCase();
+            let option = optionByCode.get(normalized);
+            if (!option && normalized.startsWith(_CONCI_DEMORA_PREFIX_CODE)) {
+                option = _conciDemoraPrefixVariants(options || [], normalized)
+                    .find(candidate => candidate.codigo === normalized);
+            }
+            return _conciDemoraOptionDescription(option);
+        })
+        .filter(Boolean)
+        .join('; ');
+}
+
+function _conciSyncDemoraObservaciones(td, codes, options) {
+    const tr = td && td.closest('tr');
+    const obsCell = tr && Array.from(tr.querySelectorAll('td[data-col]'))
+        .find(cell => _conciIsObservacionesColumn(cell.dataset.col));
+    if (!obsCell || obsCell.classList.contains('conci-cell-active')) return;
+    const description = _conciDemoraDescriptionsForCodes(codes, options);
+    // No se usa _conciCommitCellRaw aquí: ese método dispara un guardado que
+    // cierra los demás editores de la fila. Mientras el combo múltiple sigue
+    // abierto sólo dejamos ambas celdas como borrador; el autoguardado de la
+    // fila las persiste juntas con keepEditorsOpen.
+    _conciStageCellDraft(obsCell, description);
+    obsCell.dataset.raw = description;
+    obsCell.textContent = description;
+    obsCell.title = description || 'Clic para editar';
+    _conciBroadcastCellInput(obsCell, description);
 }
 
 function _conciNormalizeManifestType(value) {
@@ -23849,6 +23951,12 @@ function _conciActivateAeronaveEditor(td, currentRaw) {
     let currentMatches = [];
 
     const positionSuggest = () => {
+        // Si una actualización externa retiró el editor del DOM, no dejar el
+        // panel huérfano en (0, 0), que era la ventana vista en la esquina.
+        if (!input.isConnected) {
+            suggest.classList.add('d-none');
+            return;
+        }
         const r = input.getBoundingClientRect();
         suggest.style.left = `${Math.round(r.left)}px`;
         suggest.style.top = `${Math.round(r.bottom + 4)}px`;
@@ -24020,12 +24128,13 @@ function _conciDemoraFilterOptions(options, query) {
     return options.filter(option => option.search.includes(q)).slice(0, 60);
 }
 
-// Editor de la columna CÓDIGO DEMORA: combobox con autocompletado contra
-// public.catalogo_demoras, filtrado por la dirección de la fila. Se guarda sólo
-// el `codigo` (igual que antes) y no se admiten códigos fuera del catálogo.
+// Editor multiselección de CÓDIGO DEMORA: admite hasta cinco códigos del
+// catálogo y mantiene OBSERVACIONES sincronizada con sus descripciones.
 function _conciActivateDemoraCodeEditor(td, currentRaw) {
     const options = _conciDemoraAllOptions();
-    const code = String(currentRaw || '').trim().toUpperCase();
+    const originalCodes = _conciParseDemoraCodes(currentRaw);
+    let selectedCodes = originalCodes.slice(0, _CONCI_DEMORA_MAX_CODES);
+    const code = selectedCodes.join(', ');
     const optionByCode = new Map(options.map(option => [option.codigo, option]));
 
     const input = document.createElement('input');
@@ -24033,7 +24142,7 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
     input.className = 'form-control form-control-sm conci-cell-input';
     input.autocomplete = 'off';
     input.spellcheck = false;
-    input.placeholder = 'Código o causa…';
+    input.placeholder = 'Hasta 5 códigos…';
     input.value = code;
 
     td.classList.add('conci-cell-active');
@@ -24080,8 +24189,8 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
             suggest.innerHTML = '<div class="conci-aeronave-suggest-empty">Catálogo de demoras no disponible</div>';
         } else {
             suggest.innerHTML = currentMatches.length ? currentMatches.map((option, i) => `
-                <div class="conci-aeronave-suggest-item" data-idx="${i}">
-                    <span class="conci-aeronave-suggest-icon"><i class="fas fa-clock"></i></span>
+                <div class="conci-aeronave-suggest-item${selectedCodes.includes(option.codigo) ? ' conci-aeronave-suggest-active' : ''}" data-idx="${i}">
+                    <span class="conci-aeronave-suggest-icon"><i class="fas ${selectedCodes.includes(option.codigo) ? 'fa-check-square' : 'fa-square'}"></i></span>
                     <span class="conci-demora-suggest-body">
                         <span class="conci-aeronave-suggest-name">${_conciAeronaveHighlight(option.label, q)}</span>
                         ${option.detalle ? `<span class="conci-demora-suggest-sub">${_conciCatalogEsc(option.detalle)}</span>` : ''}
@@ -24092,20 +24201,37 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
 
         positionSuggest();
         suggest.classList.remove('d-none');
-        setActive(-1);
+        activeIndex = -1;
         suggest.addEventListener('mousedown', onSuggestMouseDown);
         window.addEventListener('scroll', positionSuggest, true);
         window.addEventListener('resize', positionSuggest);
     };
 
-    const pickMatch = (option) => { input.value = option.codigo; };
+    const pickMatch = (option) => {
+        const existing = selectedCodes.indexOf(option.codigo);
+        if (existing >= 0) {
+            selectedCodes.splice(existing, 1);
+        } else if (selectedCodes.length < _CONCI_DEMORA_MAX_CODES) {
+            selectedCodes.push(option.codigo);
+        } else {
+            if (typeof showNotification === 'function') {
+                showNotification(`Sólo se permiten ${_CONCI_DEMORA_MAX_CODES} códigos de demora por registro.`, 'warning');
+            }
+            return;
+        }
+        input.value = selectedCodes.join(', ');
+        _conciStageCellDraft(td, input.value);
+        _conciSyncDemoraObservaciones(td, selectedCodes, options);
+        _conciBroadcastCellInput(td, input.value);
+        renderSuggest('');
+    };
 
     function onSuggestMouseDown(event) {
         const item = event.target.closest('.conci-aeronave-suggest-item');
         if (!item) return;
         event.preventDefault(); // evita el blur del input antes de procesar el clic
         const option = currentMatches[parseInt(item.dataset.idx, 10)];
-        if (option) { pickMatch(option); closeEditor(true, false); }
+        if (option) pickMatch(option);
     }
 
     // Acepta el código exacto, la etiqueta completa "CÓDIGO — causa" y, si lo
@@ -24142,8 +24268,9 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
             _conciCommitCellRaw(td, typed, move, typed);
             return;
         }
-        const resolved = resolveInput(input.value);
-        if (!resolved.ok) {
+        const typedParts = _conciParseDemoraCodes(input.value);
+        const resolvedParts = typedParts.map(part => resolveInput(part));
+        if (typedParts.length > _CONCI_DEMORA_MAX_CODES || resolvedParts.some(resolved => !resolved.ok)) {
             // Código inexistente: se descarta y la celda vuelve a su valor previo.
             _conciCommitCellRaw(td, code, move, code);
             td.classList.add('conci-cell-invalid-code');
@@ -24159,29 +24286,34 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
         // siguiente en la tabla, así que si el foco avanza hacia allá (Tab/
         // Enter), su editor se abre ya con este texto en vez de perderlo por
         // el blur forzado que dispararía pisarlo después de abierto.
-        if (resolved.codigo && resolved.option) {
-            const description = _conciDemoraOptionDescription(resolved.option);
-            const tr = td.closest('tr');
-            const obsCell = tr && Array.from(tr.querySelectorAll('td[data-col]'))
-                .find(cell => _conciIsObservacionesColumn(cell.dataset.col));
-            if (description && obsCell && !obsCell.classList.contains('conci-cell-active')) {
-                const obsCurrent = _conciNormalizeEditableCellText(
-                    obsCell.dataset.pendingRaw ?? obsCell.dataset.raw ?? obsCell.textContent
-                );
-                if (!obsCurrent) _conciCommitCellRaw(obsCell, description, undefined, description);
-            }
-        }
-
-        _conciCommitCellRaw(td, resolved.codigo, move, resolved.codigo);
-        if (resolved.option) td.title = resolved.option.label;
+        selectedCodes = Array.from(new Set(resolvedParts.map(resolved => resolved.codigo).filter(Boolean)));
+        const joinedCodes = selectedCodes.join(', ');
+        _conciSyncDemoraObservaciones(td, selectedCodes, options);
+        _conciCommitCellRaw(td, joinedCodes, move, joinedCodes);
+        td.title = selectedCodes.map(selected => optionByCode.get(selected)?.label || selected).join('\n');
     };
     td._conciCloseEditor = closeEditor;
 
     // No se fuerza mayúsculas al teclear (movería el cursor al final): el filtrado
     // es insensible a mayúsculas y el valor se normaliza al confirmar.
-    input.addEventListener('input', () => renderSuggest(input.value));
-    input.addEventListener('focus', () => { renderSuggest(input.value); input.select(); });
+    input.addEventListener('input', () => renderSuggest(input.value.includes(',') ? input.value.split(',').pop() : input.value));
+    input.addEventListener('focus', () => {
+        renderSuggest('');
+        try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) { /* sin soporte */ }
+    });
     input.addEventListener('keydown', event => {
+        const joinedSelection = selectedCodes.join(', ');
+        const caretAtEnd = input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+        if (event.key.length === 1 && selectedCodes.length
+            && selectedCodes.length < _CONCI_DEMORA_MAX_CODES
+            && input.value === joinedSelection && caretAtEnd) {
+            // Permite escribir inmediatamente el siguiente código sin borrar
+            // ni pegarlo al anterior: "AAA" + "A" pasa a "AAA, A".
+            event.preventDefault();
+            input.value = `${joinedSelection}, ${event.key}`;
+            renderSuggest(event.key);
+            return;
+        }
         if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
             // Igual que en el editor de AERONAVE: las flechas sólo navegan
             // entre celdas y nunca confirman una sugerencia.
@@ -24204,7 +24336,7 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
     input.addEventListener('blur', () => closeEditor(true, false));
 
     input.focus();
-    input.select();
+    try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) { /* sin soporte */ }
 }
 
 function _conciIsOperationTypeColumn(column) {

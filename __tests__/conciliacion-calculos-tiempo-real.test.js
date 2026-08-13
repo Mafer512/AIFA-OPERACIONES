@@ -20,7 +20,7 @@ const calculationSource = sourceBetween(
 );
 const calculationApi = new Function(
   'document',
-  calculationSource + '; return { _conciHrsCumplidas, _conciPuntualidad, _conciRenderHrsCumplidasCell, _conciRenderPuntualidadCell };'
+  calculationSource + '; return { _conciHrsCumplidas, _conciPuntualidad, _conciDemoraMinutos, _conciDemoraHorasMinutos, _conciRenderDemoraMinutosCell, _conciRenderHrsCumplidasCell, _conciRenderPuntualidadCell };'
 )(document);
 
 const refreshSource = sourceBetween(
@@ -35,7 +35,7 @@ const shouldPersistCalculatedColumn = new Function(
 )();
 const refreshRow = new Function(
   '_conciHrsCumplidas', '_conciPuntualidad',
-  '_conciRenderHrsCumplidasCell', '_conciRenderPuntualidadCell',
+  '_conciRenderHrsCumplidasCell', '_conciRenderPuntualidadCell', '_conciDemoraMinutos', '_conciRenderDemoraMinutosCell',
   '_conciEditFallbackYear',
   refreshSource + '; return _conciRefreshCalculatedCellsForRow;'
 )(
@@ -43,6 +43,8 @@ const refreshRow = new Function(
   calculationApi._conciPuntualidad,
   calculationApi._conciRenderHrsCumplidasCell,
   calculationApi._conciRenderPuntualidadCell,
+  calculationApi._conciDemoraMinutos,
+  calculationApi._conciRenderDemoraMinutosCell,
   2026
 );
 
@@ -66,6 +68,7 @@ describe('calculos en tiempo real de Conciliacion > Manifiestos', () => {
     'TOTAL EXENTOS',
     'PAX QUE PAGAN TUA',
     'KG DE CARGA TOTAL',
+    'DEMORA +- 15 MIN.',
   ])('reconoce %s como columna calculada', (column) => {
     expect(isCalculatedColumn(column)).toBe(true);
   });
@@ -74,6 +77,7 @@ describe('calculos en tiempo real de Conciliacion > Manifiestos', () => {
     'TOTAL EXENTOS',
     'PAX QUE PAGAN TUA',
     'KG DE CARGA TOTAL',
+    'DEMORA +- 15 MIN.',
   ])('persiste %s aunque sea una columna calculada', (column) => {
     expect(shouldPersistCalculatedColumn(column)).toBe(true);
   });
@@ -93,6 +97,37 @@ describe('calculos en tiempo real de Conciliacion > Manifiestos', () => {
     expect(statusCell.textContent).toContain('ANTES');
     expect(statusCell.querySelector('span')).not.toBeNull();
     expect(statusCell.querySelector('span').style.color).toBe('rgb(46, 125, 50)');
+  });
+
+  test('calcula demora con prioridad de SLOT COORDINADO y colorea por tolerancia', () => {
+    expect(calculationApi._conciDemoraMinutos(
+      '12/08/2026 10:00', '12/08/2026 10:20', '12/08/2026 10:40', 2026
+    )).toBe(20);
+    expect(calculationApi._conciDemoraMinutos(
+      '12/08/2026 10:00', '', '12/08/2026 09:50', 2026
+    )).toBe(-10);
+
+    const red = document.createElement('td');
+    calculationApi._conciRenderDemoraMinutosCell(red, 20);
+    expect(red.textContent).toBe('+20');
+    expect(red.style.color).toBe('rgb(198, 40, 40)');
+    expect(red.title).toContain('+20 min');
+
+    const green = document.createElement('td');
+    calculationApi._conciRenderDemoraMinutosCell(green, -15);
+    expect(green.textContent).toBe('-15');
+    expect(green.style.color).toBe('rgb(46, 125, 50)');
+  });
+
+  test('simplifica los minutos del mensaje emergente a horas y minutos', () => {
+    expect(calculationApi._conciDemoraHorasMinutos(1445)).toBe('+24 hr 5 min');
+    expect(calculationApi._conciDemoraHorasMinutos(-125)).toBe('-2 hr 5 min');
+    expect(calculationApi._conciDemoraHorasMinutos(60)).toBe('+1 hr');
+    expect(calculationApi._conciDemoraHorasMinutos(0)).toBe('0 min');
+
+    const cell = document.createElement('td');
+    calculationApi._conciRenderDemoraMinutosCell(cell, 1445);
+    expect(cell.title).toContain('1445 minuto(s) = +24 hr 5 min');
   });
 
   test('recalcula inmediatamente usando el valor que aun se esta capturando', () => {
