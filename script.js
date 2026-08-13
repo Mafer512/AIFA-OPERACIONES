@@ -3865,6 +3865,31 @@ async function rejectOperacionesAccess() {
     try { window.supabaseClient?.auth?.signOut()?.catch(() => { }); } catch (_) {}
 }
 
+// Nombre completo de quien está en sesión, buscado en el mismo orden en todas
+// las rutas: primero la metadata del usuario y, si ahí no está, la tabla
+// profiles. Devuelve '' si no hay ninguno, para que quien llame decida si vale
+// la pena caer al correo.
+//
+// Importa que sea uno solo: este nombre alimenta los avatares de colaboración y
+// también la columna CAPTURÓ, que queda guardada en la base. Cuando cada ruta
+// resolvía el nombre por su cuenta, la de recargar la página se saltaba profiles
+// y terminaba escribiendo el correo en los registros.
+async function _resolverNombreCompleto(user) {
+    if (!user) return '';
+    const deMetadata = String(user.user_metadata?.full_name || '').trim();
+    if (deMetadata) return deMetadata;
+    try {
+        const { data: perfil } = await window.supabaseClient
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single();
+        return String(perfil?.full_name || '').trim();
+    } catch (_) {
+        return '';
+    }
+}
+
 function cacheSupabaseSession(session) {
     if (!session) return;
     try {
@@ -3955,10 +3980,17 @@ async function restoreSessionFromSupabase() {
             return false;
         }
         cacheSupabaseSession(session);
+        // El nombre completo se busca igual que al iniciar sesión: metadata y,
+        // si no está, la tabla profiles. Antes esta ruta -- la que corre al
+        // recargar la página -- se saltaba profiles y guardaba el correo, así
+        // que quien no tuviera el nombre en su metadata aparecía como
+        // "isaac.lopez@aifa.operaciones" en los avatares y, peor, se guardaba
+        // así en la columna CAPTURÓ de cada fila que tocara.
         try {
-            if (!sessionStorage.getItem('user_fullname')) {
-                const fallbackName = session.user?.user_metadata?.full_name || session.user?.email || '';
-                if (fallbackName) sessionStorage.setItem('user_fullname', fallbackName);
+            const guardado = sessionStorage.getItem('user_fullname');
+            if (!guardado || guardado.includes('@')) {
+                const nombre = await _resolverNombreCompleto(session.user);
+                if (nombre) sessionStorage.setItem('user_fullname', nombre);
             }
         } catch (_) { }
         const access = await getOperacionesAccess(session.user);
@@ -4293,18 +4325,8 @@ async function handleLogin(e) {
         if (data.session.refresh_token) sessionStorage.setItem(SESSION_REFRESH_TOKEN, data.session.refresh_token);
         cacheSupabaseSession(data.session);
 
-        // Obtener nombre completo (metadata o tabla profiles)
-        let fullName = data.user.user_metadata?.full_name;
-        if (!fullName) {
-            try {
-                const { data: profile } = await window.supabaseClient
-                    .from('profiles')
-                    .select('full_name')
-                    .eq('id', data.user.id)
-                    .single();
-                if (profile) fullName = profile.full_name;
-            } catch (_) { }
-        }
+        // Nombre completo: misma resolución que al restaurar la sesión.
+        const fullName = await _resolverNombreCompleto(data.user);
         sessionStorage.setItem('user_fullname', fullName || data.user.email);
 
         // Obtener rol y permisos del usuario
@@ -19341,7 +19363,15 @@ function _conciCurrentUserDisplayName() {
 function _conciInitialsFromName(name) {
     const clean = String(name || '').trim();
     if (!clean) return '';
-    if (clean.includes('@')) return clean.split('@')[0].slice(0, 2).toUpperCase();
+    // Un correo no debería llegar hasta aquí -- el nombre completo se resuelve
+    // en _resolverNombreCompleto -- pero si el perfil no lo tiene, se saca una
+    // inicial por cada parte del buzón en vez de las dos primeras letras:
+    // "isaac.lopez@..." da "IL", no "IS".
+    if (clean.includes('@')) {
+        const partes = clean.split('@')[0].split(/[._-]+/).filter(Boolean);
+        if (partes.length > 1) return partes.slice(0, 3).map(p => p[0]).join('').toUpperCase();
+        return (partes[0] || clean).slice(0, 2).toUpperCase();
+    }
     const words = clean.split(/\s+/).filter(Boolean);
     if (words.length === 1) {
         return words[0].length <= 4 ? words[0].toUpperCase() : words[0].slice(0, 2).toUpperCase();
