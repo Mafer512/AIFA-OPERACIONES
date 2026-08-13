@@ -55,7 +55,11 @@
             function recover(hard) {
                 del('aifa.boot.fails');
                 purge(hard).then(function () {
-                    location.replace(location.origin + location.pathname);
+                    // Conservar la ruta solicitada durante una recuperación de
+                    // arranque. Sólo #recover es una orden técnica y no debe
+                    // volver a abrirse como una sección de la aplicación.
+                    var targetHash = location.hash === '#recover' ? '' : location.hash;
+                    location.replace(location.origin + location.pathname + location.search + targetHash);
                 });
             }
 
@@ -1559,7 +1563,18 @@ FF
 
 <body class="navdeck-mode">
 
-    <div id="login-screen" class="login-screen">
+    <!-- Estado de arranque independiente del loader de datos. Otros módulos
+         pueden ocultar #global-loader, pero nunca deben dejar la autenticación
+         sin una pantalla visible. -->
+    <div id="auth-boot-screen" role="status" aria-live="polite" aria-busy="true"
+         style="position:fixed;inset:0;z-index:5000;display:flex;align-items:center;justify-content:center;background:#f4f7fb;color:#17345f;font-family:Arial,sans-serif">
+        <div style="text-align:center">
+            <i class="fas fa-plane" aria-hidden="true" style="font-size:2rem;color:#0d6efd;margin-bottom:14px"></i>
+            <div style="font-size:1rem;font-weight:700">Restaurando sesión...</div>
+        </div>
+    </div>
+
+    <div id="login-screen" class="login-screen hidden">
         <img id="login-bg-img" class="login-bg-img" src="images/Slot.jpeg" alt="" aria-hidden="true" draggable="false"
              loading="eager" fetchpriority="high" decoding="async"
              onload="this.classList.add('loaded')" />
@@ -36112,7 +36127,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260811-conci-teclado-sin-cambios" defer></script>
+    <script src="script.js?v=20260812-restaura-navegacion-v2" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>
@@ -36740,14 +36755,14 @@ FF
         <span>Rotar</span>
     </button>
     <!-- Loader Global -->
-    <div id="global-loader" class="global-loader hidden" role="alert" aria-live="assertive" aria-busy="true">
+    <div id="global-loader" class="global-loader" role="alert" aria-live="assertive" aria-busy="true">
         <div class="loader-content">
             <div class="plane-orbit">
                 <span class="orbit-ring"></span>
                 <span class="plane-icon"><i class="fas fa-plane" aria-hidden="true"></i></span>
                 <img src="images/logo_aifa.jpg" alt="AIFA" class="loader-aifa-logo" />
             </div>
-            <div class="loader-text" id="global-loader-text">Cargando...</div>
+            <div class="loader-text" id="global-loader-text">Restaurando sesión...</div>
         </div>
     </div>
 
