@@ -22265,6 +22265,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         // Repone las capturas que quedaron pendientes de guardar y las reintenta.
         _conciRestaurarBorradores();
         _conciRepintarEstelas();
+        _conciMarcarFilasSinCaptura();
     });
 
     // Encabezado fijo vía CSS (position:sticky). Sin manipulación de transform
@@ -25291,6 +25292,7 @@ function _conciStageCellDraft(td, rawValue) {
 
 function _conciQueueAutoSave(tr) {
     if (!tr || !tr.isConnected || !_conciEditMode || !_conciCanCurrentUserEdit()) return;
+    if (tr.dataset.conciDescartada === '1') return;
     if (tr._conciAutoSaveTimer) clearTimeout(tr._conciAutoSaveTimer);
     tr._conciAutoSaveTimer = setTimeout(() => {
         tr._conciAutoSaveTimer = null;
@@ -25410,6 +25412,62 @@ function _conciBorradorQuitarCelda(td) {
 
 // Una fila nueva que ya se guardo cambia de clave (pasa a tener id): su borrador
 // anterior deja de corresponder a nada y hay que retirarlo.
+// Borra el borrador local de una fila. Se usa al descartarla: si no, la fila
+// se repondria sola en la siguiente carga (ver _conciRestaurarFilasNuevas).
+const _CONCI_COLUMNAS_IDENTIDAD = [
+    'AEROLINEA', 'MATRICULA', '# DE VUELO', 'TIPO DE MANIFIESTO',
+    'AERONAVE', 'DESTINO / ORIGEN', 'TOTAL PAX',
+];
+
+// ¿Esta fila no tiene nada de lo que identifica un vuelo?
+//
+// Una fila casi en blanco asusta: no se sabe si alguien la acaba de agregar o
+// si perdio sus datos. Marcarlas quita esa duda de encima y deja a mano donde
+// comprobarlo: el historial de la fila dice si fue un alta o si alguien vacio
+// campos, con nombre y hora.
+//
+// Fecha y mes no cuentan: los pone el sistema al crear la fila.
+function _conciFilaSinCaptura(tr) {
+    if (!tr) return false;
+    const celdas = [...tr.querySelectorAll('td[data-col]')];
+    if (!celdas.length) return false;
+    let miradas = 0;
+    for (const td of celdas) {
+        const clave = _conciSummaryColumnKey(td.dataset.col);
+        if (!_CONCI_COLUMNAS_IDENTIDAD.some(c => _conciSummaryColumnKey(c) === clave)) continue;
+        miradas++;
+        if (_conciNormalizeEditableCellText(td.dataset.raw ?? td.textContent)) return false;
+    }
+    return miradas > 0;
+}
+
+function _conciMarcarFilasSinCaptura() {
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (!tbody) return 0;
+    let cuantas = 0;
+    tbody.querySelectorAll('tr[data-row-id]').forEach(tr => {
+        const vacia = _conciFilaSinCaptura(tr);
+        tr.classList.toggle('conci-fila-sin-captura', vacia);
+        if (!vacia) return;
+        cuantas++;
+        if (!tr.title) {
+            tr.title = 'Fila sin capturar. Abre su historial (icono de reloj) para ver quien la creo y cuando: si dice ALTA, es una fila nueva; si aparecen campos vaciados, ahi se ve quien lo hizo.';
+        }
+    });
+    return cuantas;
+}
+function _conciBorradorOlvidarFila(tr) {
+    if (!tr) return;
+    const clave = tr.dataset.conciBorradorClave
+        || (tr.dataset.rowId ? `id:${String(tr.dataset.rowId).trim()}` : '');
+    if (!clave) return;
+    const datos = _conciBorradoresLeer();
+    if (!datos[clave]) return;
+    delete datos[clave];
+    _conciBorradoresEscribir(datos);
+    _conciActualizarIndicadorBorradores();
+}
+
 function _conciBorradorTrasladarFilaNueva(tr, nuevoId) {
     const claveVieja = tr?.dataset?.conciBorradorClave;
     if (!claveVieja) return;
@@ -26870,6 +26928,8 @@ async function _conciSaveVirtualAirlineOverride(client, tr, value) {
 
 async function _conciAutoSaveRow(tr, options = {}) {
     if (!tr || !tr.isConnected || !_conciEditMode || !_conciCanCurrentUserEdit()) return;
+    // La fila se descarto mientras esto esperaba su turno: no debe crearse.
+    if (tr.dataset.conciDescartada === '1') return;
     if (tr._conciAutoSavePromise) {
         tr._conciAutoSaveQueued = true;
         return tr._conciAutoSavePromise;
@@ -27159,6 +27219,52 @@ async function _conciAutoSaveRow(tr, options = {}) {
     return tr._conciAutoSavePromise;
 }
 
+// Descarta una fila nueva. Quitarla de la pantalla no basta.
+//
+// Antes esto era un tr.remove() y nada mas. En cuanto se captura algo en la
+// fila, el autoguardado queda armado a 400 ms; si se borraba antes de que
+// terminara, la fila desaparecia de la vista pero el guardado llegaba igual y
+// la creaba en la base. Reaparecia -- casi vacia, con lo poco que se hubiera
+// alcanzado a capturar -- en la siguiente carga. Ese es el origen de las filas
+// en blanco, y por eso "no se eliminaba" y habia que volver a borrarla.
+//
+// Ahora se cierran las cuatro puertas por las que la fila podia volver:
+//   1. Se marca la fila como descartada, para que ningun guardado siga.
+//   2. Se cancela el guardado que estuviera en cola.
+//   3. Se olvida su borrador local, o se repondria al recargar.
+//   4. Se espera a lo que ya iba en camino y, si alcanzo a crearla, se borra
+//      de la base.
+async function _conciDescartarFilaNueva(tr) {
+    if (!tr) return;
+    tr.dataset.conciDescartada = '1';
+    if (tr._conciAutoSaveTimer) { clearTimeout(tr._conciAutoSaveTimer); tr._conciAutoSaveTimer = null; }
+    tr._conciAutoSaveQueued = false;
+    if (typeof _conciBorradorOlvidarFila === 'function') _conciBorradorOlvidarFila(tr);
+
+    // Un guardado ya en vuelo no se puede cancelar: se espera y se comprueba
+    // si alcanzo a crear la fila.
+    try { await tr._conciAutoSavePromise; } catch (_) { /* fallo: entonces no se creo */ }
+
+    const rowId = String(tr.dataset.rowId || '').trim();
+    tr.remove();
+    if (!rowId) return;
+
+    try {
+        let client = window.supabaseClient;
+        if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
+        if (!client) throw new Error('No se pudo inicializar el cliente de Supabase.');
+        const result = await client.from('Conciliación Manifiestos').delete().eq('id', rowId);
+        if (result.error) throw result.error;
+        _conciRenderCache.clear();
+        _conciRenderedKey = '';
+    } catch (error) {
+        console.warn('[Conciliación] la fila descartada alcanzó a guardarse y no se pudo borrar:', error);
+        if (typeof showNotification === 'function') {
+            showNotification('La fila alcanzó a guardarse y no se pudo eliminar. Actualiza la tabla y bórrala desde ahí.', 'error');
+        }
+    }
+}
+
 function _conciBindRowActions() {
     const table = document.getElementById('table-conci-manifiestos');
     const tbody = table ? table.querySelector('tbody') : null;
@@ -27172,7 +27278,8 @@ function _conciBindRowActions() {
         if (!_conciEditMode || !_conciCanCurrentUserEdit()) return;
         const tr = button.closest('tr');
         if (button.classList.contains('conci-delete-new-row')) {
-            tr?.remove();
+            button.disabled = true;
+            await _conciDescartarFilaNueva(tr);
             return;
         }
         if (!_conciCanCurrentUserManage()) return;
