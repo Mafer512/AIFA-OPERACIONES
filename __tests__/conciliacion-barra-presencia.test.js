@@ -42,6 +42,7 @@ const api = new Function('document', 'presencia', 'estado', `
   ${extraer('_conciNormalizeEditableCellText')}
   // La burbuja propia toma su celda de aquí, no del mapa de cursores ajenos.
   let _conciMiFocoActual = { rowId: '', col: '' };
+  ${extraer('_conciNombreDefinitivo')}
   ${extraer('_conciPresenciaConectados')}
   ${extraer('_conciVueloDeFila')}
   ${extraer('_conciTextoPresencia')}

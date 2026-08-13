@@ -24427,17 +24427,87 @@ function _conciVigilarConexionLive() {
     window.addEventListener('focus', revisar);
 }
 
+// ── Identidad de quien esta conectado ───────────────────────────────────────
+//
+// Aparecian hasta tres burbujas de la misma persona: una con su nombre, otra
+// con su correo y otra que decia "Usuario". Tres causas distintas:
+//
+//   • El id de cliente se generaba nuevo en cada carga de la pagina. Al
+//     recargar, la presencia anterior seguia viva en el servidor hasta que
+//     caducaba, asi que uno se veia a si mismo dos veces. Ahora se guarda en
+//     sessionStorage: la misma pestana reusa su id y el servidor reemplaza su
+//     entrada en vez de agregar otra.
+//
+//   • La barra agrupaba por NOMBRE. Si una conexion se anuncio con el correo
+//     y otra con el nombre completo, salian como dos personas. Ahora se agrupa
+//     por correo, que es lo unico estable.
+//
+//   • El nombre se leia una sola vez al conectar y, si todavia no estaba
+//     resuelto, se quedaba en "Usuario" para siempre. Ahora se reintenta en
+//     cada latido hasta conseguir el de verdad, y al conseguirlo se reanuncia.
+function _conciIdClienteVivo() {
+    if (_conciLiveClientId) return _conciLiveClientId;
+    try {
+        const guardado = sessionStorage.getItem('aifa-conci-live-client-id');
+        if (guardado) return guardado;
+    } catch (_) { /* sin almacenamiento: se genera uno volatil */ }
+    const nuevo = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`;
+    try { sessionStorage.setItem('aifa-conci-live-client-id', nuevo); } catch (_) { }
+    return nuevo;
+}
+
+// Correo de quien esta en sesion: identidad estable, no cambia aunque el
+// nombre tarde en resolverse.
+function _conciCorreoUsuario() {
+    try {
+        return String(sessionStorage.getItem(SESSION_USER) || '').trim().toLowerCase();
+    } catch (_) { return ''; }
+}
+
+// ¿Es un nombre de verdad, o un relleno? Un correo o "Usuario" significan que
+// el perfil todavia no llego.
+function _conciNombreDefinitivo(nombre) {
+    const limpio = String(nombre || '').trim();
+    if (!limpio || limpio === 'Usuario') return false;
+    return !limpio.includes('@');
+}
+
+function _conciAplicarIdentidadVivo() {
+    const nombre = _conciCurrentUserDisplayName() || '';
+    _conciLiveDisplayName = nombre || _conciCorreoUsuario() || 'Usuario';
+    _conciLiveColor = _conciColorForUser(_conciLiveDisplayName);
+}
+
+// Si el nombre mejora (llego el perfil), se reanuncia para que las demas
+// pantallas dejen de ver el correo o "Usuario".
+function _conciRevisarIdentidadVivo() {
+    if (_conciNombreDefinitivo(_conciLiveDisplayName)) return;
+    const anterior = _conciLiveDisplayName;
+    _conciAplicarIdentidadVivo();
+    if (_conciLiveDisplayName === anterior) return;
+    if (!_conciLiveChannel || !_conciLiveReady) return;
+    try {
+        _conciLiveChannel.track({
+            user: _conciLiveDisplayName,
+            color: _conciLiveColor,
+            email: _conciCorreoUsuario(),
+            rowId: null,
+            col: null,
+        });
+    } catch (_) { /* señalización en vivo, no crítica */ }
+    _conciRenderBarraPresencia();
+}
+
 async function _conciInitLiveCollab() {
     if (_conciLiveChannel) return;
     let client = window.supabaseClient;
     if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
     if (!client) { setTimeout(_conciInitLiveCollab, 1500); return; }
 
-    _conciLiveClientId = _conciLiveClientId || (
-        (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
-    );
-    _conciLiveDisplayName = _conciCurrentUserDisplayName() || 'Usuario';
-    _conciLiveColor = _conciColorForUser(_conciLiveDisplayName);
+    _conciLiveClientId = _conciIdClienteVivo();
+    _conciAplicarIdentidadVivo();
 
     const channel = client.channel('conci-manifiestos-live', {
         config: { presence: { key: _conciLiveClientId }, broadcast: { self: false, ack: false } }
@@ -24456,7 +24526,16 @@ async function _conciInitLiveCollab() {
             _conciIniciarLatidoFoco();
             _conciVigilarConexionLive();
             try {
-                await channel.track({ user: _conciLiveDisplayName, color: _conciLiveColor, rowId: null, col: null });
+                await channel.track({
+                    user: _conciLiveDisplayName,
+                    color: _conciLiveColor,
+                    // Identidad estable: el nombre puede tardar en resolverse
+                    // y no sirve para saber si dos conexiones son la misma
+                    // persona.
+                    email: _conciCorreoUsuario(),
+                    rowId: null,
+                    col: null,
+                });
             } catch (_) { /* ignora: sólo afecta la señalización en vivo, no el guardado real */ }
             // Se reanuncia la celda propia: tras una reconexión, las demás
             // pantallas ya habían dado este cursor por perdido.
@@ -24761,6 +24840,8 @@ function _conciIniciarLatidoFoco() {
         if (_conciMiFocoActual.rowId && _conciMiFocoActual.col) {
             _conciEnviarFoco(_conciMiFocoActual.rowId, _conciMiFocoActual.col);
         }
+        // Si al conectar no estaba resuelto el nombre, se vuelve a intentar.
+        _conciRevisarIdentidadVivo();
         // Aunque no haya cursor propio, hay que caducar los ajenos.
         _conciRepintarFocos();
     }, _CONCI_LATIDO_MS);
@@ -24794,7 +24875,12 @@ function _conciPresenciaConectados() {
         (state[clave] || []).forEach(entrada => {
             if (!entrada) return;
             const nombre = String(entrada.user || 'Usuario').trim();
-            const previo = porPersona.get(nombre);
+            // Se agrupa por correo: dos conexiones de la misma persona pueden
+            // haberse anunciado con nombres distintos (el correo antes de que
+            // llegara el perfil, el nombre completo despues) y saldrian como
+            // dos personas.
+            const identidad = String(entrada.email || '').trim().toLowerCase() || nombre.toLowerCase();
+            const previo = porPersona.get(identidad);
             // La celda ya no viaja en la presencia (era demasiado caro
             // reanunciarla en cada movimiento): sale del mapa de cursores.
             const esYo = clave === _conciLiveClientId;
@@ -24803,9 +24889,13 @@ function _conciPresenciaConectados() {
             const foco = esYo ? _conciMiFocoActual : _conciFocoRemotoPorCliente.get(clave);
             const editando = foco?.col ? String(foco.col) : (entrada.col ? String(entrada.col) : '');
             // Si la misma persona tiene dos pestañas, manda la que está capturando.
-            if (!previo || (!previo.editando && editando)) {
-                porPersona.set(nombre, {
-                    nombre,
+            const mejoraNombre = !!previo && !_conciNombreDefinitivo(previo.nombre)
+                && _conciNombreDefinitivo(nombre);
+            if (!previo || (!previo.editando && editando) || mejoraNombre) {
+                porPersona.set(identidad, {
+                    nombre: _conciNombreDefinitivo(nombre)
+                        ? nombre
+                        : (_conciNombreDefinitivo(previo?.nombre) ? previo.nombre : nombre),
                     color: entrada.color || _conciColorForUser(nombre),
                     editando,
                     // La fila permite decir en qué vuelo está trabajando, no

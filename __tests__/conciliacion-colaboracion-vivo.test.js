@@ -63,6 +63,7 @@ const api = new Function('document', 'window', 'setTimeout', 'clearTimeout', 'pr
   };
   // La burbuja propia toma su celda de aquí, no del mapa de cursores ajenos.
   let _conciMiFocoActual = { rowId: '', col: '' };
+  ${extraer('_conciNombreDefinitivo')}
   ${extraer('_conciPresenciaConectados')}
   // La barra se actualiza en sitio y compara contra lo último pintado para no
   // parpadear; la firma tiene que existir en el arnés.
