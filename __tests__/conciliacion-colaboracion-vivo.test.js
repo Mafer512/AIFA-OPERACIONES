@@ -54,6 +54,9 @@ const api = new Function('document', 'window', 'setTimeout', 'clearTimeout', 'pr
   let _conciLiveDisplayName = 'Isaac Lopez';
   let _conciLiveColor = '#3949ab';
   let _conciLiveReady = true;
+  // El detalle "capturando X" ya no viaja en la presencia (reanunciarla en cada
+  // celda era la operación más cara del canal): sale del mapa de cursores.
+  let _conciFocoRemotoPorCliente = new Map();
   const _conciLiveChannel = {
     presenceState: () => presencia.state,
     send: (m) => enviados.push(m),

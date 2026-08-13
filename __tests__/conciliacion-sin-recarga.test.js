@@ -59,12 +59,16 @@ const api = new Function('document', 'recalculadas', 'enviados', `
   ${extraer('_conciFindLiveCell')}
   ${extraer('_conciAplicarCambioRemoto')}
   ${extraer('_conciRecargaYaCubierta')}
+  // El anuncio de cursor se agrupa (throttle) y delega el envío real en
+  // _conciEnviarFoco; las pruebas comprueban el envío, no el temporizador.
+  let _conciFocoThrottleTimer = null;
   ${extraer('_conciBroadcastFoco')}
+  ${extraer('_conciEnviarFoco')}
   ${extraer('_conciCursoresVigentes')}
   ${extraer('_conciRepintarFocos')}
   ${extraer('_conciHandleRemoteFoco')}
   return {
-    _conciAplicarCambioRemoto, _conciRecargaYaCubierta, _conciBroadcastFoco,
+    _conciAplicarCambioRemoto, _conciRecargaYaCubierta, _conciBroadcastFoco, _conciEnviarFoco,
     _conciHandleRemoteFoco,
     marcarParche: () => { _conciUltimoParcheTs = Date.now(); },
     envejecerParche: () => { _conciUltimoParcheTs = Date.now() - 10000; },
@@ -151,8 +155,8 @@ describe('la recarga completa se evita', () => {
 });
 
 describe('foco inmediato', () => {
-  test('abrir una celda se anuncia al instante por broadcast', () => {
-    api._conciBroadcastFoco('42', 'TOTAL PAX');
+  test('abrir una celda se anuncia por broadcast, no por presencia', () => {
+    api._conciEnviarFoco('42', 'TOTAL PAX');
     expect(enviados).toHaveLength(1);
     expect(enviados[0]).toMatchObject({
       event: 'cell-focus',
@@ -161,8 +165,17 @@ describe('foco inmediato', () => {
   });
 
   test('cerrarla anuncia que quedó libre', () => {
-    api._conciBroadcastFoco(null, null);
+    api._conciEnviarFoco('', '');
     expect(enviados[0].payload).toMatchObject({ rowId: '', col: '' });
+  });
+
+  test('moverse rápido entre celdas no manda un mensaje por cada una', () => {
+    // Con las flechas se disparaba un mensaje por celda y se agotaba el
+    // presupuesto del canal, encolando justo los avisos urgentes.
+    api._conciBroadcastFoco('42', 'TOTAL PAX');
+    api._conciBroadcastFoco('42', 'OBSERVACIONES');
+    api._conciBroadcastFoco('43', 'TOTAL PAX');
+    expect(enviados).toHaveLength(0);   // todavía agrupando
   });
 
   test('el resaltado ajeno aparece de inmediato', () => {

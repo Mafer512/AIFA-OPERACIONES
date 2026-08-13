@@ -53,7 +53,9 @@ const api = new Function('document', 'enviados', `
   ${extraer('_conciRepintarFocos')}
   ${extraer('_conciApplyRemotePresenceHighlights')}
   ${extraer('_conciCellStillClaimed')}
+  let _conciFocoThrottleTimer = null;
   ${extraer('_conciBroadcastFoco')}
+  ${extraer('_conciEnviarFoco')}
   ${extraer('_conciHandleRemoteFoco')}
   return {
     _conciRepintarFocos, _conciApplyRemotePresenceHighlights, _conciHandleRemoteFoco,

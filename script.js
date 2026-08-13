@@ -24309,9 +24309,11 @@ function _conciBeginCellPresence(td) {
     const tr = td.closest('tr');
     const rowId = tr ? String(tr.dataset.rowId || '').trim() : '';
     if (!rowId) return;
-    _conciSetPresenceCell(rowId, td.dataset.col || '');
-    // presence.track lo reparte el servidor agrupado y tarda; el broadcast
-    // llega al instante y es lo que hace que el resaltado se sienta inmediato.
+    // Solo broadcast. Antes esto tambien llamaba a presence.track en cada
+    // celda: el servidor recalculaba la presencia y la difundia a todos los
+    // conectados, la operacion mas cara del canal, por cada movimiento de
+    // cursor. Eso agotaba el presupuesto de mensajes y encolaba justo los
+    // avisos urgentes -- el cursor y los guardados -- que llegaban tarde.
     _conciBroadcastFoco(rowId, td.dataset.col || '');
 }
 
@@ -24407,8 +24409,21 @@ function _conciRecargaYaCubierta() {
 // aparecer. Un broadcast se entrega al instante, asi que el foco se anuncia por
 // los dos caminos: el broadcast pinta ya, y la presencia sigue siendo la fuente
 // de verdad para limpiar cuando alguien cierra la pestana.
+// Moverse rapido con las flechas disparaba un mensaje por celda. Se agrupan
+// los movimientos y se anuncia donde se acabo parando, no cada paso.
+let _conciFocoThrottleTimer = null;
+
 function _conciBroadcastFoco(rowId, col) {
     _conciMiFocoActual = { rowId: rowId ? String(rowId) : '', col: col ? String(col) : '' };
+    if (!_conciLiveChannel || !_conciLiveReady) return;
+    if (_conciFocoThrottleTimer) clearTimeout(_conciFocoThrottleTimer);
+    _conciFocoThrottleTimer = setTimeout(() => {
+        _conciFocoThrottleTimer = null;
+        _conciEnviarFoco(_conciMiFocoActual.rowId, _conciMiFocoActual.col);
+    }, 90);
+}
+
+function _conciEnviarFoco(rowId, col) {
     if (!_conciLiveChannel || !_conciLiveReady) return;
     try {
         _conciLiveChannel.send({
@@ -24553,7 +24568,7 @@ function _conciIniciarLatidoFoco() {
     if (_conciLatidoTimer) return;
     _conciLatidoTimer = setInterval(() => {
         if (_conciMiFocoActual.rowId && _conciMiFocoActual.col) {
-            _conciBroadcastFoco(_conciMiFocoActual.rowId, _conciMiFocoActual.col);
+            _conciEnviarFoco(_conciMiFocoActual.rowId, _conciMiFocoActual.col);
         }
         // Aunque no haya cursor propio, hay que caducar los ajenos.
         _conciRepintarFocos();
@@ -24589,7 +24604,10 @@ function _conciPresenciaConectados() {
             if (!entrada) return;
             const nombre = String(entrada.user || 'Usuario').trim();
             const previo = porPersona.get(nombre);
-            const editando = entrada.col ? String(entrada.col) : '';
+            // La celda ya no viaja en la presencia (era demasiado caro
+            // reanunciarla en cada movimiento): sale del mapa de cursores.
+            const foco = _conciFocoRemotoPorCliente.get(clave);
+            const editando = foco?.col ? String(foco.col) : (entrada.col ? String(entrada.col) : '');
             // Si la misma persona tiene dos pestañas, manda la que está capturando.
             if (!previo || (!previo.editando && editando)) {
                 porPersona.set(nombre, {
