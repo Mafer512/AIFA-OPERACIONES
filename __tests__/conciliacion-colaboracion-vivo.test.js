@@ -175,7 +175,9 @@ describe('quién está conectado', () => {
   test('sin nadie conectado la barra se esconde', () => {
     pintarTabla();
     api._conciRenderBarraPresencia();
-    expect(document.getElementById('conci-presencia').classList.contains('d-none')).toBe(true);
+    const barra = document.getElementById('conci-presencia');
+    expect(barra.classList.contains('d-none')).toBe(false);
+    expect(barra.classList.contains('conci-presencia-vacia')).toBe(true);
   });
 
   test('un nombre con caracteres especiales no se inyecta como HTML', () => {

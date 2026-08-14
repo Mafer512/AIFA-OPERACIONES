@@ -1114,28 +1114,27 @@ FF
         }
         .conci-fecha-mask { font-variant-numeric: tabular-nums; }
         /* ── Colaboración en vivo ──────────────────────────────────────────
-           Quién está en la tabla ahora mismo. El punto verde late mientras el
-           canal está conectado; cada avatar toma el color de esa persona, el
-           mismo con el que se resalta la celda que tiene abierta. */
-        .conci-presencia { display: inline-flex; align-items: center; gap: 3px; flex: none; }
+           Quién está en la tabla ahora mismo. El indicador y los avatares son
+           completamente estáticos para evitar destellos en equipos laptop. */
+        .conci-presencia {
+            display: inline-flex; align-items: center; gap: 3px; flex: none;
+            width: 145px; min-width: 145px; height: 28px; overflow: visible;
+            contain: layout;
+        }
+        /* El espacio se conserva aun sin usuarios. Así, cuando alguien entra o
+           sale, la cabecera no cambia de ancho, no envuelve controles y la
+           página no "brinca" ni parpadea en pantallas de laptop. */
+        .conci-presencia.conci-presencia-vacia { visibility: hidden; pointer-events: none; }
         .conci-presencia-punto {
             width: 7px; height: 7px; border-radius: 50%;
             background: #22c55e; margin-right: 4px; flex: none;
-            animation: conciPresenciaLatido 2.4s ease-in-out infinite;
+            box-shadow: 0 0 0 2px rgba(34,197,94,.14);
         }
-        /* Canal caído: el punto deja de latir en verde y avisa en ámbar. Lo que
+        /* Canal caído: el punto cambia de verde a ámbar. Lo que
            se ve en pantalla puede estar viejo y conviene que se note. */
         .conci-presencia-punto.conci-presencia-punto-caido {
             background: #f0ad4e;
-            animation: conciPresenciaReconectando 1.1s ease-in-out infinite;
-        }
-        @keyframes conciPresenciaReconectando {
-            0%, 100% { opacity: 1; }
-            50% { opacity: .25; }
-        }
-        @keyframes conciPresenciaLatido {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,.55); }
-            50% { box-shadow: 0 0 0 4px rgba(34,197,94,0); }
+            box-shadow: 0 0 0 2px rgba(240,173,78,.16);
         }
         .conci-presencia-avatar {
             width: 24px; height: 24px; border-radius: 50%;
@@ -1144,10 +1143,10 @@ FF
             color: #fff; background: var(--conci-persona-color, #64748b);
             border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25);
             margin-left: -6px; cursor: default; user-select: none; flex: none;
-            transition: transform .15s ease;
+            transition: none;
         }
         .conci-presencia-avatar:first-of-type { margin-left: 0; }
-        .conci-presencia-avatar:hover { transform: translateY(-2px) scale(1.08); z-index: 2; }
+        .conci-presencia-avatar:hover { z-index: 2; }
         /* Quien está capturando ahora mismo lleva un anillo de su color. */
         .conci-presencia-avatar.conci-presencia-activo {
             box-shadow: 0 0 0 2px var(--conci-persona-color, #64748b), 0 1px 3px rgba(0,0,0,.25);
@@ -21787,7 +21786,7 @@ FF
                                             <!-- Conciliación Manifiestos Table -->
                                             <div class="card border-0 shadow-sm conci-manifest-card">
                                                 <div class="card-header bg-white border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2 conci-manifest-toolbar">
-                                                    <div class="d-flex align-items-center gap-2 flex-nowrap"><h6 class="mb-0 fw-semibold"><i class="fas fa-file-alt me-2 text-success"></i>Conciliación Manifiestos</h6><span id="conci-presencia" class="conci-presencia d-none" aria-label="Personas trabajando en esta tabla ahora"></span></div>
+                                                    <div class="d-flex align-items-center gap-2 flex-nowrap"><h6 class="mb-0 fw-semibold"><i class="fas fa-file-alt me-2 text-success"></i>Conciliación Manifiestos</h6><span id="conci-presencia" class="conci-presencia conci-presencia-vacia" aria-label="Personas trabajando en esta tabla ahora"></span></div>
                                                     <div class="d-flex gap-2 align-items-center flex-wrap">
                                                         <!-- Selector de periodo de fechas -->
                                                         <div class="input-group input-group-sm" style="width:auto">
@@ -21898,10 +21897,10 @@ FF
                                                     </div>
                                                     <div class="d-flex gap-2 align-items-center">
                                                         <div class="btn-group btn-group-sm shadow-sm" role="group" aria-label="Filtrar manifiestos por estado de captura">
-                                                            <button class="btn btn-outline-success" type="button" id="conci-pill-capturados" title="Mostrar manifiestos con CIERRE SUBSECRETARIA registrado">
+                                                            <button class="btn btn-outline-success" type="button" id="conci-pill-capturados" title="Mostrar manifiestos con HR. DE RECEPCIÓN registrada">
                                                                 <i class="fas fa-circle-check me-1"></i>Capturados <span class="badge bg-success ms-1" id="conci-count-capturados">0</span>
                                                             </button>
-                                                            <button class="btn btn-outline-danger" type="button" id="conci-pill-sin-capturar" title="Mostrar manifiestos sin CIERRE SUBSECRETARIA">
+                                                            <button class="btn btn-outline-danger" type="button" id="conci-pill-sin-capturar" title="Mostrar manifiestos sin HR. DE RECEPCIÓN">
                                                                 <i class="fas fa-circle-xmark me-1"></i>Sin capturar <span class="badge bg-danger ms-1" id="conci-count-sin-capturar">0</span>
                                                             </button>
                                                         </div>

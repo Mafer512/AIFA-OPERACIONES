@@ -17814,8 +17814,10 @@ body.dark-mode #table-conci-manifiestos tr.conci-row-overcapacity>td {
 }
 #table-conci-manifiestos tbody td.conci-cell-remote-editing .conci-remote-badge {
    position: absolute;
-   top: -9px;
-   left: 2px;
+   /* Debe permanecer dentro de la celda. Con top negativo, la primera fila
+      quedaba recortada/oculta debajo del encabezado sticky de filtros. */
+   top: 2px;
+   left: 3px;
    font-size: .6rem;
    line-height: 1;
    color: #fff;
@@ -17823,7 +17825,7 @@ body.dark-mode #table-conci-manifiestos tr.conci-row-overcapacity>td {
    border-radius: 999px;
    white-space: nowrap;
    box-shadow: 0 1px 3px rgba(0,0,0,.35);
-   z-index: 2;
+   z-index: 9;
    pointer-events: none;
 }
 

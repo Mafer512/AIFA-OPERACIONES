@@ -12709,16 +12709,15 @@ function showMainApp() {
     const login = document.getElementById('login-screen');
     const main = document.getElementById('main-app');
     try { showGlobalLoader('Restaurando sesión...'); } catch (_) { }
-    // Conservar el destino de la URL antes de aplicar permisos. Durante un
-    // reload la aplicación todavía no tiene una sección activa autorizada y
-    // applySectionPermissions puede normalizar el hash al Inicio. Esta copia
-    // permite volver al apartado real solicitado una vez validada la sesión.
+    // Conservar únicamente un destino EXPLÍCITO de la URL. La raíz del sitio
+    // siempre debe abrir el menú principal después de validar la sesión; no se
+    // restaura ahí la última sección visitada. Un enlace con #apartado sí queda
+    // pendiente durante el login y se abre al terminar la autenticación.
     const requestedSectionKey = (() => {
         try {
             const key = String(location.hash || '').replace(/^#/, '').trim();
             if (key && key !== 'recover' && /^[a-z0-9-]+$/i.test(key)) return key;
-            const remembered = sessionStorage.getItem(LAST_SECTION_STORAGE_KEY) || '';
-            return /^[a-z0-9-]+$/i.test(remembered) ? remembered : '';
+            return '';
         } catch (_) { return ''; }
     })();
     // Validar sesión firmada
@@ -12838,8 +12837,6 @@ function showMainApp() {
         } catch (_) { }
         if (mainWasHidden) {
             try {
-                const _loginRole = sessionStorage.getItem('user_role') || 'viewer';
-                const _isColabOnly = ['colab_viewer', 'colab_editor'].includes(_loginRole);
                 const requestedLink = requestedSectionKey
                     ? document.querySelector(`.menu-item[data-section="${requestedSectionKey}"]`)
                     : null;
@@ -12850,18 +12847,17 @@ function showMainApp() {
                     && !requestedLink.classList.contains('perm-hidden')
                     && !(requestedSection && requestedSection.classList.contains('perm-hidden'))
                     && isSectionAllowed(requestedSectionKey);
-                // Todo rol autenticado vuelve a la URL solicitada. Los roles de
-                // colaboración sólo permanecen en el menú cuando no existe una
-                // ruta previa válida.
-                const startLink = requestedAllowed
-                    ? requestedLink
-                    : (!_isColabOnly
-                        ? document.querySelector('.menu-item[data-section="operaciones-totales"]')
-                        : null);
                 if (requestedAllowed || requestedSectionKey === 'conciliacion') {
                     restoreSectionFromNavigation(requestedSectionKey);
-                } else if (startLink && startLink.dataset?.section) {
-                    restoreSectionFromNavigation(startLink.dataset.section);
+                } else {
+                    // URL raíz o enlace no autorizado: mostrar el lanzador de
+                    // módulos, sin inventar un hash ni abrir Operaciones.
+                    if (typeof window._navdeckShowMenu === 'function') {
+                        window._navdeckShowMenu();
+                    } else {
+                        document.body.classList.remove('navdeck-active');
+                    }
+                    try { history.replaceState(null, '', location.pathname + location.search); } catch (_) { }
                 }
             } catch (_) { }
             try {
@@ -20478,6 +20474,10 @@ async function loadConciliacionManifiestos(options = {}) {
     }
 }
 
+function _conciIsReceptionColumn(column) {
+    return /^hr\.?\s+de\s+recepcion$/.test(_conciNormalizedColumnName(column));
+}
+
 function _conciUpdateResumen(data, columns) {
     let empate = 0, soloManifiesto = 0, soloVuelos = 0;
     let llegadas = 0, salidas = 0, pax = 0, carga = 0;
@@ -20489,7 +20489,7 @@ function _conciUpdateResumen(data, columns) {
     const tipoCol    = cols.find(c => /tipo.*manif/i.test(c)) || null;
     const optypeCol  = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
     const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
-    const cierreCol = cols.find(c => _conciNormalizedColumnName(c) === 'cierre subsecretaria') || null;
+    const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
     for (const r of (data || [])) {
         const f = String(r && r._fuente || '');
         if (f === 'Manifiestos + Vuelos') empate++;
@@ -20509,7 +20509,10 @@ function _conciUpdateResumen(data, columns) {
             if (isArr) paxArr++; else if (isDep) paxDep++;
         }
         if (r && r._conci_overcapacity) sobrecupo++;
-        if (cierreCol && String(r?.[cierreCol] ?? '').trim()) capturados++;
+        // HR. DE RECEPCIÓN es la autoridad del estado de captura. CIERRE
+        // SUBSECRETARIA ya no basta por sí solo: con recepción es capturado,
+        // sin recepción es pendiente, aunque el cierre tenga valor.
+        if (recepcionCol && String(r?.[recepcionCol] ?? '').trim()) capturados++;
         else sinCapturar++;
     }
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = String(val); };
@@ -20639,13 +20642,13 @@ function _conciRowPassesPillFilter(tr) {
         if (tr.dataset.rowOvercap !== '1') return false;
     }
     if (_conciCaptureFilter) {
-        const cierreCell = [...tr.querySelectorAll('td[data-col]')]
-            .find(td => _conciNormalizedColumnName(td.dataset.col) === 'cierre subsecretaria');
-        const cierre = _conciNormalizeEditableCellText(
-            cierreCell?.dataset.pendingRaw ?? cierreCell?.dataset.raw ?? cierreCell?.textContent ?? ''
+        const recepcionCell = [...tr.querySelectorAll('td[data-col]')]
+            .find(td => _conciIsReceptionColumn(td.dataset.col));
+        const recepcion = _conciNormalizeEditableCellText(
+            recepcionCell?.dataset.pendingRaw ?? recepcionCell?.dataset.raw ?? recepcionCell?.textContent ?? ''
         );
-        if (_conciCaptureFilter === 'capturados' && !cierre) return false;
-        if (_conciCaptureFilter === 'sin-capturar' && cierre) return false;
+        if (_conciCaptureFilter === 'capturados' && !recepcion) return false;
+        if (_conciCaptureFilter === 'sin-capturar' && recepcion) return false;
     }
     return true;
 }
@@ -24555,7 +24558,31 @@ function _conciActivateMatriculaStatusEditor(td, currentRaw) {
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'down'); }
         else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
+        // Mismo criterio que los combos de TIPO DE MANIFIESTO y TIPO DE
+        // OPERACIÓN. Este editor se había quedado solo con Enter y Escape, y
+        // _conciHandleGridArrowNavigation ignora a propósito lo que ocurre
+        // dentro de un <select>, así que nadie interceptaba las flechas: un
+        // <select> con el foco cambia de opción al recibirlas, eso dispara
+        // "change" y el editor lo confirmaba como una elección del operador.
+        // Atravesar la fila con el teclado bastaba para voltear el estatus.
+        else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+            event.preventDefault();
+            closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
+        } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            event.preventDefault();
+            closeEditor(true, event.key === 'ArrowUp' ? 'up' : 'down');
+        }
     });
+    // La rueda del mouse es la otra vía por la que el estatus cambiaba solo: al
+    // desplazar la tabla con el cursor sobre la celda abierta, el <select> con
+    // foco salta de opción y dispara "change". El preventDefault corta ese
+    // salto y cerrar el editor deja que el siguiente giro desplace la tabla con
+    // normalidad. Como userChanged sigue en false, el cierre confirma
+    // fallbackRaw, o sea el valor que la celda ya tenía.
+    select.addEventListener('wheel', event => {
+        event.preventDefault();
+        closeEditor(true, false);
+    }, { passive: false });
     select.addEventListener('blur', () => closeEditor(true, false));
     select.focus();
 }
@@ -25234,9 +25261,11 @@ function _conciRenderBarraPresencia() {
 
     if (!gente.length) {
         cont.textContent = '';
-        cont.classList.add('d-none');
+        cont.classList.add('conci-presencia-vacia');
+        cont.classList.remove('d-none');
         return;
     }
+    cont.classList.remove('conci-presencia-vacia');
     cont.classList.remove('d-none');
 
     // El punto se conserva entre repintados para que su animación siga corriendo.

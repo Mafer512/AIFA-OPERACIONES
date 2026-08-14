@@ -22,16 +22,27 @@ describe('restauracion de sesion y apartado durante reload', () => {
     expect(block).not.toContain('restoreSessionFromSupabase().then');
   });
 
-  test('showMainApp conserva el hash permitido y solo cae a Inicio como respaldo', () => {
+  test('showMainApp conserva enlaces explícitos y en la raíz abre el menú', () => {
     const start = script.indexOf('function showMainApp()');
     const end = script.indexOf('function checkSession()', start);
     const block = script.slice(start, end);
     expect(block).toContain('const requestedSectionKey');
     expect(block).toContain('const requestedAllowed');
-    expect(block).toContain('? requestedLink');
-    expect(block).toContain('data-section="operaciones-totales"');
-    expect(block).toContain('const startLink = requestedAllowed');
+    expect(block).toContain("if (typeof window._navdeckShowMenu === 'function')");
+    expect(block).toContain("document.body.classList.remove('navdeck-active')");
+    expect(block).toContain('location.pathname + location.search');
+    expect(block).not.toContain('const remembered = sessionStorage.getItem(LAST_SECTION_STORAGE_KEY)');
+    expect(block).not.toContain('data-section="operaciones-totales"');
     expect(block).not.toContain('if (!_isColabOnly) {');
+  });
+
+  test('un enlace específico permanece pendiente mientras se valida el login', () => {
+    const start = script.indexOf('function showMainApp()');
+    const end = script.indexOf('function checkSession()', start);
+    const block = script.slice(start, end);
+    expect(block).toContain("String(location.hash || '').replace(/^#/, '').trim()");
+    expect(block).toContain('restoreSectionFromNavigation(requestedSectionKey)');
+    expect(block.indexOf('const requestedSectionKey')).toBeLessThan(block.indexOf('verifyToken(token)'));
   });
 
   test('recuerda la seccion y la pestana interna activas', () => {
