@@ -1754,7 +1754,30 @@ ${uncovered.length ? `<div class="p-3 rounded-3" style="background:#f8fafc;borde
   function normalizeAirline(air){
     const daily = DAY_CODES.map(code => Number(air?.daily?.[code] ?? 0));
     const dailyDetails = DAY_CODES.map(code => air?.dailyDetails?.[code] || ''); // Capture details
-    const weeklyTotal = Number(air?.weeklyTotal) || daily.reduce((sum, val) => sum + val, 0);
+    // El total de la semana se calcula SUMANDO LOS DIAS, no se toma de la
+    // columna weekly_total de la base.
+    //
+    // Esa columna se genera con COUNT(*) sobre todas las filas del periodo,
+    // mientras que cada dia se cuenta convirtiendo la fecha a hora de Mexico
+    // (EXTRACT(DOW ... AT TIME ZONE)). Una fila sin fecha valida no cae en
+    // ningun dia pero si entra en el COUNT(*), asi que el total quedaba por
+    // encima de lo que se ve en la tabla: decia 4 frecuencias donde solo se
+    // veian dos.
+    //
+    // Los dias son lo que el usuario tiene delante, asi que mandan ellos. La
+    // columna guardada solo se usa cuando no hay ningun dia capturado, para no
+    // perder un dato que solo exista ahi.
+    const sumaDias = daily.reduce((sum, val) => sum + val, 0);
+    const totalGuardado = Number(air?.weeklyTotal);
+    const weeklyTotal = sumaDias > 0
+        ? sumaDias
+        : (Number.isFinite(totalGuardado) ? totalGuardado : 0);
+    if (sumaDias > 0 && Number.isFinite(totalGuardado) && totalGuardado !== sumaDias) {
+      console.warn(
+        `[Frecuencias] ${air?.name || "aerolínea"}: la base dice ${totalGuardado} ` +
+        `frecuencias pero los días suman ${sumaDias}. Se muestra la suma de los días.`
+      );
+    }
     return {
       name: air?.name || 'Sin aerolínea',
       slug: slugify(air?.name || 'sin-aerolinea'),
