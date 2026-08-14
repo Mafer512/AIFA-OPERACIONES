@@ -24538,7 +24538,31 @@ function _conciActivateMatriculaStatusEditor(td, currentRaw) {
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'down'); }
         else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
+        // Mismo criterio que los combos de TIPO DE MANIFIESTO y TIPO DE
+        // OPERACIÓN. Este editor se había quedado solo con Enter y Escape, y
+        // _conciHandleGridArrowNavigation ignora a propósito lo que ocurre
+        // dentro de un <select>, así que nadie interceptaba las flechas: un
+        // <select> con el foco cambia de opción al recibirlas, eso dispara
+        // "change" y el editor lo confirmaba como una elección del operador.
+        // Atravesar la fila con el teclado bastaba para voltear el estatus.
+        else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+            event.preventDefault();
+            closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
+        } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            event.preventDefault();
+            closeEditor(true, event.key === 'ArrowUp' ? 'up' : 'down');
+        }
     });
+    // La rueda del mouse es la otra vía por la que el estatus cambiaba solo: al
+    // desplazar la tabla con el cursor sobre la celda abierta, el <select> con
+    // foco salta de opción y dispara "change". El preventDefault corta ese
+    // salto y cerrar el editor deja que el siguiente giro desplace la tabla con
+    // normalidad. Como userChanged sigue en false, el cierre confirma
+    // fallbackRaw, o sea el valor que la celda ya tenía.
+    select.addEventListener('wheel', event => {
+        event.preventDefault();
+        closeEditor(true, false);
+    }, { passive: false });
     select.addEventListener('blur', () => closeEditor(true, false));
     select.focus();
 }
