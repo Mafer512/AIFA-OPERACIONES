@@ -24655,6 +24655,15 @@ function _conciActivateMatriculaStatusEditor(td, currentRaw) {
         } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
             event.preventDefault();
             closeEditor(true, event.key === 'ArrowUp' ? 'up' : 'down');
+        } else if (!event.ctrlKey && !event.altKey && !event.metaKey) {
+            // Todo lo demás se consume. Enumerar teclas "malas" no alcanza: en un
+            // <select> nativo Home y End saltan a la primera y última opción, y
+            // cualquier carácter imprimible dispara el typeahead — con estas dos
+            // opciones basta teclear "a" para dejar ACTIVA y "n" para dejar NO
+            // IDENTIFICADA, sin abrir el menú. Nada de eso es una selección
+            // deliberada. Se dejan pasar las combinaciones con Ctrl/Alt/Meta para
+            // no romper los atajos del navegador (recargar, copiar, etc.).
+            event.preventDefault();
         }
     });
     // La rueda del mouse es la otra vía por la que el estatus cambiaba solo: al
