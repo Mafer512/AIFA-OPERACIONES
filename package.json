@@ -7,7 +7,8 @@
     "dev": "node server.js",
     "build": "node --check server.js",
     "start": "node server.js",
-    "test": "jest"
+    "test": "jest --testPathIgnorePatterns pagina-carga-y-navega",
+    "test:pagina": "jest __tests__/pagina-carga-y-navega.test.js --forceExit --testTimeout=120000"
   },
   "repository": {
     "type": "git",

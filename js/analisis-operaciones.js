@@ -40,13 +40,13 @@ const OPS_MONTHS_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep',
 let _moduleInitDone = false;
 function init() {
     if (_moduleInitDone) return;
-    if (!document.getElementById('ops-filter-year')) return;
+    if (!document.getElementById('aops-filter-year')) return;
     _moduleInitDone = true;
     initOpsAnalysisTabs();
 }
 
 async function initOpsAnalysisTabs() {
-    if (!document.getElementById('ops-filter-year')) return;
+    if (!document.getElementById('aops-filter-year')) return;
     // Determinar el periodo más reciente con datos antes de pintar los selectores
     try { await _opsSetLatestPeriod(); } catch (e) { console.warn('No se pudo detectar el periodo más reciente', e); }
     populateOpsYearSelect();
@@ -85,7 +85,7 @@ async function _opsSetLatestPeriod() {
 
 // ─── Selectores de Año / Mes ───────────────────────────────────────────────
 function populateOpsYearSelect() {
-    const sel = document.getElementById('ops-filter-year');
+    const sel = document.getElementById('aops-filter-year');
     if (!sel) return;
     const thisYear = Math.max(new Date().getFullYear(), currentYearOps);
     const startYear = 2024;
@@ -116,7 +116,7 @@ function populateOpsMonthSelect() {
 }
 
 function bindOpsFilters() {
-    const yearSel = document.getElementById('ops-filter-year');
+    const yearSel = document.getElementById('aops-filter-year');
     const monthSel = document.getElementById('ops-filter-month');
     const refreshBtn = document.getElementById('ops-btn-refresh');
 
@@ -373,7 +373,7 @@ async function loadOpsMonthData(month, force = false) {
     _opsUpdateUndoBtn();
 
     // Sincronizar selectores de Año / Mes
-    const yearSel = document.getElementById('ops-filter-year');
+    const yearSel = document.getElementById('aops-filter-year');
     if (yearSel && yearSel.value !== String(currentYearOps)) yearSel.value = String(currentYearOps);
     const monthSel = document.getElementById('ops-filter-month');
     if (monthSel && monthSel.value !== month) monthSel.value = month;
