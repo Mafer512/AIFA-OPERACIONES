@@ -7219,24 +7219,44 @@ function showSection(sectionKey, linkEl) {
         // Actualizar hash
         try { history.replaceState(null, '', `#${targetKey}`); } catch (_) { }
 
-        // Hook: Operaciones Totales — activar sub-pestaña correcta
-        if (displayKey === 'operaciones-totales') {
-            setTimeout(() => {
-                if (!restoreActiveTab(targetKey, target)) {
-                    const subTabId = linkEl?.dataset?.subTab || 'comparativa-yoy-tab';
-                    const subTabEl = document.getElementById(subTabId);
-                    if (subTabEl) {
-                        const bsTab = bootstrap.Tab.getOrCreateInstance(subTabEl);
-                        bsTab.show();
-                    }
+        // Sub-pestaña a mostrar dentro de la sección.
+        //
+        // Manda SIEMPRE la que el usuario pidió. Varias entradas del menú
+        // apuntan a la misma sección y se distinguen por su data-sub-tab
+        // (Resumen General y Comparativa Histórica viven las dos en
+        // Operaciones Totales, por ejemplo). Antes se intentaba primero
+        // restaurar la última pestaña usada y solo se hacía caso al menú si
+        // esa restauración fallaba: al entrar a Resumen General reaparecía
+        // Comparativa Histórica, que era donde se había estado antes.
+        //
+        // La pestaña recordada es para volver donde estabas al RECARGAR, no
+        // para pisar un clic deliberado.
+        const subTabSolicitada = String(linkEl?.dataset?.subTab || '').trim();
+        setTimeout(() => {
+            if (subTabSolicitada) {
+                const subTabEl = document.getElementById(subTabSolicitada);
+                if (subTabEl && !subTabEl.disabled) {
+                    try {
+                        if (typeof bootstrap !== 'undefined' && bootstrap.Tab) {
+                            bootstrap.Tab.getOrCreateInstance(subTabEl).show();
+                        } else {
+                            subTabEl.click();
+                        }
+                        return;
+                    } catch (_) { /* si falla, se cae al comportamiento de siempre */ }
                 }
-            }, 50);
-        } else {
-            // Conciliación y el resto de módulos también pueden contener tabs.
-            // Restaurarlos después de activar su sección evita volver siempre a
-            // la primera pestaña (p. ej. Itinerario en vez de Manifiestos).
-            setTimeout(() => restoreActiveTab(targetKey, target), 50);
-        }
+            }
+            // Sin petición explícita: se vuelve a la última pestaña usada en
+            // esta sección, que es lo que evita caer siempre en la primera
+            // (p. ej. Itinerario en vez de Manifiestos).
+            if (restoreActiveTab(targetKey, target)) return;
+            if (displayKey === 'operaciones-totales') {
+                const porDefecto = document.getElementById('comparativa-yoy-tab');
+                if (porDefecto && typeof bootstrap !== 'undefined' && bootstrap.Tab) {
+                    bootstrap.Tab.getOrCreateInstance(porDefecto).show();
+                }
+            }
+        }, 50);
 
         // Hook específico para Historia
         if (targetKey === 'historia') {
