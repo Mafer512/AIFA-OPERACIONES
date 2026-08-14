@@ -17509,6 +17509,7 @@ let _conciCellClickHandler = null;   // delegated click handler for edit-mode ce
 let _conciTabNavigationHandler = null; // captura Tab: avanza de campo (da la vuelta a la fila siguiente/anterior)
 let _conciArrowNavigationHandler = null; // flechas cuando no hay editor abierto (si no, el contenedor hace scroll)
 let _conciAnchorCell = null;         // última celda visitada: origen de la navegación con flechas
+let _conciAnchorKey = null;          // {rowId, col} del ancla: sobrevive al repintado del tbody, el nodo no
 let _conciAirlineCatalogLoaded = false;
 let _conciAirlineCodeMap = new Map();
 let _conciAirlineMasterCodeMap = new Map();
@@ -18463,9 +18464,21 @@ function _conciRefreshMatriculaValidationForRow(tr) {
     // Se aplica la MISMA regla que al cargar la tabla, leyendo lo que hay en
     // pantalla. Antes se recalculaba solo desde el catalogo y se pisaba la
     // eleccion recien hecha.
+    // Si el combo de estatus está abierto, el usuario está parado en esa celda:
+    // _conciLiveCellValue devolvería la opción que muestra el <select>, que no
+    // tiene por qué ser el valor guardado, y repintar destruiría el editor bajo
+    // el cursor. Se lee entonces lo guardado y no se repinta esa celda; al
+    // cerrarse el editor, _conciCommitCellRaw vuelve a llamar aquí con la celda
+    // ya asentada. Sin esto, atravesar la fila con las flechas convertía el
+    // estatus en la opción por omisión del combo.
+    const statusEditorAbierto = !!statusTd.querySelector('select, input, textarea');
+    const estatusGuardado = _conciNormalizeEditableCellText(
+        statusTd.dataset.pendingRaw !== undefined ? statusTd.dataset.pendingRaw : (statusTd.dataset.raw || '')
+    );
+
     const optypeTd = cells.find(td => /tipo.*oper|service\s*type/i.test(String(td.dataset.col || '')));
     const filaViva = {
-        estatus: _conciLiveCellValue(statusTd),
+        estatus: statusEditorAbierto ? estatusGuardado : _conciLiveCellValue(statusTd),
         optype: optypeTd ? _conciLiveCellValue(optypeTd) : '',
         aerolinea: airlineTd ? _conciLiveCellValue(airlineTd) : '',
     };
@@ -18475,7 +18488,9 @@ function _conciRefreshMatriculaValidationForRow(tr) {
     );
     const mismatch = !!(catalogEntry && airlineTd
         && !_conciAirlinesMatch(_conciLiveCellValue(airlineTd), catalogEntry.aerolinea));
-    _conciRenderMatriculaStatusCell(statusTd, status, mismatch, catalogEntry?.aerolinea || '');
+    if (!statusEditorAbierto) {
+        _conciRenderMatriculaStatusCell(statusTd, status, mismatch, catalogEntry?.aerolinea || '');
+    }
     tr.classList.toggle('conci-matricula-mismatch', mismatch);
 }
 
@@ -23129,9 +23144,23 @@ function _conciExpandDateMaskYear(value) {
     return iso ? _conciIsoToMaskedDate(iso) : _conciFormatDateMask(value);
 }
 
+// Selectores de navegación. La diferencia entre los dos es deliberada:
+//
+//   VISIBLE  — dónde se puede *parar* el cursor: cualquier celda de una columna
+//              que no esté oculta por el menú de visibilidad. Incluye las de
+//              solo lectura: uno se para en ellas, simplemente no abren editor.
+//   EDITABLE — a dónde saltan ←/→ y Tab: además, que se pueda capturar. Saltarse
+//              las calculadas mantiene ágil la captura.
+//
+// Los dos excluyen .d-none. Antes no lo hacían, y como el menú de columnas deja
+// ocultar cualquier columna, el recorrido se metía en celdas invisibles: el foco
+// seguía avanzando donde el usuario no veía nada y parecía haberse perdido.
+const _CONCI_SEL_CELDA_VISIBLE = 'td[data-col]:not(.d-none)';
+const _CONCI_SEL_CELDA_EDITABLE = 'td[data-col]:not([data-conci-readonly="1"]):not(.d-none)';
+
 function _conciGetNextEditableCell(td) {
     if (!td) return null;
-    const SEL = 'td[data-col]:not([data-conci-readonly="1"])';
+    const SEL = _CONCI_SEL_CELDA_EDITABLE;
     let next = td.nextElementSibling;
     while (next && !next.matches(SEL)) next = next.nextElementSibling;
     if (next) return next;
@@ -23146,7 +23175,7 @@ function _conciGetNextEditableCell(td) {
 
 function _conciGetPrevEditableCell(td) {
     if (!td) return null;
-    const SEL = 'td[data-col]:not([data-conci-readonly="1"])';
+    const SEL = _CONCI_SEL_CELDA_EDITABLE;
     let prev = td.previousElementSibling;
     while (prev && !prev.matches(SEL)) prev = prev.previousElementSibling;
     if (prev) return prev;
@@ -23172,10 +23201,15 @@ function _conciVisibleBodyRows() {
     return Array.from(tbody.querySelectorAll('tr[data-row-index]')).filter(tr => tr.style.display !== 'none');
 }
 
+// ↑/↓ se mueven dentro de la MISMA columna, así que aquí no se puede exigir que
+// la celda sea editable: si la columna es calculada no habría ninguna en ninguna
+// fila y el recorrido vertical moría en seco: quien se paraba ahí (con clic, o
+// bajando desde el filtro de esa columna) se quedaba sin ↑ ni ↓ hasta volver a
+// hacer clic en otro lado. Basta con que la columna esté visible.
 function _conciGetCellInRow(tr, col) {
     if (!tr) return null;
-    return Array.from(tr.querySelectorAll('td[data-col]'))
-        .find(td => td.dataset.col === col && td.dataset.conciReadonly !== '1') || null;
+    return Array.from(tr.querySelectorAll(_CONCI_SEL_CELDA_VISIBLE))
+        .find(td => td.dataset.col === col) || null;
 }
 
 function _conciGetCellAbove(td) {
@@ -23304,6 +23338,44 @@ function _conciMoveFromCell(td, key) {
     else if (key === 'ArrowUp') _conciFocusFilterOrAbove(td);
 }
 
+// Devuelve el origen vivo de la navegación, reconstruyéndolo si hizo falta.
+//
+// El tbody se repinta entero (tbody.innerHTML = '') cada vez que cambian los
+// filtros, se refresca la tabla o entra un cambio remoto de otro capturista. El
+// nodo que guardaba _conciAnchorCell queda entonces fuera del documento y la
+// navegación con flechas se apagaba en silencio: el manejador salía por
+// isConnected y las teclas volvían a irse al contenedor con scroll, sin manera
+// de recuperarse salvo volver a hacer clic. Fila y columna sí sobreviven al
+// repintado, así que se vuelve a ubicar la celda a partir de ellas.
+function _conciResolveAnchorCell() {
+    const table = document.getElementById('table-conci-manifiestos');
+    if (!table) return null;
+
+    const anchor = _conciAnchorCell;
+    if (anchor && anchor.isConnected && table.contains(anchor)) {
+        if (!anchor.classList.contains('d-none')) return anchor;
+        // Su columna se ocultó mientras el cursor estaba ahí: se sale a la
+        // celda visible más cercana en lugar de quedarse sin salida.
+        return _conciGetNextEditableCell(anchor) || _conciGetPrevEditableCell(anchor);
+    }
+
+    const key = _conciAnchorKey;
+    if (!key) return null;
+    const rows = _conciVisibleBodyRows();
+    if (!rows.length) return null;
+
+    const tr = key.rowId ? rows.find(r => String(r.dataset.rowId || '') === key.rowId) : null;
+    const sameCell = tr ? _conciGetCellInRow(tr, key.col) : null;
+    if (sameCell) return sameCell;
+
+    // La fila ya no pasa el filtro: se conserva al menos la columna.
+    for (const row of rows) {
+        const cell = _conciGetCellInRow(row, key.col);
+        if (cell) return cell;
+    }
+    return null;
+}
+
 // Navegación con flechas cuando NO hay un editor de celda abierto.
 //
 // Dentro de un editor cada tecla ya está manejada por el propio input, pero al
@@ -23326,10 +23398,11 @@ function _conciHandleGridArrowNavigation(ev) {
     if (target && typeof target.closest === 'function'
         && target.closest('input, select, textarea, [contenteditable="true"]')) return;
 
-    const anchor = _conciAnchorCell;
-    if (!anchor || !anchor.isConnected) return;
-    const table = document.getElementById('table-conci-manifiestos');
-    if (!table || !table.contains(anchor)) return;
+    const anchor = _conciResolveAnchorCell();
+    if (!anchor) return;
+    // Si se reconstruyó tras un repintado, el ancla vuelve a apuntar a un nodo
+    // vivo para que los siguientes movimientos partan de ahí.
+    _conciAnchorCell = anchor;
 
     // Se consume la tecla aunque no haya a dónde moverse (en el borde de la
     // tabla): de lo contrario el contenedor volvería a hacer scroll.
@@ -24524,9 +24597,20 @@ function _conciActivateManifestTypeEditor(td, currentRaw) {
 function _conciActivateMatriculaStatusEditor(td, currentRaw) {
     const select = document.createElement('select');
     select.className = 'form-select form-select-sm conci-cell-input';
-    const fallbackRaw = _conciNormalizeEditableCellText(
+    // El combo debe abrirse mostrando exactamente lo que la celda ya decía, y
+    // fallbackRaw —lo que se confirma si el usuario solo pasa de largo— tiene que
+    // ser ese mismo valor. Antes, cuando lo guardado venía vacío o con una
+    // variante fuera de la lista (catálogo aún sin cargar, dato heredado), el
+    // combo caía a "ACTIVA" mientras fallbackRaw conservaba lo otro: bastaba
+    // atravesar la celda con las flechas para que el estatus cambiara solo. Si
+    // ni lo guardado ni lo mostrado sirven, se usa "NO IDENTIFICADA", el mismo
+    // valor conservador que aplica _conciRenderMatriculaStatusCell.
+    const guardado = _conciNormalizeEditableCellText(
         td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || '')
-    );
+    ).toUpperCase();
+    const mostrado = _conciNormalizeEditableCellText(td.textContent).toUpperCase();
+    const fallbackRaw = _CONCI_ESTATUS_MATRICULA.includes(guardado) ? guardado
+        : (_CONCI_ESTATUS_MATRICULA.includes(mostrado) ? mostrado : 'NO IDENTIFICADA');
     _CONCI_ESTATUS_MATRICULA.forEach(valor => {
         const option = document.createElement('option');
         option.value = valor;
@@ -24534,7 +24618,7 @@ function _conciActivateMatriculaStatusEditor(td, currentRaw) {
         select.appendChild(option);
     });
     const actual = _conciNormalizeEditableCellText(currentRaw).toUpperCase();
-    select.value = _CONCI_ESTATUS_MATRICULA.includes(actual) ? actual : 'ACTIVA';
+    select.value = _CONCI_ESTATUS_MATRICULA.includes(actual) ? actual : fallbackRaw;
 
     td.classList.add('conci-cell-active');
     td.textContent = '';
@@ -25909,8 +25993,31 @@ function _conciActualizarIndicadorBorradores() {
 function _conciActivateCellEditor(td) {
     if (!td || td.querySelector('.conci-cell-input, .conci-cell-dt')) return;
 
-    // Origen de la navegación con flechas, se abra o no un editor debajo.
+    // Origen de la navegación con flechas, se abra o no un editor debajo. Se
+    // guarda además fila+columna: el nodo muere en cada repintado del tbody
+    // (filtros, refresco, cambio remoto) y la clave permite volver a ubicarlo.
     _conciAnchorCell = td;
+    _conciAnchorKey = { rowId: String(td.closest('tr')?.dataset.rowId || ''), col: td.dataset.col || '' };
+
+    // El foco del navegador se ancla a la celda aquí mismo, junto al origen
+    // lógico. Hay celdas navegables que no abren editor —las calculadas, las de
+    // pasajeros en un vuelo de carga y ESTATUS MATRÍCULA fuera de carga— y al
+    // pararse en ellas no quedaba nadie enfocado dentro de la tabla; Chrome
+    // entrega entonces el foco al contenedor con scroll
+    // (#conci-manifiestos-scroll), que es focusable por ser un scroller. De ahí
+    // que el recorrido con flechas "saltara" a la barra de scroll horizontal y
+    // se perdiera la continuidad al pasar por esas columnas. Con el foco en la
+    // celda, la barra solo se activa si el usuario la usa a mano.
+    //
+    // Se hace para toda celda activada, no solo para esas tres: así ninguna rama
+    // futura puede olvidarlo. Las que sí abren editor recuperan el foco de
+    // inmediato con el focus() de su propio input.
+    //
+    // tabindex="-1" la hace enfocable por código sin meterla en el orden de Tab,
+    // que sigue gobernado por _conciTabNavigationHandler; preventScroll evita
+    // pelearse con el scrollIntoView que ya hizo el llamador.
+    if (!td.hasAttribute('tabindex')) td.tabIndex = -1;
+    try { td.focus({ preventScroll: true }); } catch (_) { td.focus(); }
     // Se anuncia la posición aunque esta celda no abra editor: interesa ver
     // dónde está parado un compañero, no solo cuándo escribe.
     {
@@ -26002,6 +26109,19 @@ function _conciActivateCellEditor(td) {
     if (isAirlineCol) _conciApplyAirlineCellPreview(td);
 
     let closed = false;
+    // Igual que en los combos: abrir no confirma nada, solo un cambio real.
+    //
+    // Era el único editor sin esta guarda, y por eso pasar con las flechas
+    // reescribía celdas que nadie tocó. El caso más visible es AEROLINEA: el
+    // editor muestra el nombre resuelto ("VOLARIS") mientras el dato guardado es
+    // el código ("Y4"), así que al cerrarse se confirmaba el nombre como si el
+    // usuario lo hubiera tecleado — la celda quedaba sucia, se registraba en
+    // deshacer y el autoguardado lo persistía. Con la guarda, atravesar una
+    // celda devuelve exactamente el valor con el que se abrió.
+    //
+    // Es además la invariante que _conciAutoSaveRow ya daba por cierta al cerrar
+    // con accept=false cualquier editor que siguiera abierto.
+    let userChanged = false;
     const closeEditor = (accept, move) => {
         if (closed) return;
         closed = true;
@@ -26012,7 +26132,9 @@ function _conciActivateCellEditor(td) {
                 ? td._conciEditorStartRaw
                 : (td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || ''))
         );
-        const nextRaw = accept ? _conciNormalizeEditableCellText(input.value) : fallbackRaw;
+        const nextRaw = accept && userChanged
+            ? _conciNormalizeEditableCellText(input.value)
+            : fallbackRaw;
         _conciCommitCellRaw(td, nextRaw, move, nextRaw);
     };
     td._conciCloseEditor = closeEditor;
@@ -26036,6 +26158,8 @@ function _conciActivateCellEditor(td) {
         }
     });
     input.addEventListener('input', () => {
+        // Primer tecleo/pegado real: a partir de aquí sí hay algo que confirmar.
+        userChanged = true;
         const tr = td.closest('tr');
         _conciStageCellDraft(td, input.value);
         _conciQueueAutoSave(tr);
@@ -26465,6 +26589,7 @@ function _conciSetTableEditableState(enabled) {
         if (_conciTabNavigationHandler) tbody.removeEventListener('keydown', _conciTabNavigationHandler, true);
         if (_conciArrowNavigationHandler) document.removeEventListener('keydown', _conciArrowNavigationHandler);
         _conciAnchorCell = null;
+        _conciAnchorKey = null;
 
         tbody.querySelectorAll('td[data-col]').forEach(td => {
             if (typeof td._conciCloseEditor === 'function') td._conciCloseEditor(true, false);
