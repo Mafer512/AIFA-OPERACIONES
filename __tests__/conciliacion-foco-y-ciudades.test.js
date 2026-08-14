@@ -165,4 +165,15 @@ describe('integración en el módulo', () => {
     expect(html).not.toContain('animation: conciPresenciaReconectando');
     expect(html).not.toContain('transform: translateY(-2px) scale(1.08)');
   });
+
+  test('las iniciales de edición remota permanecen dentro de la celda y sobre los datos', () => {
+    const css = fs.readFileSync(path.join(__dirname, '..', 'style.css'), 'utf8');
+    const selector = '#table-conci-manifiestos tbody td.conci-cell-remote-editing .conci-remote-badge';
+    const start = css.indexOf(selector);
+    const block = css.slice(start, css.indexOf('}', start));
+    expect(start).toBeGreaterThan(-1);
+    expect(block).toMatch(/top:\s*2px/);
+    expect(block).toMatch(/z-index:\s*9/);
+    expect(block).not.toMatch(/top:\s*-\d/);
+  });
 });
