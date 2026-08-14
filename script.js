@@ -12689,16 +12689,15 @@ function showMainApp() {
     const login = document.getElementById('login-screen');
     const main = document.getElementById('main-app');
     try { showGlobalLoader('Restaurando sesión...'); } catch (_) { }
-    // Conservar el destino de la URL antes de aplicar permisos. Durante un
-    // reload la aplicación todavía no tiene una sección activa autorizada y
-    // applySectionPermissions puede normalizar el hash al Inicio. Esta copia
-    // permite volver al apartado real solicitado una vez validada la sesión.
+    // Conservar únicamente un destino EXPLÍCITO de la URL. La raíz del sitio
+    // siempre debe abrir el menú principal después de validar la sesión; no se
+    // restaura ahí la última sección visitada. Un enlace con #apartado sí queda
+    // pendiente durante el login y se abre al terminar la autenticación.
     const requestedSectionKey = (() => {
         try {
             const key = String(location.hash || '').replace(/^#/, '').trim();
             if (key && key !== 'recover' && /^[a-z0-9-]+$/i.test(key)) return key;
-            const remembered = sessionStorage.getItem(LAST_SECTION_STORAGE_KEY) || '';
-            return /^[a-z0-9-]+$/i.test(remembered) ? remembered : '';
+            return '';
         } catch (_) { return ''; }
     })();
     // Validar sesión firmada
@@ -12818,8 +12817,6 @@ function showMainApp() {
         } catch (_) { }
         if (mainWasHidden) {
             try {
-                const _loginRole = sessionStorage.getItem('user_role') || 'viewer';
-                const _isColabOnly = ['colab_viewer', 'colab_editor'].includes(_loginRole);
                 const requestedLink = requestedSectionKey
                     ? document.querySelector(`.menu-item[data-section="${requestedSectionKey}"]`)
                     : null;
@@ -12830,18 +12827,17 @@ function showMainApp() {
                     && !requestedLink.classList.contains('perm-hidden')
                     && !(requestedSection && requestedSection.classList.contains('perm-hidden'))
                     && isSectionAllowed(requestedSectionKey);
-                // Todo rol autenticado vuelve a la URL solicitada. Los roles de
-                // colaboración sólo permanecen en el menú cuando no existe una
-                // ruta previa válida.
-                const startLink = requestedAllowed
-                    ? requestedLink
-                    : (!_isColabOnly
-                        ? document.querySelector('.menu-item[data-section="operaciones-totales"]')
-                        : null);
                 if (requestedAllowed || requestedSectionKey === 'conciliacion') {
                     restoreSectionFromNavigation(requestedSectionKey);
-                } else if (startLink && startLink.dataset?.section) {
-                    restoreSectionFromNavigation(startLink.dataset.section);
+                } else {
+                    // URL raíz o enlace no autorizado: mostrar el lanzador de
+                    // módulos, sin inventar un hash ni abrir Operaciones.
+                    if (typeof window._navdeckShowMenu === 'function') {
+                        window._navdeckShowMenu();
+                    } else {
+                        document.body.classList.remove('navdeck-active');
+                    }
+                    try { history.replaceState(null, '', location.pathname + location.search); } catch (_) { }
                 }
             } catch (_) { }
             try {

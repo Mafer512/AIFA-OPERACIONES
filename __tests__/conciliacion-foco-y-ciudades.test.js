@@ -159,4 +159,10 @@ describe('integración en el módulo', () => {
     expect(html).toMatch(/\.conci-presencia\s*\{[^}]*display:\s*inline-flex[^}]*flex:\s*none[^}]*width:\s*145px/s);
     expect(html).toContain('.conci-presencia.conci-presencia-vacia');
   });
+
+  test('el indicador y los avatares no usan animaciones que produzcan parpadeo', () => {
+    expect(html).not.toContain('animation: conciPresenciaLatido');
+    expect(html).not.toContain('animation: conciPresenciaReconectando');
+    expect(html).not.toContain('transform: translateY(-2px) scale(1.08)');
+  });
 });
