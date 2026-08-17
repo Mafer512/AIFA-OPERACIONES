@@ -19527,12 +19527,33 @@ function _conciNameHue(name) {
 
 // Celda "CAPTURÓ": muestra un avatar circular con las iniciales de quien
 // capturó la fila; el nombre completo aparece al pasar el ratón (tooltip).
-function _conciRenderCapturoCell(td, rawValue) {
+// `pendienteDeGuardar` distingue los dos usos de esta celda:
+//
+//   false (por defecto) — se está pintando lo que la base YA tiene. La celda
+//          queda limpia porque no hay nada que enviar.
+//
+//   true — se acaba de autocompletar con el nombre de quien captura, y todavía
+//          no está en la base. Tiene que quedar marcada como sucia igual que
+//          cualquier captura a mano.
+//
+//          Sin esa marca se perdía en silencio: al pintarse, la celda dejaba de
+//          estar vacía —así que el autocompletado ya no volvía a entrar— y
+//          tampoco estaba sucia —así que no entraba en el payload—. Si la
+//          primera escritura fallaba (red caída, por ejemplo), el reintento
+//          guardaba las demás columnas y CAPTURÓ se quedaba fuera para siempre:
+//          la pantalla mostraba el nombre y la base lo tenía vacío.
+function _conciRenderCapturoCell(td, rawValue, pendienteDeGuardar = false) {
     if (!td) return;
     const raw = String(rawValue || '').trim();
     td.dataset.raw = raw;
     td.dataset.pendingRaw = raw;
-    td.removeAttribute('data-dirty');
+    if (pendienteDeGuardar && raw) {
+        td.dataset.dirty = '1';
+        // Y a salvo en esta computadora hasta que la base lo confirme.
+        if (typeof _conciBorradorGuardarCelda === 'function') _conciBorradorGuardarCelda(td, raw);
+    } else {
+        td.removeAttribute('data-dirty');
+    }
     td.innerHTML = '';
     td.style.textAlign = 'center';
     if (!raw) {
@@ -27908,7 +27929,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 if (!currentCapturo) {
                     const displayName = _conciCurrentUserDisplayName();
                     if (displayName) {
-                        _conciRenderCapturoCell(capturoTd, displayName);
+                        _conciRenderCapturoCell(capturoTd, displayName, true);
                         payload['CAPTURÓ'] = _conciPrepareValueForDatabase('CAPTURÓ', displayName);
                         autoPersistedCols.add('CAPTURÓ');
                         savedCellValues.set(capturoTd, displayName);
