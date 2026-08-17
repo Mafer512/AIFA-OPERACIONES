@@ -17,27 +17,28 @@
 --    · La sincronización NO está caída: 9 filas nuevas entraron el mismo 17 de
 --      agosto. Fallan lotes concretos, no todos.
 --
---  Quedan dos causas posibles, las dos por datos del lote que llega, no por el
---  esquema. Se distinguen por el código de error del log:
+--  CAUSA CONFIRMADA por el mensaje del log:
 --
---  ── 21000 · "ON CONFLICT DO UPDATE command cannot affect row a second time"
---     El mismo lote trae DOS filas con el mismo reporte_id. Postgres no puede
---     insertar y actualizar la misma fila en una sola sentencia, así que
---     rechaza el lote entero —por eso se pierde todo, no solo la fila mala—.
---     Causa típica: una fila duplicada en la hoja de cálculo de origen.
---     Se arregla en el origen: quitar el duplicado, o que el Apps Script haga
---     de-duplicado por "Reporte ID" antes de enviar, quedándose con el último.
+--      ON CONFLICT DO UPDATE command cannot affect row a second time   (21000)
 --
---  ── 22007 · "invalid input syntax for type date"
---     ó 22008 · "date/time field value out of range"
---     El lote trae una fecha que no convierte. json_to_recordset la declara
---     como date, así que una celda vacía llega como "" y revienta —no como
---     NULL—, y una fecha en formato dd/mm/aaaa se rompe en cuanto el día pasa
---     de 12. Se arregla en el origen: mandar null en vez de "" cuando la celda
---     esté vacía, y las fechas en formato ISO (aaaa-mm-dd).
+--  El lote trae DOS filas con el mismo reporte_id. El upsert va en una sola
+--  sentencia, así que Postgres tendría que insertar y actualizar la misma fila
+--  dentro del mismo comando, y eso no lo hace: rechaza el LOTE ENTERO. Por eso
+--  una sola fila duplicada en la hoja de cálculo tumba la sincronización
+--  completa —unos días entraban registros y otros no entraba ninguno—.
 --
---  Los dos arreglos de abajo son independientes del error y se pueden aplicar
---  ya.
+--  El arreglo NO es de base de datos: está en el emisor,
+--  scripts/appsheet_hvac_to_supabase.gs, que armaba el lote fila por fila sin
+--  comprobar repetidos. Ahora deduplica por "Reporte ID" antes de enviar,
+--  quedándose con la última —que es la que ganaría en el upsert de todas
+--  formas— y deja en el log de Apps Script qué IDs venían repetidos para poder
+--  limpiar la hoja. Hay también una función debugDuplicados() que los lista
+--  sin mandar nada.
+--
+--  Hay que copiar el .gs actualizado a Extensiones → Apps Script en la hoja.
+--
+--  Los dos arreglos de abajo son independientes de ese error y se pueden
+--  aplicar ya.
 -- =============================================================================
 
 
@@ -103,10 +104,11 @@ CREATE TRIGGER trg_hvac_updated_at
 --  activo sobre esta tabla. A modo de comparación, profiles devuelve 0 filas a
 --  un anónimo, así que ahí sí está funcionando.
 --
---  NO se activa aquí sin más, a propósito: si el Apps Script que sincroniza usa
---  la anon key en vez de la service_role, activar RLS le corta la escritura y
---  la sincronización deja de funcionar. Confirmar primero con qué clave manda
---  el Apps Script, y entonces descomentar:
+--  Activarlo NO rompe la sincronización: scripts/appsheet_hvac_to_supabase.gs
+--  manda con la service_role key, que se salta RLS por diseño. Queda igualmente
+--  comentado para que sea una decisión consciente y se pueda comprobar antes
+--  que la copia instalada en Apps Script lleva de verdad la service_role y no
+--  la anon (en el repo la constante está como marcador de posición):
 --
 -- ALTER TABLE public.reportes_hvac ENABLE ROW LEVEL SECURITY;
 --

@@ -169,7 +169,79 @@ function syncAll() {
   });
 
   if (!payload.length) { Logger.log('Nada que sincronizar.'); return; }
-  upsertBatch(payload);
+
+  // Dos filas de la hoja con el mismo "Reporte ID" tumban la sincronización
+  // ENTERA, no solo esa fila: el upsert va en una sola sentencia y Postgres
+  // responde
+  //
+  //     ON CONFLICT DO UPDATE command cannot affect row a second time
+  //
+  // porque no puede insertar y actualizar la misma fila en el mismo comando.
+  // Se manda una sola vez cada Reporte ID, la última, que es la que gana en un
+  // upsert de todas formas.
+  var limpio = dedupePorClave(payload, CONFLICT_COL);
+  var repetidos = Object.keys(limpio.repetidas);
+  if (repetidos.length) {
+    Logger.log('⚠️ ' + repetidos.length + ' "Reporte ID" repetidos en la hoja. ' +
+               'Se envía la última fila de cada uno, pero conviene corregir la hoja: ' +
+               repetidos.map(function (k) {
+                 return k + ' (x' + limpio.repetidas[k] + ')';
+               }).join(', '));
+  }
+
+  upsertBatch(limpio.filas);
+}
+
+// ─── Quita repetidos por clave, quedándose con el último ─────────────
+//  Devuelve { filas: [...], repetidas: { clave: cuántas veces } }.
+function dedupePorClave(filas, clave) {
+  var ultima    = Object.create(null);   // sin prototipo: ninguna clave choca
+  var orden     = [];
+  var repetidas = Object.create(null);
+
+  filas.forEach(function (fila) {
+    var k = String(fila[clave]);
+    if (k in ultima) repetidas[k] = (repetidas[k] || 1) + 1;
+    else             orden.push(k);
+    ultima[k] = fila;
+  });
+
+  return {
+    filas: orden.map(function (k) { return ultima[k]; }),
+    repetidas: repetidas
+  };
+}
+
+// ─── DIAGNÓSTICO: qué "Reporte ID" están repetidos en la hoja ────────
+//  No manda nada a Supabase; solo informa. Útil para limpiar el origen.
+function debugDuplicados() {
+  var ss    = SpreadsheetApp.getActive();
+  var sheet = ss.getSheetByName(SHEET_NAME) || ss.getActiveSheet();
+  var data  = sheet.getDataRange().getValues();
+  var hr    = findHeaderRow(data);
+  if (hr === -1) { Logger.log('No se encontró la fila de encabezados.'); return; }
+
+  var headers = data[hr];
+  var col = -1;
+  headers.forEach(function (h, i) {
+    if (COLUMN_MAP[String(h).trim()] === CONFLICT_COL) col = i;
+  });
+  if (col === -1) { Logger.log('No se encontró la columna "Reporte ID".'); return; }
+
+  var vistos = Object.create(null);
+  var repes  = [];
+  data.slice(hr + 1).forEach(function (row, i) {
+    var k = String(row[col]).trim();
+    if (!k) return;
+    if (k in vistos) repes.push('"' + k + '" en las filas ' + vistos[k] + ' y ' + (hr + i + 2));
+    else vistos[k] = hr + i + 2;
+  });
+
+  if (!repes.length) Logger.log('✅ Sin "Reporte ID" repetidos.');
+  else {
+    Logger.log('❌ ' + repes.length + ' repetido(s), y esto es lo que tumba la sincronización:');
+    repes.forEach(function (r) { Logger.log('   ' + r); });
+  }
 }
 
 // ─── POST upsert a Supabase REST ─────────────────────────────────────
