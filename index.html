@@ -1195,6 +1195,13 @@ FF
                 45deg, transparent, transparent 6px,
                 rgba(173, 181, 189, .10) 6px, rgba(173, 181, 189, .10) 12px);
         }
+        /* Fila empezada a la que le faltan campos obligatorios: ámbar, para
+           separarla de la que está del todo vacía (gris). Lo capturado ya se
+           guardó; lo que dice esta marca es que aún no puede darse por cerrada.
+           El title lista qué falta. */
+        #table-conci-manifiestos tbody tr.conci-fila-incompleta > td:first-child {
+            box-shadow: inset 3px 0 0 #f0ad4e;
+        }
         #table-conci-manifiestos tbody tr {
             cursor: pointer;
             transition: background-color .15s ease;

@@ -22509,6 +22509,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         _conciRepintarEstelas();
         _conciRepintarConflictos();
         _conciMarcarFilasSinCaptura();
+        _conciMarcarFilasIncompletas();
     });
 
     // Encabezado fijo vía CSS (position:sticky). Sin manipulación de transform
@@ -26136,6 +26137,59 @@ function _conciFilaSinCaptura(tr) {
     return miradas > 0;
 }
 
+// Campos sin los que un manifiesto no está terminado. Son los tres que pidió
+// Operaciones, ni uno más: se marca lo que de verdad impide dar la fila por
+// cerrada, no toda columna vacía — si no, media tabla saldría marcada y el
+// aviso dejaría de significar algo.
+const _CONCI_COLUMNAS_OBLIGATORIAS = ['AEROLINEA', 'MATRICULA', 'TIPO DE OPERACIÓN'];
+
+// Qué le falta a esta fila para estar completa. Devuelve los nombres tal como
+// aparecen en el encabezado, para poder decírselo al operador con sus palabras.
+function _conciCamposObligatoriosFaltantes(tr) {
+    if (!tr) return [];
+    const faltan = [];
+    const celdas = [...tr.querySelectorAll('td[data-col]')];
+    _CONCI_COLUMNAS_OBLIGATORIAS.forEach(obligatoria => {
+        const clave = _conciSummaryColumnKey(obligatoria);
+        const td = celdas.find(c => _conciSummaryColumnKey(c.dataset.col) === clave);
+        if (!td) return;   // esa columna no está a la vista: no se exige
+        const valor = _conciNormalizeEditableCellText(
+            td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent
+        );
+        if (!valor) faltan.push(td.dataset.col);
+    });
+    return faltan;
+}
+
+// Una fila EMPEZADA a la que le faltan campos obligatorios. Una fila del todo
+// vacía no cuenta aquí: de ésa se encarga _conciFilaSinCaptura, y avisar dos
+// veces de lo mismo sólo hace ruido.
+function _conciFilaIncompleta(tr) {
+    if (!tr) return false;
+    if (_conciFilaSinCaptura(tr)) return false;
+    return _conciCamposObligatoriosFaltantes(tr).length > 0;
+}
+
+// Marca en pantalla las filas a las que les falta algo obligatorio, para que el
+// operador vea CUÁLES son sin recorrer la tabla campo por campo.
+function _conciMarcarFilasIncompletas() {
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (!tbody) return 0;
+    let cuantas = 0;
+    tbody.querySelectorAll('tr[data-row-id]').forEach(tr => {
+        const faltan = _conciFilaIncompleta(tr) ? _conciCamposObligatoriosFaltantes(tr) : [];
+        tr.classList.toggle('conci-fila-incompleta', faltan.length > 0);
+        if (faltan.length) {
+            tr.dataset.conciFaltan = faltan.join(', ');
+            tr.title = 'Falta capturar: ' + faltan.join(', ');
+            cuantas++;
+        } else {
+            delete tr.dataset.conciFaltan;
+        }
+    });
+    return cuantas;
+}
+
 function _conciMarcarFilasSinCaptura() {
     const tbody = document.querySelector('#table-conci-manifiestos tbody');
     if (!tbody) return 0;
@@ -26888,8 +26942,20 @@ async function _conciGuardarTodoAhora() {
         //    haya confirmado ese valor exacto.
         const quedanPendientes = _conciContarCeldasSinGuardar();
         const confirmadas = Math.max(0, celdasPendientes - quedanPendientes);
+        // Guardado y COMPLETO no son lo mismo. Lo capturado se persiste siempre
+        // —retenerlo en pantalla es como se pierde el trabajo—, pero una fila a
+        // la que le faltan campos obligatorios no puede darse por cerrada en
+        // silencio: se marca en la tabla y se dice cuántas son, para que el
+        // operador las termine en vez de creer que la jornada quedó lista.
+        const incompletas = _conciMarcarFilasIncompletas();
         if (typeof showNotification === 'function') {
-            if (!quedanPendientes) {
+            if (!quedanPendientes && incompletas) {
+                showNotification(
+                    `Se guardó lo capturado, pero ${incompletas === 1 ? 'hay 1 fila incompleta' : `hay ${incompletas} filas incompletas`}: `
+                    + `les falta ${_CONCI_COLUMNAS_OBLIGATORIAS.join(', ')}. Quedan marcadas en la tabla.`,
+                    'warning'
+                );
+            } else if (!quedanPendientes) {
                 showNotification(
                     confirmadas === 1
                         ? 'Guardado: 1 captura confirmada por la base.'
