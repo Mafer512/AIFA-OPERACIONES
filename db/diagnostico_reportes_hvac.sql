@@ -43,6 +43,23 @@
 
 
 -- ── 1. Confirmar de qué lado está el problema ────────────────────────────────
+--
+--  YA EJECUTADO el 17-ago-2026. Devolvió:
+--
+--      restriccion          definicion
+--      reportes_hvac_pkey   PRIMARY KEY (reporte_id)
+--
+--  Con eso queda cerrado: el arbitro del ON CONFLICT existe —una llave primaria
+--  sirve igual que un unique— y el error no era 42P10. El bloque 2 no hace
+--  falta.
+--
+--  De paso salió otra cosa: la tabla real tiene 19 columnas y reporte_id es la
+--  LLAVE PRIMARIA, mientras que db/reportes_hvac.sql declaraba una columna "pk
+--  bigserial primary key" con reporte_id como simple "unique". La tabla nunca
+--  se creó con ese archivo, lo que explica por qué sus políticas de RLS
+--  tampoco están en efecto (paso 4). El archivo ya se corrigió para reflejar la
+--  base.
+--
 -- Debe devolver una fila. Si NO devuelve nada, el error sí es 42P10 y falta la
 -- restricción; en ese caso ejecutar el bloque 2.
 SELECT con.conname AS restriccion,

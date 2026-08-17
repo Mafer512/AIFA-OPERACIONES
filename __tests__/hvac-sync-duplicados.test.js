@@ -127,3 +127,45 @@ describe('el script llama al de-duplicado antes de mandar', () => {
     expect(fuente).toContain('function debugDuplicados(');
   });
 });
+
+describe('el esquema del repo y el script de sincronizacion no se separan', () => {
+  const sql = fs.readFileSync(
+    path.resolve(__dirname, '..', 'db', 'reportes_hvac.sql'), 'utf8');
+
+  // Columnas declaradas dentro del create table.
+  const cuerpo = sql.slice(
+    sql.indexOf('create table if not exists public.reportes_hvac ('),
+    sql.indexOf('\n);'),
+  );
+  const columnasSql = new Set(
+    cuerpo.split('\n').slice(1)
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith('--'))
+      .map((l) => l.split(/\s+/)[0]),
+  );
+
+  // Columnas a las que el .gs mapea los encabezados de la hoja.
+  const columnasGs = [...fuente.matchAll(/^\s*'[^']+'\s*:\s*'(\w+)'/gm)].map((m) => m[1]);
+
+  test('cada columna que manda el .gs existe en la tabla', () => {
+    const faltantes = columnasGs.filter((c) => !columnasSql.has(c));
+    expect(faltantes).toEqual([]);
+  });
+
+  test('el .gs manda las 18 columnas de datos', () => {
+    expect(columnasGs).toHaveLength(18);
+  });
+
+  test('reporte_id es la llave primaria, como en produccion', () => {
+    // Comprobado contra la base el 17-ago-2026: reportes_hvac_pkey es
+    // PRIMARY KEY (reporte_id). El archivo declaraba antes una columna "pk"
+    // que la tabla real no tiene.
+    expect(cuerpo).toMatch(/reporte_id\s+text\s+primary key/);
+    expect(columnasSql.has('pk')).toBe(false);
+  });
+
+  test('la columna del ON CONFLICT es la misma en los dos lados', () => {
+    expect(fuente).toContain("var CONFLICT_COL  = 'reporte_id'");
+    expect(columnasSql.has('reporte_id')).toBe(true);
+  });
+});

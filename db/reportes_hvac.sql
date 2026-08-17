@@ -6,9 +6,20 @@
 -- ═══════════════════════════════════════════════════════════════════
 
 -- 1) Tabla -----------------------------------------------------------
+--
+--  ⚠️ CORREGIDO 17-ago-2026 para que coincida con lo que hay en producción.
+--
+--  Este archivo declaraba una columna "pk bigserial primary key" y dejaba
+--  reporte_id como simple "unique". La tabla real NO tiene esa columna: son 19
+--  columnas y reporte_id es la LLAVE PRIMARIA (restricción reportes_hvac_pkey).
+--  O sea, la tabla nunca se creó con este script, y por eso las políticas de
+--  más abajo tampoco están surtiendo efecto en producción (ver el paso 4 de
+--  db/diagnostico_reportes_hvac.sql).
+--
+--  Se deja como está en la base, que es lo correcto: reporte_id ES la
+--  identidad de un reporte, y una llave subrogada encima no aportaba nada.
 create table if not exists public.reportes_hvac (
-  pk                       bigserial primary key,
-  reporte_id               text unique not null,     -- clave de negocio (AppSheet "Reporte ID")
+  reporte_id               text primary key,          -- clave de negocio (AppSheet "Reporte ID")
   fecha                    date,
   quien_elabora            text,
   id_registro              text,                      -- columna "ID" de AppSheet
