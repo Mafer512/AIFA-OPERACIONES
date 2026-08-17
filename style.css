@@ -20875,3 +20875,49 @@ body.conci-manifest-workspace #navdeck-back {
    .airline-stats-chart-wrap { max-height: 480px; }
    .airline-stats-table-wrap { max-height: 360px; }
 }
+
+/* ── Dos personas capturaron la misma celda ─────────────────────────────────
+   Gana lo que se escribió en esta pantalla. La marca sirve para enterarse de
+   que alguien más puso otra cosa, y para quedarse con lo suyo si conviene. */
+#table-conci-manifiestos tbody td.conci-cell-conflicto {
+  position: relative;
+  background-image: linear-gradient(135deg, rgba(255, 171, 0, .16), rgba(255, 171, 0, .06));
+  box-shadow: inset 0 0 0 2px rgba(230, 145, 0, .75);
+}
+
+#table-conci-manifiestos tbody td.conci-cell-conflicto .conci-conflicto-marca {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 9;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #e69100;
+  color: #fff;
+  font-size: .6rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  border: 1.5px solid #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+}
+
+#table-conci-manifiestos tbody td.conci-cell-conflicto .conci-conflicto-marca:hover,
+#table-conci-manifiestos tbody td.conci-cell-conflicto .conci-conflicto-marca:focus-visible {
+  background: #c97b00;
+  transform: scale(1.15);
+  outline: none;
+}
+
+/* Hay capturas sin guardar en OTRA computadora: eso no se resuelve solo, hace
+   falta que alguien las rescate. Se distingue del pendiente propio, que sí se
+   reintenta por su cuenta. */
+#conci-pendientes-indicador.conci-pendientes-ajenos {
+  background: #f8d7da !important;
+  color: #842029 !important;
+  border-color: #dc3545 !important;
+}

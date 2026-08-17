@@ -45,6 +45,8 @@ const api = new Function('document', 'setTimeout', 'clearTimeout', 'estado', 'en
   ${constante('_CONCI_REINTENTO_MAX_MS')}
   let _conciReintentoTimer = null;
   let _conciReintentoEspera = _CONCI_REINTENTO_MIN_MS;
+  const MIN = _CONCI_REINTENTO_MIN_MS;
+  const MAX = _CONCI_REINTENTO_MAX_MS;
   function _conciReintentarPendientes() { return estado.pendientes; }
   function _conciCanCurrentUserEdit() { return estado.puedeEditar; }
   function _conciRefreshCalculatedCellsForRow() {}
@@ -66,6 +68,7 @@ const api = new Function('document', 'setTimeout', 'clearTimeout', 'estado', 'en
   ${extraer('_conciRestaurarFilasNuevas')}
   return {
     _conciProgramarReintento, _conciReiniciarEsperaReintento, _conciRestaurarFilasNuevas,
+    MIN, MAX,
     espera: () => _conciReintentoEspera,
     hayTimer: () => _conciReintentoTimer !== null,
     // El temporizador vive en el modulo, no en cada prueba: hay que reiniciarlo
@@ -101,7 +104,7 @@ describe('insiste hasta que la base acepte', () => {
     api._conciProgramarReintento();
     expect(api.hayTimer()).toBe(true);
 
-    jest.advanceTimersByTime(15000);
+    jest.advanceTimersByTime(api.MIN);
     expect(api.hayTimer()).toBe(true); // sigue insistiendo
   });
 
@@ -109,45 +112,45 @@ describe('insiste hasta que la base acepte', () => {
     pendientes = 1;
     api._conciProgramarReintento();
 
-    expect(api.espera()).toBe(15000);
-    jest.advanceTimersByTime(15000);
-    expect(api.espera()).toBe(30000);
-    jest.advanceTimersByTime(30000);
-    expect(api.espera()).toBe(60000);
+    expect(api.espera()).toBe(api.MIN);
+    jest.advanceTimersByTime(api.MIN);
+    expect(api.espera()).toBe(api.MIN * 2);
+    jest.advanceTimersByTime(api.MIN * 2);
+    expect(api.espera()).toBe(api.MIN * 4);
   });
 
   test('la espera tiene tope: no se va a horas', () => {
     pendientes = 1;
     api._conciProgramarReintento();
     for (let i = 0; i < 12; i++) jest.advanceTimersByTime(api.espera());
-    expect(api.espera()).toBe(120000);
+    expect(api.espera()).toBe(api.MAX);
   });
 
   test('cuando ya no queda nada pendiente, se apaga', () => {
     pendientes = 1;
     api._conciProgramarReintento();
     pendientes = 0;
-    jest.advanceTimersByTime(15000);
+    jest.advanceTimersByTime(api.MIN);
     expect(api.hayTimer()).toBe(false);
   });
 
   test('tras apagarse, la espera vuelve al intervalo corto', () => {
     pendientes = 1;
     api._conciProgramarReintento();
-    jest.advanceTimersByTime(15000);   // 15s -> espera 30s
+    jest.advanceTimersByTime(api.MIN);   // 15s -> espera 30s
     pendientes = 0;
-    jest.advanceTimersByTime(30000);
-    expect(api.espera()).toBe(15000);
+    jest.advanceTimersByTime(api.MIN * 2);
+    expect(api.espera()).toBe(api.MIN);
   });
 
   test('un guardado exitoso reinicia la espera', () => {
     pendientes = 1;
     api._conciProgramarReintento();
-    jest.advanceTimersByTime(15000);
-    expect(api.espera()).toBe(30000);
+    jest.advanceTimersByTime(api.MIN);
+    expect(api.espera()).toBe(api.MIN * 2);
 
     api._conciReiniciarEsperaReintento();
-    expect(api.espera()).toBe(15000);
+    expect(api.espera()).toBe(api.MIN);
   });
 
   test('no se programan dos reintentos a la vez', () => {
@@ -155,9 +158,9 @@ describe('insiste hasta que la base acepte', () => {
     api._conciProgramarReintento();
     api._conciProgramarReintento();
     api._conciProgramarReintento();
-    jest.advanceTimersByTime(15000);
+    jest.advanceTimersByTime(api.MIN);
     // Un solo ciclo: la espera se duplicó una vez, no tres.
-    expect(api.espera()).toBe(30000);
+    expect(api.espera()).toBe(api.MIN * 2);
   });
 });
 
