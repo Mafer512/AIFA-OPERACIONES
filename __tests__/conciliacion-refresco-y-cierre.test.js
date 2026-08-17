@@ -171,11 +171,10 @@ describe('las instrucciones para quien captura', () => {
     expect(texto).toMatch(/misma celda/i);
   }, 30000);
 
-  test('el botón está en la barra del módulo', () => {
+  test('el botón de instrucciones ya no aparece en la barra del módulo', () => {
     const fs = require('fs');
     const path = require('path');
     const html = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'), 'utf8');
-    expect(html).toContain('id="btn-conci-instrucciones"');
-    expect(html).toContain('_conciAbrirInstrucciones()');
+    expect(html).not.toContain('id="btn-conci-instrucciones"');
   });
 });
