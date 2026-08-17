@@ -37,22 +37,37 @@ function constante(nombre) {
 
 const borrados = [];
 const olvidados = [];
+// Lo que la base responde al DELETE. Por omisión confirma que borró la fila
+// (devuelve el id). `respuestaBorrado.filas = []` simula el caso silencioso:
+// PostgREST responde sin error pero RLS no dejó borrar nada.
+const respuestaBorrado = { filas: null, error: null };
 
-const api = new Function('document', 'window', 'console', 'borrados', 'olvidados', `
+const api = new Function('document', 'window', 'console', 'borrados', 'olvidados', 'respuestaBorrado', `
   function _conciBorradorOlvidarFila(tr) { olvidados.push(tr); }
   const _conciRenderCache = { clear() {} };
   let _conciRenderedKey = '';
   window.supabaseClient = {
-    from: () => ({ delete: () => ({ eq: (_c, id) => { borrados.push(id); return Promise.resolve({ error: null }); } }) }),
+    from: () => ({
+      delete: () => ({
+        eq: (_c, id) => ({
+          select: () => {
+            borrados.push(id);
+            if (respuestaBorrado.error) return Promise.resolve({ data: null, error: respuestaBorrado.error });
+            return Promise.resolve({ data: respuestaBorrado.filas ?? [{ id }], error: null });
+          },
+        }),
+      }),
+    }),
   };
+  ${extraer('_conciEliminarRegistro')}
   ${extraer('_conciDescartarFilaNueva')}
   ${extraer('_conciNormalizeEditableCellText')}
   ${extraer('_conciSummaryColumnKey')}
   ${constante('_CONCI_COLUMNAS_IDENTIDAD')}
   ${extraer('_conciFilaSinCaptura')}
   ${extraer('_conciMarcarFilasSinCaptura')}
-  return { _conciDescartarFilaNueva, _conciFilaSinCaptura, _conciMarcarFilasSinCaptura };
-`)(document, window, console, borrados, olvidados);
+  return { _conciDescartarFilaNueva, _conciEliminarRegistro, _conciFilaSinCaptura, _conciMarcarFilasSinCaptura };
+`)(document, window, console, borrados, olvidados, respuestaBorrado);
 
 function filaNueva({ rowId = '', promesa = null, timer = null } = {}) {
   document.body.innerHTML = `
@@ -69,6 +84,8 @@ function filaNueva({ rowId = '', promesa = null, timer = null } = {}) {
 beforeEach(() => {
   borrados.length = 0;
   olvidados.length = 0;
+  respuestaBorrado.filas = null;
+  respuestaBorrado.error = null;
   document.body.innerHTML = '';
 });
 
@@ -133,8 +150,62 @@ describe('descartar una fila nueva', () => {
 
   test('un guardado que falló no impide descartarla', async () => {
     const tr = filaNueva({ promesa: Promise.reject(new Error('sin red')) });
-    await expect(api._conciDescartarFilaNueva(tr)).resolves.toBeUndefined();
+    await expect(api._conciDescartarFilaNueva(tr)).resolves.toBe(true);
     expect(tr.isConnected).toBe(false);
+  });
+
+  // El segundo síntoma reportado: la fila se iba de la pantalla pero el
+  // registro seguía en la base y volvía al recargar. Pasaba porque el DELETE
+  // se daba por bueno sin comprobar que hubiera borrado algo.
+  test('si la base no borró nada, la fila se queda en pantalla', async () => {
+    respuestaBorrado.filas = [];
+    const tr = filaNueva({ rowId: '9876' });
+
+    await expect(api._conciDescartarFilaNueva(tr)).resolves.toBe(false);
+    expect(tr.isConnected).toBe(true);
+  });
+
+  test('si el borrado falla, la fila se queda en pantalla', async () => {
+    respuestaBorrado.error = new Error('permiso denegado');
+    const tr = filaNueva({ rowId: '9876' });
+
+    await expect(api._conciDescartarFilaNueva(tr)).resolves.toBe(false);
+    expect(tr.isConnected).toBe(true);
+  });
+
+  // Si quedara marcada como descartada, el botón podría reintentar pero el
+  // autoguardado ya no volvería a tocarla nunca.
+  test('una fila que no se pudo borrar vuelve a ser una fila viva', async () => {
+    respuestaBorrado.filas = [];
+    const tr = filaNueva({ rowId: '9876' });
+
+    await api._conciDescartarFilaNueva(tr);
+
+    expect(tr.dataset.conciDescartada).toBeUndefined();
+  });
+});
+
+describe('confirmar que la base borró de verdad', () => {
+  test('un DELETE que devuelve la fila cuenta como borrado', async () => {
+    await expect(api._conciEliminarRegistro('42')).resolves.toBe(true);
+    expect(borrados).toEqual(['42']);
+  });
+
+  // PostgREST responde 204 sin error aunque RLS haya filtrado el registro y no
+  // se haya borrado nada: sin pedir la fila de vuelta parecía un éxito.
+  test('un DELETE que no tocó ninguna fila NO cuenta como borrado', async () => {
+    respuestaBorrado.filas = [];
+    await expect(api._conciEliminarRegistro('42')).resolves.toBe(false);
+  });
+
+  test('un error de la base se propaga', async () => {
+    respuestaBorrado.error = new Error('permiso denegado');
+    await expect(api._conciEliminarRegistro('42')).rejects.toThrow('permiso denegado');
+  });
+
+  test('se pide la fila de vuelta para poder comprobarlo', () => {
+    const fn = source.slice(source.indexOf('async function _conciEliminarRegistro'));
+    expect(fn.slice(0, 900)).toContain(".select('id')");
   });
 });
 
@@ -201,5 +272,20 @@ describe('integración en el módulo', () => {
   test('las filas sin captura se marcan tras cada render', () => {
     expect(source).toContain('_conciMarcarFilasSinCaptura();');
     expect(html).toContain('conci-fila-sin-captura');
+  });
+
+  // Los dos caminos de borrado (fila nueva y fila ya guardada) deben pasar por
+  // la misma comprobación; si alguno vuelve a hacer su propio .delete() sin
+  // .select(), regresa el borrado que parecía funcionar y no funcionaba.
+  test('ningún borrado da por bueno un DELETE sin confirmar', () => {
+    const sueltos = source.match(/from\('Conciliación Manifiestos'\)\s*\n?\s*\.?delete\(\)/g) || [];
+    expect(sueltos).toHaveLength(1); // sólo el de _conciEliminarRegistro
+    expect(source).toContain('const borrada = await _conciEliminarRegistro(rowId);');
+  });
+
+  test('la papelera avisa cuando el usuario no tiene permiso de borrado', () => {
+    const manejador = source.slice(source.indexOf('function _conciBindRowActions'));
+    const bloque = manejador.slice(0, manejador.indexOf('\n}\n'));
+    expect(bloque).toContain('Solo usuarios editor o admin pueden eliminar filas');
   });
 });

@@ -18467,6 +18467,20 @@ function _conciRefreshMatriculaValidationForRow(tr) {
     const airlineTd = cells.find(td => /aerol[ií]nea|airline/i.test(String(td.dataset.col || '')));
     if (!matriculaTd || !statusTd) return;
 
+    // Una fila recién agregada todavía no tiene matrícula que validar. Pintarle
+    // "NO IDENTIFICADA" en rojo desde el primer instante hacía que la fila que
+    // el usuario está capturando se viera idéntica a un registro fantasma, que
+    // es justo lo que se estaba intentando distinguir. Se deja en blanco hasta
+    // que haya una matrícula escrita; en cuanto la haya, esta misma función
+    // vuelve a correr y la evalúa como siempre.
+    const esFilaNuevaSinMatricula = tr.dataset.conciNew === '1'
+        && !String(tr.dataset.rowId || '').trim()
+        && !_conciNormalizeEditableCellText(_conciLiveCellValue(matriculaTd));
+    if (esFilaNuevaSinMatricula) {
+        tr.classList.remove('conci-matricula-mismatch');
+        return;
+    }
+
     const catalogEntry = _conciMatriculaCatalogMap.get(_conciNormalizeMatricula(_conciLiveCellValue(matriculaTd)));
     // Se aplica la MISMA regla que al cargar la tabla, leyendo lo que hay en
     // pantalla. Antes se recalculaba solo desde el catalogo y se pisaba la
@@ -27723,6 +27737,49 @@ async function _conciSaveVirtualAirlineOverride(client, tr, value) {
     return data;
 }
 
+// ¿Esta fila puede escribirse en la base? Una fila que todavía no existe allá
+// sólo debe crearse cuando el usuario capturó algo en ella; una fila ya
+// existente se guarda siempre (ahí "sin captura nueva" ya se filtra por
+// columnas modificadas más adelante).
+function _conciFilaNuevaListaParaGuardar(tr, hayCapturaDelUsuario) {
+    const esNuevaSinGuardar = tr.dataset.conciNew === '1' && !String(tr.dataset.rowId || '').trim();
+    return !esNuevaSinGuardar || hayCapturaDelUsuario;
+}
+
+// Una fila recién agregada en la que el usuario no llegó a escribir nada: no
+// existe en la base y en pantalla sólo estorba.
+//
+// Se mira celda por celda en vez de confiar en data-dirty de la fila, porque
+// hay valores que la fila muestra sin que nadie los haya capturado: en cuanto
+// se crea, _conciRefreshMatriculaValidationForRow le pinta "NO IDENTIFICADA"
+// en ESTATUS MATRÍCULA (no hay matrícula que identificar). Ése es el texto que
+// se veía en las filas vacías del final de la tabla.
+function _conciFilaNuevaSinCapturar(tr) {
+    if (!tr || tr.dataset.conciNew !== '1') return false;
+    if (String(tr.dataset.rowId || '').trim()) return false;
+    return ![...tr.querySelectorAll('td[data-col]')].some(td => {
+        if (td.dataset.dirty !== '1') return false;
+        return _conciNormalizeEditableCellText(
+            td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent
+        ) !== '';
+    });
+}
+
+// Busca una fila nueva que siga en blanco para reutilizarla.
+//
+// NINGUNA fila se quita sola de la pantalla. Un intento anterior las retiraba
+// al salir de ellas (focusout) y eso resultó peligroso: entre el blur y el
+// click hay una carrera, y si el temporizador corría antes de que el foco
+// aterrizara en la celda destino, la fila desaparecía con lo que llevara
+// dentro. En un módulo de captura eso es perder trabajo, que es justo lo que no
+// puede pasar. Reutilizar en vez de borrar consigue lo mismo —que "Agregar
+// fila" no apile filas vacías— sin destruir nada nunca.
+function _conciBuscarFilaNuevaEnBlanco(tbody) {
+    if (!tbody) return null;
+    return [...tbody.querySelectorAll('tr[data-conci-new="1"]')]
+        .find(tr => _conciFilaNuevaSinCapturar(tr)) || null;
+}
+
 async function _conciAutoSaveRow(tr, options = {}) {
     if (!tr || !tr.isConnected || !_conciEditMode || !_conciCanCurrentUserEdit()) return;
     // La fila se descarto mientras esto esperaba su turno: no debe crearse.
@@ -27760,6 +27817,11 @@ async function _conciAutoSaveRow(tr, options = {}) {
     const payload = {};
     const dirtyCols = new Set();
     const autoPersistedCols = new Set();
+    // ¿El usuario escribió realmente algo en esta fila? Sólo cuenta una celda
+    // que haya tocado (dirty) y que además tenga contenido. Ni el valor que la
+    // fila ya traía, ni un campo vaciado, ni los rellenos automáticos (la fecha
+    // heredada del filtro, el nombre de quien está en sesión) son datos suyos.
+    let hasUserCapture = false;
     cells.forEach(td => {
         const col = td.dataset.col;
         const liveInput = td.querySelector('input, textarea, select');
@@ -27797,9 +27859,28 @@ async function _conciAutoSaveRow(tr, options = {}) {
             payload[col] = null;
         }
         if (isDirty) dirtyCols.add(col);
+        if (isDirty && raw) hasUserCapture = true;
     });
     const settleSavedCells = (savedColumns) =>
         _conciSettleSavedCells(tr, cells, savedCellValues, savedColumns);
+
+    // Una fila nueva que todavía no existe en la base NO debe crearse hasta que
+    // el usuario capture algo. Éste era el origen de las filas fantasma:
+    //
+    // "Agregar fila" deja el cursor abierto en la primera celda editable. Al
+    // hacer clic en otra parte (o Escape, o Tab) ese editor se cierra y
+    // _conciCommitCellRaw llama a _conciAutoSaveRow SIEMPRE, aunque no se haya
+    // escrito nada. El payload venía vacío, pero justo debajo la fila nueva
+    // heredaba la fecha del filtro y enseguida se le ponía el nombre de quien
+    // estaba en sesión — así que dejaba de estar vacío y se insertaba igual. El
+    // resultado era un registro real con esos dos campos y nada más, que la
+    // tabla dibuja en blanco y con ESTATUS MATRÍCULA "NO IDENTIFICADA" (no hay
+    // matrícula que identificar), y que el contador de arriba suma porque sí
+    // existe.
+    //
+    // Va antes de esos dos rellenos automáticos a propósito: son ellos los que
+    // hacían pasar por "con datos" a una fila que el usuario nunca tocó.
+    if (!_conciFilaNuevaListaParaGuardar(tr, hasUserCapture)) return;
     // Una fila nueva sin fecha capturada hereda la del filtro, pero SOLO cuando
     // el filtro apunta a un unico dia. Con un rango activo (del 1 al 15, por
     // ejemplo) se tomaba siempre el dia de inicio, sin importar en que parte de
@@ -27949,12 +28030,13 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 tr.dataset.rowId = String(inserted.id);
                 tr.dataset.conciSummaryPersisted = '1';
                 tr.removeAttribute('data-conci-new');
-                const action = tr.querySelector('.conci-delete-new-row');
-                if (action) {
-                    action.classList.remove('conci-delete-new-row');
-                    action.classList.add('conci-delete-row');
-                    action.dataset.rowId = String(inserted.id);
-                }
+                // La fila ya es un registro real: su celda de acciones pasa a ser
+                // la misma que la del resto de filas guardadas (historial +
+                // eliminar según permisos). Antes sólo se le cambiaba la clase al
+                // botón de la fila nueva, y a un capturista le quedaba una
+                // papelera visible que el manejador descartaba sin decir nada.
+                const actionTd = tr.querySelector('td.conci-row-action-col');
+                if (actionTd) _conciFillRowActionCell(actionTd, String(inserted.id));
             }
             // Columnas que _conciWriteRowSafe tuvo que descartar del payload
             // real (ej. "# DE VUELO" con letras rechazado por ser bigint en
@@ -28032,7 +28114,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
 //   4. Se espera a lo que ya iba en camino y, si alcanzo a crearla, se borra
 //      de la base.
 async function _conciDescartarFilaNueva(tr) {
-    if (!tr) return;
+    if (!tr) return false;
     tr.dataset.conciDescartada = '1';
     if (tr._conciAutoSaveTimer) { clearTimeout(tr._conciAutoSaveTimer); tr._conciAutoSaveTimer = null; }
     tr._conciAutoSaveQueued = false;
@@ -28043,23 +28125,56 @@ async function _conciDescartarFilaNueva(tr) {
     try { await tr._conciAutoSavePromise; } catch (_) { /* fallo: entonces no se creo */ }
 
     const rowId = String(tr.dataset.rowId || '').trim();
-    tr.remove();
-    if (!rowId) return;
+    // Nunca llegó a la base: basta con quitarla de la pantalla.
+    if (!rowId) { tr.remove(); return true; }
 
+    // Sí llegó a la base. Antes se quitaba de la pantalla ANTES de borrarla allá
+    // y, si el borrado fallaba, sólo quedaba un aviso: la fila desaparecía a la
+    // vista pero el registro seguía existiendo y volvía en la siguiente carga.
+    // Ahora la fila sólo se quita cuando la base confirma el borrado.
     try {
-        let client = window.supabaseClient;
-        if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
-        if (!client) throw new Error('No se pudo inicializar el cliente de Supabase.');
-        const result = await client.from('Conciliación Manifiestos').delete().eq('id', rowId);
-        if (result.error) throw result.error;
-        _conciRenderCache.clear();
-        _conciRenderedKey = '';
+        const borrada = await _conciEliminarRegistro(rowId);
+        if (!borrada) throw new Error('La base de datos no eliminó el registro (permisos o registro ya inexistente).');
+        tr.remove();
+        return true;
     } catch (error) {
+        delete tr.dataset.conciDescartada;
         console.warn('[Conciliación] la fila descartada alcanzó a guardarse y no se pudo borrar:', error);
         if (typeof showNotification === 'function') {
-            showNotification('La fila alcanzó a guardarse y no se pudo eliminar. Actualiza la tabla y bórrala desde ahí.', 'error');
+            showNotification('La fila alcanzó a guardarse y no se pudo eliminar: ' + (error.message || error), 'error');
         }
+        return false;
     }
+}
+
+// Borra un registro de "Conciliación Manifiestos" y CONFIRMA que realmente se
+// borró antes de dar el borrado por bueno.
+//
+// El .delete() de Supabase no lleva .select(), así que responde 204 sin error
+// aunque no haya tocado ninguna fila — es justo lo que pasa cuando RLS filtra
+// el registro para el usuario en sesión, o cuando el id ya no existe. Ese
+// "éxito" silencioso era el segundo síntoma reportado: la fila se quitaba de la
+// pantalla, el registro seguía en la base y reaparecía al recargar. Pidiendo la
+// fila de vuelta con .select('id') se distingue un borrado real de uno que la
+// base ignoró. (Es la misma comprobación que _conciWriteRowSafe ya hace para
+// los UPDATE.)
+async function _conciEliminarRegistro(rowId) {
+    let client = window.supabaseClient;
+    if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
+    if (!client) throw new Error('No se pudo inicializar el cliente de Supabase.');
+    const { data, error } = await client
+        .from('Conciliación Manifiestos')
+        .delete()
+        .eq('id', rowId)
+        .select('id');
+    if (error) throw error;
+    const eliminadas = Array.isArray(data) ? data.length : (data ? 1 : 0);
+    if (!eliminadas) return false;
+    // La foto en caché ya no coincide con la base: volver a esta pestaña o
+    // re-filtrar la misma fecha reviviría la fila borrada.
+    _conciRenderCache.clear();
+    _conciRenderedKey = '';
+    return true;
 }
 
 function _conciBindRowActions() {
@@ -28076,22 +28191,27 @@ function _conciBindRowActions() {
         const tr = button.closest('tr');
         if (button.classList.contains('conci-delete-new-row')) {
             button.disabled = true;
-            await _conciDescartarFilaNueva(tr);
+            // Si el borrado no se pudo confirmar, la fila sigue en pantalla y el
+            // botón debe volver a servir para reintentarlo.
+            const descartada = await _conciDescartarFilaNueva(tr);
+            if (!descartada) button.disabled = false;
             return;
         }
-        if (!_conciCanCurrentUserManage()) return;
+        if (!_conciCanCurrentUserManage()) {
+            // Antes esto era un return mudo: el clic en la papelera no hacía
+            // nada ni explicaba por qué, y se leía como "el borrado no funciona".
+            alert('Solo usuarios editor o admin pueden eliminar filas de Conciliación.');
+            return;
+        }
         const rowId = String(button.dataset.rowId || tr?.dataset.rowId || '').trim();
         if (!rowId) return;
         if (!confirm('¿Eliminar esta fila de Conciliación? Esta acción no se puede deshacer.')) return;
         button.disabled = true;
         try {
-            let client = window.supabaseClient;
-            if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
-            if (!client) throw new Error('No se pudo inicializar el cliente de Supabase.');
-            const result = await client.from('Conciliación Manifiestos').delete().eq('id', rowId);
-            if (result.error) throw result.error;
-            _conciRenderCache.clear();
-            _conciRenderedKey = '';
+            const borrada = await _conciEliminarRegistro(rowId);
+            if (!borrada) {
+                throw new Error('La base de datos no eliminó el registro. Puede que no tengas permiso de borrado o que la fila ya no exista.');
+            }
             await loadConciliacionManifiestos({ forceRefresh: true });
         } catch (error) {
             button.disabled = false;
@@ -28109,9 +28229,35 @@ function _conciAddBlankRow() {
     const table = document.getElementById('table-conci-manifiestos');
     const thead = table ? table.querySelector('thead') : null;
     const tbody = table ? table.querySelector('tbody') : null;
-    const headerCells = thead ? Array.from(thead.querySelectorAll('th:not([data-conci-action])')) : [];
+    // Sólo la fila de ENCABEZADOS, y sólo sus columnas de datos.
+    //
+    // Antes esto era thead.querySelectorAll('th:not([data-conci-action])'), que
+    // barría el thead entero — y el thead tiene DOS filas: los encabezados y la
+    // fila de filtros ("Filtrar…"). La fila nueva nacía entonces con casi el
+    // doble de celdas que las demás: las de datos, más una por cada campo de
+    // filtro (sin nombre de columna, basura). Por eso salía corrida, más ancha
+    // que la tabla, y su papelera aparecía suelta muy a la derecha, fuera de la
+    // columna "Acciones". Cada clic en "Agregar fila" dibujaba otra igual.
+    //
+    // data-conci-column-key lo pone el propio render en cada th de datos, así
+    // que es el mismo nombre de columna que usan las filas reales; leerlo de
+    // ahí evita además el textContent del th, que arrastra el botón de filtro.
+    const headerRow = thead ? thead.querySelector('tr:not(.conci-filter-row)') : null;
+    const headerCells = headerRow ? Array.from(headerRow.querySelectorAll('th[data-conci-column-key]')) : [];
     if (!tbody || !headerCells.length) {
         alert('No hay columnas disponibles para crear una fila. Actualiza la tabla e inténtalo de nuevo.');
+        return;
+    }
+    // Si ya hay una fila nueva todavía en blanco, se reutiliza: se lleva el
+    // cursor a ella en vez de apilar otra igual debajo. Nada se borra — la fila
+    // que estaba ahí sigue ahí, con lo que tuviera.
+    const enBlanco = _conciBuscarFilaNuevaEnBlanco(tbody);
+    if (enBlanco) {
+        const celda = enBlanco.querySelector('td[data-col]:not([data-conci-readonly="1"])');
+        if (celda) {
+            _conciAsegurarCeldaVisible(celda, 'ambos');
+            _conciActivateCellEditor(celda);
+        }
         return;
     }
     const tr = document.createElement('tr');
@@ -28121,7 +28267,7 @@ function _conciAddBlankRow() {
     tr.dataset.conciNew = '1';
     tr.dataset.dirty = '1';
     headerCells.forEach((th) => {
-        const col = th.textContent.trim();
+        const col = th.dataset.conciColumnKey;
         const td = document.createElement('td');
         td.className = 'conci-cell';
         td.dataset.col = col;
@@ -28138,16 +28284,27 @@ function _conciAddBlankRow() {
         }
         td.textContent = '';        tr.appendChild(td);
     });
-    const actionTd = document.createElement('td');
-    actionTd.className = 'conci-row-action-col text-center';
-    actionTd.dataset.conciAction = '1';
-    const remove = document.createElement('button');
-    remove.type = 'button';
-    remove.className = 'btn btn-sm btn-outline-danger conci-delete-new-row';
-    remove.title = 'Quitar fila nueva';
-    remove.innerHTML = '<i class="fas fa-trash-alt"></i>';
-    actionTd.appendChild(remove);
-    tr.appendChild(actionTd);
+    // Celda de validación "Itinerario": las filas de datos la llevan siempre y
+    // no es editable. Sin ella la fila nueva quedaba corrida una columna
+    // respecto al resto de la tabla.
+    const itTd = document.createElement('td');
+    itTd.className = 'conci-cell conci-it-val-cell text-center';
+    itTd.innerHTML = '<span class="text-muted" style="font-size:.7rem">—</span>';
+    tr.appendChild(itTd);
+    // La columna de acciones sólo existe cuando el render la dibujó; añadirla
+    // siempre dejaba la fila una celda más ancha que el encabezado.
+    if (headerRow.querySelector('th[data-conci-action]')) {
+        const actionTd = document.createElement('td');
+        actionTd.className = 'conci-row-action-col text-center';
+        actionTd.dataset.conciAction = '1';
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn btn-sm btn-outline-danger conci-delete-new-row';
+        remove.title = 'Quitar fila nueva';
+        remove.innerHTML = '<i class="fas fa-trash-alt"></i>';
+        actionTd.appendChild(remove);
+        tr.appendChild(actionTd);
+    }
     tbody.appendChild(tr);
     tbody.scrollTop = tbody.scrollHeight;
     _conciBindRowActions();
