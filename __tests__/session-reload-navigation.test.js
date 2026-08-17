@@ -64,10 +64,18 @@ describe('restauracion de sesion y apartado durante reload', () => {
     expect(script).toContain('restoreSectionFromNavigation(requestedSectionKey)');
   });
 
-  test('reafirma la URL despues de refrescar permisos', () => {
+  // La reafirmacion sigue existiendo -applySectionPermissions puede ocultar
+  // Conciliacion y hay que volver a mostrarla-, pero SOLO cuando los permisos
+  // cambiaron de verdad. Hacerlo en cada vuelta del sondeo (cada 60 s) sacaba al
+  // usuario de la sub-pestana en la que estaba trabajando, porque pasaba por
+  // showSection como si fuera un clic del menu. Ver navegacion-involuntaria.
+  test('reafirma la URL despues de refrescar permisos, solo si cambiaron', () => {
     const start = script.indexOf('async function refreshUserPermissionsFromServer()');
     const end = script.indexOf('// Polling ligero', start);
-    expect(script.slice(start, end)).toContain('restoreSectionFromNavigation(routeKey)');
+    const block = script.slice(start, end);
+    expect(block).toContain('restoreSectionFromNavigation(routeKey');
+    expect(block.indexOf('if (permisosCambiaron)'))
+      .toBeLessThan(block.indexOf('restoreSectionFromNavigation(routeKey'));
   });
 
   test('la restauracion tiene limite y nunca deja ambas pantallas ocultas', () => {

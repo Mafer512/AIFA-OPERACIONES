@@ -2559,9 +2559,18 @@ async function refreshUserPermissionsFromServer() {
         const secs = roleData?.permissions?.allowed_sections;
         const prev = sessionStorage.getItem('user_allowed_sections');
         const next = Array.isArray(secs) ? JSON.stringify(secs) : null;
+        // Comparar el JSON en crudo hacía que un simple REORDENAMIENTO de la
+        // lista que devuelve el servidor contara como "cambiaron los permisos".
+        // La consulta no lleva ORDER BY, así que el mismo conjunto puede volver
+        // en otro orden entre dos sondeos; eso disparaba applySectionPermissions,
+        // que tiene dos caminos que navegan a la sección por defecto, y el
+        // usuario aparecía de pronto en otro módulo sin haber tocado nada.
+        const permisosCambiaron = _seccionesPermitidasCambiaron(prev, next);
         if (next !== prev) {
             if (next) sessionStorage.setItem('user_allowed_sections', next);
             else sessionStorage.removeItem('user_allowed_sections');
+        }
+        if (permisosCambiaron) {
             applySectionPermissions(sessionStorage.getItem(SESSION_USER) || name);
         }
         // El lanzador modal vive fuera de #sidebar-nav y mantiene su propia
@@ -2572,9 +2581,42 @@ async function refreshUserPermissionsFromServer() {
                 permissions: roleData.permissions || {}
             });
         } catch (_) {}
-        const routeKey = String(location.hash || '').replace(/^#/, '').trim();
-        if (routeKey) restoreSectionFromNavigation(routeKey);
+        // ESTE era el disparador de la navegación involuntaria.
+        //
+        // Antes se re-navegaba a la sección del hash en CADA vuelta del sondeo
+        // (cada 60 s), hubiera cambiado algo o no. Y se hacía por showSection
+        // pasándole el elemento del menú, es decir, por el mismo camino que un
+        // clic deliberado del usuario: showSection honra el data-sub-tab de ese
+        // elemento y reimpone la sub-pestaña por defecto de la sección. Quien
+        // estuviera trabajando en otra sub-pestaña era devuelto a la de arranque
+        // cada minuto, sin haber tocado nada.
+        //
+        // Ahora sólo se re-navega cuando los permisos REALMENTE cambiaron —que
+        // es lo único que justificaba re-aplicar la ruta— y se pide conservar la
+        // pestaña activa, porque esto nunca es un clic del usuario.
+        if (permisosCambiaron) {
+            const routeKey = String(location.hash || '').replace(/^#/, '').trim();
+            if (routeKey) restoreSectionFromNavigation(routeKey, { preserveActiveTab: true });
+        }
     } catch (_) {}
+}
+
+// ¿Cambió de verdad el conjunto de secciones permitidas? Compara CONJUNTOS, no
+// el texto: el mismo listado en distinto orden no es un cambio de permisos.
+// null (sin restricción) y [] son estados distintos y deben distinguirse.
+function _seccionesPermitidasCambiaron(prevJson, nextJson) {
+    if (prevJson === nextJson) return false;
+    const aLista = (json) => {
+        if (json === null || json === undefined) return null;
+        try {
+            const v = JSON.parse(json);
+            return Array.isArray(v) ? [...new Set(v.map(String))].sort() : null;
+        } catch (_) { return null; }
+    };
+    const a = aLista(prevJson);
+    const b = aLista(nextJson);
+    if (a === null || b === null) return a !== b;
+    return a.length !== b.length || a.some((v, i) => v !== b[i]);
 }
 
 // Polling ligero para propagar en vivo los cambios de permisos (cada 60 s).
@@ -3784,8 +3826,15 @@ function rememberActiveTab(tabButton) {
 
 function restoreActiveTab(sectionKey, sectionElement) {
     if (!sectionKey || !sectionElement) return false;
+    // rememberActiveTab guarda bajo el id del contenedor .content-section, que es
+    // la clave ANFITRIONA. Aquí llegaba la clave de RUTA, y para las rutas con
+    // anfitrión distinto (SECTION_HOST_OVERRIDES: itinerario → inicio) nunca
+    // coincidían: la restauración fallaba en silencio y el usuario aterrizaba en
+    // la pestaña de arranque en vez de en la suya.
+    const hostKey = (typeof resolveSectionHostKey === 'function'
+        ? resolveSectionHostKey(sectionKey) : sectionKey) || sectionKey;
     let tabId = '';
-    try { tabId = sessionStorage.getItem(`${LAST_TAB_STORAGE_PREFIX}${sectionKey}`) || ''; } catch (_) { }
+    try { tabId = sessionStorage.getItem(`${LAST_TAB_STORAGE_PREFIX}${hostKey}`) || ''; } catch (_) { }
     if (!tabId || !/^[a-z0-9_-]+$/i.test(tabId)) return false;
     const tabButton = document.getElementById(tabId);
     if (!tabButton || !sectionElement.contains(tabButton) || tabButton.disabled) return false;
@@ -3799,7 +3848,7 @@ function restoreActiveTab(sectionKey, sectionElement) {
     } catch (_) { return false; }
 }
 
-function restoreSectionFromNavigation(sectionKey) {
+function restoreSectionFromNavigation(sectionKey, options = {}) {
     const key = String(sectionKey || '').trim();
     if (!key || !/^[a-z0-9-]+$/i.test(key)) return false;
     const target = document.getElementById(`${resolveSectionHostKey(key)}-section`);
@@ -3814,7 +3863,7 @@ function restoreSectionFromNavigation(sectionKey) {
         !item.classList.contains('perm-hidden') && !item.classList.contains('d-none-auth')
     ) || links[0] || null;
 
-    try { showSection(key, link); } catch (_) {
+    try { showSection(key, link, options); } catch (_) {
         document.querySelectorAll('.content-section').forEach(sec => sec.classList.remove('active'));
         target.classList.add('active');
         currentSectionKey = key;
@@ -7178,7 +7227,11 @@ function initItinerarioGraphsTabBridge() {
 document.addEventListener('DOMContentLoaded', initItinerarioGraphsTabBridge);
 
 // Navegación: mostrar sección y marcar menú activo
-function showSection(sectionKey, linkEl) {
+// options.preserveActiveTab: la llamada NO viene de un clic del usuario (un
+// sondeo en segundo plano, una re-aplicación de permisos). En ese caso el
+// data-sub-tab del elemento del menú no debe imponerse: se respeta la
+// sub-pestaña en la que el usuario esté trabajando.
+function showSection(sectionKey, linkEl, options = {}) {
     try {
         let targetKey = sectionKey || currentSectionKey || getDefaultAllowedSection();
         if (!isSectionAllowed(targetKey)) {
@@ -7231,7 +7284,11 @@ function showSection(sectionKey, linkEl) {
         //
         // La pestaña recordada es para volver donde estabas al RECARGAR, no
         // para pisar un clic deliberado.
-        const subTabSolicitada = String(linkEl?.dataset?.subTab || '').trim();
+        // Salvo que quien llama avise que no es un clic del usuario: entonces
+        // imponer el data-sub-tab sacaría al operador de donde está trabajando.
+        const subTabSolicitada = options.preserveActiveTab === true
+            ? ''
+            : String(linkEl?.dataset?.subTab || '').trim();
         setTimeout(() => {
             if (subTabSolicitada) {
                 const subTabEl = document.getElementById(subTabSolicitada);
