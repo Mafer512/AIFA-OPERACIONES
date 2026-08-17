@@ -27,13 +27,22 @@ function extraer(nombre) {
   return source.slice(inicio, source.indexOf('\n}\n', inicio) + 2);
 }
 
+function constante(nombre) {
+  const i = source.indexOf(`const ${nombre}`);
+  if (i === -1) throw new Error(`No se encontró ${nombre}`);
+  return source.slice(i, source.indexOf('\n', i) + 1);
+}
+
 let presenceState = {};
+const estadoVivo = { listo: true };
 
 const api = new Function('document', 'presencia', 'estado', `
   function escapeHTML(s) { return String(s ?? ''); }
   let _conciLiveClientId = 'yo';
   let _conciFocoRemotoPorCliente = new Map();
   let _conciFirmaPresencia = '';
+  ${constante('_CONCI_PRESENCIA_GRACIA_MS')}
+  let _conciPresenciaVacioDesde = 0;
   const _conciLiveChannel = { presenceState: () => presencia.state };
   Object.defineProperty(globalThis, '_conciLiveReady', { get: () => estado.listo, configurable: true });
   function _conciColorForUser() { return '#3949ab'; }
@@ -52,8 +61,11 @@ const api = new Function('document', 'presencia', 'estado', `
     focos: () => _conciFocoRemotoPorCliente,
     miFoco: (f) => { _conciMiFocoActual = f; },
     olvidarFirma: () => { _conciFirmaPresencia = ''; },
+    olvidarVacio: () => { _conciPresenciaVacioDesde = 0; },
+    // Simula que el hueco de presencia ya lleva abierto más que el margen.
+    agotarGracia: () => { _conciPresenciaVacioDesde = Date.now() - _CONCI_PRESENCIA_GRACIA_MS - 1; },
   };
-`)(document, { get state() { return presenceState; } }, { listo: true });
+`)(document, { get state() { return presenceState; } }, estadoVivo);
 
 function pintar() {
   document.body.innerHTML = `
@@ -71,9 +83,11 @@ const avatares = () => [...cont().querySelectorAll('.conci-presencia-avatar')];
 
 beforeEach(() => {
   presenceState = {};
+  estadoVivo.listo = true;
   document.body.innerHTML = '';
   api.focos().clear();
   api.olvidarFirma();
+  api.olvidarVacio();
   api.miFoco({ rowId: '', col: '' });
 });
 
@@ -131,6 +145,82 @@ describe('sin parpadeo', () => {
 
     expect(avatares()[0]).toBe(avatar);
     expect(avatar.title).toContain('OBSERVACIONES');
+  });
+});
+
+// El parpadeo que seguía apareciendo "después de un rato" no venía de repintar
+// de más, sino de repintar de MENOS gente: la presencia se queda vacía un
+// instante cada vez que el canal se resuscribe (entre SUBSCRIBED y que track()
+// aterrice) y en cada reconexión. La barra se vaciaba —destruyendo el punto y
+// los avatares— y al instante siguiente los volvía a crear.
+describe('el hueco de presencia no vacía la barra', () => {
+  test('una presencia vacía momentánea conserva los avatares', () => {
+    pintar();
+    presenceState = { a: [{ user: 'Ana' }], b: [{ user: 'Luis' }] };
+    api._conciRenderBarraPresencia();
+    const punto = cont().querySelector('.conci-presencia-punto');
+    const primero = avatares()[0];
+
+    presenceState = {};          // el canal se está resuscribiendo
+    api._conciRenderBarraPresencia();
+
+    expect(avatares()).toHaveLength(2);
+    expect(avatares()[0]).toBe(primero);
+    expect(cont().querySelector('.conci-presencia-punto')).toBe(punto);
+    expect(cont().classList.contains('conci-presencia-vacia')).toBe(false);
+  });
+
+  test('el punto avisa en ámbar mientras dura el hueco', () => {
+    pintar();
+    presenceState = { a: [{ user: 'Ana' }] };
+    api._conciRenderBarraPresencia();
+
+    estadoVivo.listo = false;
+    presenceState = {};
+    api._conciRenderBarraPresencia();
+
+    const punto = cont().querySelector('.conci-presencia-punto');
+    expect(punto.classList.contains('conci-presencia-punto-caido')).toBe(true);
+    expect(punto.title).toContain('Sin conexión en vivo');
+  });
+
+  test('cuando la misma gente vuelve, no se recrea ningún nodo', () => {
+    pintar();
+    presenceState = { a: [{ user: 'Ana' }], b: [{ user: 'Luis' }] };
+    api._conciRenderBarraPresencia();
+    const antes = avatares();
+
+    presenceState = {};
+    api._conciRenderBarraPresencia();
+    presenceState = { a: [{ user: 'Ana' }], b: [{ user: 'Luis' }] };
+    api._conciRenderBarraPresencia();
+
+    // Mismos nodos: el hueco no dejó rastro. Esto es el parpadeo, medido.
+    expect(avatares()[0]).toBe(antes[0]);
+    expect(avatares()[1]).toBe(antes[1]);
+  });
+
+  test('si de verdad no vuelve nadie, pasado el margen se vacía', () => {
+    pintar();
+    presenceState = { a: [{ user: 'Ana' }] };
+    api._conciRenderBarraPresencia();
+    expect(avatares()).toHaveLength(1);
+
+    presenceState = {};
+    api.agotarGracia();
+    api._conciRenderBarraPresencia();
+
+    expect(avatares()).toHaveLength(0);
+    expect(cont().classList.contains('conci-presencia-vacia')).toBe(true);
+  });
+
+  test('en la primera carga, sin nadie todavía, la barra queda oculta', () => {
+    pintar();
+    presenceState = {};
+    api._conciRenderBarraPresencia();
+
+    expect(avatares()).toHaveLength(0);
+    expect(cont().classList.contains('conci-presencia-vacia')).toBe(true);
   });
 });
 

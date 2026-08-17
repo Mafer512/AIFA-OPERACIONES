@@ -166,22 +166,41 @@ describe('vigilancia', () => {
   });
 });
 
+// Cuerpo completo del callback de subscribe. Se corta en su cierre real y no a
+// tantos caracteres: con un limite fijo, añadir un comentario dentro del
+// callback empujaba el codigo fuera de la ventana y estas pruebas fallaban sin
+// que nada se hubiera roto.
+function cuerpoSubscribe() {
+  const inicio = source.indexOf('channel.subscribe(async (status)');
+  expect(inicio).toBeGreaterThan(-1);
+  const fin = source.indexOf('\n    });\n', inicio);
+  expect(fin).toBeGreaterThan(inicio);
+  return source.slice(inicio, fin);
+}
+
 describe('integración en el módulo', () => {
   test('la caída del canal programa la reconexión', () => {
-    const sub = source.slice(source.indexOf('channel.subscribe(async (status)'));
-    const cuerpo = sub.slice(0, 1800);
+    const cuerpo = cuerpoSubscribe();
     expect(cuerpo).toContain("status === 'CHANNEL_ERROR'");
     expect(cuerpo).toContain('_conciProgramarReconexion();');
   });
 
   test('al reconectar se reanuncia el cursor propio', () => {
-    const sub = source.slice(source.indexOf('channel.subscribe(async (status)'));
-    expect(sub.slice(0, 1800)).toContain('_conciEnviarFoco(_conciMiFocoActual.rowId');
+    expect(cuerpoSubscribe()).toContain('_conciEnviarFoco(_conciMiFocoActual.rowId');
   });
 
   test('el contador de intentos se reinicia al conectar', () => {
-    const sub = source.slice(source.indexOf('channel.subscribe(async (status)'));
-    expect(sub.slice(0, 1800)).toContain('_conciLiveReintentos = 0;');
+    expect(cuerpoSubscribe()).toContain('_conciLiveReintentos = 0;');
+  });
+
+  // El aviso tardio de un canal ya retirado reabria el ciclo de reconexion y
+  // hacia parpadear la barra sin parar. Ver el comentario en script.js.
+  test('un canal que ya no es el vigente no toca el estado de la conexión', () => {
+    const cuerpo = cuerpoSubscribe();
+    const guarda = cuerpo.indexOf('if (_conciLiveChannel !== channel) return;');
+    expect(guarda).toBeGreaterThan(-1);
+    // Antes de cualquier lectura del estado: si no, ya habria hecho daño.
+    expect(guarda).toBeLessThan(cuerpo.indexOf("status === 'SUBSCRIBED'"));
   });
 
   test('el punto de la barra avisa cuando no hay conexión', () => {

@@ -24947,6 +24947,24 @@ async function _conciInitLiveCollab() {
     channel.on('broadcast', { event: 'cell-saved' }, ({ payload }) => _conciHandleRemoteCellSaved(payload));
     channel.on('broadcast', { event: 'cell-focus' }, ({ payload }) => _conciHandleRemoteFoco(payload));
     channel.subscribe(async (status) => {
+        // Un canal ya retirado sigue avisando.
+        //
+        // removeChannel() lleva el canal viejo a CLOSED, y ese aviso llega
+        // DESPUES -- cuando _conciReconectarLive ya abrio el canal nuevo y este
+        // esta suscrito y sano. Sin esta guarda, el aviso tardio del canal
+        // muerto apagaba _conciLiveReady y programaba OTRA reconexion, que a su
+        // vez tiraba el canal bueno para abrir otro, que al cerrarse volvia a
+        // avisar tarde... y asi indefinidamente. Como cada SUBSCRIBED reinicia
+        // los reintentos, la espera nunca crecia: el ciclo se repetia cada uno o
+        // dos segundos.
+        //
+        // Ese bucle es el origen del parpadeo que empezaba "despues de un rato"
+        // (a la primera caida real de la red) y ya no paraba solo: en cada vuelta
+        // la presencia se quedaba vacia un instante y la barra se reconstruia.
+        //
+        // Un canal que no es el vigente no tiene nada que decir sobre el estado
+        // de la conexion.
+        if (_conciLiveChannel !== channel) return;
         if (status === 'SUBSCRIBED') {
             _conciLiveReady = true;
             _conciLiveReintentos = 0;
@@ -25376,10 +25394,48 @@ function _conciTextoPresencia(p) {
 // lo que cambio, para que la animacion del punto no se reinicie.
 let _conciFirmaPresencia = '';
 
+// Cuanto se tolera una presencia vacia antes de dar la barra por vacia de
+// verdad. Cubre de sobra el hueco entre SUBSCRIBED y que track() aterrice, y
+// tambien el cambio de canal de una reconexion.
+const _CONCI_PRESENCIA_GRACIA_MS = 20000;
+let _conciPresenciaVacioDesde = 0;
+
 function _conciRenderBarraPresencia() {
     const cont = document.getElementById('conci-presencia');
     if (!cont) return;
     const gente = _conciPresenciaConectados();
+
+    // Una lista vacia casi nunca significa "no hay nadie": uno mismo aparece en
+    // la presencia en cuanto track() aterriza, y la barra se pinta antes, al
+    // recibir SUBSCRIBED. Tambien queda vacia mientras se cambia de canal en una
+    // reconexion, porque _conciPresenciaConectados devuelve [] sin canal.
+    //
+    // Vaciar la barra en ese hueco es lo que se ve como parpadeo: el
+    // cont.textContent = '' de mas abajo destruye el punto y todos los avatares,
+    // y al instante siguiente hay que volver a crearlos.
+    //
+    // Durante un margen de gracia se conserva lo ultimo pintado y solo se cambia
+    // el punto a ambar, que es justo lo que hay que comunicar: lo que se ve es
+    // lo ultimo que se supo y puede estar viejo. Si de verdad no vuelve nadie,
+    // pasado el margen se vacia.
+    if (!gente.length && cont.querySelector('.conci-presencia-avatar')) {
+        if (!_conciPresenciaVacioDesde) _conciPresenciaVacioDesde = Date.now();
+        if ((Date.now() - _conciPresenciaVacioDesde) < _CONCI_PRESENCIA_GRACIA_MS) {
+            const punto = cont.querySelector('.conci-presencia-punto');
+            if (punto) {
+                punto.classList.toggle('conci-presencia-punto-caido', !_conciLiveReady);
+                punto.title = _conciLiveReady
+                    ? 'Colaboración en vivo activa'
+                    : 'Sin conexión en vivo: reintentando…';
+            }
+            // La firma NO se actualiza: cuando la presencia vuelva con la misma
+            // gente, coincidira con lo ya pintado y no se tocara el DOM.
+            return;
+        }
+    } else if (gente.length) {
+        _conciPresenciaVacioDesde = 0;
+    }
+
     const visibles = gente.slice(0, 6);
     const sobran = gente.length - visibles.length;
 
