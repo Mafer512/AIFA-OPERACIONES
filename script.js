@@ -17351,6 +17351,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnConciAirlineColors = document.getElementById('btn-conci-airline-colors');
     const btnConciMatriculaCatalog = document.getElementById('btn-conci-matricula-catalog');
     const btnConciUndo = document.getElementById('btn-conci-undo-mode');
+    const btnConciSaveAll = document.getElementById('btn-conci-save-all');
+    const btnConciRewriteAll = document.getElementById('btn-conci-rewrite-all');
     const btnConciClearFilters = document.getElementById('btn-conci-clear-filters');
     if (btnConciRefresh) btnConciRefresh.addEventListener('click', () => loadConciliacionManifiestos({ forceRefresh: true }));
     if (btnConciImport) btnConciImport.addEventListener('click', () => {
@@ -17404,6 +17406,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnConciAirlineColors) btnConciAirlineColors.addEventListener('click', _conciOpenAirlineColors);
     if (btnConciMatriculaCatalog) btnConciMatriculaCatalog.addEventListener('click', _conciOpenMatriculaCatalog);
     if (btnConciUndo) btnConciUndo.addEventListener('click', _conciUndoLastChange);
+    if (btnConciSaveAll) btnConciSaveAll.addEventListener('click', () => { _conciGuardarTodoAhora(); });
+    if (btnConciRewriteAll) btnConciRewriteAll.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        _conciReescribirTodasLasFilas();
+    });
     if (btnConciClearFilters) btnConciClearFilters.addEventListener('click', _conciClearAllTableFilters);
     // Formato dd/mm/aaaa fijo en los filtros de fecha, tanto de Manifiestos
     // como de Itinerario de Vuelos, sin depender del idioma del navegador.
@@ -18602,6 +18609,9 @@ function _conciRefreshEditToolbar() {
         btnAdd.classList.toggle('d-none', !canEdit || !_conciEditMode);
         btnAdd.disabled = !canEdit || !_conciEditMode;
     }
+    // Sigue disponible aunque no haya nada pendiente: el sentido del boton es
+    // poder confirmar a mano, no solo cuando el sistema cree que hace falta.
+    if (typeof _conciActualizarBotonGuardarTodo === 'function') _conciActualizarBotonGuardarTodo();
     if (btnAirlineColors) {
         btnAirlineColors.classList.toggle('d-none', !canManage);
         btnAirlineColors.disabled = !canManage;
@@ -22144,6 +22154,29 @@ document.addEventListener('keydown', event => {
     input.focus();
     input.select();
 }, true);
+
+// Ctrl+G guarda de inmediato todo lo capturado en Conciliación Manifiestos, sin
+// tener que soltar el teclado para ir al botón — quien captura trabaja con las
+// dos manos en las teclas y bajar al ratón por cada confirmación cuesta.
+//
+// Va en fase de captura y con preventDefault porque Ctrl+G es "buscar siguiente"
+// en el navegador; sólo se intercepta dentro de esta pestaña, en cualquier otra
+// parte de la aplicación el atajo del navegador sigue intacto. Se acepta también
+// mientras el foco está dentro de un editor de celda: ahí es justo donde estará
+// el foco al terminar de capturar, y el propio guardado cierra ese editor
+// aceptando lo que se acaba de escribir.
+document.addEventListener('keydown', event => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+    if (String(event.key || '').toLowerCase() !== 'g') return;
+    const section = document.getElementById('conciliacion-section');
+    if (!section?.classList.contains('active')) return;
+    if (!document.getElementById('pane-conci-comercial')?.classList.contains('active')) return;
+    if (!document.getElementById('table-conci-manifiestos')) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    _conciGuardarTodoAhora();
+}, true);
 window.addEventListener('resize', () => {
     clearTimeout(_conciScrollResizeTimer);
     _conciScrollResizeTimer = setTimeout(() => {
@@ -25625,6 +25658,10 @@ function _conciStageCellDraft(td, rawValue) {
         if (tr.querySelector('td[data-dirty="1"]')) tr.dataset.dirty = '1';
         else tr.removeAttribute('data-dirty');
     }
+    // El contador del boton refleja el tecleo al instante. No se delega en los
+    // helpers de borrador: alguno de ellos corta antes cuando la celda ya no
+    // figuraba en el borrador, y el contador se quedaria atrasado.
+    if (typeof _conciActualizarBotonGuardarTodo === 'function') _conciActualizarBotonGuardarTodo();
     return nextRaw;
 }
 
@@ -25984,6 +26021,11 @@ function _conciReintentarPendientes() {
 }
 
 function _conciActualizarIndicadorBorradores() {
+    // El contador del boton "Guardar todo" se refresca aqui porque este punto lo
+    // toca todo lo que cambia el estado pendiente: teclear, confirmar, restaurar
+    // un borrador o descartar una fila. Va antes del early return: el indicador
+    // de borradores puede no existir en pantalla y el boton si.
+    if (typeof _conciActualizarBotonGuardarTodo === 'function') _conciActualizarBotonGuardarTodo();
     const el = document.getElementById('conci-pendientes-indicador');
     if (!el) return;
     const { filas, celdas } = _conciBorradoresPendientes();
@@ -25998,6 +26040,381 @@ function _conciActualizarIndicadorBorradores() {
     el.title = `${textoCeldas} en ${filas === 1 ? '1 fila' : `${filas} filas`}. `
         + 'Se reintenta solo; están guardadas en esta computadora hasta que la base las confirme.';
 }
+
+// ── "Guardar todo" a mano (botón + Ctrl+G) ───────────────────────────────────
+//
+// La captura ya se guarda sola: cada celda dispara su escritura 400 ms despues
+// del ultimo tecleo, y lo que falla se reintenta con espera creciente. Aun asi
+// hace falta poder decir "guarda TODO ahora", por tres razones concretas:
+//
+//   1. El autoguardado es por fila y con retraso. Al terminar una jornada de
+//      captura puede haber varias filas cuyo temporizador todavia no vencio;
+//      cerrar la pestaña en ese hueco depende del aviso del navegador.
+//   2. Una fila que fallo queda esperando su proximo reintento -- hasta dos
+//      minutos. Sin un boton no hay forma de forzar ese reintento salvo volver
+//      a tocar la celda.
+//   3. Confianza: ver un "N capturas confirmadas por la base" cierra el ciclo.
+//      Un guardado silencioso nunca dice que termino.
+//
+// Lo que este boton NO hace, a proposito: reescribir filas que no se tocaron.
+// La tabla es colaborativa (varias personas capturan el mismo dia a la vez), y
+// reenviar el contenido de toda la pantalla pisaria capturas ajenas hechas
+// mientras esta sesion tenia la tabla abierta. "Mas seguro" aqui significa
+// confirmar contra la base todo lo que esta sesion capturo y aun no esta a
+// salvo, y decirlo con numeros -- no repetir escrituras que nadie pidio.
+
+let _conciGuardadoTotalEnCurso = false;
+
+function _conciContarCeldasSinGuardar() {
+    const tabla = document.getElementById('table-conci-manifiestos');
+    if (!tabla) return 0;
+    return tabla.querySelectorAll('tbody td[data-dirty="1"]').length;
+}
+
+// Filas con algo que enviar: celdas capturadas sin confirmar, o filas nuevas
+// que todavia no existen en la base. Las descartadas quedan fuera: su fila ya
+// se dio de baja y volver a guardarla la resucitaria.
+function _conciFilasPorGuardar() {
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (!tbody) return [];
+    return [...tbody.querySelectorAll('tr')].filter(tr =>
+        tr.dataset.conciDescartada !== '1'
+        && (tr.dataset.conciNew === '1' || !!tr.querySelector('td[data-dirty="1"]'))
+    );
+}
+
+function _conciActualizarBotonGuardarTodo() {
+    const btn = document.getElementById('btn-conci-save-all');
+    if (!btn) return;
+    const grupo = document.getElementById('grp-conci-save-all');
+    const caret = document.getElementById('btn-conci-save-all-more');
+    const visible = _conciEditMode && _conciCanCurrentUserEdit();
+    (grupo || btn).classList.toggle('d-none', !visible);
+    // La reescritura completa puede pisar capturas ajenas: no es una accion de
+    // captura, es de administracion del modulo. Un capturista guarda lo suyo,
+    // pero no reemplaza el trabajo de los demas.
+    if (caret) caret.classList.toggle('d-none', !_conciCanCurrentUserManage());
+    // Mientras guarda, el boton muestra su propio estado: no pisarlo.
+    if (!visible || _conciGuardadoTotalEnCurso) return;
+
+    const pendientes = _conciContarCeldasSinGuardar();
+    const badge = document.getElementById('badge-conci-save-all');
+    if (badge) {
+        badge.textContent = String(pendientes);
+        badge.classList.toggle('d-none', pendientes === 0);
+    }
+    // Relleno solido solo cuando hay algo que guardar: asi el boton llama la
+    // atencion justo cuando importa y no compite con el resto de la barra.
+    [btn, caret].forEach(el => {
+        if (!el) return;
+        el.classList.toggle('btn-success', pendientes > 0);
+        el.classList.toggle('btn-outline-success', pendientes === 0);
+    });
+    btn.title = pendientes > 0
+        ? `Guardar ahora ${pendientes === 1 ? '1 captura pendiente' : `${pendientes} capturas pendientes`} (Ctrl+G)`
+        : 'Todo lo capturado ya está confirmado por la base (Ctrl+G)';
+}
+
+// Espera a que se apaguen las escrituras en vuelo de estas filas. Un guardado
+// que termina puede encolar otro solo (el usuario siguio capturando mientras
+// Supabase respondia), asi que no basta con esperar una vez: se dan varias
+// pasadas y se corta al quedar todo quieto.
+async function _conciEsperarEscriturasEnVuelo(filas, maxPasadas = 6) {
+    for (let pasada = 0; pasada < maxPasadas; pasada++) {
+        const enVuelo = filas.map(tr => tr._conciAutoSavePromise).filter(Boolean);
+        if (!enVuelo.length) return;
+        await Promise.allSettled(enVuelo);
+    }
+}
+
+async function _conciGuardarTodoAhora() {
+    if (_conciGuardadoTotalEnCurso) return;
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (!tbody) return;
+    if (!_conciCanCurrentUserEdit()) {
+        if (typeof showNotification === 'function') {
+            showNotification('No tienes permiso de captura en el módulo de Conciliación.', 'error');
+        }
+        return;
+    }
+    if (!_conciEditMode) {
+        if (typeof showNotification === 'function') {
+            showNotification('Activa la captura en la tabla para poder guardar cambios.', 'info');
+        }
+        return;
+    }
+
+    const btn = document.getElementById('btn-conci-save-all');
+    const htmlPrevio = btn ? btn.innerHTML : '';
+    _conciGuardadoTotalEnCurso = true;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Guardando…';
+    }
+
+    try {
+        // 1. Lo que este a medio escribir cuenta como capturado. Se cierra cada
+        //    editor ACEPTANDO su valor (a diferencia del autoguardado, que los
+        //    descarta): quien pulsa "Guardar todo" quiere que lo que tiene en
+        //    pantalla quede en la base, no lo que habia antes de escribirlo.
+        //    Una fecha u hora invalida detiene el guardado en vez de mandar
+        //    basura: el editor se queda abierto y marcado para corregirlo.
+        for (const td of tbody.querySelectorAll('td[data-col]')) {
+            if (typeof td._conciCloseEditor !== 'function') continue;
+            if (td._conciCloseEditor(true, false) === false) {
+                if (typeof showNotification === 'function') {
+                    showNotification('Corrige la fecha u hora marcada antes de guardar.', 'error');
+                }
+                return;
+            }
+        }
+
+        const filas = _conciFilasPorGuardar();
+        const celdasPendientes = _conciContarCeldasSinGuardar();
+        if (!filas.length || !celdasPendientes) {
+            if (typeof showNotification === 'function') {
+                showNotification('No hay capturas pendientes: todo está guardado.', 'info');
+            }
+            return;
+        }
+
+        // 2. Se adelanta el temporizador de cada fila para no esperar el retraso
+        //    del autoguardado ni el reintento de una fila que fallo.
+        filas.forEach(tr => {
+            if (tr._conciAutoSaveTimer) {
+                clearTimeout(tr._conciAutoSaveTimer);
+                tr._conciAutoSaveTimer = null;
+            }
+        });
+        await Promise.allSettled(filas.map(tr => _conciAutoSaveRow(tr, { keepEditorsOpen: true })));
+        await _conciEsperarEscriturasEnVuelo(filas);
+
+        // 3. Se informa contra el estado REAL de la tabla, no contra lo que se
+        //    intento: una celda sigue marcada como pendiente mientras la base no
+        //    haya confirmado ese valor exacto.
+        const quedanPendientes = _conciContarCeldasSinGuardar();
+        const confirmadas = Math.max(0, celdasPendientes - quedanPendientes);
+        if (typeof showNotification === 'function') {
+            if (!quedanPendientes) {
+                showNotification(
+                    confirmadas === 1
+                        ? 'Guardado: 1 captura confirmada por la base.'
+                        : `Guardado: ${confirmadas} capturas confirmadas por la base.`,
+                    'success'
+                );
+            } else {
+                showNotification(
+                    `Se guardaron ${confirmadas} capturas; quedan ${quedanPendientes} sin confirmar. `
+                    + 'Siguen a salvo en esta computadora y se reintentan solas.',
+                    'warning'
+                );
+            }
+        }
+        if (quedanPendientes) _conciProgramarReintento();
+    } catch (error) {
+        console.warn('[Conciliación] error al guardar todo:', error);
+        if (typeof showNotification === 'function') {
+            showNotification(`No se pudo completar el guardado: ${error?.message || error}`, 'error');
+        }
+        _conciProgramarReintento();
+    } finally {
+        _conciGuardadoTotalEnCurso = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = htmlPrevio;
+        }
+        _conciActualizarBotonGuardarTodo();
+    }
+}
+
+window.conciGuardarTodo = _conciGuardarTodoAhora;
+
+// ── Reescritura completa (opción del desplegable) ────────────────────────────
+//
+// "Guardar todo" solo confirma lo que ESTA sesion capturo y aun no esta en la
+// base. Esto es lo contrario: reenvia el contenido completo de cada fila que se
+// ve en pantalla, se haya tocado o no, para dejar la base igual a lo que se
+// esta viendo.
+//
+// Es deliberadamente incomodo de ejecutar, y con razon. La tabla es
+// colaborativa: la copia que tienes en pantalla es una foto del momento en que
+// cargaste el dia. Si un compañero capturo algo despues, reenviar tu foto lo
+// reemplaza por el valor viejo, y ninguno de los dos se entera -- el dato
+// simplemente vuelve a estar mal. Por eso esta detras del desplegable, limitada
+// a quien administra el modulo, y siempre precedida de un aviso que dice
+// cuantas filas se van a tocar y quien mas esta capturando en este momento.
+//
+// Solo actualiza filas que ya existen en la base. Las filas nuevas y las de
+// "Solo Vuelos" (espejo del itinerario, sin manifiesto propio) se dejan al
+// guardado normal: crear registros no es lo que se pidio aqui.
+
+let _conciReescrituraEnCurso = false;
+
+// Valor a persistir de una celda, tal y como se ve ahora en pantalla.
+function _conciValorVisibleDeCelda(td) {
+    const col = td.dataset.col || '';
+    // En routing, dataset.raw guarda la ciudad ya resuelta para mostrar
+    // ("QUITO"); lo que la base espera vive en dataset.routeRaw ("MEX-UIO").
+    const crudo = _conciIsRoutingColumn(col)
+        ? (td.dataset.routeRaw ?? td.dataset.raw ?? td.textContent)
+        : (td.dataset.raw ?? td.textContent);
+    return _conciNormalizeEditableCellText(td.dataset.pendingRaw ?? crudo);
+}
+
+// Contenido completo de una fila, listo para un UPDATE.
+//
+// Las columnas calculadas quedan fuera salvo las que la base si almacena: su
+// "-" de "falta un insumo" no es una captura y Postgres lo rechaza en columnas
+// numericas. Una celda vacia SI viaja como null: el sentido de reescribir es
+// que la base quede igual a la pantalla, y eso incluye lo que se borro.
+function _conciPayloadCompletoDeFila(tr) {
+    const payload = {};
+    tr.querySelectorAll('td[data-col]').forEach(td => {
+        const col = td.dataset.col || '';
+        if (!col) return;
+        if (_conciIsCalculatedColumn(col) && !_conciShouldPersistCalculatedColumn(col)) return;
+        const valor = _conciValorVisibleDeCelda(td);
+        payload[col] = valor === '' ? null : _conciPrepareValueForDatabase(col, valor);
+    });
+    return payload;
+}
+
+function _conciFilasReescribibles() {
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (!tbody) return [];
+    return [...tbody.querySelectorAll('tr')].filter(tr =>
+        tr.dataset.conciDescartada !== '1'
+        && tr.dataset.conciNew !== '1'
+        && tr.dataset.rowFuente !== 'Solo Vuelos'
+        && !!String(tr.dataset.rowId || '').trim()
+    );
+}
+
+// Quien mas esta conectado a esta misma vista ahora mismo.
+function _conciOtrosCapturando() {
+    if (typeof _conciPresenciaConectados !== 'function') return [];
+    try {
+        return _conciPresenciaConectados()
+            .filter(p => p && !p.esYo)
+            .map(p => String(p.nombre || '').trim())
+            .filter(Boolean);
+    } catch (_) {
+        return [];
+    }
+}
+
+// El aviso previo. Dice las tres cosas que hacen falta para decidir: cuanto se
+// va a tocar, que se pierde, y quien mas puede estar escribiendo ahora.
+function _conciAvisoReescritura(totalFilas) {
+    const otros = _conciOtrosCapturando();
+    const quienes = otros.length
+        ? `\nAhora mismo hay ${otros.length === 1 ? 'otra persona capturando' : `otras ${otros.length} personas capturando`}: ${otros.join(', ')}.`
+        : '\nNadie más está capturando en este momento.';
+    return `Vas a reescribir en la base ${totalFilas === 1 ? 'la fila' : `las ${totalFilas} filas`} que tienes en pantalla, `
+        + 'con los valores tal como se ven ahora.\n\n'
+        + 'Esto reemplaza lo que haya en la base, aunque alguien lo haya cambiado después de que cargaste la tabla. '
+        + 'Las celdas que veas vacías quedarán vacías también en la base.'
+        + quienes
+        + '\n\n¿Continuar?';
+}
+
+async function _conciReescribirTodasLasFilas() {
+    if (_conciReescrituraEnCurso || _conciGuardadoTotalEnCurso) return;
+    if (!_conciCanCurrentUserManage()) {
+        if (typeof showNotification === 'function') {
+            showNotification('Solo un editor o administrador puede reescribir todas las filas.', 'error');
+        }
+        return;
+    }
+    if (!_conciEditMode) {
+        if (typeof showNotification === 'function') {
+            showNotification('Activa la captura en la tabla para poder reescribir las filas.', 'info');
+        }
+        return;
+    }
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (!tbody) return;
+
+    // Lo tecleado cuenta: se cierran los editores aceptando su valor antes de
+    // fotografiar la tabla.
+    for (const td of tbody.querySelectorAll('td[data-col]')) {
+        if (typeof td._conciCloseEditor !== 'function') continue;
+        if (td._conciCloseEditor(true, false) === false) {
+            if (typeof showNotification === 'function') {
+                showNotification('Corrige la fecha u hora marcada antes de reescribir.', 'error');
+            }
+            return;
+        }
+    }
+
+    const filas = _conciFilasReescribibles();
+    if (!filas.length) {
+        if (typeof showNotification === 'function') {
+            showNotification('No hay filas guardadas en pantalla que reescribir.', 'info');
+        }
+        return;
+    }
+    if (!confirm(_conciAvisoReescritura(filas.length))) return;
+
+    _conciReescrituraEnCurso = true;
+    const btn = document.getElementById('btn-conci-save-all');
+    const htmlPrevio = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Reescribiendo…';
+    }
+
+    try {
+        let client = window.supabaseClient;
+        if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
+        if (!client) throw new Error('No se pudo inicializar el cliente de Supabase.');
+
+        const trabajos = filas
+            .map(tr => ({ id: String(tr.dataset.rowId).trim(), payload: _conciPayloadCompletoDeFila(tr) }))
+            .filter(t => Object.keys(t.payload).length);
+
+        // En lotes: un rango de fechas amplio puede traer cientos de filas y
+        // dispararlas todas a la vez solo consigue que el servidor rechace parte.
+        const resultados = await _conciRunBatchWrites(trabajos, 30,
+            item => _conciWriteRowSafe(client, item.payload, item.id));
+
+        const ok = resultados.filter(r => r && r.ok).length;
+        const fallidos = resultados.filter(r => !r || !r.ok);
+
+        if (typeof showNotification === 'function') {
+            if (!fallidos.length) {
+                showNotification(`Reescritura completa: ${ok} ${ok === 1 ? 'fila' : 'filas'} en la base.`, 'success');
+            } else {
+                const primero = fallidos[0]?.error?.message || 'error de base de datos';
+                showNotification(
+                    `Reescritura parcial: ${ok} ${ok === 1 ? 'fila' : 'filas'} y ${fallidos.length} con error. Primer error: ${primero}`,
+                    'error'
+                );
+            }
+        }
+
+        // Se recarga siempre para mostrar lo que la base tiene de verdad: tras
+        // una escritura masiva, seguir mirando la copia de pantalla es justo lo
+        // que impide notar una fila que no paso.
+        _conciRenderCache.clear();
+        _conciRenderedKey = '';
+        await loadConciliacionManifiestos({ forceRefresh: true, allowLocalEditsReplace: true });
+    } catch (error) {
+        console.warn('[Conciliación] error al reescribir todas las filas:', error);
+        if (typeof showNotification === 'function') {
+            showNotification(`No se pudo reescribir: ${error?.message || error}`, 'error');
+        }
+    } finally {
+        _conciReescrituraEnCurso = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = htmlPrevio;
+        }
+        _conciActualizarBotonGuardarTodo();
+    }
+}
+
+window.conciReescribirTodo = _conciReescribirTodasLasFilas;
 
 function _conciActivateCellEditor(td) {
     if (!td || td.querySelector('.conci-cell-input, .conci-cell-dt')) return;
@@ -27287,6 +27704,7 @@ function _conciSettleSavedCells(tr, cells, savedCellValues, savedColumns) {
     });
     if (tr.querySelector(`td[data-dirty='1']`)) tr.dataset.dirty = '1';
     else tr.removeAttribute('data-dirty');
+    if (typeof _conciActualizarBotonGuardarTodo === 'function') _conciActualizarBotonGuardarTodo();
 }
 
 async function _conciSaveVirtualAirlineOverride(client, tr, value) {
