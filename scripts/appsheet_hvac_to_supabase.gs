@@ -2,16 +2,27 @@
  * ═══════════════════════════════════════════════════════════════════
  *  SYNC: Google Sheet (AppSheet HVAC) → Supabase  (Google Apps Script)
  * ───────────────────────────────────────────────────────────────────
- *  Cómo instalar:
+ *  Cómo instalar — DENTRO de la hoja (lo normal):
  *   1. Abre el Google Sheet que usa AppSheet como backend.
  *   2. Menú: Extensiones → Apps Script.
  *   3. Borra el contenido y pega TODO este archivo.
- *   4. Ajusta SHEET_NAME si tu hoja no se llama "Reportes".
+ *   4. Ajusta SHEET_NAME si tu hoja no se llama "Reportes". Deja SHEET_ID vacío.
  *   5. Pon tu SERVICE_ROLE key (Supabase → Settings → API → service_role).
  *      ⚠️  Úsala SOLO aquí (servidor de Google), NUNCA en el front-end.
  *   6. Ejecuta una vez la función  setupTrigger  (autoriza permisos).
  *   7. Ejecuta  syncAll  una vez para la carga inicial.
  *  A partir de ahí, cada cambio en la hoja se envía a Supabase en segundos.
+ *
+ *  Cómo instalar — COMO PROYECTO INDEPENDIENTE:
+ *  Sirve cuando el menú Extensiones no está disponible. Igual que arriba, pero
+ *  el proyecto se crea en script.google.com y hay que rellenar SHEET_ID con el
+ *  ID del libro (el trozo de la URL entre /d/ y /edit). El script solo LEE la
+ *  hoja, así que basta con tener acceso de lectura y las pestañas protegidas no
+ *  estorban.
+ *
+ *  ⚠️  No instales el disparador en los dos sitios a la vez: se sincronizaría
+ *      dos veces. Si ya hay uno puesto desde la hoja, bórralo antes de ejecutar
+ *      setupTrigger aquí.
  * ═══════════════════════════════════════════════════════════════════
  */
 
@@ -21,6 +32,14 @@ var SUPABASE_KEY  = 'PEGA_AQUI_TU_SERVICE_ROLE_KEY';   // service_role (secreto)
 var TABLE         = 'reportes_hvac';
 var CONFLICT_COL  = 'reporte_id';                      // columna única para upsert
 var SHEET_NAME    = 'Reportes';                        // ← nombre de la pestaña
+
+// ID del libro. Dejalo VACIO si el script vive dentro de la propia hoja
+// (Extensiones → Apps Script): entonces usa la hoja activa.
+//
+// Rellenalo con el ID del libro si el script es un proyecto INDEPENDIENTE
+// creado en script.google.com —util cuando el menú Extensiones no está
+// disponible—. El ID es el trozo de la URL entre /d/ y /edit.
+var SHEET_ID      = '';
 
 // Mapa: encabezado EXACTO del Sheet  →  columna de Supabase
 var COLUMN_MAP = {
@@ -51,6 +70,13 @@ var DATE_COLUMNS = ['fecha'];
 // (la fila 1 suele ser un título/banner, no los encabezados reales).
 var HEADER_SEARCH_ROWS = 10;
 
+// ─── El libro sobre el que trabaja el script ───────────────────
+//  Con SHEET_ID vacio, la hoja activa (script dentro del documento).
+//  Con SHEET_ID puesto, ese libro (proyecto independiente).
+function libro() {
+  return SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActive();
+}
+
 // ─── Encuentra la fila de encabezados (la que contiene "Reporte ID") ──
 //  Devuelve el índice 0-based de esa fila dentro de `data`, o -1.
 function findHeaderRow(data) {
@@ -71,7 +97,7 @@ function setupTrigger() {
     if (t.getHandlerFunction() === 'onSheetChange') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('onSheetChange')
-    .forSpreadsheet(SpreadsheetApp.getActive())
+    .forSpreadsheet(libro())
     .onChange()
     .create();
   Logger.log('Trigger onChange instalado correctamente.');
@@ -81,7 +107,7 @@ function setupTrigger() {
 //  Muestra: pestañas disponibles, pestaña usada, encabezados detectados,
 //  número de filas y si "Reporte ID" coincide con el mapa.
 function debugSheet() {
-  var ss = SpreadsheetApp.getActive();
+  var ss = libro();
 
   // 1) Lista todas las pestañas del libro
   var tabs = ss.getSheets().map(function (s) {
@@ -137,7 +163,7 @@ function onSheetChange(e) {
 
 // ─── Lee toda la hoja y hace upsert en Supabase ──────────────────────
 function syncAll() {
-  var ss    = SpreadsheetApp.getActive();
+  var ss    = libro();
   var sheet = ss.getSheetByName(SHEET_NAME) || ss.getActiveSheet();
   var data  = sheet.getDataRange().getValues();
   if (data.length < 2) { Logger.log('Sin filas de datos.'); return; }
@@ -215,7 +241,7 @@ function dedupePorClave(filas, clave) {
 // ─── DIAGNÓSTICO: qué "Reporte ID" están repetidos en la hoja ────────
 //  No manda nada a Supabase; solo informa. Útil para limpiar el origen.
 function debugDuplicados() {
-  var ss    = SpreadsheetApp.getActive();
+  var ss    = libro();
   var sheet = ss.getSheetByName(SHEET_NAME) || ss.getActiveSheet();
   var data  = sheet.getDataRange().getValues();
   var hr    = findHeaderRow(data);

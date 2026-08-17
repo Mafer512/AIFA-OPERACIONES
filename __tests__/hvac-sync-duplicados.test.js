@@ -169,3 +169,41 @@ describe('el esquema del repo y el script de sincronizacion no se separan', () =
     expect(columnasSql.has('reporte_id')).toBe(true);
   });
 });
+
+describe('el script sirve dentro de la hoja y como proyecto independiente', () => {
+  const libro = new Function('SHEET_ID', 'SpreadsheetApp', `
+    ${extraer('libro')}
+    return libro();
+  `);
+
+  const app = {
+    getActive: () => ({ cual: 'hoja activa' }),
+    openById: (id) => ({ cual: 'por id', id }),
+  };
+
+  test('sin SHEET_ID usa la hoja activa (script dentro del documento)', () => {
+    expect(libro('', app)).toEqual({ cual: 'hoja activa' });
+  });
+
+  test('con SHEET_ID abre ese libro (proyecto independiente)', () => {
+    expect(libro('1lun6Ok', app)).toEqual({ cual: 'por id', id: '1lun6Ok' });
+  });
+
+  test('SHEET_ID viene vacío en el repo, para no fijar el libro de nadie', () => {
+    expect(fuente).toMatch(/var SHEET_ID\s*=\s*''/);
+  });
+
+  test('ninguna función llama a getActive() directamente', () => {
+    // Si alguna se saltara el helper, funcionaría dentro de la hoja pero
+    // reventaría como proyecto independiente, que es justo el caso que
+    // estamos cubriendo.
+    const fueraDelHelper = fuente.replace(extraer('libro'), '');
+    expect(fueraDelHelper).not.toContain('SpreadsheetApp.getActive()');
+  });
+
+  test('las tres funciones que tocan la hoja pasan por el helper', () => {
+    ['setupTrigger', 'debugSheet', 'syncAll', 'debugDuplicados'].forEach((f) => {
+      expect(extraer(f)).toContain('libro()');
+    });
+  });
+});
