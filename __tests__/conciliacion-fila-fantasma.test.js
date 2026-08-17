@@ -85,4 +85,17 @@ describe('integración en el autoguardado', () => {
   test('sólo cuenta como captura una celda tocada y con contenido', () => {
     expect(guardado).toContain("if (isDirty && raw) hasUserCapture = true;");
   });
+
+  // "Guardar todo" (Ctrl+G) recorre TODAS las filas nuevas, incluidas las que
+  // siguen en blanco. Debe escribir a través del autoguardado para heredar esta
+  // comprobación; si algún día se le diera su propio insert, la fila fantasma
+  // volvería por esa puerta.
+  test('"Guardar todo" escribe a través del autoguardado, no por su cuenta', () => {
+    const manual = source.slice(source.indexOf('async function _conciGuardarTodoAhora'));
+    const bloque = manual.slice(0, manual.indexOf('\n}\n'));
+
+    expect(bloque).toContain('_conciAutoSaveRow(tr, { keepEditorsOpen: true })');
+    expect(bloque).not.toContain('_conciWriteRowSafe');
+    expect(bloque).not.toContain('.insert(');
+  });
 });
