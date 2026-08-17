@@ -17403,6 +17403,14 @@ document.addEventListener('DOMContentLoaded', () => {
             e.returnValue = '';
         }
     });
+    // El aviso de arriba solo pregunta; esto es lo que de verdad rescata la
+    // captura. `pagehide` se dispara tambien cuando el navegador cierra la
+    // pestana sin preguntar, y en movil cuando la aplicacion pasa a segundo
+    // plano —dos casos que beforeunload no cubre—.
+    window.addEventListener('pagehide', _conciEnviarPendientesAlCerrar);
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') _conciEnviarPendientesAlCerrar();
+    });
     if (btnConciAirlineColors) btnConciAirlineColors.addEventListener('click', _conciOpenAirlineColors);
     if (btnConciMatriculaCatalog) btnConciMatriculaCatalog.addEventListener('click', _conciOpenMatriculaCatalog);
     if (btnConciUndo) btnConciUndo.addEventListener('click', _conciUndoLastChange);
@@ -22438,7 +22446,11 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         _conciSyncColumnasFijas();
         // Repone las capturas que quedaron pendientes de guardar y las reintenta.
         _conciRestaurarBorradores();
+        // Y lo que quedo pendiente en OTRAS computadoras, que aqui no se
+        // reintenta solo y hay que poder rescatar a mano.
+        _conciCargarPendientesRemotos();
         _conciRepintarEstelas();
+        _conciRepintarConflictos();
         _conciMarcarFilasSinCaptura();
     });
 
@@ -25075,13 +25087,21 @@ let _conciUltimoParcheTs = 0;
 // Aplica en su celda el valor que otra persona acaba de guardar. Devuelve true
 // si se pudo aplicar; false cuando la fila no esta a la vista y hace falta la
 // recarga de siempre.
-function _conciAplicarCambioRemoto(rowId, col, valor) {
+function _conciAplicarCambioRemoto(rowId, col, valor, usuario) {
     const tabla = document.getElementById('table-conci-manifiestos');
     if (!tabla) return false;
     const td = _conciFindLiveCell(tabla, rowId, col);
     if (!td) return false;
     // Una celda que esta persona tiene abierta no se toca: su captura manda.
-    if (td.classList.contains('conci-cell-active') || td.dataset.dirty === '1') return true;
+    // Pero antes eso pasaba en silencio: quien estaba escribiendo no se
+    // enteraba de que alguien mas habia puesto otro valor, y al guardar lo
+    // pisaba sin que ninguno de los dos lo supiera. Ahora queda constancia.
+    if (td.classList.contains('conci-cell-active') || td.dataset.dirty === '1') {
+        _conciRegistrarConflicto(td, rowId, col, valor, usuario);
+        return true;
+    }
+    // Si habia un conflicto anotado y la celda ya se solto, deja de estorbar.
+    _conciLimpiarConflicto(rowId, col);
 
     const texto = String(valor ?? '');
     td.dataset.raw = texto;
@@ -25105,6 +25125,143 @@ function _conciAplicarCambioRemoto(rowId, col, valor) {
         _conciRefreshMatriculaValidationForRow(tr);
     }
     return true;
+}
+
+// ── Dos personas sobre la misma celda ────────────────────────────────────────
+//
+// Gana quien esté escribiendo aquí: su captura no se pisa nunca. Lo que faltaba
+// era enterarse. Antes el valor de la otra persona se descartaba en silencio y,
+// al guardar, esta pantalla sobreescribía el suyo — ninguno de los dos llegaba
+// a saber que habían trabajado sobre la misma celda.
+//
+// Ahora la celda queda marcada, dice quién puso qué, y ese valor se puede
+// adoptar de un clic. La marca desaparece sola cuando la celda se guarda (aquí
+// se decidió) o cuando la persona la suelta sin haber capturado nada.
+const _conciConflictos = new Map();          // "rowId|col" -> { valor, usuario, ts }
+const _CONCI_CONFLICTO_VENCE_MS = 15 * 60 * 1000;
+let _conciConflictoAvisoTimer = null;
+const _conciAvisosPendientes = new Map();
+
+function _conciClaveConflicto(rowId, col) { return `${String(rowId)}|${String(col)}`; }
+
+function _conciRegistrarConflicto(td, rowId, col, valorRemoto, usuario) {
+    const valor = String(valorRemoto ?? '');
+    const mio = _conciNormalizeEditableCellText(td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent);
+    // Si la otra persona escribió exactamente lo mismo, no hay nada que avisar.
+    if (_conciNormalizeEditableCellText(valor) === mio) return;
+
+    const quien = String(usuario || '').trim() || 'Otra persona';
+    _conciConflictos.set(_conciClaveConflicto(rowId, col), {
+        valor, usuario: quien, ts: Date.now(),
+        // Lo que había aquí cuando chocaron. Sirve para saber, más tarde, si
+        // esta persona volvió a decidir sobre la celda.
+        mio,
+    });
+    _conciPintarConflicto(td, { valor, usuario: quien });
+
+    // Varios choques seguidos (alguien tecleando al otro lado) se resumen en un
+    // solo aviso: uno por ráfaga, no uno por pulsación. El aviso se queda con lo
+    // anotado AHORA, no con lo que quede vivo cuando salte el temporizador: el
+    // autoguardado confirma la captura en menos de medio segundo y antes eso
+    // borraba el choque antes de que nadie llegara a verlo.
+    _conciAvisosPendientes.set(_conciClaveConflicto(rowId, col), { quien, col, rowId });
+    if (_conciConflictoAvisoTimer) clearTimeout(_conciConflictoAvisoTimer);
+    _conciConflictoAvisoTimer = setTimeout(() => {
+        _conciConflictoAvisoTimer = null;
+        const avisos = [..._conciAvisosPendientes.values()];
+        _conciAvisosPendientes.clear();
+        if (!avisos.length || typeof showNotification !== 'function') return;
+        if (avisos.length === 1) {
+            const a = avisos[0];
+            const vuelo = _conciVueloDeFila(String(a.rowId));
+            const donde = vuelo ? `${a.col} del vuelo ${vuelo}` : a.col;
+            showNotification(
+                `${a.quien} capturó otro valor en ${donde} al mismo tiempo que tú. Se conservó el tuyo; la celda quedó marcada y puedes quedarte con el suyo desde ahí.`,
+                'warning'
+            );
+        } else {
+            showNotification(
+                `Hay ${avisos.length} celdas donde otra persona capturó algo distinto a la vez que tú. Están marcadas en la tabla.`,
+                'warning'
+            );
+        }
+    }, 900);
+}
+
+function _conciConflictosVigentes() {
+    const ahora = Date.now();
+    [..._conciConflictos.entries()].forEach(([clave, info]) => {
+        if (ahora - info.ts > _CONCI_CONFLICTO_VENCE_MS) _conciConflictos.delete(clave);
+    });
+    return [..._conciConflictos.entries()];
+}
+
+function _conciPintarConflicto(td, info) {
+    if (!td) return;
+    td.classList.add('conci-cell-conflicto');
+    const suyo = info.valor === '' ? '(vacío)' : info.valor;
+    td.title = `${info.usuario} puso "${suyo}" aquí al mismo tiempo. Se conservó lo tuyo. Clic en el aviso para quedarte con el suyo.`;
+    let marca = td.querySelector('.conci-conflicto-marca');
+    if (!marca) {
+        marca = document.createElement('span');
+        marca.className = 'conci-conflicto-marca';
+        marca.setAttribute('role', 'button');
+        marca.tabIndex = 0;
+        const tomar = (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            _conciAdoptarValorRemoto(td);
+        };
+        marca.addEventListener('mousedown', tomar);
+        marca.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') tomar(ev); });
+        td.appendChild(marca);
+    }
+    marca.textContent = '!';
+    marca.title = `Quedarte con "${suyo}" de ${info.usuario}`;
+}
+
+// Adoptar el valor de la otra persona es capturarlo: entra por el mismo camino
+// que cualquier tecleo, así que se guarda, se avisa en vivo y queda en el
+// borrador como todo lo demás.
+function _conciAdoptarValorRemoto(td) {
+    const tr = td.closest('tr');
+    if (!tr) return;
+    const rowId = String(tr.dataset.rowId || '');
+    const col = String(td.dataset.col || '');
+    const info = _conciConflictos.get(_conciClaveConflicto(rowId, col));
+    if (!info) { _conciLimpiarConflicto(rowId, col); return; }
+    if (typeof td._conciCloseEditor === 'function') td._conciCloseEditor(false, false);
+    _conciStageCellDraft(td, info.valor);
+    td.textContent = info.valor;
+    _conciLimpiarConflicto(rowId, col);
+    _conciQueueAutoSave(tr);
+    if (typeof showNotification === 'function') {
+        showNotification(`Te quedaste con el valor de ${info.usuario}.`, 'info');
+    }
+}
+
+function _conciLimpiarConflicto(rowId, col) {
+    const clave = _conciClaveConflicto(rowId, col);
+    if (!_conciConflictos.has(clave)) return;
+    _conciConflictos.delete(clave);
+    const tabla = document.getElementById('table-conci-manifiestos');
+    const td = tabla && _conciFindLiveCell(tabla, rowId, col);
+    if (!td) return;
+    td.classList.remove('conci-cell-conflicto');
+    td.removeAttribute('title');
+    td.querySelector('.conci-conflicto-marca')?.remove();
+}
+
+// Un refresco de la tabla reconstruye el tbody y se llevaria las marcas por
+// delante; se reponen igual que la estela de autoria.
+function _conciRepintarConflictos() {
+    const tabla = document.getElementById('table-conci-manifiestos');
+    if (!tabla) return;
+    _conciConflictosVigentes().forEach(([clave, info]) => {
+        const [rowId, col] = clave.split('|');
+        const td = _conciFindLiveCell(tabla, rowId, col);
+        if (td) _conciPintarConflicto(td, info);
+    });
 }
 
 // La recarga completa se anuncia por Postgres unos instantes despues del
@@ -25508,7 +25665,7 @@ function _conciHandleRemoteCellSaved(payload) {
     let todoAplicado = true;
     payload.cols.forEach(col => {
         if (Object.prototype.hasOwnProperty.call(valores, col)) {
-            if (!_conciAplicarCambioRemoto(payload.rowId, col, valores[col])) todoAplicado = false;
+            if (!_conciAplicarCambioRemoto(payload.rowId, col, valores[col], payload.user)) todoAplicado = false;
         } else {
             todoAplicado = false;
         }
@@ -25566,7 +25723,11 @@ function _conciPintarEstela(rowId, col, registro) {
         chip.textContent = nombre;
         td.appendChild(chip);
     }
-    td.title = `${registro.user} acaba de cambiar este campo`;
+    // Un choque sobre esta celda dice mas que el rastro de autoria —explica que
+    // hay dos valores en juego y cual se conservo—, asi que no se pisa.
+    if (!td.classList.contains('conci-cell-conflicto')) {
+        td.title = `${registro.user} acaba de cambiar este campo`;
+    }
 }
 
 // Repinta el rastro vigente. Se llama tras renderizar la tabla, porque el
@@ -25679,6 +25840,17 @@ function _conciStageCellDraft(td, rawValue) {
     if (td.dataset.origRaw === undefined) td.dataset.origRaw = currentRaw;
     const origRaw = _conciNormalizeEditableCellText(td.dataset.origRaw);
     td.dataset.pendingRaw = nextRaw;
+    // Volver a escribir en una celda marcada por un choque es decidir otra vez:
+    // la marca ya cumplio su papel de avisar y deja de estorbar. Se retira
+    // tambien si lo que se escribe coincide con lo que puso la otra persona.
+    if (typeof _conciConflictos !== 'undefined') {
+        const trConf = td.closest('tr');
+        const claveConf = _conciClaveConflicto(String(trConf?.dataset?.rowId || ''), String(td.dataset.col || ''));
+        const choque = _conciConflictos.get(claveConf);
+        if (choque && nextRaw !== choque.mio) {
+            _conciLimpiarConflicto(String(trConf?.dataset?.rowId || ''), String(td.dataset.col || ''));
+        }
+    }
     if (nextRaw !== origRaw) {
         td.dataset.dirty = '1';
         // Desde el primer tecleo queda a salvo en esta computadora.
@@ -25966,7 +26138,13 @@ function _conciRestaurarBorradores() {
 // 2 minutos mientras quede algo pendiente. En cuanto todo queda guardado, se
 // apaga y vuelve a empezar desde el intervalo corto.
 
-const _CONCI_REINTENTO_MIN_MS = 15000;
+// El primer reintento era de 15 s. En ese hueco cabe de sobra que alguien
+// teclee, vea el aviso de "pendiente de guardar" y cierre la pestana: la
+// captura no se llegaba a reenviar nunca desde esa sesion. Ahora el primer
+// intento es casi inmediato —un fallo de red suele durar menos de dos
+// segundos— y a partir de ahi se va espaciando igual que antes, para no
+// martillear a un servidor que de verdad este caido.
+const _CONCI_REINTENTO_MIN_MS = 1500;
 const _CONCI_REINTENTO_MAX_MS = 120000;
 let _conciReintentoTimer = null;
 let _conciReintentoEspera = _CONCI_REINTENTO_MIN_MS;
@@ -26064,16 +26242,384 @@ function _conciActualizarIndicadorBorradores() {
     const el = document.getElementById('conci-pendientes-indicador');
     if (!el) return;
     const { filas, celdas } = _conciBorradoresPendientes();
-    if (!celdas) {
+    // Lo que quedo a medias en OTRA computadora. Eso no se reintenta solo aqui:
+    // hay que rescatarlo a mano, y por eso se muestra aparte.
+    const ajenos = (typeof _conciPendientesAjenos === 'function') ? _conciPendientesAjenos() : [];
+
+    if (!celdas && !ajenos.length) {
         el.classList.add('d-none');
         el.removeAttribute('title');
+        el.classList.remove('conci-pendientes-ajenos');
         return;
     }
     el.classList.remove('d-none');
-    const textoCeldas = celdas === 1 ? '1 captura sin guardar' : `${celdas} capturas sin guardar`;
-    el.textContent = textoCeldas;
-    el.title = `${textoCeldas} en ${filas === 1 ? '1 fila' : `${filas} filas`}. `
-        + 'Se reintenta solo; están guardadas en esta computadora hasta que la base las confirme.';
+
+    if (celdas && ajenos.length) {
+        el.textContent = `${celdas} sin guardar · ${ajenos.length} de otro equipo`;
+    } else if (celdas) {
+        el.textContent = celdas === 1 ? '1 captura sin guardar' : `${celdas} capturas sin guardar`;
+    } else {
+        el.textContent = ajenos.length === 1
+            ? '1 captura pendiente de otro equipo'
+            : `${ajenos.length} capturas pendientes de otro equipo`;
+    }
+    el.classList.toggle('conci-pendientes-ajenos', ajenos.length > 0);
+
+    const partes = [];
+    if (celdas) {
+        partes.push(`${celdas === 1 ? '1 captura' : `${celdas} capturas`} en `
+            + `${filas === 1 ? '1 fila' : `${filas} filas`} de esta computadora. Se reintentan solas.`);
+    }
+    if (ajenos.length) {
+        const quienes = [...new Set(ajenos.map(a => a.usuario))].join(', ');
+        partes.push(`${ajenos.length === 1 ? '1 captura quedo' : `${ajenos.length} capturas quedaron`} `
+            + `sin guardar en otro equipo (${quienes}). Clic para verlas y rescatarlas.`);
+    }
+    el.title = partes.join(' ');
+}
+
+// Panel de rescate: lo que quedo a medias en otra computadora, con quien lo
+// capturo y cuando, y un boton para traerlo a la tabla.
+function _conciAbrirPanelPendientes() {
+    const ajenos = (typeof _conciPendientesAjenos === 'function') ? _conciPendientesAjenos() : [];
+    let modal = document.getElementById('conci-pendientes-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'conci-pendientes-modal';
+        modal.className = 'modal fade';
+        modal.tabIndex = -1;
+        modal.innerHTML = `
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h6 class="modal-title mb-0"><i class="bi bi-life-preserver me-2"></i>Capturas sin guardar en otros equipos</h6>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body" id="conci-pendientes-cuerpo"></div>
+              </div>
+            </div>`;
+        document.body.appendChild(modal);
+    }
+    const cuerpo = modal.querySelector('#conci-pendientes-cuerpo');
+    if (!ajenos.length) {
+        cuerpo.innerHTML = '<p class="text-muted mb-0">No hay nada pendiente en otros equipos. '
+            + 'Todo lo capturado esta confirmado en la base.</p>';
+    } else {
+        cuerpo.innerHTML = `
+            <p class="small text-muted">Estas capturas se tecleraron en otra computadora y no llegaron a
+            guardarse. Revisa que sigan siendo correctas antes de aplicarlas.</p>
+            <div class="table-responsive"><table class="table table-sm align-middle">
+              <thead><tr><th>Quien</th><th>Vuelo</th><th>Campo</th><th>Valor</th><th>Cuando</th><th></th></tr></thead>
+              <tbody>${ajenos.map(a => `
+                <tr data-pend-id="${escapeHtml(String(a.id))}">
+                  <td>${escapeHtml(a.usuario || '')}</td>
+                  <td>${escapeHtml(a.vuelo || '-')}</td>
+                  <td>${escapeHtml(a.columna || '')}</td>
+                  <td><code>${escapeHtml(a.valor ?? '')}</code></td>
+                  <td class="small text-muted">${escapeHtml(new Date(a.creado_en).toLocaleString('es-MX'))}</td>
+                  <td><button type="button" class="btn btn-sm btn-outline-primary conci-pend-aplicar">Aplicar</button></td>
+                </tr>`).join('')}</tbody>
+            </table></div>`;
+        cuerpo.querySelectorAll('.conci-pend-aplicar').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.closest('tr')?.dataset.pendId;
+                const reg = ajenos.find(a => String(a.id) === String(id));
+                if (reg) _conciAplicarPendienteRemoto(reg);
+            });
+        });
+    }
+    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+    }
+}
+
+// Traer un pendiente ajeno a la tabla es capturarlo aqui: entra por el mismo
+// camino que cualquier tecleo, con lo que se guarda, se avisa en vivo y queda
+// atribuido a quien lo rescata.
+function _conciAplicarPendienteRemoto(reg) {
+    const tabla = document.getElementById('table-conci-manifiestos');
+    const td = tabla && _conciFindLiveCell(tabla, String(reg.row_id), String(reg.columna));
+    if (!td) {
+        if (typeof showNotification === 'function') {
+            showNotification('Esa fila no esta a la vista con el filtro actual. Cambia la fecha para verla.', 'warning');
+        }
+        return;
+    }
+    const tr = td.closest('tr');
+    _conciStageCellDraft(td, String(reg.valor ?? ''));
+    td.textContent = String(reg.valor ?? '');
+    _conciQueueAutoSave(tr);
+    _conciBorrarPendienteRemoto(reg.id);
+    if (typeof showNotification === 'function') {
+        showNotification(`Se aplico la captura de ${reg.usuario}: ${reg.columna} = ${reg.valor}`, 'success');
+    }
+}
+
+async function _conciBorrarPendienteRemoto(id) {
+    const client = await _conciClientePendientes();
+    if (!client) return;
+    try {
+        await client.from(_CONCI_TABLA_PENDIENTES).delete().eq('id', id);
+        _conciPendientesRemotos = _conciPendientesRemotos.filter(p => String(p.id) !== String(id));
+        _conciActualizarIndicadorBorradores();
+    } catch (e) { _conciColaFalla(e); }
+}
+
+// ── Cola de pendientes en el servidor ────────────────────────────────────────
+//
+// El borrador local rescata una captura cuando la persona vuelve a entrar EN
+// ESA MISMA COMPUTADORA. Si la máquina no vuelve a encenderse, o quien capturó
+// sigue desde otro equipo, lo capturado se queda encerrado en un localStorage
+// que nadie más puede abrir — y nadie sabe siquiera que existía.
+//
+// Aquí lo que no llegó a la base queda también del lado del servidor, visible
+// para todos. En cuanto la base confirma la captura, se retira: esta tabla solo
+// contiene lo que TODAVÍA no está guardado, nunca es una segunda verdad.
+//
+// Requiere db/conciliacion_capturas_pendientes.sql. Si la tabla no existe, todo
+// esto se desactiva solo y la captura sigue funcionando igual que antes.
+const _CONCI_TABLA_PENDIENTES = 'conciliacion_capturas_pendientes';
+let _conciPendientesRemotos = [];
+let _conciColaDisponible = null;   // null = aún no se sabe
+
+async function _conciClientePendientes() {
+    if (_conciColaDisponible === false) return null;
+    let client = window.supabaseClient;
+    if (!client && window.ensureSupabaseClient) {
+        try { client = await window.ensureSupabaseClient(); } catch (_) { return null; }
+    }
+    return client || null;
+}
+
+// Un fallo aquí nunca puede estorbar a la captura: esto es una red de
+// seguridad, y una red que rompiera lo que sostiene no serviría de nada.
+function _conciColaFalla(error) {
+    const msg = String(error?.message || error || '');
+    if (/does not exist|schema cache|relation .* does not exist/i.test(msg)) {
+        _conciColaDisponible = false;
+        console.warn('[Conciliación] la cola de pendientes no está instalada; se sigue solo con el borrador local. Ejecuta db/conciliacion_capturas_pendientes.sql.');
+    }
+    return false;
+}
+
+function _conciCeldasPendientesDeFila(tr) {
+    return [...tr.querySelectorAll('td[data-dirty="1"]')].map(td => ({
+        td,
+        col: String(td.dataset.col || ''),
+        valor: _conciNormalizeEditableCellText(td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent),
+    })).filter(c => c.col);
+}
+
+async function _conciEncolarPendientesDeFila(tr, mensajeError) {
+    if (!tr) return false;
+    const celdas = _conciCeldasPendientesDeFila(tr);
+    if (!celdas.length) return false;
+    const client = await _conciClientePendientes();
+    if (!client) return false;
+
+    const rowId = String(tr.dataset.rowId || tr.dataset.conciTempId || '').trim()
+        || `nueva:${_conciLiveClientId}:${tr.rowIndex}`;
+    const filas = celdas.map(c => ({
+        row_id: rowId,
+        columna: c.col,
+        valor: c.valor,
+        usuario: _conciCurrentUserDisplayName() || 'Sin nombre',
+        cliente_id: _conciLiveClientId || 'sin-id',
+        fecha_vuelo: (typeof _conciFechaUnicaDelFiltro === 'function' ? _conciFechaUnicaDelFiltro() : '') || null,
+        vuelo: _conciVueloDeFila(rowId) || null,
+        ultimo_error: String(mensajeError || '').slice(0, 300) || null,
+        visto_en: new Date().toISOString(),
+    }));
+
+    try {
+        const { error } = await client
+            .from(_CONCI_TABLA_PENDIENTES)
+            .upsert(filas, { onConflict: 'row_id,columna,cliente_id' });
+        if (error) return _conciColaFalla(error);
+        return true;
+    } catch (e) {
+        return _conciColaFalla(e);
+    }
+}
+
+async function _conciDesencolarPendientesDeFila(tr, columnas) {
+    if (!tr || _conciColaDisponible === false) return;
+    const cols = [...(columnas instanceof Set ? columnas : (columnas || []))].filter(Boolean);
+    if (!cols.length) return;
+    const rowId = String(tr.dataset.rowId || '').trim();
+    if (!rowId) return;
+    const client = await _conciClientePendientes();
+    if (!client) return;
+    try {
+        const { error } = await client
+            .from(_CONCI_TABLA_PENDIENTES)
+            .delete()
+            .eq('row_id', rowId)
+            .eq('cliente_id', _conciLiveClientId || 'sin-id')
+            .in('columna', cols);
+        if (error) _conciColaFalla(error);
+    } catch (e) {
+        _conciColaFalla(e);
+    }
+}
+
+async function _conciCargarPendientesRemotos() {
+    const client = await _conciClientePendientes();
+    if (!client) return;
+    // Buen momento para guardar el token: al cerrar la pestana ya no da tiempo
+    // de pedirlo, y sin el la peticion de ultimo momento iria como anonima.
+    try {
+        const { data } = await client.auth.getSession();
+        _conciRecordarToken(data?.session?.access_token);
+    } catch (_) { /* sin token se intenta igual con la clave publica */ }
+    try {
+        const { data, error } = await client
+            .from(_CONCI_TABLA_PENDIENTES)
+            .select('*')
+            .order('creado_en', { ascending: true });
+        if (error) { _conciColaFalla(error); return; }
+        _conciColaDisponible = true;
+        _conciPendientesRemotos = Array.isArray(data) ? data : [];
+        _conciActualizarIndicadorBorradores();
+    } catch (e) {
+        _conciColaFalla(e);
+    }
+}
+
+// Los pendientes que dejó OTRA persona, o esta misma desde otra computadora.
+// Son los que nadie va a rescatar solo, porque su borrador local está en una
+// máquina a la que quizá nadie vuelva.
+function _conciPendientesAjenos() {
+    const mio = _conciLiveClientId || 'sin-id';
+    return _conciPendientesRemotos.filter(p => String(p.cliente_id) !== mio);
+}
+
+// ── Instrucciones para quien captura ─────────────────────────────────────────
+//
+// Explica lo que el sistema hace por su cuenta, para que nadie invente rutinas
+// de "por si acaso" —copiar a un Excel aparte, no cerrar nunca la pestaña— que
+// acaban siendo la verdadera fuente de errores.
+function _conciAbrirInstrucciones() {
+    let modal = document.getElementById('conci-instrucciones-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'conci-instrucciones-modal';
+        modal.className = 'modal fade';
+        modal.tabIndex = -1;
+        modal.innerHTML = `
+          <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h6 class="modal-title mb-0"><i class="fas fa-circle-question me-2"></i>Cómo capturar sin perder nada</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+              </div>
+              <div class="modal-body">
+                <div class="alert alert-success py-2">
+                  <strong>No hace falta guardar.</strong> Cada celda se guarda sola en cuanto dejas de
+                  escribir, más o menos medio segundo después. No hay botón de guardar porque no hace falta.
+                </div>
+
+                <h6 class="mt-3">Si se va el internet</h6>
+                <p class="mb-2">Sigue capturando con normalidad. Lo que escribas queda guardado en esta
+                computadora y se reintenta solo, cada vez con un poco más de espera, hasta que la base lo
+                acepte. La fila se marca en gris mientras tanto.</p>
+
+                <h6 class="mt-3">Si refrescas o cierras la pestaña</h6>
+                <p class="mb-2"><strong>No se pierde nada.</strong> Al cerrar, lo que aún no estaba
+                confirmado se manda al servidor; y al volver a entrar, lo que quedó pendiente reaparece en
+                su fila y se reintenta solo. Si el aviso del navegador te pregunta si quieres salir, puedes
+                salir: es solo una advertencia, no una amenaza.</p>
+
+                <h6 class="mt-3">Si tu computadora se apaga o te cambias de equipo</h6>
+                <p class="mb-2">Lo pendiente queda registrado en el servidor. Cualquiera lo ve en la
+                etiqueta <span class="badge" style="background:#f8d7da;color:#842029;border:1px solid #dc3545">capturas pendientes de otro equipo</span>
+                de la barra de arriba, y puede aplicarlo desde ahí con un clic.</p>
+
+                <h6 class="mt-3">Si alguien captura la misma celda que tú</h6>
+                <p class="mb-2">Manda lo tuyo: tu captura no se pisa nunca. La celda queda marcada en
+                ámbar con un <strong>!</strong>, que te dice quién puso qué. Si su valor era el correcto,
+                haz clic en esa marca para quedarte con el suyo.</p>
+
+                <h6 class="mt-3">Lo que ves de los demás</h6>
+                <p class="mb-2">Las burbujas de arriba muestran quién está dentro y en qué vuelo trabaja.
+                Cuando alguien cambia un campo, la celda se ilumina un momento con su nombre.</p>
+
+                <div class="alert alert-warning py-2 mt-3 mb-0">
+                  <strong>Lo único que sí conviene:</strong> si una fila se queda en gris mucho rato,
+                  avisa. Significa que la base está rechazando ese dato —normalmente un valor que no
+                  corresponde al tipo de campo— y ahí sí hace falta corregirlo a mano.
+                </div>
+              </div>
+            </div>
+          </div>`;
+        document.body.appendChild(modal);
+    }
+    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+    }
+}
+
+// ── Envío de último momento, al cerrar o esconder la pestaña ────────────────
+//
+// El aviso de "tienes capturas sin guardar" al salir avisa, pero no rescata
+// nada: si la persona acepta salir —o el navegador cierra la pestaña por su
+// cuenta, o se apaga el equipo— lo capturado se queda en el localStorage de esa
+// máquina y ahí termina la historia.
+//
+// Aquí lo que quede sin confirmar sale hacia el servidor en el último instante.
+// No se puede usar el cliente de supabase-js: sus peticiones son asíncronas y el
+// navegador las cancela al descargar la página. Un fetch con `keepalive` sí
+// sobrevive, y es exactamente para esto.
+//
+// El token de sesión se guarda al vuelo porque leerlo es asíncrono y en
+// `pagehide` ya no hay tiempo de esperar nada.
+let _conciTokenSesion = '';
+
+function _conciRecordarToken(token) {
+    if (token) _conciTokenSesion = String(token);
+}
+
+function _conciEnviarPendientesAlCerrar() {
+    if (_conciColaDisponible === false) return;
+    const tabla = document.getElementById('table-conci-manifiestos');
+    if (!tabla) return;
+    const url = window.SUPABASE_URL;
+    const apikey = window.SUPABASE_ANON_KEY;
+    if (!url || !apikey) return;
+
+    const filas = [];
+    tabla.querySelectorAll('tbody tr').forEach(tr => {
+        const rowId = String(tr.dataset.rowId || '').trim()
+            || `nueva:${_conciLiveClientId}:${tr.rowIndex}`;
+        _conciCeldasPendientesDeFila(tr).forEach(c => {
+            filas.push({
+                row_id: rowId,
+                columna: c.col,
+                valor: c.valor,
+                usuario: _conciCurrentUserDisplayName() || 'Sin nombre',
+                cliente_id: _conciLiveClientId || 'sin-id',
+                fecha_vuelo: (typeof _conciFechaUnicaDelFiltro === 'function' ? _conciFechaUnicaDelFiltro() : '') || null,
+                vuelo: _conciVueloDeFila(rowId) || null,
+                ultimo_error: 'La pestaña se cerró antes de confirmar el guardado.',
+                visto_en: new Date().toISOString(),
+            });
+        });
+    });
+    if (!filas.length) return;
+
+    try {
+        fetch(`${url}/rest/v1/${_CONCI_TABLA_PENDIENTES}?on_conflict=row_id,columna,cliente_id`, {
+            method: 'POST',
+            keepalive: true,          // sobrevive al cierre de la pestaña
+            headers: {
+                'Content-Type': 'application/json',
+                apikey,
+                Authorization: `Bearer ${_conciTokenSesion || apikey}`,
+                Prefer: 'resolution=merge-duplicates,return=minimal',
+            },
+            body: JSON.stringify(filas),
+        }).catch(() => { /* ultimo intento: si no sale, queda el borrador local */ });
+    } catch (_) { /* idem */ }
 }
 
 // ── "Guardar todo" a mano (botón + Ctrl+G) ───────────────────────────────────
@@ -27724,6 +28270,11 @@ function _conciMarkRowSaved(tr, cells) {
 // más reciente conserva data-dirty y será enviada por el reintento en cola.
 function _conciSettleSavedCells(tr, cells, savedCellValues, savedColumns) {
     const allowed = savedColumns instanceof Set ? savedColumns : null;
+    // Confirmado por la base: sale de la cola del servidor. Esa tabla solo
+    // guarda lo que todavia no esta en "Conciliacion Manifiestos".
+    if (typeof _conciDesencolarPendientesDeFila === 'function') {
+        _conciDesencolarPendientesDeFila(tr, savedColumns);
+    }
     cells.forEach(td => {
         if (allowed && !allowed.has(td.dataset.col)) return;
         const savedRaw = savedCellValues.get(td);
@@ -27986,6 +28537,9 @@ async function _conciAutoSaveRow(tr, options = {}) {
                     console.warn('[Conciliación] fila (Solo Vuelos) pendiente de guardar:', result.error);
                     // Insiste solo hasta que la base lo acepte.
                     _conciProgramarReintento();
+                    // Y queda en la cola del servidor, para que no dependa de
+                    // que esta computadora vuelva a encenderse.
+                    _conciEncolarPendientesDeFila(tr, msg);
                     if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
                     return;
                 }
@@ -28041,6 +28595,9 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 console.warn('[Conciliación] fila pendiente de guardar:', result.error);
                 // Insiste solo hasta que la base lo acepte.
                 _conciProgramarReintento();
+                // Y queda en la cola del servidor, para que no dependa de que
+                // esta computadora vuelva a encenderse.
+                _conciEncolarPendientesDeFila(tr, msg);
                 if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
                 return;
             }

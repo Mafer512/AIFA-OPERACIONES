@@ -9,7 +9,8 @@
     "start": "node server.js",
     "test": "jest --testPathIgnorePatterns pagina-carga-y-navega cinco-capturistas",
     "test:pagina": "jest __tests__/pagina-carga-y-navega.test.js --forceExit --testTimeout=120000",
-    "test:capturistas": "jest __tests__/conciliacion-cinco-capturistas.test.js --forceExit --testTimeout=120000"
+    "test:capturistas": "jest __tests__/conciliacion-cinco-capturistas.test.js --forceExit --testTimeout=120000",
+    "banco": "node scripts/banco-capturistas.js"
   },
   "repository": {
     "type": "git",

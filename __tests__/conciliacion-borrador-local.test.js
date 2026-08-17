@@ -283,12 +283,17 @@ describe('indicador', () => {
 describe('integración en el módulo', () => {
   test('se guarda el borrador al teclear', () => {
     const stage = source.slice(source.indexOf('function _conciStageCellDraft'));
-    expect(stage.slice(0, 900)).toContain('_conciBorradorGuardarCelda(td, nextRaw)');
+    // El recorte solo acota la busqueda a esta funcion; se dejo holgado para que
+    // anadirle algo delante (el aviso de choque entre capturistas, por ejemplo)
+    // no haga fallar una comprobacion que no va de eso.
+    expect(stage.slice(0, 2500)).toContain('_conciBorradorGuardarCelda(td, nextRaw)');
   });
 
   test('se retira solo cuando la base confirma ese valor', () => {
     const settle = source.slice(source.indexOf('function _conciSettleSavedCells'));
-    expect(settle.slice(0, 900)).toContain('_conciBorradorQuitarCelda(td)');
+    // Recorte holgado por lo mismo que arriba: acota la busqueda a esta
+    // funcion sin romperse porque le anadan algo delante.
+    expect(settle.slice(0, 2500)).toContain('_conciBorradorQuitarCelda(td)');
   });
 
   test('se reintenta al recuperar la conexión', () => {

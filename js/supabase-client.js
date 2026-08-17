@@ -15,6 +15,15 @@ const SUPABASE_ANON_KEY = (window.APP_CONFIG && window.APP_CONFIG.SUPABASE_ANON_
 // límites del plan.
 const SUPABASE_OPTIONS = { realtime: { params: { eventsPerSecond: 40 } } };
 
+// Se exponen para el envio de ultimo momento al cerrar la pestana. En ese
+// instante ya no se puede usar el cliente de supabase-js —sus peticiones son
+// asincronas y el navegador las cancela al descargar la pagina—, hace falta un
+// fetch con keepalive contra el REST, y ese necesita la URL y la clave.
+if (typeof window !== 'undefined') {
+	window.SUPABASE_URL = SUPABASE_URL;
+	window.SUPABASE_ANON_KEY = SUPABASE_ANON_KEY;
+}
+
 // Initialize client if UMD `window.supabase` is present (script loaded before this file)
 if (typeof window !== 'undefined') {
 	try {

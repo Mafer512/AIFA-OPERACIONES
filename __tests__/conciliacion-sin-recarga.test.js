@@ -43,6 +43,12 @@ const api = new Function('document', 'recalculadas', 'enviados', `
   let _conciEditFallbackYear = 2026;
   let _conciLiveReady = true;
   let _conciLiveDisplayName = 'Ana';
+  // El aviso de choque entre dos capturistas vive en otras funciones; aqui solo
+  // interesa que aplicar un cambio remoto siga haciendo lo suyo.
+  const _conciConflictos = new Map();
+  function _conciClaveConflicto(r, c) { return r + '|' + c; }
+  function _conciRegistrarConflicto() {}
+  function _conciLimpiarConflicto() {}
   let _conciLiveColor = '#00897b';
   let _conciLiveClientId = 'yo';
   let _conciFocoRemotoPorCliente = new Map();

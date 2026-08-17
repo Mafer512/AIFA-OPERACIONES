@@ -31,7 +31,11 @@ function crearServidor() {
     TABLA,
     filas,
     bitacora,
+    // Perfil de red simulada. El banco de pruebas los mueve para reproducir
+    // desde una oficina con fibra hasta un enlace saturado.
     latenciaMs: 15,
+    jitterMs: 0,            // variacion aleatoria sobre la latencia
+    tasaFallos: 0,          // 0..1 — proporcion de escrituras que se rechazan
     fallarSiguiente: null,          // para simular un error puntual
     // Falla determinista, acotada a una fila: "la siguiente peticion" es
     // ambiguo cuando hay capturas en vuelo de otras personas y el fallo puede
@@ -96,7 +100,13 @@ function crearServidor() {
       };
 
       async function ejecutar() {
-        await esperar(srv.latenciaMs);
+        const jitter = srv.jitterMs ? Math.random() * srv.jitterMs : 0;
+        await esperar(srv.latenciaMs + jitter);
+
+        if (srv.tasaFallos > 0 && estado.operacion && Math.random() < srv.tasaFallos) {
+          bitacora.push({ quien, error: 'rechazo aleatorio', op: estado.operacion });
+          return { data: null, error: { message: 'la base rechazo la escritura (simulado)' } };
+        }
 
         if (srv.fallarSiguiente) {
           const err = srv.fallarSiguiente;
@@ -222,7 +232,10 @@ function crearServidor() {
 
 const codigoScript = fs.readFileSync(path.join(raiz, 'script.js'), 'utf8');
 
-async function abrirPersona(nombre, servidor, errores) {
+// `opciones.almacenamiento` reproduce un refresco de la pestana: la ventana es
+// nueva, pero el localStorage es el que dejo la anterior, igual que en un
+// navegador de verdad.
+async function abrirPersona(nombre, servidor, errores, opciones = {}) {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', {
     url: 'http://localhost:3000/',
     runScripts: 'outside-only',
@@ -244,7 +257,9 @@ async function abrirPersona(nombre, servidor, errores) {
     ResizeObserver: class { observe() {} unobserve() {} disconnect() {} },
     matchMedia: () => ({ matches: false, addEventListener: noop, removeEventListener: noop, addListener: noop, removeListener: noop }),
     fetch: () => Promise.resolve({ ok: true, status: 200, headers: { get: () => null }, json: () => Promise.resolve({}), text: () => Promise.resolve('') }),
-    showNotification: noop,
+    // Los avisos al usuario se recogen para poder comprobarlos.
+    __avisos: [],
+    showNotification: function (msg) { win.__avisos.push(String(msg)); },
     scrollTo: noop,
   });
   win.HTMLCanvasElement.prototype.getContext = () => doble;
@@ -252,6 +267,10 @@ async function abrirPersona(nombre, servidor, errores) {
   win.console.error = (...a) => errores.push(`${nombre} console.error: ${a.map(String).join(' ')}`);
   win.console.warn = (...a) => errores.push(`${nombre} WARN: ${a.map(String).join(' ')}`);
   win.console.log = noop;
+
+  if (opciones.almacenamiento) {
+    Object.entries(opciones.almacenamiento).forEach(([k, v]) => win.localStorage.setItem(k, v));
+  }
 
   // Sesion de capturista: es lo que consulta _conciCurrentUserRole().
   win.sessionStorage.setItem('user_role', 'capturista');
@@ -264,6 +283,10 @@ async function abrirPersona(nombre, servidor, errores) {
   // ven, y asignarles algo crearia otra variable global distinta —que es lo que
   // pasaba: el modulo se quedaba con _conciEditMode = false y no guardaba nada.
   const puente = `
+    // script.js declara su propia showNotification y al evaluarlo pisa
+    // cualquier doble puesto antes. Se reemplaza aqui, ya dentro del mismo
+    // eval, para poder comprobar lo que se le dice al usuario.
+    showNotification = function (msg) { window.__avisos.push(String(msg)); };
     window.__t = {
       modoEdicion(v) { _conciEditMode = v; },
       pendientes() { return _conciPendingAutoSaveCount; },
@@ -289,6 +312,11 @@ async function abrirPersona(nombre, servidor, errores) {
       borradores() { return _conciBorradoresLeer(); },
       recibirBroadcast(payload) { _conciHandleRemoteCellSaved(payload); },
       puedeEditar() { return _conciCanCurrentUserEdit(); },
+      conflictos() { return [..._conciConflictos.entries()].map(([k, v]) => k + ' -> ' + v.usuario + ':' + v.valor); },
+      adoptar(rowId, col) {
+        const td = document.querySelector('tr[data-row-id="' + rowId + '"] td[data-col="' + col + '"]');
+        _conciAdoptarValorRemoto(td);
+      },
     };
   `;
 
@@ -317,4 +345,14 @@ function pintarTabla(win, filas) {
     <table id="table-conci-manifiestos"><tbody>${cuerpo}</tbody></table>`;
 }
 
-module.exports = { crearServidor, abrirPersona, pintarTabla, COLUMNAS, esperar };
+// Lo que la pestana dejaria escrito en disco al cerrarse.
+function volcarAlmacenamiento(win) {
+  const salida = {};
+  for (let i = 0; i < win.localStorage.length; i++) {
+    const k = win.localStorage.key(i);
+    salida[k] = win.localStorage.getItem(k);
+  }
+  return salida;
+}
+
+module.exports = { crearServidor, abrirPersona, pintarTabla, COLUMNAS, esperar, volcarAlmacenamiento };
