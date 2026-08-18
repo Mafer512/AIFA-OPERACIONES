@@ -26151,6 +26151,20 @@ const _CONCI_COLUMNAS_IDENTIDAD = [
     'AERONAVE', 'DESTINO / ORIGEN', 'TOTAL PAX',
 ];
 
+// ¿Esta columna es una de las que identifican un vuelo?
+//
+// Ni FECHA/MES ni CIERRE SUBSECRETARIA cuentan: son campos de organización, no
+// de identidad. Antes bastaba con tocar cualquiera de ellos para que la fila se
+// diera por "capturada" y naciera en la base -- y una fila con sólo una fecha
+// puesta se ve exactamente igual de vacía que la fila fantasma original, así
+// que el operador la reportaba como el mismo bug. Esta es la misma pregunta que
+// ya resuelve _conciFilaSinCaptura para saber si una fila EXISTENTE quedó sin
+// nada; aquí decide si una fila NUEVA ya tiene motivo para crearse.
+function _conciEsColumnaIdentidad(col) {
+    const clave = _conciSummaryColumnKey(col);
+    return _CONCI_COLUMNAS_IDENTIDAD.some(c => _conciSummaryColumnKey(c) === clave);
+}
+
 // ¿Esta fila no tiene nada de lo que identifica un vuelo?
 //
 // Una fila casi en blanco asusta: no se sabe si alguien la acaba de agregar o
@@ -28331,7 +28345,16 @@ async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
     const droppedColumns = new Set();
     // Columnas que el usuario capturó de verdad en esta fila. Sólo importan
     // cuando la escritura es un INSERT — ver la comprobación dentro del bucle.
-    const capturaRequerida = Array.isArray(options.columnasDeCaptura)
+    // Se distingue "el llamador no pidió esta comprobación" (columnasDeCaptura
+    // ausente, ej. la importación desde archivo) de "el llamador SÍ la pidió y
+    // no quedó ninguna columna que la cumpla" (columnasDeCaptura === []): un
+    // array vacío no es lo mismo que no pasar la opción. Colapsar los dos casos
+    // en la misma condición volvía la comprobación un no-op justo en el caso
+    // que más importa: cuando de verdad no se capturó nada de identidad, un
+    // array vacío pasaba "sin capturaRequerida.length, no hay nada que exigir"
+    // igual que si nadie hubiera pedido la comprobación.
+    const seExigeCapturaDeIdentidad = Array.isArray(options.columnasDeCaptura);
+    const capturaRequerida = seExigeCapturaDeIdentidad
         ? options.columnasDeCaptura.filter(Boolean)
         : [];
 
@@ -28340,7 +28363,7 @@ async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
         .toLowerCase().replace(/[^a-z0-9]/g, '');
 
     const conservaAlgoCapturado = () => {
-        if (!capturaRequerida.length) return true;
+        if (!seExigeCapturaDeIdentidad) return true;
         const presentes = Object.keys(currentPayload).map(_norm);
         return capturaRequerida.some(col => presentes.includes(_norm(col)));
     };
@@ -28350,15 +28373,19 @@ async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
             return { ok: false, error: { message: 'Sin campos válidos para guardar.' }, droppedColumns: [...droppedColumns] };
         }
 
-        // Un INSERT crea una fila que antes no existía. Si la auto-corrección de
-        // más abajo ya quitó del payload TODO lo que el usuario capturó, lo único
-        // que queda son los rellenos automáticos que pone el propio código: la
-        // FECHA heredada del filtro y el nombre de quien está en sesión. Una fila
-        // nacida sólo de eso es exactamente la fila fantasma — en blanco, con la
-        // fecha puesta y ESTATUS MATRÍCULA "NO IDENTIFICADA" porque no hay
-        // matrícula que identificar — y el contador de arriba la suma porque es un
-        // registro real. No se crea: se devuelve el error para que la captura siga
-        // en pantalla y el usuario corrija el dato que la base rechazó.
+        // Un INSERT crea una fila que antes no existía. El llamador sólo cuenta
+        // como "captura real" (columnasDeCaptura) lo que identifica un vuelo —
+        // aerolínea, matrícula, # de vuelo, tipo de manifiesto, aeronave,
+        // destino/origen, total de pasajeros — nunca FECHA, MES o CIERRE
+        // SUBSECRETARIA por sí solos (ver _conciEsColumnaIdentidad). Dos formas
+        // de terminar sin nada de eso: la auto-corrección de más abajo quitó del
+        // payload la única columna de identidad que traía (la base la rechazó),
+        // o el usuario nunca tocó ninguna — sólo puso una fecha, o probó algo en
+        // CIERRE SUBSECRETARIA. En los dos casos la fila nacería en blanco, con
+        // ESTATUS MATRÍCULA "NO IDENTIFICADA" porque no hay matrícula que
+        // identificar, y el contador de arriba la sumaría porque es un registro
+        // real. No se crea: se devuelve el error para que la captura siga en
+        // pantalla y el usuario termine de identificar el vuelo.
         if (!effectiveRowId && !conservaAlgoCapturado()) {
             const descartadas = [...droppedColumns];
             return {
@@ -28368,7 +28395,14 @@ async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
                     message: descartadas.length
                         ? `La base de datos no aceptó ${descartadas.join(', ')}, que es lo único capturado en esta fila. `
                           + 'La fila no se creó para no dejar un registro en blanco; corrige ese dato y se guardará.'
-                        : 'No quedó ningún dato capturado que guardar en esta fila nueva.',
+                        // El caso normal: se tocó FECHA, MES o CIERRE SUBSECRETARIA (u
+                        // otro campo de organización) pero nada que identifique el vuelo.
+                        // Es justo lo que se ve en pantalla: sin aerolínea, matrícula, #
+                        // de vuelo, tipo de manifiesto, aeronave, destino/origen o total
+                        // de pasajeros, sigue siendo una fila que nadie podría reconocer.
+                        : 'Falta capturar algo que identifique el vuelo (aerolínea, matrícula, # de vuelo, '
+                          + 'tipo de manifiesto, aeronave, destino/origen o total de pasajeros) antes de que esta '
+                          + 'fila pueda guardarse como un registro nuevo.',
                 },
                 droppedColumns: descartadas,
             };
@@ -28737,6 +28771,12 @@ async function _conciAutoSaveRow(tr, options = {}) {
         if (isDirty) dirtyCols.add(col);
         if (isDirty && raw) { hasUserCapture = true; capturedCols.add(col); }
     });
+    // De lo capturado, sólo lo que identifica un vuelo justifica CREAR una fila
+    // nueva. FECHA, MES o CIERRE SUBSECRETARIA por sí solos no bastan: una fila
+    // con nada más que una fecha puesta se ve exactamente tan vacía como la fila
+    // fantasma original, así que "algo se tecleó" no es la pregunta correcta —
+    // la pregunta es "hay algo que identifique el manifiesto".
+    const identidadCapturada = [...capturedCols].filter(_conciEsColumnaIdentidad);
     const settleSavedCells = (savedColumns) =>
         _conciSettleSavedCells(tr, cells, savedCellValues, savedColumns);
 
@@ -28833,7 +28873,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 const result = await _conciWriteRowSafe(client, payload, null, {
                     recoverMovementConflict: true,
                     duplicateUpdatePayload,
-                    columnasDeCaptura: [...capturedCols],
+                    columnasDeCaptura: identidadCapturada,
                 });
                 if (!result.ok) {
                     const msg = result.error?.message || 'error de base de datos';
@@ -28890,7 +28930,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
             const result = await _conciWriteRowSafe(client, writePayload, rowId || null, {
                 recoverMovementConflict: !rowId,
                 duplicateUpdatePayload: writePayload,
-                columnasDeCaptura: [...capturedCols],
+                columnasDeCaptura: identidadCapturada,
             });
             // Esta fila YA existía en pantalla con su id (rowId) y la base dice
             // que ya no está: alguien más la borró mientras la seguíamos
@@ -29333,6 +29373,9 @@ async function _conciSaveBulkEdits() {
                 if (newRaw !== oldRaw) changedPayload[col] = normalized;
                 if (td.dataset.dirty === '1' && newRaw !== '') capturadas.add(col);
             });
+            // Igual que en el autoguardado por celda: sólo lo que identifica un
+            // vuelo justifica CREAR una fila nueva. Ver _conciEsColumnaIdentidad.
+            const identidadCapturada = [...capturadas].filter(_conciEsColumnaIdentidad);
 
             // Para una fila nueva, usa todos los valores capturados (no sólo los
             // que quedaron marcados como dirty) y no intentes guardar una fila vacía.
@@ -29363,7 +29406,7 @@ async function _conciSaveBulkEdits() {
                             options: {
                                 recoverMovementConflict: true,
                                 duplicateUpdatePayload: changedPayload,
-                                columnasDeCaptura: [...capturadas],
+                                columnasDeCaptura: identidadCapturada,
                             },
                         });
                     }
@@ -29375,16 +29418,17 @@ async function _conciSaveBulkEdits() {
                 const hasMeaningfulValue = Object.values(changedPayload)
                     .some(v => v !== null && String(v).trim() !== '');
                 // Una fila que todavía no existe en la base sólo se crea si el
-                // usuario capturó algo en ella. Los valores que la fila se pinta
-                // sola no cuentan como captura y no pueden dar origen a un
-                // registro nuevo.
-                if (hasMeaningfulValue && capturadas.size) {
+                // usuario capturó algo que identifique el vuelo. FECHA, MES o
+                // CIERRE SUBSECRETARIA por sí solos no bastan (ver
+                // _conciEsColumnaIdentidad), igual que los valores que la fila
+                // se pinta sola: ninguno de los dos da origen a un registro nuevo.
+                if (hasMeaningfulValue && identidadCapturada.length) {
                     inserts.push({
                         payload: changedPayload,
                         options: {
                             recoverMovementConflict: true,
                             duplicateUpdatePayload: changedPayload,
-                            columnasDeCaptura: [...capturadas],
+                            columnasDeCaptura: identidadCapturada,
                         },
                     });
                 }

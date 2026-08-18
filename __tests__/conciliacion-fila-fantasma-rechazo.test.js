@@ -121,6 +121,9 @@ function construirApi() {
     ${extraer('_conciPersistenceMismatch')}
     ${extraer('_conciMovementKeyFromDuplicateError')}
     ${extraer('_conciIsMovementKeyDuplicate')}
+    ${extraer('_conciSummaryColumnKey')}
+    const _CONCI_COLUMNAS_IDENTIDAD = ['AEROLINEA', 'MATRICULA', '# DE VUELO', 'TIPO DE MANIFIESTO', 'AERONAVE', 'DESTINO / ORIGEN', 'TOTAL PAX'];
+    ${extraer('_conciEsColumnaIdentidad')}
     ${extraer('_conciWriteRowSafe')}
     ${extraer('_conciAutoSaveRow')}
     return { _conciAutoSaveRow, _conciWriteRowSafe };

@@ -115,6 +115,17 @@ async function abrir(servidor, errores, almacenamiento) {
   return persona;
 }
 
+// El servidor falso de pruebas comparte un solo mapa para TODAS las tablas: no
+// distingue "Conciliación Manifiestos" de la cola de pendientes
+// (conciliacion_capturas_pendientes). Una captura que la guarda rechaza (por
+// ejemplo, tocar sólo MES antes que ningún campo de identidad) queda -- como
+// debe -- registrada ahí para reintentarla, y ese registro tiene forma
+// distinta a una fila real (trae "columna", "row_id", "ultimo_error"). Sin
+// filtrarlo, un rechazo correcto se contaría como si fuera una fila de más.
+function filasManifiesto() {
+  return [...srv.filas.values()].filter(f => !('columna' in f));
+}
+
 let srv;
 let errores;
 let ana;
@@ -129,7 +140,7 @@ beforeEach(async () => {
 
 describe('1. capturar un manifiesto completo y salir de la fila', () => {
   test('con Tab, Enter y clic fuera no aparece ninguna fila de más', async () => {
-    const antes = srv.filas.size;
+    const antes = filasManifiesto().length;
     ana.win.__p.agregarFila();
 
     const libres = ana.win.__p.camposLibres();
@@ -153,7 +164,7 @@ describe('1. capturar un manifiesto completo y salir de la fila', () => {
     await esperar(1200);
 
     // Exactamente una fila nueva: la que se capturó. Ni una más.
-    expect(srv.filas.size).toBe(antes + 1);
+    expect(filasManifiesto().length).toBe(antes + 1);
   }, 30000);
 });
 
@@ -169,7 +180,7 @@ describe('2. el botón "+ Agregar fila"', () => {
 
   test('pulsarlo varias veces sin capturar no apila filas en blanco', async () => {
     const enPantallaAntes = ana.win.__p.filasEnPantalla();
-    const enBaseAntes = srv.filas.size;
+    const enBaseAntes = filasManifiesto().length;
 
     ana.win.__p.agregarFila();
     ana.win.__p.agregarFila();
@@ -180,11 +191,11 @@ describe('2. el botón "+ Agregar fila"', () => {
     // la base: nadie capturó nada en ellas.
     expect(ana.win.__p.filasNuevas()).toBe(1);
     expect(ana.win.__p.filasEnPantalla()).toBe(enPantallaAntes + 1);
-    expect(srv.filas.size).toBe(enBaseAntes);
+    expect(filasManifiesto().length).toBe(enBaseAntes);
   }, 30000);
 
   test('abrir el editor y salir sin escribir tampoco crea el registro', async () => {
-    const enBaseAntes = srv.filas.size;
+    const enBaseAntes = filasManifiesto().length;
 
     ana.win.__p.agregarFila();
     // "+ Agregar fila" deja el cursor abierto en la primera celda editable.
@@ -192,13 +203,13 @@ describe('2. el botón "+ Agregar fila"', () => {
     ana.win.__p.clicFuera();
     await esperar(900);
 
-    expect(srv.filas.size).toBe(enBaseAntes);
+    expect(filasManifiesto().length).toBe(enBaseAntes);
   }, 30000);
 });
 
 describe('3. repintar la tabla (refrescar, cambiar fechas, filtrar)', () => {
   test('el número de filas se mantiene y no nacen filas vacías', async () => {
-    const enBaseAntes = srv.filas.size;
+    const enBaseAntes = filasManifiesto().length;
 
     // Cada repintado es lo que hace el módulo al refrescar, al cambiar el rango
     // de fechas o al limpiar filtros: reconstruye el cuerpo de la tabla.
@@ -211,7 +222,7 @@ describe('3. repintar la tabla (refrescar, cambiar fechas, filtrar)', () => {
     }
     await esperar(600);
 
-    expect(srv.filas.size).toBe(enBaseAntes);
+    expect(filasManifiesto().length).toBe(enBaseAntes);
     expect(ana.win.__p.filasEnPantalla()).toBe(2);
     expect(ana.win.__p.filasNuevas()).toBe(0);
   }, 30000);
@@ -219,18 +230,18 @@ describe('3. repintar la tabla (refrescar, cambiar fechas, filtrar)', () => {
 
 describe('4. "Guardar todo"', () => {
   test('con una fila nueva en blanco no escribe nada en la base', async () => {
-    const enBaseAntes = srv.filas.size;
+    const enBaseAntes = filasManifiesto().length;
 
     ana.win.__p.agregarFila();
     ana.win.__p.clicFuera();
     await ana.win.__p.guardarTodo();
     await esperar(900);
 
-    expect(srv.filas.size).toBe(enBaseAntes);
+    expect(filasManifiesto().length).toBe(enBaseAntes);
   }, 30000);
 
   test('con una fila capturada guarda esa fila y sólo esa', async () => {
-    const enBaseAntes = srv.filas.size;
+    const enBaseAntes = filasManifiesto().length;
 
     ana.win.__p.agregarFila();
     ana.win.__p.escribir('AEROLINEA', 'EMIRATES', 'tab');
@@ -239,7 +250,7 @@ describe('4. "Guardar todo"', () => {
     await ana.win.__p.guardarTodo();
     await esperar(1200);
 
-    expect(srv.filas.size).toBe(enBaseAntes + 1);
+    expect(filasManifiesto().length).toBe(enBaseAntes + 1);
     const creada = [...srv.filas.values()].find(f => String(f['# DE VUELO']) === '9935');
     expect(creada).toBeDefined();
     expect(creada.AEROLINEA).toBe('EMIRATES');
@@ -257,11 +268,11 @@ describe('5. volver a abrir la pestaña', () => {
 
     const almacenamiento = volcarAlmacenamiento(ana.win);
 
-    const enBaseAntes = srv.filas.size;
+    const enBaseAntes = filasManifiesto().length;
     ana = await abrir(srv, errores, almacenamiento);
     await esperar(900);
 
-    expect(srv.filas.size).toBe(enBaseAntes);
+    expect(filasManifiesto().length).toBe(enBaseAntes);
     expect(ana.win.__p.filasNuevas()).toBe(0);
     expect(ana.win.__p.filasEnPantalla()).toBe(2);
   }, 30000);

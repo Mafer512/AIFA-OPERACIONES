@@ -96,7 +96,19 @@ describe('integración en el autoguardado', () => {
     const insertNuevo = guardado.indexOf('_conciWriteRowSafe(client, writePayload, rowId || null');
     expect(insertNuevo).toBeGreaterThan(-1);
     const bloque = guardado.slice(insertNuevo, insertNuevo + 400);
-    expect(bloque).toContain('columnasDeCaptura: [...capturedCols]');
+    expect(bloque).toContain('columnasDeCaptura: identidadCapturada');
+  });
+
+  // El bug reportado al operador: "capturé y refresqué, y apareció una fila en
+  // blanco" — resultó no venir de un INSERT vacío, sino de tocar sólo FECHA,
+  // MES o CIERRE SUBSECRETARIA (campos de organización, no de identidad) en
+  // una fila nueva. Técnicamente "algo se capturó", pero la fila se ve igual de
+  // irreconocible que la fila fantasma original. Sólo lo que identifica un
+  // vuelo debe poder crear el registro.
+  test('sólo columnas de identidad justifican crear una fila nueva, no cualquier captura', () => {
+    expect(source).toContain('function _conciEsColumnaIdentidad(col)');
+    const inicio = source.indexOf('const identidadCapturada = [...capturedCols].filter(_conciEsColumnaIdentidad)');
+    expect(inicio).toBeGreaterThan(-1);
   });
 
   // "Guardar todo" (Ctrl+G) recorre TODAS las filas nuevas, incluidas las que
