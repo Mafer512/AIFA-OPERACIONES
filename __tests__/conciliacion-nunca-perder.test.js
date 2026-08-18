@@ -69,6 +69,7 @@ const api = new Function('document', 'setTimeout', 'clearTimeout', 'estado', 'en
   const _CONCI_COLUMNAS_IDENTIDAD = ['AEROLINEA', 'MATRICULA', '# DE VUELO', 'TIPO DE MANIFIESTO', 'AERONAVE', 'DESTINO / ORIGEN', 'TOTAL PAX'];
   ${extraer('_conciEsColumnaIdentidad')}
   ${extraer('_conciBorradorPuedeLlegarAGuardarse')}
+  ${extraer('_conciNormalizeEditableCellText')}
   ${extraer('_conciRestaurarFilasNuevas')}
   return {
     _conciProgramarReintento, _conciReiniciarEsperaReintento, _conciRestaurarFilasNuevas,

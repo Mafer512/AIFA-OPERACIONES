@@ -26610,8 +26610,9 @@ function _conciRestaurarFilasNuevas(datos) {
         if (tr.dataset.conciBorradorClave && tr.dataset.conciBorradorClave !== clave) return;
         tr.dataset.conciBorradorClave = clave;
 
+        const tdsFila = [...tr.querySelectorAll('td[data-col]')];
         Object.keys(celdas).forEach(col => {
-            const td = [...tr.querySelectorAll('td[data-col]')].find(c => c.dataset.col === col);
+            const td = tdsFila.find(c => c.dataset.col === col);
             if (!td) return;
             const valor = String(celdas[col] ?? '');
             td.textContent = valor;
@@ -26620,6 +26621,22 @@ function _conciRestaurarFilasNuevas(datos) {
             td.classList.add('conci-cell-borrador');
             td.title = 'Captura pendiente de guardar, recuperada de esta misma computadora.';
         });
+        // Segunda comprobación, independiente de la de arriba: ahora se mira lo
+        // que de verdad quedó puesto en la fila, celda por celda, en vez del
+        // objeto celdas original. Es una red de seguridad aparte -- si el
+        // descarte anterior tuviera algún día un hueco (una columna renombrada,
+        // un caso no previsto), esta fila jamás se queda visible sin identidad:
+        // se retira igual que si el borrador nunca hubiera calificado.
+        const quedoConIdentidad = tdsFila.some(td =>
+            _conciEsColumnaIdentidad(td.dataset.col)
+            && _conciNormalizeEditableCellText(td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent) !== ''
+        );
+        if (!quedoConIdentidad) {
+            tr.remove();
+            delete datos[clave];
+            limpiadas = true;
+            return;
+        }
         tr.dataset.dirty = '1';
         _conciRefreshCalculatedCellsForRow(tr);
         _conciQueueAutoSave(tr);
