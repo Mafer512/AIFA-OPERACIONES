@@ -26050,6 +26050,21 @@ function _conciBorradoresPurgar(datos) {
             || !entrada?.celdas || !Object.keys(entrada.celdas).length) {
             delete vivos[clave];
             cambio = true;
+            return;
+        }
+        // Un borrador de fila NUEVA cuyas celdas estan todas vacias no describe
+        // ninguna captura que recuperar: son celdas que alguien vacio en una
+        // fila que nunca llego a existir en la base. Reponerlo dibujaba una
+        // fila en blanco que ademas NUNCA se puede guardar (el autoguardado
+        // exige una captura real para crear la fila), asi que el borrador no se
+        // limpiaba nunca y la fila volvia a aparecer sola en cada render.
+        //
+        // En una fila que SI existe ("id:N") un valor vacio si significa algo:
+        // borrar esa celda. Por eso la regla se limita a las claves "nueva:".
+        if (clave.startsWith('nueva:')
+            && !Object.values(entrada.celdas).some(v => String(v ?? '').trim() !== '')) {
+            delete vivos[clave];
+            cambio = true;
         }
     });
     if (cambio) _conciBorradoresEscribir(vivos);
@@ -26160,16 +26175,47 @@ function _conciBorradorOlvidarFila(tr) {
     _conciActualizarIndicadorBorradores();
 }
 
+// Una fila nueva que consigue guardarse cambia de identidad: deja de ser
+// "nueva:xxx" y pasa a ser "id:N". Su borrador local tiene que MUDARSE a la
+// clave nueva. Ni quedarse donde estaba, ni borrarse:
+//
+//   - Si se queda bajo "nueva:xxx", esa entrada queda huerfana para siempre:
+//     desde este momento la fila se busca como "id:N" y nadie vuelve a tocarla.
+//     Y una entrada "nueva:" huerfana es exactamente lo que
+//     _conciRestaurarFilasNuevas convierte en UNA FILA NUEVA en el siguiente
+//     render, con las dos o tres celdas que llevara dentro. Esa fila casi vacia
+//     se autoguarda y acaba como un registro aparte en la base — con el codigo
+//     de demora, o lo ultimo que se hubiera tecleado, y nada mas. Ese era el
+//     origen de las filas en blanco que aparecian solas y de los datos que se
+//     guardaban "por separado".
+//   - Si se borra entero, las celdas que el usuario tecleo mientras Supabase
+//     respondia (todavia sin confirmar) se quedan sin respaldo local.
+//
+// Mudarlo cumple las dos cosas: la clave vieja desaparece y lo que aun no esta
+// confirmado sigue a salvo, ahora bajo el id real de la fila.
 function _conciBorradorTrasladarFilaNueva(tr, nuevoId) {
-    const claveVieja = tr?.dataset?.conciBorradorClave;
+    if (!tr) return;
+    const claveVieja = tr.dataset.conciBorradorClave;
+    const id = String(nuevoId ?? '').trim();
+    // El id manda desde ya: cualquier lectura posterior del borrador de esta
+    // fila —incluida la de _conciBorradorQuitarCelda al confirmar cada celda—
+    // tiene que apuntar a la clave nueva.
+    if (id) tr.dataset.rowId = id;
+    delete tr.dataset.conciBorradorClave;
     if (!claveVieja) return;
     const datos = _conciBorradoresLeer();
-    if (datos[claveVieja]) {
-        delete datos[claveVieja];
-        _conciBorradoresEscribir(datos);
+    const entrada = datos[claveVieja];
+    delete datos[claveVieja];
+    const claveNueva = id ? `id:${id}` : '';
+    if (entrada && claveNueva && Object.keys(entrada.celdas || {}).length) {
+        const destino = datos[claveNueva] || { celdas: {} };
+        destino.celdas = { ...(destino.celdas || {}), ...entrada.celdas };
+        destino.ts = Date.now();
+        destino.fecha = entrada.fecha || destino.fecha || '';
+        destino.esNueva = false;
+        datos[claveNueva] = destino;
     }
-    delete tr.dataset.conciBorradorClave;
-    if (nuevoId) tr.dataset.rowId = String(nuevoId);
+    _conciBorradoresEscribir(datos);
     _conciActualizarIndicadorBorradores();
 }
 
@@ -26293,19 +26339,44 @@ function _conciRestaurarFilasNuevas(datos) {
     if (!tbody || !_conciCanCurrentUserEdit()) return 0;
     let recuperadas = 0;
 
+    const fechaVista = (typeof _conciFechaUnicaDelFiltro === 'function' ? _conciFechaUnicaDelFiltro() : '') || '';
+    let aplazadas = 0;
+    let limpiadas = false;
+
     Object.keys(datos || {}).forEach(clave => {
         if (!clave.startsWith('nueva:')) return;
-        const celdas = datos[clave]?.celdas || {};
+        const entrada = datos[clave];
+        const celdas = entrada?.celdas || {};
         if (!Object.keys(celdas).length) return;
+        // Nada que recuperar: todas sus celdas estan vacias. Reponerla dibujaba
+        // una fila en blanco imposible de guardar (el autoguardado no crea una
+        // fila nueva sin captura real), que por eso mismo volvia a aparecer en
+        // cada render. Se descarta el borrador para que no reaparezca mas.
+        if (!Object.values(celdas).some(v => String(v ?? '').trim() !== '')) {
+            delete datos[clave];
+            limpiadas = true;
+            return;
+        }
+        // El dia importa. Una fila nueva sin fecha capturada hereda la del
+        // filtro al guardarse, asi que reponer aqui el borrador de OTRO dia
+        // archivaria ese manifiesto en una fecha que no es la suya —y el error
+        // es invisible, porque la fila se ve bien. Se conserva tal cual y se
+        // repone cuando se vuelva a filtrar su propio dia.
+        if (entrada.fecha && fechaVista && entrada.fecha !== fechaVista) { aplazadas++; return; }
         // Si esa fila ya esta en pantalla (por ejemplo tras otro render), no se
         // duplica.
         const yaEsta = [...tbody.querySelectorAll('tr[data-conci-borrador-clave]')]
             .some(tr => tr.dataset.conciBorradorClave === clave);
         if (yaEsta) return;
 
-        _conciAddBlankRow();
-        const tr = tbody.lastElementChild;
+        // _conciAddBlankRow puede REUTILIZAR una fila nueva que siga en blanco
+        // en vez de anadir otra; entonces la fila buena no es la ultima del
+        // tbody. Hay que quedarse con la que devuelve.
+        const tr = _conciAddBlankRow() || tbody.lastElementChild;
         if (!tr || tr.dataset.conciNew !== '1') return;
+        // Reutilizo una fila que ya carga otro borrador: pisarle la clave
+        // dejaria huerfano al anterior y mezclaria dos capturas en una fila.
+        if (tr.dataset.conciBorradorClave && tr.dataset.conciBorradorClave !== clave) return;
         tr.dataset.conciBorradorClave = clave;
 
         Object.keys(celdas).forEach(col => {
@@ -26324,11 +26395,30 @@ function _conciRestaurarFilasNuevas(datos) {
         recuperadas++;
     });
 
+    // Los borradores vacios que se acaban de descartar no deben volver a
+    // leerse en el proximo render.
+    if (limpiadas && typeof _conciBorradoresEscribir === 'function') _conciBorradoresEscribir(datos);
+
     if (recuperadas && typeof showNotification === 'function') {
         const texto = recuperadas === 1
             ? 'Se recuperó 1 fila que se había capturado sin llegar a guardarse.'
             : `Se recuperaron ${recuperadas} filas que se habían capturado sin llegar a guardarse.`;
         showNotification(texto, 'warning');
+    }
+    // Una captura aplazada no se pierde, pero tampoco puede quedar en silencio:
+    // hay que decir donde esta. Se avisa una sola vez por combinacion, para que
+    // no salte en cada render del dia.
+    if (aplazadas && typeof showNotification === 'function') {
+        const firma = `${fechaVista}|${aplazadas}`;
+        if (tbody.dataset.conciAplazadosAvisados !== firma) {
+            tbody.dataset.conciAplazadosAvisados = firma;
+            showNotification(
+                aplazadas === 1
+                    ? 'Hay 1 fila capturada sin guardar de otro día. Filtra ese día para recuperarla.'
+                    : `Hay ${aplazadas} filas capturadas sin guardar de otros días. Filtra esos días para recuperarlas.`,
+                'info'
+            );
+        }
     }
     return recuperadas;
 }
@@ -26520,6 +26610,24 @@ function _conciCeldasPendientesDeFila(tr) {
     })).filter(c => c.col);
 }
 
+// Identidad estable de una fila que todavia no existe en la base.
+//
+// Antes se componia al vuelo con tr.rowIndex, que cambia en cuanto la tabla se
+// reordena o se vuelve a dibujar: la misma captura se encolaba una y otra vez
+// bajo ids distintos y, peor, ninguno se podia retirar despues —la fila acababa
+// teniendo un id real y nadie volvia a mirar los ids temporales. La cola del
+// servidor se llenaba de pendientes ya guardados, que se veian como "capturas
+// pendientes de otro equipo" para todo el mundo. Ahora la fila lleva su id
+// temporal encima y es el mismo hasta que consigue uno real.
+function _conciIdTemporalDeFila(tr) {
+    if (!tr) return '';
+    if (!tr.dataset.conciTempId) {
+        tr.dataset.conciTempId = `nueva:${_conciLiveClientId || 'sin-id'}:`
+            + `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+    return tr.dataset.conciTempId;
+}
+
 async function _conciEncolarPendientesDeFila(tr, mensajeError) {
     if (!tr) return false;
     const celdas = _conciCeldasPendientesDeFila(tr);
@@ -26527,8 +26635,7 @@ async function _conciEncolarPendientesDeFila(tr, mensajeError) {
     const client = await _conciClientePendientes();
     if (!client) return false;
 
-    const rowId = String(tr.dataset.rowId || tr.dataset.conciTempId || '').trim()
-        || `nueva:${_conciLiveClientId}:${tr.rowIndex}`;
+    const rowId = String(tr.dataset.rowId || '').trim() || _conciIdTemporalDeFila(tr);
     const filas = celdas.map(c => ({
         row_id: rowId,
         columna: c.col,
@@ -26556,15 +26663,22 @@ async function _conciDesencolarPendientesDeFila(tr, columnas) {
     if (!tr || _conciColaDisponible === false) return;
     const cols = [...(columnas instanceof Set ? columnas : (columnas || []))].filter(Boolean);
     if (!cols.length) return;
-    const rowId = String(tr.dataset.rowId || '').trim();
-    if (!rowId) return;
+    // Los dos ids con los que esta fila pudo encolarse: el real y el temporal
+    // que uso mientras no existia en la base. Sin el temporal, todo lo que se
+    // encolo ANTES del primer guardado se quedaba en la cola para siempre —
+    // dando a entender que seguia sin guardarse cuando ya estaba a salvo.
+    const ids = [
+        String(tr.dataset.rowId || '').trim(),
+        String(tr.dataset.conciTempId || '').trim(),
+    ].filter(Boolean);
+    if (!ids.length) return;
     const client = await _conciClientePendientes();
     if (!client) return;
     try {
         const { error } = await client
             .from(_CONCI_TABLA_PENDIENTES)
             .delete()
-            .eq('row_id', rowId)
+            .in('row_id', ids)
             .eq('cliente_id', _conciLiveClientId || 'sin-id')
             .in('columna', cols);
         if (error) _conciColaFalla(error);
@@ -28656,6 +28770,17 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 didWriteSuccessfully = true;
                 const inserted = Array.isArray(result.data) ? result.data[0] : result.data;
                 if (inserted?.id !== undefined && inserted?.id !== null) {
+                    // Una fila "Solo Vuelos" no tiene id hasta este momento, asi
+                    // que su borrador local vivia bajo una clave "nueva:xxx".
+                    // Aqui pasa a tener id — y sin este traslado esa entrada
+                    // quedaba huerfana: nadie volvia a mirarla (la fila ya se
+                    // busca como "id:N") y en el siguiente render
+                    // _conciRestaurarFilasNuevas la resucitaba como una FILA
+                    // NUEVA casi vacia, que se guardaba aparte en la base. Es
+                    // el mismo traslado que hace el guardado normal mas abajo;
+                    // faltaba solo en esta rama, que es justo la que usa quien
+                    // captura un manifiesto sobre un vuelo del itinerario.
+                    _conciBorradorTrasladarFilaNueva(tr, inserted.id);
                     tr.dataset.rowId = String(inserted.id);
                     tr.dataset.rowFuente = 'Manifiestos + Vuelos';
                     tr.classList.remove('conci-missing-manifiesto');
@@ -28908,10 +29033,14 @@ function _conciBindRowActions() {
     });
 }
 
+// Devuelve el <tr> con el que se queda el cursor: la fila recien creada, o la
+// fila nueva en blanco que se reutilizo. Quien la llama en automatico
+// (_conciRestaurarFilasNuevas) necesita ESA fila concreta; dar por hecho que es
+// la ultima del tbody fallaba justo en el caso de reutilizacion.
 function _conciAddBlankRow() {
     if (!_conciCanCurrentUserEdit()) {
         alert('No tienes permiso de captura en el módulo de Conciliación.');
-        return;
+        return null;
     }
     if (!_conciEditMode) _conciEnterEditMode();
     const table = document.getElementById('table-conci-manifiestos');
@@ -28934,7 +29063,7 @@ function _conciAddBlankRow() {
     const headerCells = headerRow ? Array.from(headerRow.querySelectorAll('th[data-conci-column-key]')) : [];
     if (!tbody || !headerCells.length) {
         alert('No hay columnas disponibles para crear una fila. Actualiza la tabla e inténtalo de nuevo.');
-        return;
+        return null;
     }
     // Si ya hay una fila nueva todavía en blanco, se reutiliza: se lleva el
     // cursor a ella en vez de apilar otra igual debajo. Nada se borra — la fila
@@ -28946,7 +29075,7 @@ function _conciAddBlankRow() {
             _conciAsegurarCeldaVisible(celda, 'ambos');
             _conciActivateCellEditor(celda);
         }
-        return;
+        return enBlanco;
     }
     const tr = document.createElement('tr');
     tr.className = 'conci-row-tone-0';
@@ -29002,6 +29131,7 @@ function _conciAddBlankRow() {
     // inmediato en vez de dejarlo sin foco en un campo bloqueado.
     const firstCell = tr.querySelector('td[data-col]:not([data-conci-readonly="1"])');
     if (firstCell) _conciActivateCellEditor(firstCell);
+    return tr;
 }
 
 async function _conciRunBatchWrites(items, batchSize, worker) {

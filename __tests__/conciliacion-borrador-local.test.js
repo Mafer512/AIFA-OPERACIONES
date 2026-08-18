@@ -146,16 +146,41 @@ describe('se retira cuando la base confirma', () => {
     expect(api._conciBorradoresLeer()).toEqual({});
   });
 
-  test('una fila nueva que obtiene id suelta su borrador anterior', () => {
+  // El borrador de una fila nueva que consigue id NO se tira: se muda.
+  //
+  // Tirarlo dejaba sin respaldo local lo que el usuario tecleara mientras
+  // Supabase respondia (esas celdas siguen sin confirmar). Y dejarlo donde
+  // estaba era peor todavia: la clave "nueva:xxx" quedaba huerfana —la fila ya
+  // se busca como "id:N"— y _conciRestaurarFilasNuevas la resucitaba en el
+  // siguiente render como una fila nueva casi vacia, que acababa guardandose
+  // aparte en la base.
+  test('una fila nueva que obtiene id se lleva su borrador a la clave del id', () => {
     const { tr, td } = pintarFila({ nueva: true });
     api._conciBorradorGuardarCelda(td('TOTAL PAX'), '90');
-    expect(Object.keys(api._conciBorradoresLeer())).toHaveLength(1);
+    const claveNueva = tr.dataset.conciBorradorClave;
+    expect(Object.keys(api._conciBorradoresLeer())).toEqual([claveNueva]);
 
     api._conciBorradorTrasladarFilaNueva(tr, 77);
 
-    expect(api._conciBorradoresLeer()).toEqual({});
+    const datos = api._conciBorradoresLeer();
+    expect(Object.keys(datos)).toEqual(['id:77']);
+    expect(datos['id:77'].celdas).toEqual({ 'TOTAL PAX': '90' });
+    expect(datos['id:77'].esNueva).toBe(false);
+    expect(datos[claveNueva]).toBeUndefined();
     expect(tr.dataset.rowId).toBe('77');
     expect(tr.dataset.conciBorradorClave).toBeUndefined();
+  });
+
+  // Y con el id ya puesto, confirmar la celda la retira de la clave correcta:
+  // la mudanza no puede dejar basura detras.
+  test('tras la mudanza, confirmar la celda deja el borrador vacío', () => {
+    const { tr, td } = pintarFila({ nueva: true });
+    api._conciBorradorGuardarCelda(td('TOTAL PAX'), '90');
+    api._conciBorradorTrasladarFilaNueva(tr, 77);
+
+    api._conciBorradorQuitarCelda(td('TOTAL PAX'));
+
+    expect(api._conciBorradoresLeer()).toEqual({});
   });
 });
 
