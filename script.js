@@ -25442,6 +25442,37 @@ function _conciCursoresVigentes() {
     return porCelda;
 }
 
+// ── El nombre del companero no es parte del dato ─────────────────────────────
+//
+// La burbuja con el nombre de quien esta capturando (.conci-remote-badge) es un
+// <span> HIJO del <td>. Se ve flotando en la esquina gracias al CSS, pero para
+// el DOM es contenido de la celda: td.textContent devuelve el dato Y el nombre
+// pegados ("TIJ-NLU-MID" + "Omar" = "TIJ-NLU-MIDOmar").
+//
+// Ahi estaba el fallo. El preview en vivo guardaba td.textContent como "valor
+// original" antes de pintar lo que el companero iba tecleando; al terminar,
+// restauraba esa cadena ya contaminada y el nombre se quedaba pegado al dato
+// dentro de la celda, sin que nadie lo hubiera escrito.
+//
+// Estas dos ayudantes leen y escriben SOLO los nodos de texto de la celda, asi
+// que ni leen la burbuja ni la borran al escribir.
+function _conciTextoDeCelda(td) {
+    if (!td) return '';
+    let texto = '';
+    // 3 = nodo de texto. Se usa el numero y no Node.TEXT_NODE porque esta
+    // funcion se evalua aislada en las pruebas, donde Node no existe.
+    td.childNodes.forEach(nodo => { if (nodo.nodeType === 3) texto += nodo.nodeValue; });
+    return texto;
+}
+
+function _conciEscribirTextoDeCelda(td, texto) {
+    if (!td) return;
+    // Asignar textContent borraria tambien la burbuja, que debe seguir ahi
+    // mientras el companero siga en la celda.
+    [...td.childNodes].forEach(nodo => { if (nodo.nodeType === 3) nodo.remove(); });
+    td.insertBefore(document.createTextNode(String(texto ?? '')), td.firstChild);
+}
+
 // Reconcilia la tabla contra los cursores vigentes: apaga lo que sobra y
 // enciende lo que falta. Es el UNICO sitio que toca esas clases.
 function _conciRepintarFocos() {
@@ -25461,7 +25492,7 @@ function _conciRepintarFocos() {
         if (badge) badge.remove();
         // Si habia un preview de texto en vivo, restaura el valor real guardado.
         if (td.dataset.conciLivePreviewOrig !== undefined) {
-            td.textContent = td.dataset.conciLivePreviewOrig;
+            _conciEscribirTextoDeCelda(td, td.dataset.conciLivePreviewOrig);
             delete td.dataset.conciLivePreviewOrig;
         }
     });
@@ -25914,8 +25945,13 @@ function _conciHandleRemoteCellInput(payload) {
     if (!table) return;
     const td = _conciFindLiveCell(table, payload.rowId, payload.col);
     if (!td || td.classList.contains('conci-cell-active')) return;
-    if (td.dataset.conciLivePreviewOrig === undefined) td.dataset.conciLivePreviewOrig = td.textContent;
-    td.textContent = payload.value;
+    // Solo el texto propio de la celda: td.textContent traeria pegado el nombre
+    // de la burbuja de quien esta capturando, y esa cadena contaminada es la que
+    // se restauraba al final y dejaba el nombre dentro del dato.
+    if (td.dataset.conciLivePreviewOrig === undefined) {
+        td.dataset.conciLivePreviewOrig = _conciTextoDeCelda(td);
+    }
+    _conciEscribirTextoDeCelda(td, payload.value);
 }
 
 // Llamado cuando llega un cambio confirmado (INSERT/UPDATE/DELETE) en
