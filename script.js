@@ -28293,6 +28293,27 @@ async function _conciFindExistingMovementRowId(client, payload, error) {
     return row?.id !== undefined && row?.id !== null ? row.id : null;
 }
 
+// La tabla es colaborativa: cualquiera con permiso de administrar puede borrar
+// una fila (papelera de la fila, o el script de limpieza de filas fantasma).
+// Ese borrado no se avisa en vivo a las demás pestañas —sólo los guardados de
+// celda se retransmiten—, así que una pestaña que la seguía mostrando puede
+// intentar actualizarla después de que ya no existe. Esta lectura, aparte de
+// la escritura que falló, es la única forma de distinguir "ya no existe" de
+// un problema de permisos real, sin asumir lo primero a la ligera.
+async function _conciFilaExisteEnBase(client, rowId) {
+    try {
+        const { data, error } = await client
+            .from('Conciliación Manifiestos')
+            .select('id')
+            .eq('id', rowId)
+            .maybeSingle();
+        if (error) return null; // inconcluso: no se pudo comprobar
+        return !!data;
+    } catch (_) {
+        return null; // inconcluso
+    }
+}
+
 async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
     let currentPayload = { ...payload };
     let effectiveRowId = String(rowId ?? '').trim();
@@ -28466,6 +28487,27 @@ const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bi
                     currentPayload = { ...duplicateUpdatePayload };
                 }
                 mutated = true;
+            }
+        }
+
+        // Un UPDATE que no confirma NINGUNA fila (no valores distintos: cero
+        // filas afectadas) sobre un id que existía casi siempre significa que
+        // alguien más la borró mientras esta pantalla la seguía mostrando —ver
+        // el comentario de _conciFilaExisteEnBase. Reintentar no sirve: el
+        // mismo id seguirá sin existir. Se confirma con una lectura aparte antes
+        // de darlo por hecho; si esa lectura tampoco es concluyente, se trata
+        // igual que antes (aviso de permisos, con reintento).
+        if (!mutated && effectiveRowId && result.error.code === 'CONCI_WRITE_NOT_CONFIRMED' && !result.data) {
+            const sigueExistiendo = await _conciFilaExisteEnBase(client, effectiveRowId);
+            if (sigueExistiendo === false) {
+                return {
+                    ok: false,
+                    error: {
+                        code: 'CONCI_ROW_DELETED',
+                        message: 'Esta fila ya no existe en la base de datos: alguien más la eliminó.',
+                    },
+                    droppedColumns: [...droppedColumns],
+                };
             }
         }
 
@@ -28850,6 +28892,29 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 duplicateUpdatePayload: writePayload,
                 columnasDeCaptura: [...capturedCols],
             });
+            // Esta fila YA existía en pantalla con su id (rowId) y la base dice
+            // que ya no está: alguien más la borró mientras la seguíamos
+            // mostrando (papelera de la fila, o la limpieza de filas fantasma) y
+            // el borrado no se avisa en vivo a las demás pestañas. Reintentar es
+            // inútil -- el mismo id nunca va a volver a existir -- y dejarla
+            // marcada "pendiente de guardar" para siempre sería justo la fila de
+            // más que sobra en la tabla. Se retira sin pedir confirmación, igual
+            // que habría desaparecido sola con un refresco.
+            //
+            // Si rowId venía vacío (una fila nueva de esta sesión que resultó
+            // coincidir por movement_key con un registro ajeno ya borrado), se
+            // deja el camino de abajo: ahí sí hay una captura propia que no
+            // conviene perder en silencio.
+            if (!result.ok && result.error?.code === 'CONCI_ROW_DELETED' && rowId) {
+                if (typeof _conciBorradorOlvidarFila === 'function') _conciBorradorOlvidarFila(tr);
+                _conciDesencolarPendientesDeFila(tr, cells.map(td => td.dataset.col));
+                if (typeof showNotification === 'function') {
+                    showNotification('Esta fila ya no existe: alguien más la eliminó mientras la tenías abierta.', 'warning');
+                }
+                tr.remove();
+                if (typeof _conciActualizarBotonGuardarTodo === 'function') _conciActualizarBotonGuardarTodo();
+                return;
+            }
             if (!result.ok) {
                 // Conserva la fila y sus valores para que el usuario pueda corregir
                 // el campo que causó el error; nunca se elimina silenciosamente.
