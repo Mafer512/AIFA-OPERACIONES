@@ -57,7 +57,7 @@ describe('restauracion de sesion y apartado durante reload', () => {
     expect(script).toContain("const authenticatedCoreSections = ['conciliacion']");
     expect(script).toContain("!authenticatedCoreSections.includes(item.dataset.section)");
     expect(script).toContain("!authenticatedCoreSections.includes(key)");
-    expect(html).toContain('script.js?v=20260812-restaura-navegacion-v2');
+    expect(html).toMatch(/<script src="script\.js\?v=[^"]+" defer><\/script>/);
     expect(script).toContain("const isAuthenticatedCore = key === 'conciliacion'");
     expect(script).toContain("target.classList.remove('perm-hidden', 'd-none-auth')");
     expect(script).toContain("document.body.classList.add('navdeck-active')");
