@@ -28212,6 +28212,13 @@ function _conciIsMovementKeyDuplicate(error) {
     return /uq_conciliacion_manifiestos_movement_key|movement_key/i.test(errorText);
 }
 
+// Reintentar no sirve cuando la base rechazó la captura por lo que vale: hasta
+// que el usuario la corrija el resultado será idéntico. Lo capturado sigue en
+// pantalla, en el borrador local y en la cola del servidor, así que no se pierde.
+function _conciErrorEsperaCorreccion(error) {
+    return String(error?.code || '') === 'CONCI_CAPTURA_NO_ACEPTADA';
+}
+
 function _conciDatabaseValueEquals(expected, actual) {
     if (expected === null || expected === undefined) {
         return actual === null || actual === undefined;
@@ -28265,14 +28272,49 @@ async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
     // El llamador necesita saber esto explícitamente: un resultado "ok" no
     // significa que TODO el payload se haya guardado.
     const droppedColumns = new Set();
+    // Columnas que el usuario capturó de verdad en esta fila. Sólo importan
+    // cuando la escritura es un INSERT — ver la comprobación dentro del bucle.
+    const capturaRequerida = Array.isArray(options.columnasDeCaptura)
+        ? options.columnasDeCaptura.filter(Boolean)
+        : [];
 
     const _norm = s => String(s || '')
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .toLowerCase().replace(/[^a-z0-9]/g, '');
 
+    const conservaAlgoCapturado = () => {
+        if (!capturaRequerida.length) return true;
+        const presentes = Object.keys(currentPayload).map(_norm);
+        return capturaRequerida.some(col => presentes.includes(_norm(col)));
+    };
+
     for (let attempt = 0; attempt < 8; attempt++) {
         if (Object.keys(currentPayload).length === 0) {
             return { ok: false, error: { message: 'Sin campos válidos para guardar.' }, droppedColumns: [...droppedColumns] };
+        }
+
+        // Un INSERT crea una fila que antes no existía. Si la auto-corrección de
+        // más abajo ya quitó del payload TODO lo que el usuario capturó, lo único
+        // que queda son los rellenos automáticos que pone el propio código: la
+        // FECHA heredada del filtro y el nombre de quien está en sesión. Una fila
+        // nacida sólo de eso es exactamente la fila fantasma — en blanco, con la
+        // fecha puesta y ESTATUS MATRÍCULA "NO IDENTIFICADA" porque no hay
+        // matrícula que identificar — y el contador de arriba la suma porque es un
+        // registro real. No se crea: se devuelve el error para que la captura siga
+        // en pantalla y el usuario corrija el dato que la base rechazó.
+        if (!effectiveRowId && !conservaAlgoCapturado()) {
+            const descartadas = [...droppedColumns];
+            return {
+                ok: false,
+                error: {
+                    code: 'CONCI_CAPTURA_NO_ACEPTADA',
+                    message: descartadas.length
+                        ? `La base de datos no aceptó ${descartadas.join(', ')}, que es lo único capturado en esta fila. `
+                          + 'La fila no se creó para no dejar un registro en blanco; corrige ese dato y se guardará.'
+                        : 'No quedó ningún dato capturado que guardar en esta fila nueva.',
+                },
+                droppedColumns: descartadas,
+            };
         }
 
         const req = client.from('Conciliación Manifiestos');
@@ -28568,6 +28610,11 @@ async function _conciAutoSaveRow(tr, options = {}) {
     const payload = {};
     const dirtyCols = new Set();
     const autoPersistedCols = new Set();
+    // Las columnas que el usuario escribió a mano y traen contenido. Es lo mismo
+    // que enciende hasUserCapture, pero guardado por nombre: al crear una fila
+    // nueva hay que poder comprobar que al menos una de ellas llegó de verdad a
+    // la base, y no sólo que "algo" se capturó antes de intentarlo.
+    const capturedCols = new Set();
     // ¿El usuario escribió realmente algo en esta fila? Sólo cuenta una celda
     // que haya tocado (dirty) y que además tenga contenido. Ni el valor que la
     // fila ya traía, ni un campo vaciado, ni los rellenos automáticos (la fecha
@@ -28610,7 +28657,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
             payload[col] = null;
         }
         if (isDirty) dirtyCols.add(col);
-        if (isDirty && raw) hasUserCapture = true;
+        if (isDirty && raw) { hasUserCapture = true; capturedCols.add(col); }
     });
     const settleSavedCells = (savedColumns) =>
         _conciSettleSavedCells(tr, cells, savedCellValues, savedColumns);
@@ -28708,6 +28755,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 const result = await _conciWriteRowSafe(client, payload, null, {
                     recoverMovementConflict: true,
                     duplicateUpdatePayload,
+                    columnasDeCaptura: [...capturedCols],
                 });
                 if (!result.ok) {
                     const msg = result.error?.message || 'error de base de datos';
@@ -28715,7 +28763,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
                     tr.classList.add('table-secondary');
                     console.warn('[Conciliación] fila (Solo Vuelos) pendiente de guardar:', result.error);
                     // Insiste solo hasta que la base lo acepte.
-                    _conciProgramarReintento();
+                    if (!_conciErrorEsperaCorreccion(result.error)) _conciProgramarReintento();
                     // Y queda en la cola del servidor, para que no dependa de
                     // que esta computadora vuelva a encenderse.
                     _conciEncolarPendientesDeFila(tr, msg);
@@ -28764,6 +28812,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
             const result = await _conciWriteRowSafe(client, writePayload, rowId || null, {
                 recoverMovementConflict: !rowId,
                 duplicateUpdatePayload: writePayload,
+                columnasDeCaptura: [...capturedCols],
             });
             if (!result.ok) {
                 // Conserva la fila y sus valores para que el usuario pueda corregir
@@ -28773,7 +28822,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 tr.classList.add('table-secondary');
                 console.warn('[Conciliación] fila pendiente de guardar:', result.error);
                 // Insiste solo hasta que la base lo acepte.
-                _conciProgramarReintento();
+                if (!_conciErrorEsperaCorreccion(result.error)) _conciProgramarReintento();
                 // Y queda en la cola del servidor, para que no dependa de que
                 // esta computadora vuelva a encenderse.
                 _conciEncolarPendientesDeFila(tr, msg);
@@ -29154,6 +29203,12 @@ async function _conciSaveBulkEdits() {
             const isNewRow = tr.dataset.conciNew === '1';
             const changedPayload = {};
             const fullPayload = {};
+            // Lo que el usuario escribió a mano en esta fila. No basta con mirar
+            // si la celda tiene texto: en una fila nueva varias se pintan solas
+            // (ESTATUS MATRÍCULA "NO IDENTIFICADA", el "-" de las calculadas) y
+            // ese texto entra por el respaldo de textContent de más abajo. Sin
+            // esta distinción, una fila que nadie tocó se daba por capturada.
+            const capturadas = new Set();
 
             tr.querySelectorAll('td[data-col]').forEach(td => {
                 const col = td.dataset.col;
@@ -29175,6 +29230,7 @@ async function _conciSaveBulkEdits() {
 
                 fullPayload[col] = normalized;
                 if (newRaw !== oldRaw) changedPayload[col] = normalized;
+                if (td.dataset.dirty === '1' && newRaw !== '') capturadas.add(col);
             });
 
             // Para una fila nueva, usa todos los valores capturados (no sólo los
@@ -29206,6 +29262,7 @@ async function _conciSaveBulkEdits() {
                             options: {
                                 recoverMovementConflict: true,
                                 duplicateUpdatePayload: changedPayload,
+                                columnasDeCaptura: [...capturadas],
                             },
                         });
                     }
@@ -29216,12 +29273,17 @@ async function _conciSaveBulkEdits() {
             else {
                 const hasMeaningfulValue = Object.values(changedPayload)
                     .some(v => v !== null && String(v).trim() !== '');
-                if (hasMeaningfulValue) {
+                // Una fila que todavía no existe en la base sólo se crea si el
+                // usuario capturó algo en ella. Los valores que la fila se pinta
+                // sola no cuentan como captura y no pueden dar origen a un
+                // registro nuevo.
+                if (hasMeaningfulValue && capturadas.size) {
                     inserts.push({
                         payload: changedPayload,
                         options: {
                             recoverMovementConflict: true,
                             duplicateUpdatePayload: changedPayload,
+                            columnasDeCaptura: [...capturadas],
                         },
                     });
                 }
