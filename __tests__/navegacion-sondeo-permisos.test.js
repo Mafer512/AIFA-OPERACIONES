@@ -53,7 +53,10 @@ describe('la navegación salió del sondeo', () => {
   });
 
   test('se sigue re-aplicando los permisos cuando cambian', () => {
-    expect(cuerpo).toContain('const permisosCambiaron = next !== prev;');
+    // Compara CONJUNTOS, no el texto del JSON: la consulta no lleva ORDER BY,
+    // asi que la misma lista puede volver en otro orden entre dos sondeos y eso
+    // no es un cambio de permisos. Ver navegacion-involuntaria.
+    expect(cuerpo).toContain('const permisosCambiaron = _seccionesPermitidasCambiaron(prev, next);');
     expect(cuerpo).toContain('applySectionPermissions(');
   });
 });

@@ -317,6 +317,39 @@ async function abrirPersona(nombre, servidor, errores, opciones = {}) {
         const td = document.querySelector('tr[data-row-id="' + rowId + '"] td[data-col="' + col + '"]');
         _conciAdoptarValorRemoto(td);
       },
+      // ── Fila nueva desde el boton "Agregar fila" ──────────────────────────
+      // Una fila recien agregada todavia no tiene id, asi que no se puede
+      // apuntar con capturar(rowId, ...). Se la localiza por data-conci-new.
+      // Se conserva la referencia al nodo: en cuanto la fila se guarda pierde
+      // data-conci-new (deja de ser nueva), y buscarla por ese atributo la
+      // perderia justo a mitad de la captura.
+      agregarFila() {
+        _conciAddBlankRow();
+        window.__filaNueva = document.querySelector('tr[data-conci-new="1"]');
+        return !!window.__filaNueva;
+      },
+      filaNuevaExiste() { return !!document.querySelector('tr[data-conci-new="1"]'); },
+      idDeFilaNueva() {
+        const tr = window.__filaNueva;
+        return tr ? String(tr.dataset.rowId || '') : '';
+      },
+      capturarEnNueva(col, valor) {
+        const tr = window.__filaNueva;
+        if (!tr) throw new Error('no hay fila nueva');
+        const td = tr.querySelector('td[data-col="' + col + '"]');
+        if (!td) throw new Error('no existe la columna ' + col);
+        _conciStageCellDraft(td, valor);
+        _conciQueueAutoSave(tr);
+      },
+      // Cerrar el editor sin escribir nada es lo que hacia nacer la fila
+      // fantasma: _conciCommitCellRaw llama al autoguardado igual.
+      salirDeLaFilaNuevaSinEscribir() {
+        const tr = window.__filaNueva;
+        if (!tr) throw new Error('no hay fila nueva');
+        return _conciAutoSaveRow(tr);
+      },
+      guardarTodo() { return _conciGuardarTodoAhora(); },
+      avisos() { return window.__avisos.slice(); },
     };
   `;
 

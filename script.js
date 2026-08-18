@@ -2559,10 +2559,18 @@ async function refreshUserPermissionsFromServer() {
         const secs = roleData?.permissions?.allowed_sections;
         const prev = sessionStorage.getItem('user_allowed_sections');
         const next = Array.isArray(secs) ? JSON.stringify(secs) : null;
-        const permisosCambiaron = next !== prev;
-        if (permisosCambiaron) {
+        // Comparar el JSON en crudo hacía que un simple REORDENAMIENTO de la
+        // lista que devuelve el servidor contara como "cambiaron los permisos".
+        // La consulta no lleva ORDER BY, así que el mismo conjunto puede volver
+        // en otro orden entre dos sondeos; eso disparaba applySectionPermissions,
+        // que tiene dos caminos que navegan a la sección por defecto, y el
+        // usuario aparecía de pronto en otro módulo sin haber tocado nada.
+        const permisosCambiaron = _seccionesPermitidasCambiaron(prev, next);
+        if (next !== prev) {
             if (next) sessionStorage.setItem('user_allowed_sections', next);
             else sessionStorage.removeItem('user_allowed_sections');
+        }
+        if (permisosCambiaron) {
             applySectionPermissions(sessionStorage.getItem(SESSION_USER) || name);
         }
         // El lanzador modal vive fuera de #sidebar-nav y mantiene su propia
@@ -2573,19 +2581,25 @@ async function refreshUserPermissionsFromServer() {
                 permissions: roleData.permissions || {}
             });
         } catch (_) {}
-        // Volver a navegar SOLO si de verdad hace falta.
+        // ESTE era el disparador de la navegación involuntaria.
         //
-        // Esto corria en cada pasada del sondeo, o sea una vez por minuto, con
-        // el usuario trabajando: releia el hash, llamaba a showSection y encima
-        // volvia a aplicar la ultima sub-pestana recordada. Bastaba con estar en
+        // Antes se re-navegaba a la sección del hash en CADA vuelta del sondeo
+        // (cada 60 s), hubiera cambiado algo o no. Y se hacía por showSection
+        // pasándole el elemento del menú, es decir, por el mismo camino que un
+        // clic deliberado del usuario: showSection honra el data-sub-tab de ese
+        // elemento y reimpone la sub-pestaña por defecto de la sección. Quien
+        // estuviera trabajando en otra sub-pestaña era devuelto a la de arranque
+        // cada minuto, sin haber tocado nada. Peor todavía: bastaba con estar en
         // una vista que el hash no refleja —el inicio, o una sub-vista que no
-        // dispara shown.bs.tab— para que la pantalla saltara sola cada 60
-        // segundos a donde uno ya no estaba.
+        // dispara shown.bs.tab— para que la pantalla saltara sola a donde uno ya
+        // no estaba.
         //
-        // Un sondeo de permisos no tiene por que mover a nadie de sitio. Solo
-        // hay un caso en que si debe: que los permisos hayan cambiado y la
-        // seccion abierta haya dejado de estar permitida. Ahi se saca al usuario
-        // y se le dice por que; en cualquier otro caso no se toca la vista.
+        // Un sondeo de permisos no tiene por qué mover a nadie de sitio. Sólo
+        // hay un caso en que sí debe: que los permisos hayan cambiado Y la
+        // sección abierta haya dejado de estar permitida. Ahí se saca al usuario
+        // y se le dice por qué; en cualquier otro caso no se toca la vista, ni
+        // siquiera para "re-aplicar la ruta" —re-aplicarla ya era la navegación
+        // que sobraba.
         if (permisosCambiaron) {
             const abierta = document.querySelector('.content-section.active');
             const claveAbierta = abierta ? String(abierta.id || '').replace(/-section$/, '') : '';
@@ -2602,6 +2616,24 @@ async function refreshUserPermissionsFromServer() {
             }
         }
     } catch (_) {}
+}
+
+// ¿Cambió de verdad el conjunto de secciones permitidas? Compara CONJUNTOS, no
+// el texto: el mismo listado en distinto orden no es un cambio de permisos.
+// null (sin restricción) y [] son estados distintos y deben distinguirse.
+function _seccionesPermitidasCambiaron(prevJson, nextJson) {
+    if (prevJson === nextJson) return false;
+    const aLista = (json) => {
+        if (json === null || json === undefined) return null;
+        try {
+            const v = JSON.parse(json);
+            return Array.isArray(v) ? [...new Set(v.map(String))].sort() : null;
+        } catch (_) { return null; }
+    };
+    const a = aLista(prevJson);
+    const b = aLista(nextJson);
+    if (a === null || b === null) return a !== b;
+    return a.length !== b.length || a.some((v, i) => v !== b[i]);
 }
 
 // Polling ligero para propagar en vivo los cambios de permisos (cada 60 s).
@@ -3811,8 +3843,15 @@ function rememberActiveTab(tabButton) {
 
 function restoreActiveTab(sectionKey, sectionElement) {
     if (!sectionKey || !sectionElement) return false;
+    // rememberActiveTab guarda bajo el id del contenedor .content-section, que es
+    // la clave ANFITRIONA. Aquí llegaba la clave de RUTA, y para las rutas con
+    // anfitrión distinto (SECTION_HOST_OVERRIDES: itinerario → inicio) nunca
+    // coincidían: la restauración fallaba en silencio y el usuario aterrizaba en
+    // la pestaña de arranque en vez de en la suya.
+    const hostKey = (typeof resolveSectionHostKey === 'function'
+        ? resolveSectionHostKey(sectionKey) : sectionKey) || sectionKey;
     let tabId = '';
-    try { tabId = sessionStorage.getItem(`${LAST_TAB_STORAGE_PREFIX}${sectionKey}`) || ''; } catch (_) { }
+    try { tabId = sessionStorage.getItem(`${LAST_TAB_STORAGE_PREFIX}${hostKey}`) || ''; } catch (_) { }
     if (!tabId || !/^[a-z0-9_-]+$/i.test(tabId)) return false;
     const tabButton = document.getElementById(tabId);
     if (!tabButton || !sectionElement.contains(tabButton) || tabButton.disabled) return false;
@@ -3826,7 +3865,7 @@ function restoreActiveTab(sectionKey, sectionElement) {
     } catch (_) { return false; }
 }
 
-function restoreSectionFromNavigation(sectionKey) {
+function restoreSectionFromNavigation(sectionKey, options = {}) {
     const key = String(sectionKey || '').trim();
     if (!key || !/^[a-z0-9-]+$/i.test(key)) return false;
     const target = document.getElementById(`${resolveSectionHostKey(key)}-section`);
@@ -3841,7 +3880,7 @@ function restoreSectionFromNavigation(sectionKey) {
         !item.classList.contains('perm-hidden') && !item.classList.contains('d-none-auth')
     ) || links[0] || null;
 
-    try { showSection(key, link); } catch (_) {
+    try { showSection(key, link, options); } catch (_) {
         document.querySelectorAll('.content-section').forEach(sec => sec.classList.remove('active'));
         target.classList.add('active');
         currentSectionKey = key;
@@ -7205,7 +7244,11 @@ function initItinerarioGraphsTabBridge() {
 document.addEventListener('DOMContentLoaded', initItinerarioGraphsTabBridge);
 
 // Navegación: mostrar sección y marcar menú activo
-function showSection(sectionKey, linkEl) {
+// options.preserveActiveTab: la llamada NO viene de un clic del usuario (un
+// sondeo en segundo plano, una re-aplicación de permisos). En ese caso el
+// data-sub-tab del elemento del menú no debe imponerse: se respeta la
+// sub-pestaña en la que el usuario esté trabajando.
+function showSection(sectionKey, linkEl, options = {}) {
     try {
         let targetKey = sectionKey || currentSectionKey || getDefaultAllowedSection();
         if (!isSectionAllowed(targetKey)) {
@@ -7258,7 +7301,11 @@ function showSection(sectionKey, linkEl) {
         //
         // La pestaña recordada es para volver donde estabas al RECARGAR, no
         // para pisar un clic deliberado.
-        const subTabSolicitada = String(linkEl?.dataset?.subTab || '').trim();
+        // Salvo que quien llama avise que no es un clic del usuario: entonces
+        // imponer el data-sub-tab sacaría al operador de donde está trabajando.
+        const subTabSolicitada = options.preserveActiveTab === true
+            ? ''
+            : String(linkEl?.dataset?.subTab || '').trim();
         setTimeout(() => {
             if (subTabSolicitada) {
                 const subTabEl = document.getElementById(subTabSolicitada);
@@ -22562,6 +22609,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         _conciRepintarEstelas();
         _conciRepintarConflictos();
         _conciMarcarFilasSinCaptura();
+        _conciMarcarFilasIncompletas();
     });
 
     // Encabezado fijo vía CSS (position:sticky). Sin manipulación de transform
@@ -25090,6 +25138,24 @@ async function _conciInitLiveCollab() {
     channel.on('broadcast', { event: 'cell-saved' }, ({ payload }) => _conciHandleRemoteCellSaved(payload));
     channel.on('broadcast', { event: 'cell-focus' }, ({ payload }) => _conciHandleRemoteFoco(payload));
     channel.subscribe(async (status) => {
+        // Un canal ya retirado sigue avisando.
+        //
+        // removeChannel() lleva el canal viejo a CLOSED, y ese aviso llega
+        // DESPUES -- cuando _conciReconectarLive ya abrio el canal nuevo y este
+        // esta suscrito y sano. Sin esta guarda, el aviso tardio del canal
+        // muerto apagaba _conciLiveReady y programaba OTRA reconexion, que a su
+        // vez tiraba el canal bueno para abrir otro, que al cerrarse volvia a
+        // avisar tarde... y asi indefinidamente. Como cada SUBSCRIBED reinicia
+        // los reintentos, la espera nunca crecia: el ciclo se repetia cada uno o
+        // dos segundos.
+        //
+        // Ese bucle es el origen del parpadeo que empezaba "despues de un rato"
+        // (a la primera caida real de la red) y ya no paraba solo: en cada vuelta
+        // la presencia se quedaba vacia un instante y la barra se reconstruia.
+        //
+        // Un canal que no es el vigente no tiene nada que decir sobre el estado
+        // de la conexion.
+        if (_conciLiveChannel !== channel) return;
         if (status === 'SUBSCRIBED') {
             _conciLiveReady = true;
             _conciLiveReintentos = 0;
@@ -25476,6 +25542,37 @@ function _conciCursoresVigentes() {
     return porCelda;
 }
 
+// ── El nombre del companero no es parte del dato ─────────────────────────────
+//
+// La burbuja con el nombre de quien esta capturando (.conci-remote-badge) es un
+// <span> HIJO del <td>. Se ve flotando en la esquina gracias al CSS, pero para
+// el DOM es contenido de la celda: td.textContent devuelve el dato Y el nombre
+// pegados ("TIJ-NLU-MID" + "Omar" = "TIJ-NLU-MIDOmar").
+//
+// Ahi estaba el fallo. El preview en vivo guardaba td.textContent como "valor
+// original" antes de pintar lo que el companero iba tecleando; al terminar,
+// restauraba esa cadena ya contaminada y el nombre se quedaba pegado al dato
+// dentro de la celda, sin que nadie lo hubiera escrito.
+//
+// Estas dos ayudantes leen y escriben SOLO los nodos de texto de la celda, asi
+// que ni leen la burbuja ni la borran al escribir.
+function _conciTextoDeCelda(td) {
+    if (!td) return '';
+    let texto = '';
+    // 3 = nodo de texto. Se usa el numero y no Node.TEXT_NODE porque esta
+    // funcion se evalua aislada en las pruebas, donde Node no existe.
+    td.childNodes.forEach(nodo => { if (nodo.nodeType === 3) texto += nodo.nodeValue; });
+    return texto;
+}
+
+function _conciEscribirTextoDeCelda(td, texto) {
+    if (!td) return;
+    // Asignar textContent borraria tambien la burbuja, que debe seguir ahi
+    // mientras el companero siga en la celda.
+    [...td.childNodes].forEach(nodo => { if (nodo.nodeType === 3) nodo.remove(); });
+    td.insertBefore(document.createTextNode(String(texto ?? '')), td.firstChild);
+}
+
 // Reconcilia la tabla contra los cursores vigentes: apaga lo que sobra y
 // enciende lo que falta. Es el UNICO sitio que toca esas clases.
 function _conciRepintarFocos() {
@@ -25495,7 +25592,7 @@ function _conciRepintarFocos() {
         if (badge) badge.remove();
         // Si habia un preview de texto en vivo, restaura el valor real guardado.
         if (td.dataset.conciLivePreviewOrig !== undefined) {
-            td.textContent = td.dataset.conciLivePreviewOrig;
+            _conciEscribirTextoDeCelda(td, td.dataset.conciLivePreviewOrig);
             delete td.dataset.conciLivePreviewOrig;
         }
     });
@@ -25664,10 +25761,48 @@ function _conciTextoPresencia(p) {
 // lo que cambio, para que la animacion del punto no se reinicie.
 let _conciFirmaPresencia = '';
 
+// Cuanto se tolera una presencia vacia antes de dar la barra por vacia de
+// verdad. Cubre de sobra el hueco entre SUBSCRIBED y que track() aterrice, y
+// tambien el cambio de canal de una reconexion.
+const _CONCI_PRESENCIA_GRACIA_MS = 20000;
+let _conciPresenciaVacioDesde = 0;
+
 function _conciRenderBarraPresencia() {
     const cont = document.getElementById('conci-presencia');
     if (!cont) return;
     const gente = _conciPresenciaConectados();
+
+    // Una lista vacia casi nunca significa "no hay nadie": uno mismo aparece en
+    // la presencia en cuanto track() aterriza, y la barra se pinta antes, al
+    // recibir SUBSCRIBED. Tambien queda vacia mientras se cambia de canal en una
+    // reconexion, porque _conciPresenciaConectados devuelve [] sin canal.
+    //
+    // Vaciar la barra en ese hueco es lo que se ve como parpadeo: el
+    // cont.textContent = '' de mas abajo destruye el punto y todos los avatares,
+    // y al instante siguiente hay que volver a crearlos.
+    //
+    // Durante un margen de gracia se conserva lo ultimo pintado y solo se cambia
+    // el punto a ambar, que es justo lo que hay que comunicar: lo que se ve es
+    // lo ultimo que se supo y puede estar viejo. Si de verdad no vuelve nadie,
+    // pasado el margen se vacia.
+    if (!gente.length && cont.querySelector('.conci-presencia-avatar')) {
+        if (!_conciPresenciaVacioDesde) _conciPresenciaVacioDesde = Date.now();
+        if ((Date.now() - _conciPresenciaVacioDesde) < _CONCI_PRESENCIA_GRACIA_MS) {
+            const punto = cont.querySelector('.conci-presencia-punto');
+            if (punto) {
+                punto.classList.toggle('conci-presencia-punto-caido', !_conciLiveReady);
+                punto.title = _conciLiveReady
+                    ? 'Colaboración en vivo activa'
+                    : 'Sin conexión en vivo: reintentando…';
+            }
+            // La firma NO se actualiza: cuando la presencia vuelva con la misma
+            // gente, coincidira con lo ya pintado y no se tocara el DOM.
+            return;
+        }
+    } else if (gente.length) {
+        _conciPresenciaVacioDesde = 0;
+    }
+
     const visibles = gente.slice(0, 6);
     const sobran = gente.length - visibles.length;
 
@@ -25910,8 +26045,13 @@ function _conciHandleRemoteCellInput(payload) {
     if (!table) return;
     const td = _conciFindLiveCell(table, payload.rowId, payload.col);
     if (!td || td.classList.contains('conci-cell-active')) return;
-    if (td.dataset.conciLivePreviewOrig === undefined) td.dataset.conciLivePreviewOrig = td.textContent;
-    td.textContent = payload.value;
+    // Solo el texto propio de la celda: td.textContent traeria pegado el nombre
+    // de la burbuja de quien esta capturando, y esa cadena contaminada es la que
+    // se restauraba al final y dejaba el nombre dentro del dato.
+    if (td.dataset.conciLivePreviewOrig === undefined) {
+        td.dataset.conciLivePreviewOrig = _conciTextoDeCelda(td);
+    }
+    _conciEscribirTextoDeCelda(td, payload.value);
 }
 
 // Llamado cuando llega un cambio confirmado (INSERT/UPDATE/DELETE) en
@@ -26126,6 +26266,20 @@ const _CONCI_COLUMNAS_IDENTIDAD = [
     'AERONAVE', 'DESTINO / ORIGEN', 'TOTAL PAX',
 ];
 
+// ¿Esta columna es una de las que identifican un vuelo?
+//
+// Ni FECHA/MES ni CIERRE SUBSECRETARIA cuentan: son campos de organización, no
+// de identidad. Antes bastaba con tocar cualquiera de ellos para que la fila se
+// diera por "capturada" y naciera en la base -- y una fila con sólo una fecha
+// puesta se ve exactamente igual de vacía que la fila fantasma original, así
+// que el operador la reportaba como el mismo bug. Esta es la misma pregunta que
+// ya resuelve _conciFilaSinCaptura para saber si una fila EXISTENTE quedó sin
+// nada; aquí decide si una fila NUEVA ya tiene motivo para crearse.
+function _conciEsColumnaIdentidad(col) {
+    const clave = _conciSummaryColumnKey(col);
+    return _CONCI_COLUMNAS_IDENTIDAD.some(c => _conciSummaryColumnKey(c) === clave);
+}
+
 // ¿Esta fila no tiene nada de lo que identifica un vuelo?
 //
 // Una fila casi en blanco asusta: no se sabe si alguien la acaba de agregar o
@@ -26146,6 +26300,59 @@ function _conciFilaSinCaptura(tr) {
         if (_conciNormalizeEditableCellText(td.dataset.raw ?? td.textContent)) return false;
     }
     return miradas > 0;
+}
+
+// Campos sin los que un manifiesto no está terminado. Son los tres que pidió
+// Operaciones, ni uno más: se marca lo que de verdad impide dar la fila por
+// cerrada, no toda columna vacía — si no, media tabla saldría marcada y el
+// aviso dejaría de significar algo.
+const _CONCI_COLUMNAS_OBLIGATORIAS = ['AEROLINEA', 'MATRICULA', 'TIPO DE OPERACIÓN'];
+
+// Qué le falta a esta fila para estar completa. Devuelve los nombres tal como
+// aparecen en el encabezado, para poder decírselo al operador con sus palabras.
+function _conciCamposObligatoriosFaltantes(tr) {
+    if (!tr) return [];
+    const faltan = [];
+    const celdas = [...tr.querySelectorAll('td[data-col]')];
+    _CONCI_COLUMNAS_OBLIGATORIAS.forEach(obligatoria => {
+        const clave = _conciSummaryColumnKey(obligatoria);
+        const td = celdas.find(c => _conciSummaryColumnKey(c.dataset.col) === clave);
+        if (!td) return;   // esa columna no está a la vista: no se exige
+        const valor = _conciNormalizeEditableCellText(
+            td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent
+        );
+        if (!valor) faltan.push(td.dataset.col);
+    });
+    return faltan;
+}
+
+// Una fila EMPEZADA a la que le faltan campos obligatorios. Una fila del todo
+// vacía no cuenta aquí: de ésa se encarga _conciFilaSinCaptura, y avisar dos
+// veces de lo mismo sólo hace ruido.
+function _conciFilaIncompleta(tr) {
+    if (!tr) return false;
+    if (_conciFilaSinCaptura(tr)) return false;
+    return _conciCamposObligatoriosFaltantes(tr).length > 0;
+}
+
+// Marca en pantalla las filas a las que les falta algo obligatorio, para que el
+// operador vea CUÁLES son sin recorrer la tabla campo por campo.
+function _conciMarcarFilasIncompletas() {
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (!tbody) return 0;
+    let cuantas = 0;
+    tbody.querySelectorAll('tr[data-row-id]').forEach(tr => {
+        const faltan = _conciFilaIncompleta(tr) ? _conciCamposObligatoriosFaltantes(tr) : [];
+        tr.classList.toggle('conci-fila-incompleta', faltan.length > 0);
+        if (faltan.length) {
+            tr.dataset.conciFaltan = faltan.join(', ');
+            tr.title = 'Falta capturar: ' + faltan.join(', ');
+            cuantas++;
+        } else {
+            delete tr.dataset.conciFaltan;
+        }
+    });
+    return cuantas;
 }
 
 function _conciMarcarFilasSinCaptura() {
@@ -26999,8 +27206,20 @@ async function _conciGuardarTodoAhora() {
         //    haya confirmado ese valor exacto.
         const quedanPendientes = _conciContarCeldasSinGuardar();
         const confirmadas = Math.max(0, celdasPendientes - quedanPendientes);
+        // Guardado y COMPLETO no son lo mismo. Lo capturado se persiste siempre
+        // —retenerlo en pantalla es como se pierde el trabajo—, pero una fila a
+        // la que le faltan campos obligatorios no puede darse por cerrada en
+        // silencio: se marca en la tabla y se dice cuántas son, para que el
+        // operador las termine en vez de creer que la jornada quedó lista.
+        const incompletas = _conciMarcarFilasIncompletas();
         if (typeof showNotification === 'function') {
-            if (!quedanPendientes) {
+            if (!quedanPendientes && incompletas) {
+                showNotification(
+                    `Se guardó lo capturado, pero ${incompletas === 1 ? 'hay 1 fila incompleta' : `hay ${incompletas} filas incompletas`}: `
+                    + `les falta ${_CONCI_COLUMNAS_OBLIGATORIAS.join(', ')}. Quedan marcadas en la tabla.`,
+                    'warning'
+                );
+            } else if (!quedanPendientes) {
                 showNotification(
                     confirmadas === 1
                         ? 'Guardado: 1 captura confirmada por la base.'
@@ -28257,6 +28476,13 @@ function _conciIsMovementKeyDuplicate(error) {
     return /uq_conciliacion_manifiestos_movement_key|movement_key/i.test(errorText);
 }
 
+// Reintentar no sirve cuando la base rechazó la captura por lo que vale: hasta
+// que el usuario la corrija el resultado será idéntico. Lo capturado sigue en
+// pantalla, en el borrador local y en la cola del servidor, así que no se pierde.
+function _conciErrorEsperaCorreccion(error) {
+    return String(error?.code || '') === 'CONCI_CAPTURA_NO_ACEPTADA';
+}
+
 function _conciDatabaseValueEquals(expected, actual) {
     if (expected === null || expected === undefined) {
         return actual === null || actual === undefined;
@@ -28295,6 +28521,27 @@ async function _conciFindExistingMovementRowId(client, payload, error) {
     return row?.id !== undefined && row?.id !== null ? row.id : null;
 }
 
+// La tabla es colaborativa: cualquiera con permiso de administrar puede borrar
+// una fila (papelera de la fila, o el script de limpieza de filas fantasma).
+// Ese borrado no se avisa en vivo a las demás pestañas —sólo los guardados de
+// celda se retransmiten—, así que una pestaña que la seguía mostrando puede
+// intentar actualizarla después de que ya no existe. Esta lectura, aparte de
+// la escritura que falló, es la única forma de distinguir "ya no existe" de
+// un problema de permisos real, sin asumir lo primero a la ligera.
+async function _conciFilaExisteEnBase(client, rowId) {
+    try {
+        const { data, error } = await client
+            .from('Conciliación Manifiestos')
+            .select('id')
+            .eq('id', rowId)
+            .maybeSingle();
+        if (error) return null; // inconcluso: no se pudo comprobar
+        return !!data;
+    } catch (_) {
+        return null; // inconcluso
+    }
+}
+
 async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
     let currentPayload = { ...payload };
     let effectiveRowId = String(rowId ?? '').trim();
@@ -28310,14 +28557,69 @@ async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
     // El llamador necesita saber esto explícitamente: un resultado "ok" no
     // significa que TODO el payload se haya guardado.
     const droppedColumns = new Set();
+    // Columnas que el usuario capturó de verdad en esta fila. Sólo importan
+    // cuando la escritura es un INSERT — ver la comprobación dentro del bucle.
+    // Se distingue "el llamador no pidió esta comprobación" (columnasDeCaptura
+    // ausente, ej. la importación desde archivo) de "el llamador SÍ la pidió y
+    // no quedó ninguna columna que la cumpla" (columnasDeCaptura === []): un
+    // array vacío no es lo mismo que no pasar la opción. Colapsar los dos casos
+    // en la misma condición volvía la comprobación un no-op justo en el caso
+    // que más importa: cuando de verdad no se capturó nada de identidad, un
+    // array vacío pasaba "sin capturaRequerida.length, no hay nada que exigir"
+    // igual que si nadie hubiera pedido la comprobación.
+    const seExigeCapturaDeIdentidad = Array.isArray(options.columnasDeCaptura);
+    const capturaRequerida = seExigeCapturaDeIdentidad
+        ? options.columnasDeCaptura.filter(Boolean)
+        : [];
 
     const _norm = s => String(s || '')
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .toLowerCase().replace(/[^a-z0-9]/g, '');
 
+    const conservaAlgoCapturado = () => {
+        if (!seExigeCapturaDeIdentidad) return true;
+        const presentes = Object.keys(currentPayload).map(_norm);
+        return capturaRequerida.some(col => presentes.includes(_norm(col)));
+    };
+
     for (let attempt = 0; attempt < 8; attempt++) {
         if (Object.keys(currentPayload).length === 0) {
             return { ok: false, error: { message: 'Sin campos válidos para guardar.' }, droppedColumns: [...droppedColumns] };
+        }
+
+        // Un INSERT crea una fila que antes no existía. El llamador sólo cuenta
+        // como "captura real" (columnasDeCaptura) lo que identifica un vuelo —
+        // aerolínea, matrícula, # de vuelo, tipo de manifiesto, aeronave,
+        // destino/origen, total de pasajeros — nunca FECHA, MES o CIERRE
+        // SUBSECRETARIA por sí solos (ver _conciEsColumnaIdentidad). Dos formas
+        // de terminar sin nada de eso: la auto-corrección de más abajo quitó del
+        // payload la única columna de identidad que traía (la base la rechazó),
+        // o el usuario nunca tocó ninguna — sólo puso una fecha, o probó algo en
+        // CIERRE SUBSECRETARIA. En los dos casos la fila nacería en blanco, con
+        // ESTATUS MATRÍCULA "NO IDENTIFICADA" porque no hay matrícula que
+        // identificar, y el contador de arriba la sumaría porque es un registro
+        // real. No se crea: se devuelve el error para que la captura siga en
+        // pantalla y el usuario termine de identificar el vuelo.
+        if (!effectiveRowId && !conservaAlgoCapturado()) {
+            const descartadas = [...droppedColumns];
+            return {
+                ok: false,
+                error: {
+                    code: 'CONCI_CAPTURA_NO_ACEPTADA',
+                    message: descartadas.length
+                        ? `La base de datos no aceptó ${descartadas.join(', ')}, que es lo único capturado en esta fila. `
+                          + 'La fila no se creó para no dejar un registro en blanco; corrige ese dato y se guardará.'
+                        // El caso normal: se tocó FECHA, MES o CIERRE SUBSECRETARIA (u
+                        // otro campo de organización) pero nada que identifique el vuelo.
+                        // Es justo lo que se ve en pantalla: sin aerolínea, matrícula, #
+                        // de vuelo, tipo de manifiesto, aeronave, destino/origen o total
+                        // de pasajeros, sigue siendo una fila que nadie podría reconocer.
+                        : 'Falta capturar algo que identifique el vuelo (aerolínea, matrícula, # de vuelo, '
+                          + 'tipo de manifiesto, aeronave, destino/origen o total de pasajeros) antes de que esta '
+                          + 'fila pueda guardarse como un registro nuevo.',
+                },
+                droppedColumns: descartadas,
+            };
         }
 
         const req = client.from('Conciliación Manifiestos');
@@ -28433,6 +28735,27 @@ const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bi
                     currentPayload = { ...duplicateUpdatePayload };
                 }
                 mutated = true;
+            }
+        }
+
+        // Un UPDATE que no confirma NINGUNA fila (no valores distintos: cero
+        // filas afectadas) sobre un id que existía casi siempre significa que
+        // alguien más la borró mientras esta pantalla la seguía mostrando —ver
+        // el comentario de _conciFilaExisteEnBase. Reintentar no sirve: el
+        // mismo id seguirá sin existir. Se confirma con una lectura aparte antes
+        // de darlo por hecho; si esa lectura tampoco es concluyente, se trata
+        // igual que antes (aviso de permisos, con reintento).
+        if (!mutated && effectiveRowId && result.error.code === 'CONCI_WRITE_NOT_CONFIRMED' && !result.data) {
+            const sigueExistiendo = await _conciFilaExisteEnBase(client, effectiveRowId);
+            if (sigueExistiendo === false) {
+                return {
+                    ok: false,
+                    error: {
+                        code: 'CONCI_ROW_DELETED',
+                        message: 'Esta fila ya no existe en la base de datos: alguien más la eliminó.',
+                    },
+                    droppedColumns: [...droppedColumns],
+                };
             }
         }
 
@@ -28613,6 +28936,11 @@ async function _conciAutoSaveRow(tr, options = {}) {
     const payload = {};
     const dirtyCols = new Set();
     const autoPersistedCols = new Set();
+    // Las columnas que el usuario escribió a mano y traen contenido. Es lo mismo
+    // que enciende hasUserCapture, pero guardado por nombre: al crear una fila
+    // nueva hay que poder comprobar que al menos una de ellas llegó de verdad a
+    // la base, y no sólo que "algo" se capturó antes de intentarlo.
+    const capturedCols = new Set();
     // ¿El usuario escribió realmente algo en esta fila? Sólo cuenta una celda
     // que haya tocado (dirty) y que además tenga contenido. Ni el valor que la
     // fila ya traía, ni un campo vaciado, ni los rellenos automáticos (la fecha
@@ -28655,8 +28983,14 @@ async function _conciAutoSaveRow(tr, options = {}) {
             payload[col] = null;
         }
         if (isDirty) dirtyCols.add(col);
-        if (isDirty && raw) hasUserCapture = true;
+        if (isDirty && raw) { hasUserCapture = true; capturedCols.add(col); }
     });
+    // De lo capturado, sólo lo que identifica un vuelo justifica CREAR una fila
+    // nueva. FECHA, MES o CIERRE SUBSECRETARIA por sí solos no bastan: una fila
+    // con nada más que una fecha puesta se ve exactamente tan vacía como la fila
+    // fantasma original, así que "algo se tecleó" no es la pregunta correcta —
+    // la pregunta es "hay algo que identifique el manifiesto".
+    const identidadCapturada = [...capturedCols].filter(_conciEsColumnaIdentidad);
     const settleSavedCells = (savedColumns) =>
         _conciSettleSavedCells(tr, cells, savedCellValues, savedColumns);
 
@@ -28753,6 +29087,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 const result = await _conciWriteRowSafe(client, payload, null, {
                     recoverMovementConflict: true,
                     duplicateUpdatePayload,
+                    columnasDeCaptura: identidadCapturada,
                 });
                 if (!result.ok) {
                     const msg = result.error?.message || 'error de base de datos';
@@ -28760,7 +29095,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
                     tr.classList.add('table-secondary');
                     console.warn('[Conciliación] fila (Solo Vuelos) pendiente de guardar:', result.error);
                     // Insiste solo hasta que la base lo acepte.
-                    _conciProgramarReintento();
+                    if (!_conciErrorEsperaCorreccion(result.error)) _conciProgramarReintento();
                     // Y queda en la cola del servidor, para que no dependa de
                     // que esta computadora vuelva a encenderse.
                     _conciEncolarPendientesDeFila(tr, msg);
@@ -28820,7 +29155,31 @@ async function _conciAutoSaveRow(tr, options = {}) {
             const result = await _conciWriteRowSafe(client, writePayload, rowId || null, {
                 recoverMovementConflict: !rowId,
                 duplicateUpdatePayload: writePayload,
+                columnasDeCaptura: identidadCapturada,
             });
+            // Esta fila YA existía en pantalla con su id (rowId) y la base dice
+            // que ya no está: alguien más la borró mientras la seguíamos
+            // mostrando (papelera de la fila, o la limpieza de filas fantasma) y
+            // el borrado no se avisa en vivo a las demás pestañas. Reintentar es
+            // inútil -- el mismo id nunca va a volver a existir -- y dejarla
+            // marcada "pendiente de guardar" para siempre sería justo la fila de
+            // más que sobra en la tabla. Se retira sin pedir confirmación, igual
+            // que habría desaparecido sola con un refresco.
+            //
+            // Si rowId venía vacío (una fila nueva de esta sesión que resultó
+            // coincidir por movement_key con un registro ajeno ya borrado), se
+            // deja el camino de abajo: ahí sí hay una captura propia que no
+            // conviene perder en silencio.
+            if (!result.ok && result.error?.code === 'CONCI_ROW_DELETED' && rowId) {
+                if (typeof _conciBorradorOlvidarFila === 'function') _conciBorradorOlvidarFila(tr);
+                _conciDesencolarPendientesDeFila(tr, cells.map(td => td.dataset.col));
+                if (typeof showNotification === 'function') {
+                    showNotification('Esta fila ya no existe: alguien más la eliminó mientras la tenías abierta.', 'warning');
+                }
+                tr.remove();
+                if (typeof _conciActualizarBotonGuardarTodo === 'function') _conciActualizarBotonGuardarTodo();
+                return;
+            }
             if (!result.ok) {
                 // Conserva la fila y sus valores para que el usuario pueda corregir
                 // el campo que causó el error; nunca se elimina silenciosamente.
@@ -28829,7 +29188,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 tr.classList.add('table-secondary');
                 console.warn('[Conciliación] fila pendiente de guardar:', result.error);
                 // Insiste solo hasta que la base lo acepte.
-                _conciProgramarReintento();
+                if (!_conciErrorEsperaCorreccion(result.error)) _conciProgramarReintento();
                 // Y queda en la cola del servidor, para que no dependa de que
                 // esta computadora vuelva a encenderse.
                 _conciEncolarPendientesDeFila(tr, msg);
@@ -29215,6 +29574,12 @@ async function _conciSaveBulkEdits() {
             const isNewRow = tr.dataset.conciNew === '1';
             const changedPayload = {};
             const fullPayload = {};
+            // Lo que el usuario escribió a mano en esta fila. No basta con mirar
+            // si la celda tiene texto: en una fila nueva varias se pintan solas
+            // (ESTATUS MATRÍCULA "NO IDENTIFICADA", el "-" de las calculadas) y
+            // ese texto entra por el respaldo de textContent de más abajo. Sin
+            // esta distinción, una fila que nadie tocó se daba por capturada.
+            const capturadas = new Set();
 
             tr.querySelectorAll('td[data-col]').forEach(td => {
                 const col = td.dataset.col;
@@ -29236,7 +29601,11 @@ async function _conciSaveBulkEdits() {
 
                 fullPayload[col] = normalized;
                 if (newRaw !== oldRaw) changedPayload[col] = normalized;
+                if (td.dataset.dirty === '1' && newRaw !== '') capturadas.add(col);
             });
+            // Igual que en el autoguardado por celda: sólo lo que identifica un
+            // vuelo justifica CREAR una fila nueva. Ver _conciEsColumnaIdentidad.
+            const identidadCapturada = [...capturadas].filter(_conciEsColumnaIdentidad);
 
             // Para una fila nueva, usa todos los valores capturados (no sólo los
             // que quedaron marcados como dirty) y no intentes guardar una fila vacía.
@@ -29267,6 +29636,7 @@ async function _conciSaveBulkEdits() {
                             options: {
                                 recoverMovementConflict: true,
                                 duplicateUpdatePayload: changedPayload,
+                                columnasDeCaptura: identidadCapturada,
                             },
                         });
                     }
@@ -29277,12 +29647,18 @@ async function _conciSaveBulkEdits() {
             else {
                 const hasMeaningfulValue = Object.values(changedPayload)
                     .some(v => v !== null && String(v).trim() !== '');
-                if (hasMeaningfulValue) {
+                // Una fila que todavía no existe en la base sólo se crea si el
+                // usuario capturó algo que identifique el vuelo. FECHA, MES o
+                // CIERRE SUBSECRETARIA por sí solos no bastan (ver
+                // _conciEsColumnaIdentidad), igual que los valores que la fila
+                // se pinta sola: ninguno de los dos da origen a un registro nuevo.
+                if (hasMeaningfulValue && identidadCapturada.length) {
                     inserts.push({
                         payload: changedPayload,
                         options: {
                             recoverMovementConflict: true,
                             duplicateUpdatePayload: changedPayload,
+                            columnasDeCaptura: identidadCapturada,
                         },
                     });
                 }

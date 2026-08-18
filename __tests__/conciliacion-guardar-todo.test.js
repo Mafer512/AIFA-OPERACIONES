@@ -42,6 +42,7 @@ const espias = {
   guardadas: [],
   reintentos: 0,
   guardadoFalla: false,
+  incompletas: 0,
 };
 
 const api = new Function('document', 'console', 'espias', `
@@ -61,6 +62,11 @@ const api = new Function('document', 'console', 'espias', `
     tr.querySelectorAll('td[data-dirty="1"]').forEach(td => td.removeAttribute('data-dirty'));
     tr.removeAttribute('data-dirty');
   }
+  // Marcado de filas incompletas: aqui se dobla a "ninguna incompleta" para no
+  // mezclar dos cosas. Estas pruebas comprueban el CONTEO de lo guardado; el
+  // aviso de fila incompleta se cubre en conciliacion-fila-incompleta.
+  const _CONCI_COLUMNAS_OBLIGATORIAS = ['AEROLINEA', 'MATRICULA', 'TIPO DE OPERACIÓN'];
+  function _conciMarcarFilasIncompletas() { return espias.incompletas || 0; }
   ${extraer('_conciContarCeldasSinGuardar')}
   ${extraer('_conciFilasPorGuardar')}
   ${extraer('_conciActualizarBotonGuardarTodo')}
@@ -184,6 +190,51 @@ describe('qué se manda a guardar', () => {
     await api._conciGuardarTodoAhora();
     expect(espias.guardadas).toHaveLength(1);
     expect(espias.guardadas[0].tr).toBe(sucia);
+  });
+});
+
+// Guardado y COMPLETO no son lo mismo: lo capturado se persiste siempre, pero
+// una fila a la que le faltan campos obligatorios no puede darse por cerrada en
+// silencio. El detector real se prueba en conciliacion-fila-incompleta.
+describe('filas incompletas al terminar de guardar', () => {
+  test('avisa cuántas quedaron incompletas en vez de decir que todo salió bien', async () => {
+    espias.incompletas = 2;
+    pintar([{ rowId: '7', sucias: ['TOTAL PAX'] }]);
+
+    await api._conciGuardarTodoAhora();
+
+    const ultimo = espias.avisos.at(-1);
+    expect(ultimo.tipo).toBe('warning');
+    expect(ultimo.texto).toContain('2 filas incompletas');
+  });
+
+  test('con una sola lo dice en singular', async () => {
+    espias.incompletas = 1;
+    pintar([{ rowId: '7', sucias: ['TOTAL PAX'] }]);
+
+    await api._conciGuardarTodoAhora();
+
+    expect(espias.avisos.at(-1).texto).toContain('1 fila incompleta');
+  });
+
+  test('el aviso dice QUÉ falta, no sólo que falta algo', async () => {
+    espias.incompletas = 1;
+    pintar([{ rowId: '7', sucias: ['TOTAL PAX'] }]);
+
+    await api._conciGuardarTodoAhora();
+
+    const texto = espias.avisos.at(-1).texto;
+    expect(texto).toContain('AEROLINEA');
+    expect(texto).toContain('MATRICULA');
+  });
+
+  test('sin filas incompletas el aviso sigue siendo de éxito', async () => {
+    espias.incompletas = 0;
+    pintar([{ rowId: '7', sucias: ['TOTAL PAX'] }]);
+
+    await api._conciGuardarTodoAhora();
+
+    expect(espias.avisos.at(-1).tipo).toBe('success');
   });
 });
 

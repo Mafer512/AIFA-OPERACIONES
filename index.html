@@ -1195,6 +1195,13 @@ FF
                 45deg, transparent, transparent 6px,
                 rgba(173, 181, 189, .10) 6px, rgba(173, 181, 189, .10) 12px);
         }
+        /* Fila empezada a la que le faltan campos obligatorios: ámbar, para
+           separarla de la que está del todo vacía (gris). Lo capturado ya se
+           guardó; lo que dice esta marca es que aún no puede darse por cerrada.
+           El title lista qué falta. */
+        #table-conci-manifiestos tbody tr.conci-fila-incompleta > td:first-child {
+            box-shadow: inset 3px 0 0 #f0ad4e;
+        }
         #table-conci-manifiestos tbody tr {
             cursor: pointer;
             transition: background-color .15s ease;
@@ -36191,7 +36198,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260812-restaura-navegacion-v2" defer></script>
+    <script src="script.js?v=20260818-conci-identidad-de-vuelo" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>

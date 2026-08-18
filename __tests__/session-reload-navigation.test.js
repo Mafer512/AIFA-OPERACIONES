@@ -57,17 +57,29 @@ describe('restauracion de sesion y apartado durante reload', () => {
     expect(script).toContain("const authenticatedCoreSections = ['conciliacion']");
     expect(script).toContain("!authenticatedCoreSections.includes(item.dataset.section)");
     expect(script).toContain("!authenticatedCoreSections.includes(key)");
-    expect(html).toContain('script.js?v=20260812-restaura-navegacion-v2');
+    expect(html).toMatch(/<script src="script\.js\?v=[^"]+" defer><\/script>/);
     expect(script).toContain("const isAuthenticatedCore = key === 'conciliacion'");
     expect(script).toContain("target.classList.remove('perm-hidden', 'd-none-auth')");
     expect(script).toContain("document.body.classList.add('navdeck-active')");
     expect(script).toContain('restoreSectionFromNavigation(requestedSectionKey)');
   });
 
-  test('reafirma la URL despues de refrescar permisos', () => {
+  // El sondeo ya NO reafirma la ruta. Reafirmarla era la navegacion que sobraba:
+  // pasaba por showSection como si fuera un clic del menu y sacaba al usuario de
+  // la sub-pestana en la que estaba trabajando. Ahora el sondeo solo mueve a
+  // alguien en un caso: que los permisos hayan cambiado Y la seccion abierta
+  // haya dejado de estar permitida. Ver navegacion-involuntaria.
+  test('el sondeo no reafirma la ruta, solo saca a quien perdio el acceso', () => {
     const start = script.indexOf('async function refreshUserPermissionsFromServer()');
     const end = script.indexOf('// Polling ligero', start);
-    expect(script.slice(start, end)).toContain('restoreSectionFromNavigation(routeKey)');
+    const block = script.slice(start, end);
+    expect(block).not.toContain('restoreSectionFromNavigation(routeKey');
+    // Lo que quede de navegacion va dentro de la guarda, y detras de comprobar
+    // que la seccion abierta dejo de estar permitida.
+    expect(block.indexOf('if (permisosCambiaron)'))
+      .toBeLessThan(block.indexOf('restoreSectionFromNavigation(destino)'));
+    expect(block.indexOf('const sigueDentro'))
+      .toBeLessThan(block.indexOf('restoreSectionFromNavigation(destino)'));
   });
 
   test('la restauracion tiene limite y nunca deja ambas pantallas ocultas', () => {

@@ -83,7 +83,32 @@ describe('integración en el autoguardado', () => {
   });
 
   test('sólo cuenta como captura una celda tocada y con contenido', () => {
-    expect(guardado).toContain("if (isDirty && raw) hasUserCapture = true;");
+    expect(guardado).toContain("if (isDirty && raw) { hasUserCapture = true; capturedCols.add(col); }");
+  });
+
+  // La comprobación de arriba mira lo que se va a ENVIAR. Pero _conciWriteRowSafe
+  // puede quitar columnas del payload sobre la marcha cuando la base las rechaza
+  // (ej. "# DE VUELO" es bigint y recibe "VB 7305"), y si se lleva todo lo que el
+  // usuario capturó, lo único que queda del INSERT son los rellenos automáticos:
+  // la fecha del filtro y el capturista. Esa fila nace en blanco. Por eso el
+  // autoguardado le dice a la escritura qué columnas son captura real.
+  test('el autoguardado informa qué columnas son captura real del usuario', () => {
+    const insertNuevo = guardado.indexOf('_conciWriteRowSafe(client, writePayload, rowId || null');
+    expect(insertNuevo).toBeGreaterThan(-1);
+    const bloque = guardado.slice(insertNuevo, insertNuevo + 400);
+    expect(bloque).toContain('columnasDeCaptura: identidadCapturada');
+  });
+
+  // El bug reportado al operador: "capturé y refresqué, y apareció una fila en
+  // blanco" — resultó no venir de un INSERT vacío, sino de tocar sólo FECHA,
+  // MES o CIERRE SUBSECRETARIA (campos de organización, no de identidad) en
+  // una fila nueva. Técnicamente "algo se capturó", pero la fila se ve igual de
+  // irreconocible que la fila fantasma original. Sólo lo que identifica un
+  // vuelo debe poder crear el registro.
+  test('sólo columnas de identidad justifican crear una fila nueva, no cualquier captura', () => {
+    expect(source).toContain('function _conciEsColumnaIdentidad(col)');
+    const inicio = source.indexOf('const identidadCapturada = [...capturedCols].filter(_conciEsColumnaIdentidad)');
+    expect(inicio).toBeGreaterThan(-1);
   });
 
   // "Guardar todo" (Ctrl+G) recorre TODAS las filas nuevas, incluidas las que
