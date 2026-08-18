@@ -26192,17 +26192,19 @@ function _conciBorradoresPurgar(datos) {
             cambio = true;
             return;
         }
-        // Un borrador de fila NUEVA cuyas celdas estan todas vacias no describe
-        // ninguna captura que recuperar: son celdas que alguien vacio en una
-        // fila que nunca llego a existir en la base. Reponerlo dibujaba una
-        // fila en blanco que ademas NUNCA se puede guardar (el autoguardado
-        // exige una captura real para crear la fila), asi que el borrador no se
-        // limpiaba nunca y la fila volvia a aparecer sola en cada render.
+        // Un borrador de fila NUEVA que nunca va a poder guardarse no describe
+        // ninguna captura que recuperar. No basta con mirar si tiene ALGÚN
+        // valor: un borrador con sólo FECHA (o MES, o CIERRE SUBSECRETARIA) no
+        // está vacío, pero tampoco es identidad — y sin identidad la guarda de
+        // _conciWriteRowSafe nunca lo deja crear la fila (ver
+        // _conciBorradorPuedeLlegarAGuardarse). Reponerlo dibujaba una fila en
+        // blanco que además NUNCA se puede guardar, así que el borrador no se
+        // limpiaba nunca y la fila volvía a aparecer sola en cada render —
+        // únicamente en el DOM, sin tocar jamás la base de datos.
         //
-        // En una fila que SI existe ("id:N") un valor vacio si significa algo:
+        // En una fila que SI existe ("id:N") un valor vacío si significa algo:
         // borrar esa celda. Por eso la regla se limita a las claves "nueva:".
-        if (clave.startsWith('nueva:')
-            && !Object.values(entrada.celdas).some(v => String(v ?? '').trim() !== '')) {
+        if (clave.startsWith('nueva:') && !_conciBorradorPuedeLlegarAGuardarse(entrada.celdas)) {
             delete vivos[clave];
             cambio = true;
         }
@@ -26278,6 +26280,24 @@ const _CONCI_COLUMNAS_IDENTIDAD = [
 function _conciEsColumnaIdentidad(col) {
     const clave = _conciSummaryColumnKey(col);
     return _CONCI_COLUMNAS_IDENTIDAD.some(c => _conciSummaryColumnKey(c) === clave);
+}
+
+// ¿Este borrador de fila NUEVA tiene algo que algún día pudiera guardarse?
+//
+// "Tiene contenido" no basta: un borrador con sólo FECHA (o MES, o CIERRE
+// SUBSECRETARIA) NO está vacío, pero tampoco puede guardarse jamás — la guarda
+// de _conciWriteRowSafe exige una columna de identidad antes de crear una fila
+// nueva (ver _conciEsColumnaIdentidad). Un borrador así quedaba fuera del
+// descarte por "todas las celdas vacías" (sí tenía una fecha) y fuera también
+// del guardado (nunca calificaba como identidad), así que ni se limpiaba ni se
+// guardaba nunca: cada render lo volvía a dibujar como una fila fantasma que
+// vive únicamente en el DOM, sin tocar jamás la base de datos. Un borrador sin
+// ninguna columna de identidad es papel muerto y debe tratarse igual que uno
+// vacío: se descarta.
+function _conciBorradorPuedeLlegarAGuardarse(celdas) {
+    return Object.entries(celdas || {}).some(
+        ([col, valor]) => _conciEsColumnaIdentidad(col) && String(valor ?? '').trim() !== ''
+    );
 }
 
 // ¿Esta fila no tiene nada de lo que identifica un vuelo?
@@ -26555,11 +26575,15 @@ function _conciRestaurarFilasNuevas(datos) {
         const entrada = datos[clave];
         const celdas = entrada?.celdas || {};
         if (!Object.keys(celdas).length) return;
-        // Nada que recuperar: todas sus celdas estan vacias. Reponerla dibujaba
-        // una fila en blanco imposible de guardar (el autoguardado no crea una
-        // fila nueva sin captura real), que por eso mismo volvia a aparecer en
-        // cada render. Se descarta el borrador para que no reaparezca mas.
-        if (!Object.values(celdas).some(v => String(v ?? '').trim() !== '')) {
+        // Nada que recuperar: ninguna de sus celdas es identidad (ver
+        // _conciBorradorPuedeLlegarAGuardarse). No es sólo el caso de todas
+        // vacías -- un borrador con nada más que FECHA tampoco calificaría
+        // nunca para guardarse, y reponerlo dibujaba una fila en blanco
+        // imposible de guardar (el autoguardado exige identidad para crear una
+        // fila nueva), que por eso mismo volvía a aparecer en cada render, para
+        // siempre, sin tocar jamás la base de datos. Se descarta el borrador
+        // para que no reaparezca más.
+        if (!_conciBorradorPuedeLlegarAGuardarse(celdas)) {
             delete datos[clave];
             limpiadas = true;
             return;
