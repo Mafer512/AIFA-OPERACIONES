@@ -147,6 +147,13 @@ describe('integración en el módulo', () => {
     expect(source).toContain('_conciCiudadBonita(catalogCity || (code ? iataToCity(code) : rawStr))');
   });
 
+  test('CTG se resuelve como Cartagena aunque falte en el catálogo remoto', () => {
+    const airports = fs.readFileSync(path.resolve(__dirname, '..', 'data/master/airports.csv'), 'utf8');
+    expect(airports).toMatch(/^CTG,SKCG,.*?,Colombia,Cartagena,International$/m);
+    expect(source).toContain("CTG: { ciudad: 'Cartagena'");
+    expect(source).toContain("data/master/country.csv");
+  });
+
   test('los avatares van junto al título, donde no se cortan', () => {
     const i = html.indexOf('Conciliación Manifiestos</h6>');
     const j = html.indexOf('id="conci-presencia"');

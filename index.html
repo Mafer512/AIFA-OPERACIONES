@@ -36007,6 +36007,29 @@ FF
     <script src="js/email-analisis.js"></script>
     <script src="js/agenda.js?v=8"></script>
     <script src="js/agenda-assistant.js?v=1"></script>
+    <!-- AIFONSO — Asistente AIFA (BETA). SOLO DESARROLLO LOCAL.
+
+         Se carga por código y solo si el host es local, para que no llegue a
+         producción mientras siga en pruebas. Los archivos js/asistente-aifa-*
+         viven fuera de git a propósito (ver .git/info/exclude): este bloque es
+         inofensivo sin ellos, porque en producción ni siquiera los pide.
+
+         Necesita Ollama corriendo en la misma computadora; ver
+         docs/AIFONSO-ollama.md. -->
+    <script>
+        (function () {
+            var HOSTS_LOCALES = ['localhost', '127.0.0.1', '::1', '[::1]'];
+            var host = location.hostname;
+            if (host !== '' && HOSTS_LOCALES.indexOf(host) === -1) return;
+            ['js/asistente-aifa-datos.js', 'js/asistente-aifa.js', 'js/asistente-aifa-ui.js']
+                .forEach(function (archivo) {
+                    var s = document.createElement('script');
+                    s.src = archivo + '?v=beta-local';
+                    s.async = false; // conserva el orden: datos → motor → interfaz
+                    document.head.appendChild(s);
+                });
+        })();
+    </script>
     <script src="js/coyh-asistencia.js?v=1"></script>
     <script src="js/ssei-derrames.js?v=3"></script>
     <script src="js/ssei-emergencias.js?v=4"></script>

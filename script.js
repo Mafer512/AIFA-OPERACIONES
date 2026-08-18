@@ -2559,7 +2559,8 @@ async function refreshUserPermissionsFromServer() {
         const secs = roleData?.permissions?.allowed_sections;
         const prev = sessionStorage.getItem('user_allowed_sections');
         const next = Array.isArray(secs) ? JSON.stringify(secs) : null;
-        if (next !== prev) {
+        const permisosCambiaron = next !== prev;
+        if (permisosCambiaron) {
             if (next) sessionStorage.setItem('user_allowed_sections', next);
             else sessionStorage.removeItem('user_allowed_sections');
             applySectionPermissions(sessionStorage.getItem(SESSION_USER) || name);
@@ -2572,8 +2573,34 @@ async function refreshUserPermissionsFromServer() {
                 permissions: roleData.permissions || {}
             });
         } catch (_) {}
-        const routeKey = String(location.hash || '').replace(/^#/, '').trim();
-        if (routeKey) restoreSectionFromNavigation(routeKey);
+        // Volver a navegar SOLO si de verdad hace falta.
+        //
+        // Esto corria en cada pasada del sondeo, o sea una vez por minuto, con
+        // el usuario trabajando: releia el hash, llamaba a showSection y encima
+        // volvia a aplicar la ultima sub-pestana recordada. Bastaba con estar en
+        // una vista que el hash no refleja —el inicio, o una sub-vista que no
+        // dispara shown.bs.tab— para que la pantalla saltara sola cada 60
+        // segundos a donde uno ya no estaba.
+        //
+        // Un sondeo de permisos no tiene por que mover a nadie de sitio. Solo
+        // hay un caso en que si debe: que los permisos hayan cambiado y la
+        // seccion abierta haya dejado de estar permitida. Ahi se saca al usuario
+        // y se le dice por que; en cualquier otro caso no se toca la vista.
+        if (permisosCambiaron) {
+            const abierta = document.querySelector('.content-section.active');
+            const claveAbierta = abierta ? String(abierta.id || '').replace(/-section$/, '') : '';
+            const sigueDentro = !claveAbierta
+                || claveAbierta === 'conciliacion'
+                || isSectionAllowed(claveAbierta);
+            if (!sigueDentro) {
+                const destino = getDefaultAllowedSection();
+                if (destino) restoreSectionFromNavigation(destino);
+                else if (typeof window._navdeckShowMenu === 'function') window._navdeckShowMenu();
+                if (typeof showNotification === 'function') {
+                    showNotification('Tus permisos cambiaron: ya no tienes acceso a esa seccion.', 'warning');
+                }
+            }
+        }
     } catch (_) {}
 }
 
@@ -18671,14 +18698,48 @@ function _conciSetRefreshLoading(isLoading) {
     if (!_conciEditMode) btnRefresh.disabled = false;
 }
 
-// Ensures window._iataToCity is available (loads airports.csv if needed)
+// Catálogo de respaldo para destinos que a veces faltan en public.catalogo_aeropuertos
+// y en airports.csv. El código IATA sigue siendo la llave estable; el nombre solo
+// se usa para que Conciliación nunca deje una ruta legible como tres siglas.
+const _CONCI_AIRPORT_CATALOG_FALLBACK = Object.freeze({
+    CTG: { ciudad: 'Cartagena', pais: 'Colombia', nombre: 'Aeropuerto Internacional Rafael Núñez' },
+    BOG: { ciudad: 'Bogotá', pais: 'Colombia', nombre: 'Aeropuerto Internacional El Dorado' },
+    MDE: { ciudad: 'Medellín', pais: 'Colombia', nombre: 'Aeropuerto Internacional José María Córdova' },
+    CLO: { ciudad: 'Cali', pais: 'Colombia', nombre: 'Aeropuerto Internacional Alfonso Bonilla Aragón' },
+    PTY: { ciudad: 'Ciudad de Panamá', pais: 'Panamá', nombre: 'Aeropuerto Internacional de Tocumen' },
+    GUA: { ciudad: 'Ciudad de Guatemala', pais: 'Guatemala', nombre: 'Aeropuerto Internacional La Aurora' },
+    SJO: { ciudad: 'San José', pais: 'Costa Rica', nombre: 'Aeropuerto Internacional Juan Santamaría' },
+    HAV: { ciudad: 'La Habana', pais: 'Cuba', nombre: 'Aeropuerto Internacional José Martí' },
+    PUJ: { ciudad: 'Punta Cana', pais: 'República Dominicana', nombre: 'Aeropuerto Internacional de Punta Cana' },
+    SDQ: { ciudad: 'Santo Domingo', pais: 'República Dominicana', nombre: 'Aeropuerto Internacional Las Américas' },
+    CCS: { ciudad: 'Caracas', pais: 'Venezuela', nombre: 'Aeropuerto Internacional de Maiquetía' },
+    MIA: { ciudad: 'Miami', pais: 'Estados Unidos', nombre: 'Miami International Airport' },
+    JFK: { ciudad: 'Nueva York', pais: 'Estados Unidos', nombre: 'John F. Kennedy International Airport' },
+    ORD: { ciudad: 'Chicago', pais: 'Estados Unidos', nombre: 'O\'Hare International Airport' },
+    IAH: { ciudad: 'Houston', pais: 'Estados Unidos', nombre: 'George Bush Intercontinental Airport' },
+    LAX: { ciudad: 'Los Ángeles', pais: 'Estados Unidos', nombre: 'Los Angeles International Airport' },
+    MAD: { ciudad: 'Madrid', pais: 'España', nombre: 'Adolfo Suárez Madrid-Barajas' },
+    CDG: { ciudad: 'París', pais: 'Francia', nombre: 'Charles de Gaulle' },
+    AMS: { ciudad: 'Ámsterdam', pais: 'Países Bajos', nombre: 'Amsterdam Airport Schiphol' },
+    LHR: { ciudad: 'Londres', pais: 'Reino Unido', nombre: 'Heathrow' },
+    FRA: { ciudad: 'Fráncfort', pais: 'Alemania', nombre: 'Frankfurt Airport' },
+    DOH: { ciudad: 'Doha', pais: 'Catar', nombre: 'Hamad International Airport' },
+    NRT: { ciudad: 'Tokio', pais: 'Japón', nombre: 'Narita International Airport' },
+    LIM: { ciudad: 'Lima', pais: 'Perú', nombre: 'Jorge Chávez International Airport' },
+    SCL: { ciudad: 'Santiago', pais: 'Chile', nombre: 'Arturo Merino Benítez' },
+    EZE: { ciudad: 'Buenos Aires', pais: 'Argentina', nombre: 'Ministro Pistarini' },
+    GRU: { ciudad: 'São Paulo', pais: 'Brasil', nombre: 'Guarulhos International Airport' },
+});
+
+// Ensures window._iataToCity is available (loads airports.csv and country.csv as fallback)
 async function _ensureIataCityMap() {
-    if (window._iataToCity && window._iataToCountry) return; // already loaded
+    if (window._conciAirportLocalCatalog && window._conciAirportFallbackLoaded) return;
     try {
         const res = await fetch('data/master/airports.csv', { cache: 'force-cache' });
         const text = await res.text();
         const map = new Map();
         const countryMap = new Map();
+        const localCatalog = new Map();
         const lines = text.split(/\r?\n/).filter(l => l.trim());
         // Parse CSV respecting quotes
         function _parseLine(line) {
@@ -18700,10 +18761,42 @@ async function _ensureIataCityMap() {
             const Country = (parts[3] || '').trim().replace(/^"|"$/g, '');
             const City = (parts[4] || '').trim().replace(/^"|"$/g, '');
             if (IATA) {
-                map.set(IATA, City || Name || IATA);
+                const ciudad = City || Name || IATA;
+                map.set(IATA, ciudad);
                 if (Country) countryMap.set(IATA, Country);
+                localCatalog.set(IATA, { iata: IATA, ciudad, pais: Country, nombre: Name, orden: Number.MAX_SAFE_INTEGER });
             }
         }
+
+        // country.csv cubre códigos IATA que no fueron incluidos en el catálogo
+        // operativo pequeño. Solo completa huecos: airports.csv conserva prioridad.
+        try {
+            const fallbackRes = await fetch('data/master/country.csv', { cache: 'force-cache' });
+            if (fallbackRes.ok) {
+                const fallbackText = await fallbackRes.text();
+                const fallbackLines = fallbackText.split(/\r?\n/).filter(l => l.trim());
+                for (let i = 1; i < fallbackLines.length; i++) {
+                    const parts = _parseLine(fallbackLines[i]);
+                    const ciudad = (parts[0] || '').trim();
+                    const IATA = (parts[1] || '').trim().toUpperCase();
+                    const Country = (parts[6] || '').trim();
+                    if (!ciudad || !/^[A-Z0-9]{3}$/.test(IATA)) continue;
+                    if (!map.has(IATA)) map.set(IATA, ciudad);
+                    if (Country && !countryMap.has(IATA)) countryMap.set(IATA, Country);
+                }
+            }
+        } catch (_) { /* el catálogo principal sigue siendo suficiente */ }
+
+        // Estas correcciones ganan a los nombres sin acentos o inconsistentes de
+        // los archivos fuente y también alimentan el editor de rutas.
+        Object.entries(_CONCI_AIRPORT_CATALOG_FALLBACK).forEach(([IATA, airport]) => {
+            map.set(IATA, airport.ciudad);
+            if (airport.pais) countryMap.set(IATA, airport.pais);
+            localCatalog.set(IATA, { iata: IATA, ...airport, orden: Number.MAX_SAFE_INTEGER });
+        });
+
+        window._conciAirportLocalCatalog = localCatalog;
+        window._conciAirportFallbackLoaded = true;
         window._iataToCity = code => {
             const k = String(code || '').trim().toUpperCase();
             return map.get(k) || k;
@@ -18713,6 +18806,10 @@ async function _ensureIataCityMap() {
             return countryMap.get(k) || '';
         };
     } catch(e) {
+        const fallbackCatalog = new Map();
+        Object.entries(_CONCI_AIRPORT_CATALOG_FALLBACK).forEach(([iata, airport]) => fallbackCatalog.set(iata, { iata, ...airport, orden: Number.MAX_SAFE_INTEGER }));
+        window._conciAirportLocalCatalog = fallbackCatalog;
+        window._conciAirportFallbackLoaded = true;
         window._iataToCity = code => String(code || '').trim().toUpperCase();
         window._iataToCountry = () => '';
     }
@@ -18881,6 +18978,16 @@ async function _ensureConciAirportCatalog(client) {
 
     _conciAirportCatalogPromise = (async () => {
         try {
+            await _ensureIataCityMap();
+            // El catálogo local complementa al remoto. Así el editor también
+            // ofrece CTG y cualquier destino agregado en airports.csv.
+            const localCatalog = window._conciAirportLocalCatalog;
+            if (localCatalog && typeof localCatalog.forEach === 'function') {
+                localCatalog.forEach((airport, iata) => {
+                    if (!_conciAirportCatalogByIata.has(iata)) _conciAirportCatalogByIata.set(iata, airport);
+                    if (airport.pais && !_conciAirportCountryByIata.has(iata)) _conciAirportCountryByIata.set(iata, airport.pais);
+                });
+            }
             let activeClient = client || window.supabaseClient;
             if (!activeClient && window.ensureSupabaseClient) activeClient = await window.ensureSupabaseClient();
             if (!activeClient) return _conciAirportCountryByIata;
@@ -18888,16 +18995,19 @@ async function _ensureConciAirportCatalog(client) {
             if (error) throw error;
             (data || []).forEach(row => {
                 const iata = String(row?.iata || '').trim().toUpperCase();
-                const pais = String(row?.pais || '').trim();
                 if (!iata) return;
+                const local = window._conciAirportLocalCatalog?.get(iata) || {};
+                const pais = String(row?.pais || '').trim() || String(local.pais || '').trim();
                 if (pais) _conciAirportCountryByIata.set(iata, pais);
+                const ordenRemoto = Number(row?.orden_id);
                 _conciAirportCatalogByIata.set(iata, {
+                    ...local,
                     iata,
-                    ciudad: String(row?.ciudad || '').trim(),
+                    ciudad: String(row?.ciudad || '').trim() || String(local.ciudad || '').trim(),
                     estado: String(row?.estado || '').trim(),
                     pais,
-                    nombre: String(row?.nombre_aeropuerto || '').trim(),
-                    orden: Number(row?.orden_id)
+                    nombre: String(row?.nombre_aeropuerto || '').trim() || String(local.nombre || '').trim(),
+                    orden: Number.isFinite(ordenRemoto) ? ordenRemoto : (Number(local.orden) || Number.MAX_SAFE_INTEGER)
                 });
             });
         } catch (error) {

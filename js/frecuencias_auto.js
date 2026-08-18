@@ -315,6 +315,14 @@
           fitMapToData();
       });
       dom.content?.classList.remove('d-none');
+
+      /* Si la dirección trae ?dest=CUN se abre ese destino solo. Es lo que
+         hace funcionar los enlaces que comparte AIFONSO cuando alguien los
+         reenvía y los abre desde cero. */
+      try {
+        const pedido = new URLSearchParams(location.search).get('dest');
+        if (pedido) setTimeout(() => window.frecuenciasAbrirDestino?.(pedido), 400);
+      } catch (_) { /* dirección sin parámetros */ }
     } catch (err) {
       console.error('Frecuencias automation error:', err);
       showError('No se pudo cargar la información de frecuencias. Verifique la conexión a la base de datos.');
@@ -465,6 +473,25 @@
       state.filters.destination = evt.target.value || 'all';
       applyFilters();
     });
+
+    /* Abrir un destino directamente, sin pasar por el mapa. Sirve para dos
+       cosas: los enlaces que comparte AIFONSO (que la gente reenvía por
+       WhatsApp) y cualquier vínculo interno del tipo
+       ...#frecuencias-semana con ?dest=CUN en la dirección.
+       Se reutiliza el mismo <select> y su evento para no duplicar lógica. */
+    window.frecuenciasAbrirDestino = function (iata) {
+      const codigo = String(iata || '').trim().toUpperCase();
+      const sel = dom.filters.destination;
+      if (!codigo || !sel) return false;
+      const existe = Array.from(sel.options).some(o => o.value === codigo);
+      if (!existe) return false;
+      sel.value = codigo;
+      sel.dispatchEvent(new Event('change'));
+      setTimeout(() => {
+        dom.detailsCol?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 350);
+      return true;
+    };
     if (dom.filters.day) dom.filters.day.addEventListener('change', evt => {
       state.filters.day = evt.target.value || 'all';
       applyFilters();
