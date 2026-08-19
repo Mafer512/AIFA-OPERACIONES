@@ -3465,8 +3465,13 @@ FF
                                                         <option value="11">Noviembre</option>
                                                         <option value="12">Diciembre</option>
                                                     </select>
+                                                    <select class="form-select w-auto" id="filter-parte-ops-year"
+                                                        aria-label="Año"></select>
                                                 </div>
                                                 <div class="d-flex gap-2">
+                                                    <button class="btn btn-success btn-sm" id="btn-export-parte-ops"
+                                                        title="Descargar el año completo en cuadrícula día × mes"><i
+                                                            class="fas fa-file-excel"></i> Exportar Excel</button>
                                                     <button class="btn btn-primary btn-sm" id="btn-new-parte-ops"><i
                                                             class="fas fa-plus"></i> Nuevo Registro</button>
                                                     <button class="btn btn-outline-secondary btn-sm"
@@ -35980,7 +35985,7 @@ FF
 
     <!-- Modular JS (non-invasive): delegates to existing functions in script.js -->
     <script src="js/core.js"></script>
-    <script src="js/navigation.js?v=20260614c"></script>
+    <script src="js/navigation.js?v=20260819-salir-al-menu"></script>
     <script src="js/inicio.js"></script>
     <script src="js/itinerario.js?v=4"></script>
     <script src="js/demoras.js"></script>
@@ -36056,7 +36061,8 @@ FF
     <script src="js/abordadores-registro.js"></script>
     <script src="js/init-data.js"></script>
     <script src="js/data-management.js"></script>
-    <script src="js/parte-ops-tab.js"></script>
+    <script src="js/parte-ops-export.js?v=20260819-parte-ops-cuadricula"></script>
+    <script src="js/parte-ops-tab.js?v=20260819-parte-ops-cuadricula"></script>
     <script src="js/itinerario-tab.js"></script>
     <script src="js/comparativa.js"></script>
     <script src="js/insights.js"></script>
@@ -36198,7 +36204,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260818-conci-doble-red-borrador" defer></script>
+    <script src="script.js?v=20260819-salir-al-menu-y-doble-red" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>

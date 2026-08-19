@@ -6,6 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnNew = document.getElementById('btn-new-parte-ops');
     const dateFilter = document.getElementById('filter-parte-ops-date');
     const monthFilter = document.getElementById('filter-parte-ops-month');
+    const yearFilter = document.getElementById('filter-parte-ops-year');
+    const btnExport = document.getElementById('btn-export-parte-ops');
     const tbody = document.getElementById('tbody-parte-ops');
     
     // Edit Modal elements
@@ -147,7 +149,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (dateFilter && dateFilter.value) {
             query = query.eq('fecha', dateFilter.value);
         } else if (monthFilter && monthFilter.value) {
-            const year = '2025';
+            // El año venía fijo en '2025'. Filtrar por mes devolvía entonces
+            // registros de 2025 mientras la tabla mostraba 2026: parecía que el
+            // filtro "no traía nada" o traía cosas de otra temporada. Ahora sale
+            // del selector de año, que se llena con los años que existen.
+            const year = anioSeleccionado();
             const month = monthFilter.value;
             const startDate = `${year}-${month}-01`;
             const nextMonth = parseInt(month, 10) + 1;
@@ -442,12 +448,90 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ── Año: se ofrece sólo lo que existe ────────────────────────────────
+    //
+    // Un rango inventado (2020-2030) llena el selector de años vacíos y hace
+    // que "no hay datos" parezca una falla. Los años salen de la propia tabla.
+    function anioSeleccionado() {
+        const elegido = String(yearFilter?.value || '').trim();
+        if (/^\d{4}$/.test(elegido)) return elegido;
+        return String(new Date().getFullYear());
+    }
+
+    let aniosCargados = false;
+    async function poblarAnios() {
+        if (aniosCargados || !yearFilter || !window.supabaseClient) return;
+        try {
+            const { data, error } = await window.supabaseClient
+                .from('parte_operations')
+                .select('fecha')
+                .order('fecha', { ascending: false })
+                .limit(3000);
+            if (error) throw error;
+            const anios = window.parteOpsExport
+                ? window.parteOpsExport.aniosDisponibles(data)
+                : [];
+            // Si la tabla está vacía queda al menos el año en curso, para que el
+            // selector no aparezca sin ninguna opción.
+            const opciones = anios.length ? anios : [String(new Date().getFullYear())];
+            yearFilter.innerHTML = opciones
+                .map(a => `<option value="${a}">${a}</option>`)
+                .join('');
+            aniosCargados = true;
+        } catch (err) {
+            console.warn('No se pudieron cargar los años de Parte de Operaciones:', err);
+        }
+    }
+
+    if (btnExport) {
+        btnExport.addEventListener('click', async () => {
+            if (!window.parteOpsExport) {
+                alert('No se pudo cargar el exportador. Recarga la página e inténtalo de nuevo.');
+                return;
+            }
+            const anio = anioSeleccionado();
+            const htmlPrevio = btnExport.innerHTML;
+            btnExport.disabled = true;
+            btnExport.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando…';
+            try {
+                const matriz = await window.parteOpsExport.exportarAnual(anio);
+                if (typeof showNotification === 'function') {
+                    showNotification(
+                        `Exportados ${matriz.registros} partes de ${anio} en cuadrícula día × mes.`,
+                        'success'
+                    );
+                }
+            } catch (err) {
+                console.error('Error al exportar Parte de Operaciones:', err);
+                const mensaje = err?.message || String(err);
+                if (typeof showNotification === 'function') showNotification(mensaje, 'error');
+                else alert(mensaje);
+            } finally {
+                btnExport.disabled = false;
+                btnExport.innerHTML = htmlPrevio;
+            }
+        });
+    }
+
     if (tabParteOps) {
-        tabParteOps.addEventListener('shown.bs.tab', loadParteOpsData);
+        tabParteOps.addEventListener('shown.bs.tab', () => {
+            poblarAnios();
+            loadParteOpsData();
+        });
+    }
+
+    if (yearFilter) {
+        yearFilter.addEventListener('change', loadParteOpsData);
     }
 
     if (btnRefresh) {
-        btnRefresh.addEventListener('click', loadParteOpsData);
+        btnRefresh.addEventListener('click', () => {
+            // "Actualizar" tambien rellena el selector de anio: si se entro a la
+            // pestana por un enlace directo, el evento shown.bs.tab no se dispara
+            // y el selector se quedaria vacio sin forma de llenarlo.
+            poblarAnios();
+            loadParteOpsData();
+        });
     }
 
     // Exponer para recarga en tiempo real

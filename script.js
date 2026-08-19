@@ -2453,10 +2453,17 @@ function applySectionPermissions(userName) {
                    !isSectionAllowed(key);
         };
 
+        // Estar en el lanzador de tarjetas es un estado VÁLIDO: no hay módulo
+        // abierto porque el usuario no quiere ninguno abierto. Antes "no hay
+        // sección activa" se trataba siempre como una anomalía que había que
+        // reparar navegando a una sección permitida, así que un simple refresco
+        // de permisos metía al usuario en un módulo que no había pedido.
+        const enElLanzador = document.body.classList.contains('navdeck-mode')
+            && !document.body.classList.contains('navdeck-active');
         let activeSection = document.querySelector('.content-section.active');
         // Si la sección activa quedó oculta —o no hay ninguna activa (el bloque
         // colabGranted pudo quitar 'active' sin poner otra)— navegar a una permitida.
-        if (!activeSection || activeSection.classList.contains('perm-hidden')) {
+        if (!enElLanzador && (!activeSection || activeSection.classList.contains('perm-hidden'))) {
             const fallback = getDefaultAllowedSection() || 'operaciones-totales';
             const fallbackLink = document.querySelector(`.menu-item[data-section="${fallback}"]`);
             if (typeof showSection === 'function') showSection(fallback, fallbackLink);
@@ -2471,7 +2478,11 @@ function applySectionPermissions(userName) {
         const activeKey = activeSection
             ? (activeSection.id || '').replace(/-section$/, '')
             : (getDefaultAllowedSection() || 'operaciones-totales');
-        if (hashKey && (_isSectionHidden(hashKey) || hashKey !== activeKey)) {
+        // En el lanzador no hay sección activa contra la que normalizar, y el
+        // hash ya se limpió al salir del módulo (exitSectionToMenu). Escribir
+        // aquí un hash "coherente" volvería a dejar el rastro que hace que la
+        // vista se reconstruya sola más tarde.
+        if (!enElLanzador && hashKey && (_isSectionHidden(hashKey) || hashKey !== activeKey)) {
             history.replaceState(null, '', `#${activeKey}`);
         }
     } catch (_) {}
@@ -3864,6 +3875,36 @@ function restoreActiveTab(sectionKey, sectionElement) {
         return true;
     } catch (_) { return false; }
 }
+
+// Salir de un módulo para volver al lanzador de tarjetas ("Menú").
+//
+// Volver al menú era, hasta ahora, quitar UNA CLASE del <body>
+// ('navdeck-active') y nada más. Por debajo, el módulo que acababas de dejar
+// seguía siendo la .content-section activa, el hash seguía apuntando a él y
+// currentSectionKey también: la aplicación creía que seguías dentro mientras tú
+// veías el lanzador.
+//
+// Con ese estado a medias, cualquier cosa que volviera a poner 'navdeck-active'
+// —o que releyera el hash para "reafirmar la ruta"— te metía de golpe en el
+// módulo anterior, minutos después, sin haber tocado nada. Ése es el "entré a
+// Colaboradores, me fui al inicio, y al rato me regresó solo a Colaboradores".
+//
+// Salir de verdad: se apaga la sección, se olvida cuál era y se limpia el hash.
+// Así no queda ningún rastro desde el que reconstruir una vista que ya
+// abandonaste. Es la contraparte de restoreSectionFromNavigation.
+function exitSectionToMenu() {
+    document.querySelectorAll('.content-section.active')
+        .forEach(sec => sec.classList.remove('active'));
+    currentSectionKey = '';
+    try { sessionStorage.removeItem(LAST_SECTION_STORAGE_KEY); } catch (_) { }
+    // La pestaña recordada de cada sección NO se borra a propósito: sirve para
+    // volver donde estabas cuando ENTRES otra vez, que es justo lo que se
+    // espera. Lo que no puede quedar es el rastro de la sección misma.
+    try {
+        if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+    } catch (_) { }
+}
+window.exitSectionToMenu = exitSectionToMenu;
 
 function restoreSectionFromNavigation(sectionKey, options = {}) {
     const key = String(sectionKey || '').trim();

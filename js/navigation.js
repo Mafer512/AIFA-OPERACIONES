@@ -49,8 +49,29 @@
       document.body.classList.add('navdeck-active');
       scrollTop();
     }
+    // Volver al menu es SALIR del modulo, no taparlo.
+    //
+    // Antes esto quitaba solo la clase 'navdeck-active'. Por debajo, el modulo
+    // que acababas de dejar seguia siendo la .content-section activa y el hash
+    // seguia apuntando a el: la aplicacion creia que seguias dentro mientras tu
+    // veias el lanzador. Cualquier cosa que volviera a poner 'navdeck-active'
+    // -o que releyera el hash- te devolvia de golpe al modulo anterior, minutos
+    // despues, sin haber tocado nada.
+    //
+    // exitSectionToMenu (script.js) apaga la seccion, olvida cual era y limpia
+    // el hash. El respaldo de aqui hace lo mismo por si esto corre antes de que
+    // script.js haya terminado de cargar.
     function showMenu(){
       document.body.classList.remove('navdeck-active');
+      if (typeof window.exitSectionToMenu === 'function') {
+        window.exitSectionToMenu();
+      } else {
+        document.querySelectorAll('.content-section.active')
+          .forEach(function(sec){ sec.classList.remove('active'); });
+        try {
+          if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+        } catch (_) {}
+      }
       scrollTop();
     }
     window._navdeckShowMenu = showMenu;
