@@ -26871,29 +26871,61 @@ Solo hazlo si ya la capturaste o si ya no aplica: se borra de la lista para todo
 // atribuido a quien lo rescata.
 // ¿Este pendiente quedo huerfano?
 //
-// Una captura sobre una fila que todavia no existia en la base se encola con un
-// id temporal ("nueva:<equipo>:<algo>"), porque no habia otro. Ese id no vuelve
+// Solo los que se encolaron con un id INVENTADO ("nueva:<equipo>:<algo>"), que
+// es lo que se hacia cuando la fila aun no existia en la base. Ese id no vuelve
 // a existir nunca: si la fila acabo guardandose recibio un id real, y si no, la
-// fila ya no esta. Buscar su celda en la tabla no puede encontrar nada, ni hoy
-// ni cambiando de fecha. Son los que se quedaban acumulados en el contador de
-// "capturas pendientes de otro equipo" sin forma de sacarlos de ahi.
+// fila ya no esta; buscar su celda no puede encontrar nada, ni hoy ni cambiando
+// de fecha. Son los que se acumulaban en "capturas pendientes de otro equipo"
+// sin forma de sacarlos de ahi.
+//
+// Ya no se generan: una fila sin id se encola con la identidad del movimiento
+// ("mov:AEROLINEA|VUELO|FECHA|A o D|OTRO EXTREMO"), que es la misma antes y
+// despues de guardar y desde cualquier computadora. Estos son los que quedaron
+// de antes.
 function _conciPendienteEsHuerfano(reg) {
     return /^nueva:/.test(String(reg?.row_id || ''));
 }
 
+// ¿Este pendiente viene identificado por el movimiento y no por un id de la
+// base? Se resuelve buscando el vuelo en la tabla, no la fila por id.
+function _conciPendienteEsIdentidad(reg) {
+    return /^mov:/.test(String(reg?.row_id || ''));
+}
+
 function _conciAplicarPendienteRemoto(reg) {
     const tabla = document.getElementById('table-conci-manifiestos');
-    const td = tabla && _conciFindLiveCell(tabla, String(reg.row_id), String(reg.columna));
+    // Dos formas de encontrar la celda. Por id, cuando la fila ya existe en la
+    // base. Y por identidad del movimiento, cuando se capturo sobre un vuelo
+    // que todavia no tenia manifiesto propio: ahi la fila puede haber cambiado
+    // de estado —seguir siendo espejo del Itinerario, o haber conseguido ya su
+    // id— y lo unico estable es el vuelo al que pertenece.
+    let td = null;
+    if (tabla && _conciPendienteEsIdentidad(reg)) {
+        const fila = _conciBuscarFilaPorIdentidad(tabla, String(reg.row_id));
+        td = fila
+            ? [...fila.querySelectorAll('td[data-col]')]
+                .find(c => String(c.dataset.col || '') === String(reg.columna)) || null
+            : null;
+    } else if (tabla) {
+        td = _conciFindLiveCell(tabla, String(reg.row_id), String(reg.columna));
+    }
     if (!td) {
         if (typeof showNotification === 'function') {
             // Distinguir los dos casos importa: uno se arregla cambiando el
             // filtro y el otro no se arregla nunca. Decir "cambia la fecha"
             // cuando no hay fecha que valga manda a buscar algo que no existe.
+            const dia = String(reg.fecha_vuelo || '').trim();
+            const vuelo = reg.vuelo ? `vuelo ${reg.vuelo}` : 'ese vuelo';
             showNotification(
                 _conciPendienteEsHuerfano(reg)
+                    // Encolado con un id inventado, de antes de que las filas sin
+                    // guardar se identificaran por su movimiento. No hay filtro
+                    // que lo traiga a la vista: solo queda copiarlo a mano.
                     ? `Esta captura se hizo sobre una fila que aun no existia en la base, asi que no se puede colocar sola. `
-                      + `Copiala a mano en el vuelo que corresponda (${reg.vuelo || 'sin vuelo anotado'}) y despues descartala.`
-                    : 'Esa fila no esta a la vista con el filtro actual. Cambia la fecha para verla.',
+                      + `Copiala a mano en el ${vuelo} y despues descartala.`
+                    // Este SI se puede colocar: hay que poner el filtro en su dia
+                    // para que el vuelo aparezca en la tabla. Se dice cual es.
+                    : `El ${vuelo} no esta a la vista${dia ? `: filtra el ${dia}` : ' con el filtro actual'} y vuelve a aplicarla.`,
                 'warning'
             );
         }
@@ -26982,6 +27014,107 @@ function _conciIdTemporalDeFila(tr) {
     return tr.dataset.conciTempId;
 }
 
+// Los valores de una fila, con nombre de columna, tal y como se ven ahora.
+//
+// Es la misma lectura que hace el autoguardado, incluida la trampa del routing:
+// en DESTINO / ORIGEN, dataset.raw guarda la ciudad ya resuelta para mostrar
+// ("QUITO") y el valor real vive en dataset.routeRaw ("MEX-UIO"). Sin ese
+// fallback, la identidad del movimiento se calcularia con el nombre de la
+// ciudad y no coincidiria con la que calcula la base.
+function _conciValoresDeFila(tr) {
+    const valores = {};
+    if (!tr) return valores;
+    tr.querySelectorAll('td[data-col]').forEach(td => {
+        const col = td.dataset.col;
+        if (!col) return;
+        const crudo = _conciIsRoutingColumn(col)
+            ? (td.dataset.routeRaw ?? td.dataset.raw ?? td.textContent)
+            : (td.dataset.raw ?? td.textContent);
+        valores[col] = _conciNormalizeEditableCellText(td.dataset.pendingRaw ?? crudo);
+    });
+    return valores;
+}
+
+// La identidad REAL del movimiento que representa esta fila.
+//
+// Es la misma llave que calcula el trigger _aifa_movement_key en la base
+// —aerolinea, numero de vuelo, fecha, llegada/salida y el otro extremo de la
+// ruta— y que ya se usa para resolver un choque de insercion duplicada. Aqui
+// sirve para lo contrario: nombrar una fila que TODAVIA no existe en la base.
+//
+// Antes eso se resolvia con un id inventado ("nueva:<equipo>:<algo>"), y ese es
+// justo el problema que se arregla: un id inventado no vuelve a existir nunca.
+// Si la fila acabo guardandose recibio un id real, y si no, la fila ya no esta;
+// en los dos casos lo que se habia encolado quedaba imposible de encontrar, de
+// aplicar y de retirar. La identidad del movimiento, en cambio, es la MISMA
+// antes y despues de guardar, y desde cualquier computadora: quien abra ese dia
+// vuelve a tener el vuelo en pantalla y la captura se puede colocar donde va.
+//
+// Devuelve '' cuando la fila todavia no tiene con que identificarse (falta la
+// aerolinea, el numero de vuelo, la fecha, el tipo o la ruta). Ahi no queda mas
+// remedio que el id temporal.
+function _conciIdentidadDeFila(tr) {
+    if (!tr || typeof _conciMovementKeyFromPayload !== 'function') return '';
+    const clave = _conciMovementKeyFromPayload(_conciValoresDeFila(tr));
+    return clave ? `mov:${clave}` : '';
+}
+
+// Con que id se encola esta fila. Por orden de preferencia: el id real que ya
+// tenga en la base, la identidad del movimiento, y solo si no hay ninguna de
+// las dos, el temporal.
+function _conciIdColaDeFila(tr) {
+    if (!tr) return '';
+    const rowId = String(tr.dataset.rowId || '').trim();
+    if (rowId) return rowId;
+    return _conciIdentidadDeFila(tr) || _conciIdTemporalDeFila(tr);
+}
+
+// Todos los ids con los que esta fila pudo haber encolado algo alguna vez: el
+// real, el que uso la ultima vez, la identidad actual y el temporal. Se usan
+// todos al retirar, porque la identidad CAMBIA mientras se captura —al escribir
+// el numero de vuelo, o al corregir la ruta— y lo encolado bajo la anterior
+// tiene que salir igual.
+function _conciIdsColaDeFila(tr) {
+    if (!tr) return [];
+    return [...new Set([
+        String(tr.dataset.rowId || '').trim(),
+        String(tr.dataset.conciColaId || '').trim(),
+        _conciIdentidadDeFila(tr),
+        String(tr.dataset.conciTempId || '').trim(),
+    ].filter(Boolean))];
+}
+
+// Encuentra en la tabla la fila que representa este movimiento, tenga ya id
+// propio o siga siendo el espejo de un vuelo del Itinerario.
+function _conciBuscarFilaPorIdentidad(root, identidad) {
+    const buscada = String(identidad || '').trim();
+    if (!root || !buscada) return null;
+    for (const tr of root.querySelectorAll('tbody tr')) {
+        if (_conciIdentidadDeFila(tr) === buscada) return tr;
+    }
+    return null;
+}
+
+// El numero de vuelo que muestra una fila. Sirve para nombrar el pendiente en
+// el panel de rescate, y se lee del elemento y no por id: una fila que aun no
+// existe en la base no tiene id con el que buscarla.
+function _conciVueloDeFilaElemento(tr) {
+    if (!tr) return '';
+    const celda = [...tr.querySelectorAll('td[data-col]')]
+        .find(td => /^#\s*de\s*vuelo$/.test(_conciNormalizedColumnName(td.dataset.col)));
+    if (!celda) return '';
+    return _conciNormalizeEditableCellText(celda.dataset.raw ?? celda.textContent);
+}
+
+// La fecha del vuelo de esta fila, en ISO. Antes se tomaba siempre la del
+// filtro: con un rango activo eso archivaba el pendiente en el primer dia del
+// rango, que no tiene por que ser el suyo.
+function _conciFechaIsoDeFila(tr) {
+    if (!tr) return '';
+    const partes = _conciMovementKeyFromPayload(_conciValoresDeFila(tr)).split('|');
+    return partes.length >= 3 && /^\d{4}-\d{2}-\d{2}$/.test(partes[2]) ? partes[2] : '';
+}
+
 async function _conciEncolarPendientesDeFila(tr, mensajeError) {
     if (!tr) return false;
     const celdas = _conciCeldasPendientesDeFila(tr);
@@ -26989,15 +27122,34 @@ async function _conciEncolarPendientesDeFila(tr, mensajeError) {
     const client = await _conciClientePendientes();
     if (!client) return false;
 
-    const rowId = String(tr.dataset.rowId || '').trim() || _conciIdTemporalDeFila(tr);
+    const rowId = _conciIdColaDeFila(tr);
+    // La identidad se completa mientras se captura: una fila a la que le falta
+    // el numero de vuelo se encola con un id y, en cuanto se teclea, pasa a
+    // tener otro. Lo que quedo bajo el anterior se retira, o el mismo dato
+    // aparece dos veces en la lista de pendientes.
+    const idPrevio = String(tr.dataset.conciColaId || '').trim();
+    if (idPrevio && idPrevio !== rowId) {
+        try {
+            await client.from(_CONCI_TABLA_PENDIENTES)
+                .delete()
+                .eq('row_id', idPrevio)
+                .eq('cliente_id', _conciLiveClientId || 'sin-id');
+        } catch (e) { _conciColaFalla(e); }
+    }
+    tr.dataset.conciColaId = rowId;
+
     const filas = celdas.map(c => ({
         row_id: rowId,
         columna: c.col,
         valor: c.valor,
         usuario: _conciCurrentUserDisplayName() || 'Sin nombre',
         cliente_id: _conciLiveClientId || 'sin-id',
-        fecha_vuelo: (typeof _conciFechaUnicaDelFiltro === 'function' ? _conciFechaUnicaDelFiltro() : '') || null,
-        vuelo: _conciVueloDeFila(rowId) || null,
+        // La fecha del vuelo de ESTA fila, no la del filtro: con un rango
+        // activo el filtro archivaba el pendiente en el primer dia del rango.
+        fecha_vuelo: _conciFechaIsoDeFila(tr)
+            || (typeof _conciFechaUnicaDelFiltro === 'function' ? _conciFechaUnicaDelFiltro() : '')
+            || null,
+        vuelo: _conciVueloDeFilaElemento(tr) || null,
         ultimo_error: String(mensajeError || '').slice(0, 300) || null,
         visto_en: new Date().toISOString(),
     }));
@@ -27017,14 +27169,11 @@ async function _conciDesencolarPendientesDeFila(tr, columnas) {
     if (!tr || _conciColaDisponible === false) return;
     const cols = [...(columnas instanceof Set ? columnas : (columnas || []))].filter(Boolean);
     if (!cols.length) return;
-    // Los dos ids con los que esta fila pudo encolarse: el real y el temporal
-    // que uso mientras no existia en la base. Sin el temporal, todo lo que se
-    // encolo ANTES del primer guardado se quedaba en la cola para siempre —
+    // Todos los ids con los que esta fila pudo encolarse: el real, el que uso
+    // la ultima vez, su identidad de movimiento y el temporal. Sin esto, lo que
+    // se encolo ANTES del primer guardado se quedaba en la cola para siempre —
     // dando a entender que seguia sin guardarse cuando ya estaba a salvo.
-    const ids = [
-        String(tr.dataset.rowId || '').trim(),
-        String(tr.dataset.conciTempId || '').trim(),
-    ].filter(Boolean);
+    const ids = _conciIdsColaDeFila(tr);
     if (!ids.length) return;
     const client = await _conciClientePendientes();
     if (!client) return;

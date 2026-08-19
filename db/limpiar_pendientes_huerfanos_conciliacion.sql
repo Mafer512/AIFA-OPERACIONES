@@ -15,13 +15,24 @@
 --  rescate no encuentra su celda, y el contador de arriba lo sigue sumando como
 --  "capturas pendientes de otro equipo".
 --
---  Se acumularon sobre todo por dos fallos ya corregidos en script.js:
+--  Se acumularon sobre todo por tres fallos ya corregidos en script.js:
 --    · la guarda de identidad rechazaba capturas sobre vuelos del Itinerario
 --      que sí estaban identificados, y cada rechazo encolaba (ver
 --      _conciWriteRowSafe / conservaAlgoCapturado);
 --    · el id temporal se componía con tr.rowIndex, que cambia al reordenar o
 --      redibujar la tabla, así que la misma captura se encolaba varias veces
---      bajo ids distintos (ver _conciIdTemporalDeFila).
+--      bajo ids distintos;
+--    · y sobre todo: se usaba un id INVENTADO donde debía ir una identidad.
+--
+--  YA NO SE GENERAN. Una fila sin id se encola ahora con la identidad real del
+--  movimiento —"mov:AEROLINEA|VUELO|FECHA|A o D|OTRO EXTREMO", la misma llave
+--  que calcula el trigger _aifa_movement_key—, que es idéntica antes y después
+--  de guardar y desde cualquier computadora. Quien abra ese día vuelve a tener
+--  el vuelo en pantalla y la captura se puede colocar donde va, con el botón
+--  "Aplicar" del panel. Ver _conciIdColaDeFila / _conciBuscarFilaPorIdentidad.
+--
+--  Los "nueva:%" que quedan son de antes de ese cambio. Ésos sí hay que
+--  copiarlos a mano o descartarlos: no hay forma de saber a qué fila iban.
 --
 --  La aplicación ya permite descartarlos uno por uno desde el panel de
 --  pendientes. Este script es para hacerlo de golpe cuando son muchos.
@@ -87,12 +98,12 @@ SELECT p.id, p.usuario, p.vuelo, p.columna, p.valor, p.creado_en
   FROM public.conciliacion_capturas_pendientes p
   JOIN public."Conciliación Manifiestos" m
     ON m.id::text = p.row_id
- WHERE p.row_id NOT LIKE 'nueva:%'
+ WHERE p.row_id ~ '^[0-9]+$'
    AND btrim(coalesce(to_jsonb(m) ->> p.columna, '')) = btrim(coalesce(p.valor, ''))
  ORDER BY p.creado_en;
 
 -- DELETE FROM public.conciliacion_capturas_pendientes p
 --  USING public."Conciliación Manifiestos" m
 --  WHERE m.id::text = p.row_id
---    AND p.row_id NOT LIKE 'nueva:%'
+--    AND p.row_id ~ '^[0-9]+$'
 --    AND btrim(coalesce(to_jsonb(m) ->> p.columna, '')) = btrim(coalesce(p.valor, ''));
