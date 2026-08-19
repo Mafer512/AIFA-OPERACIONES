@@ -49,6 +49,10 @@ const api = new Function('document', 'localStorage', 'CSS', 'console', 'encolado
   ${constante('_CONCI_BORRADORES_VIGENCIA_MS')}
   ${extraer('_conciBorradoresLeer')}
   ${extraer('_conciBorradoresEscribir')}
+  ${extraer('_conciSummaryColumnKey')}
+  const _CONCI_COLUMNAS_IDENTIDAD = ['AEROLINEA', 'MATRICULA', '# DE VUELO', 'TIPO DE MANIFIESTO', 'AERONAVE', 'DESTINO / ORIGEN', 'TOTAL PAX'];
+  ${extraer('_conciEsColumnaIdentidad')}
+  ${extraer('_conciBorradorPuedeLlegarAGuardarse')}
   ${extraer('_conciBorradoresPurgar')}
   ${extraer('_conciBorradorClaveFila')}
   ${extraer('_conciBorradorGuardarCelda')}
