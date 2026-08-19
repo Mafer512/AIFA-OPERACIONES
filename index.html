@@ -3465,8 +3465,13 @@ FF
                                                         <option value="11">Noviembre</option>
                                                         <option value="12">Diciembre</option>
                                                     </select>
+                                                    <select class="form-select w-auto" id="filter-parte-ops-year"
+                                                        aria-label="Año"></select>
                                                 </div>
                                                 <div class="d-flex gap-2">
+                                                    <button class="btn btn-success btn-sm" id="btn-export-parte-ops"
+                                                        title="Descargar el año completo en cuadrícula día × mes"><i
+                                                            class="fas fa-file-excel"></i> Exportar Excel</button>
                                                     <button class="btn btn-primary btn-sm" id="btn-new-parte-ops"><i
                                                             class="fas fa-plus"></i> Nuevo Registro</button>
                                                     <button class="btn btn-outline-secondary btn-sm"
@@ -36056,7 +36061,8 @@ FF
     <script src="js/abordadores-registro.js"></script>
     <script src="js/init-data.js"></script>
     <script src="js/data-management.js"></script>
-    <script src="js/parte-ops-tab.js"></script>
+    <script src="js/parte-ops-export.js?v=20260819-parte-ops-cuadricula"></script>
+    <script src="js/parte-ops-tab.js?v=20260819-parte-ops-cuadricula"></script>
     <script src="js/itinerario-tab.js"></script>
     <script src="js/comparativa.js"></script>
     <script src="js/insights.js"></script>
