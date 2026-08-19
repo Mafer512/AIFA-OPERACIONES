@@ -26806,7 +26806,13 @@ function _conciAbrirPanelPendientes() {
                   <td>${escapeHtml(a.columna || '')}</td>
                   <td><code>${escapeHtml(a.valor ?? '')}</code></td>
                   <td class="small text-muted">${escapeHtml(new Date(a.creado_en).toLocaleString('es-MX'))}</td>
-                  <td><button type="button" class="btn btn-sm btn-outline-primary conci-pend-aplicar">Aplicar</button></td>
+                  <td class="text-nowrap">
+                    ${_conciPendienteEsHuerfano(a)
+                        ? '<span class="badge bg-warning text-dark me-1" title="Se capturo sobre una fila que aun no existia en la base: hay que copiarla a mano">A mano</span>'
+                        : '<button type="button" class="btn btn-sm btn-outline-primary conci-pend-aplicar me-1">Aplicar</button>'}
+                    <button type="button" class="btn btn-sm btn-outline-secondary conci-pend-descartar"
+                            title="Quitar de la lista. Usalo cuando ya lo capturaste o ya no aplica.">Descartar</button>
+                  </td>
                 </tr>`).join('')}</tbody>
             </table></div>`;
         cuerpo.querySelectorAll('.conci-pend-aplicar').forEach(btn => {
@@ -26814,6 +26820,26 @@ function _conciAbrirPanelPendientes() {
                 const id = btn.closest('tr')?.dataset.pendId;
                 const reg = ajenos.find(a => String(a.id) === String(id));
                 if (reg) _conciAplicarPendienteRemoto(reg);
+            });
+        });
+        // Sin esto, un pendiente que ya no se puede aplicar solo se queda en la
+        // lista para siempre: nadie lo puede colocar y nadie lo puede sacar, y
+        // el contador de arriba lo sigue sumando como trabajo por hacer.
+        cuerpo.querySelectorAll('.conci-pend-descartar').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const fila = btn.closest('tr');
+                const id = fila?.dataset.pendId;
+                const reg = ajenos.find(a => String(a.id) === String(id));
+                if (!reg) return;
+                const detalle = `${reg.columna} = ${reg.valor} (${reg.vuelo || 'sin vuelo anotado'})`;
+                if (!confirm(`Descartar esta captura pendiente?
+
+${detalle}
+
+Solo hazlo si ya la capturaste o si ya no aplica: se borra de la lista para todos.`)) return;
+                btn.disabled = true;
+                await _conciBorrarPendienteRemoto(reg.id);
+                fila.remove();
             });
         });
     }
@@ -26825,12 +26851,33 @@ function _conciAbrirPanelPendientes() {
 // Traer un pendiente ajeno a la tabla es capturarlo aqui: entra por el mismo
 // camino que cualquier tecleo, con lo que se guarda, se avisa en vivo y queda
 // atribuido a quien lo rescata.
+// ¿Este pendiente quedo huerfano?
+//
+// Una captura sobre una fila que todavia no existia en la base se encola con un
+// id temporal ("nueva:<equipo>:<algo>"), porque no habia otro. Ese id no vuelve
+// a existir nunca: si la fila acabo guardandose recibio un id real, y si no, la
+// fila ya no esta. Buscar su celda en la tabla no puede encontrar nada, ni hoy
+// ni cambiando de fecha. Son los que se quedaban acumulados en el contador de
+// "capturas pendientes de otro equipo" sin forma de sacarlos de ahi.
+function _conciPendienteEsHuerfano(reg) {
+    return /^nueva:/.test(String(reg?.row_id || ''));
+}
+
 function _conciAplicarPendienteRemoto(reg) {
     const tabla = document.getElementById('table-conci-manifiestos');
     const td = tabla && _conciFindLiveCell(tabla, String(reg.row_id), String(reg.columna));
     if (!td) {
         if (typeof showNotification === 'function') {
-            showNotification('Esa fila no esta a la vista con el filtro actual. Cambia la fecha para verla.', 'warning');
+            // Distinguir los dos casos importa: uno se arregla cambiando el
+            // filtro y el otro no se arregla nunca. Decir "cambia la fecha"
+            // cuando no hay fecha que valga manda a buscar algo que no existe.
+            showNotification(
+                _conciPendienteEsHuerfano(reg)
+                    ? `Esta captura se hizo sobre una fila que aun no existia en la base, asi que no se puede colocar sola. `
+                      + `Copiala a mano en el vuelo que corresponda (${reg.vuelo || 'sin vuelo anotado'}) y despues descartala.`
+                    : 'Esa fila no esta a la vista con el filtro actual. Cambia la fecha para verla.',
+                'warning'
+            );
         }
         return;
     }
@@ -28650,18 +28697,43 @@ async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
     // array vacío pasaba "sin capturaRequerida.length, no hay nada que exigir"
     // igual que si nadie hubiera pedido la comprobación.
     const seExigeCapturaDeIdentidad = Array.isArray(options.columnasDeCaptura);
-    const capturaRequerida = seExigeCapturaDeIdentidad
-        ? options.columnasDeCaptura.filter(Boolean)
-        : [];
 
     const _norm = s => String(s || '')
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .toLowerCase().replace(/[^a-z0-9]/g, '');
 
+    // Vacio, nulo y el "-" con el que las columnas calculadas senalan que les
+    // falta un insumo no identifican nada.
+    const _identificaAlgo = (valor) => {
+        if (valor === null || valor === undefined) return false;
+        const texto = String(valor).trim();
+        return texto !== '' && texto !== '-';
+    };
+
+    // ¿La fila que se va a CREAR llevara algo que identifique el vuelo?
+    //
+    // La pregunta es sobre la FILA que queda en la base, no sobre lo que el
+    // usuario acaba de teclear. Antes se exigia que una de las columnas
+    // TECLEADAS fuera de identidad, y eso rechazaba el caso mas comun del
+    // modulo: una fila "Solo Vuelos" -el espejo de un vuelo del Itinerario- ya
+    // trae aerolinea, # de vuelo, tipo de manifiesto y destino/origen en
+    // pantalla, y todo eso viaja en el payload. El capturista solo anade lo que
+    // falta del manifiesto: slot coordinado, kgs, observaciones, codigo de
+    // demora. Nada de eso es identidad, asi que la captura se rechazaba con
+    // "falta capturar algo que identifique el vuelo" aunque el registro a crear
+    // estuviera perfectamente identificado y a la vista.
+    //
+    // Mirando el payload, ese caso pasa y los dos que motivaron la guarda se
+    // siguen bloqueando igual: la fila nueva con solo FECHA/MES/CIERRE
+    // SUBSECRETARIA nunca tuvo identidad en el payload, y aquella a la que la
+    // auto-correccion le podo su unica columna de identidad la pierde del
+    // payload tambien -- por eso esta comprobacion vive DENTRO del bucle de
+    // reintentos y no antes de el.
     const conservaAlgoCapturado = () => {
         if (!seExigeCapturaDeIdentidad) return true;
-        const presentes = Object.keys(currentPayload).map(_norm);
-        return capturaRequerida.some(col => presentes.includes(_norm(col)));
+        return Object.keys(currentPayload).some(col =>
+            _conciEsColumnaIdentidad(col) && _identificaAlgo(currentPayload[col])
+        );
     };
 
     for (let attempt = 0; attempt < 8; attempt++) {
