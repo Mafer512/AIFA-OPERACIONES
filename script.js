@@ -23402,7 +23402,25 @@ function _conciGetNextEditableCell(td) {
     let next = td.nextElementSibling;
     while (next && !next.matches(SEL)) next = next.nextElementSibling;
     if (next) return next;
-    let row = td.parentElement ? td.parentElement.nextElementSibling : null;
+    // Se acabo la fila: el recorrido sigue en la primera celda capturable de la
+    // fila que aparece JUSTO ABAJO EN PANTALLA, con el mismo orden visible que
+    // usan las flechas arriba/abajo. No sirve el orden del DOM: al filtrar, las
+    // filas que no pasan el filtro siguen en el tbody con display:none, asi que
+    // saltar al siguiente hermano dejaba el cursor capturando en una fila que el
+    // usuario no ve.
+    const tr = td.closest('tr');
+    const filasVisibles = _conciVisibleBodyRows();
+    const idxFila = tr ? filasVisibles.indexOf(tr) : -1;
+    if (idxFila !== -1) {
+        for (let i = idxFila + 1; i < filasVisibles.length; i++) {
+            const primera = filasVisibles[i].querySelector(SEL);
+            if (primera) return primera;
+        }
+        return null;
+    }
+    // La fila de origen no esta en la lista visible (por ejemplo, quedo oculta
+    // con el cursor dentro): se cae al recorrido por hermanos de siempre.
+    let row = tr ? tr.nextElementSibling : null;
     while (row) {
         const first = row.querySelector(SEL);
         if (first) return first;
@@ -24223,7 +24241,7 @@ function _conciActivateRoutingEditor(td, currentRaw) {
     td._conciCloseEditor = closeEditor;
     select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
-        if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'down'); }
+        if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
         else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
         else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
@@ -24422,7 +24440,7 @@ function _conciActivateAeronaveEditor(td, currentRaw) {
             closeEditor(true, event.key === 'ArrowUp' ? 'up' : 'down');
         } else if (event.key === 'Enter') {
             event.preventDefault();
-            closeEditor(true, 'down');
+            closeEditor(true, 'next');
         } else if (event.key === 'Escape') {
             event.preventDefault();
             closeEditor(false, false);
@@ -24683,7 +24701,7 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
             closeEditor(true, event.key === 'ArrowUp' ? 'up' : 'down');
         } else if (event.key === 'Enter') {
             event.preventDefault();
-            closeEditor(true, 'down');
+            closeEditor(true, 'next');
         } else if (event.key === 'Escape') {
             event.preventDefault();
             closeEditor(false, false);
@@ -24809,7 +24827,7 @@ function _conciActivateManifestTypeEditor(td, currentRaw) {
     td._conciCloseEditor = closeEditor;
     select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
-        if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'down'); }
+        if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
         else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
         else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
@@ -24878,7 +24896,7 @@ function _conciActivateMatriculaStatusEditor(td, currentRaw) {
     td._conciCloseEditor = closeEditor;
     select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
-        if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'down'); }
+        if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
         else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
         // Mismo criterio que los combos de TIPO DE MANIFIESTO y TIPO DE
         // OPERACIÓN. Este editor se había quedado solo con Enter y Escape, y
@@ -24960,7 +24978,7 @@ function _conciActivateOperationTypeEditor(td, currentRaw) {
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
             event.preventDefault();
-            closeEditor(true, 'down');
+            closeEditor(true, 'next');
         } else if (event.key === 'Escape') {
             event.preventDefault();
             closeEditor(false, false);
@@ -27633,7 +27651,7 @@ function _conciActivateCellEditor(td) {
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            closeEditor(true, 'down');
+            closeEditor(true, 'next');
         } else if (e.key === 'Escape') {
             e.preventDefault();
             closeEditor(false, false);
@@ -27902,7 +27920,7 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
     const onKeydown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            closeEditor(true, 'down');
+            closeEditor(true, 'next');
         } else if (e.key === 'Escape') {
             e.preventDefault();
             closeEditor(false, false);
