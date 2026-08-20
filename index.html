@@ -22534,15 +22534,13 @@ FF
                     #hidraulicas-section .residuos-chart-host{ width:100%; max-width:100%; min-width:0; height:310px; position:relative; overflow:hidden; }
                     #hidraulicas-section .residuos-chart-host canvas{ display:block; max-width:100%!important; }
                     #hidraulicas-section .residuos-table-wrap{ overflow:auto; border:1px solid #cbd5e1; border-radius:10px; }
-                    #hidraulicas-section .residuos-table{ min-width:850px; margin:0; }
+                    #hidraulicas-section .residuos-table{ min-width:960px; margin:0; }
                     #hidraulicas-section .residuos-table thead th{ color:#fff; font-size:.72rem; text-align:center; vertical-align:middle; border-color:#fff; white-space:nowrap; }
-                    #hidraulicas-section .residuos-table thead th:first-child{ background:#2f7d22; }
-                    #hidraulicas-section .residuos-table thead th:nth-child(2){ background:#2f7d22; }
-                    #hidraulicas-section .residuos-table thead th:nth-child(3),
-                    #hidraulicas-section .residuos-table thead th:nth-child(4),
-                    #hidraulicas-section .residuos-table thead th:nth-child(5){ background:#17658a; }
-                    #hidraulicas-section .residuos-table thead th:nth-child(6){ background:#c00000; }
-                    #hidraulicas-section .residuos-table thead th:nth-child(7){ background:#ffc000; color:#111827; }
+                    #hidraulicas-section .residuos-table thead .res-th-base{ background:#2f7d22; }
+                    #hidraulicas-section .residuos-table thead .res-th-especial{ background:#0b3040; }
+                    #hidraulicas-section .residuos-table thead .res-th-sub{ background:#17658a; }
+                    #hidraulicas-section .residuos-table thead .res-th-peligrosos{ background:#c00000; }
+                    #hidraulicas-section .residuos-table thead .res-th-valorizables{ background:#ffc000; color:#111827; }
                     #hidraulicas-section .residuos-table tbody td{ font-size:.78rem; text-align:right; white-space:nowrap; }
                     #hidraulicas-section .residuos-table tbody td:first-child,
                     #hidraulicas-section .residuos-table tbody td:nth-child(2){ text-align:center; font-weight:700; }
@@ -22552,6 +22550,8 @@ FF
                     #hidraulicas-section .residuos-table .residuos-total-special{ background:#0b3040; color:#fff; }
                     #hidraulicas-section .residuos-table .residuos-total-danger{ background:#c00000; color:#fff; }
                     #hidraulicas-section .residuos-table .residuos-total-value{ background:#ffc000; color:#111827; }
+                    #hidraulicas-section .residuos-table tfoot td.residuos-total-danger,
+                    #hidraulicas-section .residuos-table tfoot td.residuos-total-value{ text-align:center; vertical-align:middle; }
                     #hidraulicas-section .residuos-notes{ position:relative; background:linear-gradient(135deg,#ecfdf5 0%,#f0fdfa 60%,#eff6ff 100%); border:1px solid #a7f3d0; border-radius:14px; padding:16px 20px 16px 22px; margin-bottom:16px; color:#134e4a; font-size:.8rem; line-height:1.6; box-shadow:0 4px 16px rgba(6,95,70,.08); overflow:hidden; overflow-wrap:anywhere; }
                     #hidraulicas-section .residuos-notes::before{ content:""; position:absolute; left:0; top:0; bottom:0; width:5px; background:linear-gradient(180deg,#059669,#0d9488,#0284c7); }
                     #hidraulicas-section .residuos-notes-title{ display:inline-flex; align-items:center; gap:8px; color:#fff; font-weight:800; font-size:.82rem; letter-spacing:.03em; text-transform:uppercase; margin-bottom:10px; background:linear-gradient(120deg,#047857,#0d9488); padding:5px 14px 5px 10px; border-radius:999px; box-shadow:0 3px 10px rgba(4,120,87,.25); }
@@ -22968,7 +22968,7 @@ FF
                             <div id="residuos-status" class="alert alert-info py-2 small d-none" role="status"></div>
 
                             <div class="row g-3 mb-3">
-                              <div class="col-12 col-md-6 col-xl-3"><div class="residuos-kpi" style="--res-color:#17658a;"><div class="residuos-kpi-label"><i class="fas fa-layer-group me-1"></i>Manejo especial</div><div class="residuos-kpi-value" id="residuos-kpi-especial">—</div><div class="residuos-kpi-unit">kg · inorgánico + orgánico + lodos</div></div></div>
+                              <div class="col-12 col-md-6 col-xl-3"><div class="residuos-kpi" style="--res-color:#17658a;"><div class="residuos-kpi-label"><i class="fas fa-layer-group me-1"></i>Manejo especial y sólidos urbanos</div><div class="residuos-kpi-value" id="residuos-kpi-especial">—</div><div class="residuos-kpi-unit">kg · inorgánico + orgánico + lodos + manejo especial</div></div></div>
                               <div class="col-12 col-md-6 col-xl-3"><div class="residuos-kpi" style="--res-color:#c00000;"><div class="residuos-kpi-label"><i class="fas fa-triangle-exclamation me-1"></i>Peligrosos</div><div class="residuos-kpi-value" id="residuos-kpi-peligrosos">—</div><div class="residuos-kpi-unit">kg acumulados</div></div></div>
                               <div class="col-12 col-md-6 col-xl-3"><div class="residuos-kpi" style="--res-color:#e0a800;"><div class="residuos-kpi-label"><i class="fas fa-arrows-rotate me-1"></i>Valorizables</div><div class="residuos-kpi-value" id="residuos-kpi-valorizables">—</div><div class="residuos-kpi-unit">kg acumulados</div></div></div>
                               <div class="col-12 col-md-6 col-xl-3"><div class="residuos-kpi" style="--res-color:#047857;"><div class="residuos-kpi-label"><i class="fas fa-calendar-check me-1"></i>Meses con información</div><div class="residuos-kpi-value" id="residuos-kpi-meses">—</div><div class="residuos-kpi-unit">de 12 meses</div></div></div>
@@ -22989,8 +22989,8 @@ FF
                               </div>
                               <div class="residuos-table-wrap">
                                 <table class="table table-bordered residuos-table align-middle">
-                                  <thead><tr><th rowspan="2">Año</th><th rowspan="2">Mes</th><th colspan="3">Residuos de manejo especial</th><th rowspan="2">Residuos<br>peligrosos<br>(kg)</th><th rowspan="2">Residuos<br>valorizables<br>(kg)</th><th rowspan="2">Acciones</th></tr><tr><th>Inorgánico<br>(kg)</th><th>Orgánico<br>(kg)</th><th>Lodos<br>(kg)</th></tr></thead>
-                                  <tbody id="residuos-table-body"><tr><td colspan="8" class="text-center text-muted py-4">Cargando información…</td></tr></tbody>
+                                  <thead><tr><th rowspan="2" class="res-th-base">Año</th><th rowspan="2" class="res-th-base">Mes</th><th colspan="4" class="res-th-especial">Residuos de manejo especial y sólidos urbanos</th><th rowspan="2" class="res-th-peligrosos">Residuos<br>peligrosos<br>(kg)</th><th rowspan="2" class="res-th-valorizables">Residuos<br>valorizables<br>(kg)</th><th rowspan="2" class="res-th-base">Acciones</th></tr><tr><th class="res-th-sub">Inorgánico<br>(kg)</th><th class="res-th-sub">Orgánico<br>(kg)</th><th class="res-th-sub">Lodos<br>(kg)</th><th class="res-th-sub">Residuos de<br>Manejo Especial<br>(kg)</th></tr></thead>
+                                  <tbody id="residuos-table-body"><tr><td colspan="9" class="text-center text-muted py-4">Cargando información…</td></tr></tbody>
                                   <tfoot id="residuos-table-foot"></tfoot>
                                 </table>
                               </div>
@@ -23004,6 +23004,7 @@ FF
                                 <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-inorganicos">Inorgánico (kg)</label><input id="residuos-inorganicos" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
                                 <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-organicos">Orgánico (kg)</label><input id="residuos-organicos" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
                                 <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-lodos">Lodos (kg)</label><input id="residuos-lodos" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
+                                <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-manejo-especial">Manejo especial (kg)</label><input id="residuos-manejo-especial" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
                                 <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-peligrosos">Peligrosos (kg)</label><input id="residuos-peligrosos" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
                                 <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-valorizables">Valorizables (kg)</label><input id="residuos-valorizables" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
                                 <div class="col-6 col-sm-3 col-lg-2"><button id="residuos-save" class="btn btn-success btn-sm w-100" type="button"><i class="fas fa-save me-1"></i>Guardar mes</button></div>

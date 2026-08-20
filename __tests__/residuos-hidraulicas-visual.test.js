@@ -15,15 +15,16 @@ describe('Residuos GOMIH · configuración visual de gráficas', () => {
             <canvas id="residuos-chart-mensual"></canvas><canvas id="residuos-chart-composicion"></canvas>
             <canvas id="residuos-chart-tendencia"></canvas>
             <input id="residuos-inorganicos"><input id="residuos-organicos"><input id="residuos-lodos">
+            <input id="residuos-manejo-especial">
             <input id="residuos-peligrosos"><input id="residuos-valorizables"><input id="residuos-observaciones">
             <button id="residuos-refresh"></button><button id="residuos-export"></button>
             <button id="residuos-save"></button><button id="hidra-tabbtn-residuos"></button>
             <div id="residuos-capture-locked"></div><span id="residuos-edit-status"></span>`;
 
         const rows = [
-            { anio: 2026, mes_num: 1, inorganicos_kg: 100.1, organicos_kg: 20.2, lodos_kg: 0.3, peligrosos_kg: 1.25, valorizables_kg: 2.345 },
-            { anio: 2026, mes_num: 2, inorganicos_kg: 200, organicos_kg: null, lodos_kg: null, peligrosos_kg: null, valorizables_kg: 10 },
-            { anio: 2025, mes_num: 1, inorganicos_kg: 50, organicos_kg: 5, lodos_kg: 1, peligrosos_kg: 2, valorizables_kg: 3 }
+            { anio: 2026, mes_num: 1, inorganicos_kg: 100.1, organicos_kg: 20.2, lodos_kg: 0.3, manejo_especial_kg: 5, peligrosos_kg: 1.25, valorizables_kg: 2.345 },
+            { anio: 2026, mes_num: 2, inorganicos_kg: 200, organicos_kg: null, lodos_kg: null, manejo_especial_kg: null, peligrosos_kg: null, valorizables_kg: 10 },
+            { anio: 2025, mes_num: 1, inorganicos_kg: 50, organicos_kg: 5, lodos_kg: 1, manejo_especial_kg: 4, peligrosos_kg: 2, valorizables_kg: 3 }
         ];
         const query = {
             select: jest.fn().mockReturnThis(),
@@ -62,12 +63,12 @@ describe('Residuos GOMIH · configuración visual de gráficas', () => {
         expect(chartInstances).toHaveLength(3);
         const [monthly, composition, trend] = chartInstances.map(instance => instance.config);
         expect(monthly.data.datasets.map(dataset => dataset.data)).toEqual([
-            [120.6, 200],
+            [125.6, 200],
             [1.25, null],
             [2.345, 10]
         ]);
-        expect(trend.data.datasets[0].data).toEqual([124.195, 210]);
-        expect(composition.data.datasets[0].data).toEqual([320.6, 1.25, 12.345]);
+        expect(trend.data.datasets[0].data).toEqual([129.195, 210]);
+        expect(composition.data.datasets[0].data).toEqual([325.6, 1.25, 12.345]);
 
         expect(monthly.data.datasets.map(dataset => dataset.borderColor)).toEqual(['#169B62', '#E5484D', '#E9B000']);
         expect(composition.data.datasets[0].backgroundColor).toEqual(['#169B62', '#E5484D', '#E9B000']);
@@ -79,7 +80,7 @@ describe('Residuos GOMIH · configuración visual de gráficas', () => {
         expect(composition.options.plugins.residuosDoughnutCenterText.label).toBe('Total generado');
 
         expect(monthly.options.plugins.datalabels.formatter(554921.0700000001)).toBe('554,921.07');
-        expect(trend.options.plugins.datalabels.formatter(124.195)).toBe('124.2');
+        expect(trend.options.plugins.datalabels.formatter(129.195)).toBe('129.2');
         const doughnutTooltip = composition.options.plugins.tooltip.callbacks.label({
             label: 'Valorizables', raw: 12.345, dataset: { data: composition.data.datasets[0].data }
         });
@@ -99,6 +100,6 @@ describe('Residuos GOMIH · configuración visual de gráficas', () => {
 
         document.getElementById('residuos-export').click();
         expect(window.XLSX.writeFile).toHaveBeenCalledWith(expect.anything(), 'Residuos_GOMIH_2026.xlsx');
-        expect(aoaToSheet.mock.calls[0][0][3]).toEqual([2026, 'Enero', 100.1, 20.2, 0.3, 1.25, 2.345]);
+        expect(aoaToSheet.mock.calls[0][0][3]).toEqual([2026, 'Enero', 100.1, 20.2, 0.3, 5, 1.25, 2.345]);
     });
 });
