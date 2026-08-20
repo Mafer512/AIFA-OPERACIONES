@@ -43,6 +43,12 @@
         return String(str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
     }
 
+    function escapeHtml(str) {
+        return String(str ?? '').replace(/[&<>"']/g, ch => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[ch]));
+    }
+
     function daysUntil(dateStr) {
         if (!dateStr) return null;
         const now = new Date();
@@ -196,7 +202,9 @@
           <td><code class="small">${v.placas || '—'}</code></td>
           <td>${v.combustible || '—'}</td>
           <td>${statusBadge(v.estado)}</td>
-          <td>${insuranceBadge(v.vigencia_seguro)}</td>
+          <td id="veh-cell-responsable_nombre-${v.id}" onclick="event.stopPropagation()">${editableCellHTML(v, 'responsable_nombre')}</td>
+          <td id="veh-cell-numero_resguardo-${v.id}" onclick="event.stopPropagation()">${editableCellHTML(v, 'numero_resguardo')}</td>
+          <td id="veh-cell-vigencia_seguro-${v.id}" onclick="event.stopPropagation()">${editableCellHTML(v, 'vigencia_seguro')}</td>
           <td>
             <button class="btn btn-sm btn-outline-primary rounded-pill"
                     onclick="event.stopPropagation();window.vehiculosModule.openDetail('${v.id}')"
@@ -205,6 +213,98 @@
             </button>
           </td>
         </tr>`;
+    }
+
+    // ── Celdas editables in-line: Responsable / Resguardo / Vigencia de póliza ──
+    const EDITABLE_FIELDS = {
+        responsable_nombre: { label: 'Responsable',          placeholder: 'Nombre del responsable' },
+        numero_resguardo:   { label: 'Número de resguardo',  placeholder: 'No. de resguardo' },
+        vigencia_seguro:    { label: 'Vigencia de póliza',   type: 'date', render: v => insuranceBadge(v.vigencia_seguro) }
+    };
+
+    function editableCellHTML(v, field) {
+        const cfg = EDITABLE_FIELDS[field];
+        const raw = v[field];
+        const val = cfg.render ? cfg.render(v) : (raw ? escapeHtml(raw) : '<span class="text-muted">—</span>');
+        return `
+          <span class="d-inline-flex align-items-center gap-1">
+            <span class="small">${val}</span>
+            <button type="button" class="btn btn-sm btn-link p-0 text-muted" style="font-size:.72rem;"
+                    onclick="window.vehiculosModule.editCell('${v.id}','${field}')" title="Editar ${cfg.label.toLowerCase()}">
+              <i class="fas fa-pencil-alt"></i>
+            </button>
+          </span>`;
+    }
+
+    function editCell(id, field) {
+        const cfg  = EDITABLE_FIELDS[field];
+        const v    = state.all.find(x => x.id === id);
+        const cell = document.getElementById(`veh-cell-${field}-${id}`);
+        if (!v || !cell || !cfg) return;
+        const isDate  = cfg.type === 'date';
+        const rawVal  = v[field] ? String(v[field]).slice(0, 10) : '';
+        cell.innerHTML = `
+          <div class="d-flex align-items-center gap-1">
+            <input type="${isDate ? 'date' : 'text'}" class="form-control form-control-sm"
+                   style="min-width:${isDate ? '150' : '130'}px;font-size:.78rem;"
+                   id="veh-input-${field}-${id}" value="${rawVal}"
+                   ${isDate ? '' : `placeholder="${cfg.placeholder}"`}>
+            <button type="button" class="btn btn-sm btn-success py-0 px-2"
+                    onclick="window.vehiculosModule.saveCell('${id}','${field}')" title="Guardar">
+              <i class="fas fa-check"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2"
+                    onclick="window.vehiculosModule.cancelCell('${id}','${field}')" title="Cancelar">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>`;
+        const input = document.getElementById(`veh-input-${field}-${id}`);
+        if (input) {
+            input.focus();
+            input.select();
+            input.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); saveCell(id, field); }
+                if (e.key === 'Escape') { e.preventDefault(); cancelCell(id, field); }
+            });
+        }
+    }
+
+    function cancelCell(id, field) {
+        const v = state.all.find(x => x.id === id);
+        const cell = document.getElementById(`veh-cell-${field}-${id}`);
+        if (v && cell) cell.innerHTML = editableCellHTML(v, field);
+    }
+
+    async function saveCell(id, field) {
+        const cfg   = EDITABLE_FIELDS[field];
+        const input = document.getElementById(`veh-input-${field}-${id}`);
+        const cell  = document.getElementById(`veh-cell-${field}-${id}`);
+        if (!input || !cell || !cfg) return;
+        const value = input.value.trim() || null;
+
+        cell.innerHTML = '<span class="small text-muted"><span class="spinner-border spinner-border-sm me-1"></span>Guardando…</span>';
+        try {
+            const supabase = await window.ensureSupabaseClient();
+            const { error } = await supabase
+                .from('catalogo_vehiculos')
+                .update({ [field]: value })
+                .eq('id', id);
+            if (error) throw error;
+
+            const v  = state.all.find(x => x.id === id);
+            const vf = state.filtered.find(x => x.id === id);
+            if (v)  v[field]  = value;
+            if (vf) vf[field] = value;
+            if (field === 'vigencia_seguro') updateKPIs(state.all);
+
+            cell.innerHTML = editableCellHTML(v || { id, [field]: value }, field);
+            showToast(`${cfg.label} actualizado ✓`, 'success');
+        } catch (err) {
+            console.error(`[vehiculos] saveCell(${field}) error:`, err);
+            showToast(`Error al guardar ${cfg.label.toLowerCase()}: ` + (err.message || err), 'danger');
+            const v = state.all.find(x => x.id === id);
+            cell.innerHTML = editableCellHTML(v || {}, field);
+        }
     }
 
     // ── Placeholder cuando no hay imagen ─────────────────────
@@ -263,7 +363,8 @@
                 const searchable = [
                     v.codigo_aifa, v.marca, v.submarca, v.tipo_vehiculo,
                     v.placas, v.numero_serie, v.numero_economico, v.color,
-                    v.aseguradora, v.area_responsable
+                    v.aseguradora, v.area_responsable,
+                    v.responsable_nombre, v.numero_resguardo
                 ].map(normalize).join(' ');
                 if (!searchable.includes(q)) return false;
             }
@@ -341,7 +442,8 @@
                   ${row2('No. Económico',   v.numero_economico, 'fa-hashtag')}
                   ${row2('Placas',          v.placas, 'fa-car-side')}
                   ${row2('Área',            v.area_responsable, 'fa-building')}
-                  ${v.responsable_nombre ? row2('Responsable', v.responsable_nombre, 'fa-user') : ''}
+                  ${row2('Responsable',        v.responsable_nombre, 'fa-user')}
+                  ${row2('Número de Resguardo', v.numero_resguardo, 'fa-file-signature')}
                 </tbody>
               </table>
             </div>
@@ -422,7 +524,8 @@
         const fields = ['codigo_aifa','tipo_vehiculo','marca','submarca','anio_modelo','color',
                         'numero_serie','numero_economico','placas','combustible','transmision',
                         'capacidad_pasajeros','aseguradora','poliza_numero','poliza_descripcion',
-                        'vigencia_seguro','estado','area_responsable','responsable_nombre','notas'];
+                        'vigencia_seguro','estado','area_responsable','responsable_nombre',
+                        'numero_resguardo','notas'];
         fields.forEach(f => {
             const el = document.getElementById(`vf-${f}`);
             if (el) el.value = v ? (v[f] ?? '') : '';
@@ -623,6 +726,9 @@
         openFormModal,
         saveVehiculo,
         deleteVehiculo,
+        editCell,
+        saveCell,
+        cancelCell,
         confirmDelete,
         setView,
         applyFilters,
