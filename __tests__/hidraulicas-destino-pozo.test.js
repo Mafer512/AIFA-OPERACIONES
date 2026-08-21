@@ -40,7 +40,7 @@ function montarDom() {
         <div id="hidra-cap-daygrid"></div><div id="hidra-capday-tip"></div>
         <span id="hidra-cap-quarter-badge"></span>
         <span id="hidra-cap-daytitle"></span><span id="hidra-cap-month-summary"></span>
-        <span id="hidra-cap-status"></span>
+        <span id="hidra-cap-status"></span><span id="hidra-auto-period" class="d-none"></span>
         <table><tbody id="hidra-cap-pozos-tbody"></tbody></table>
         <span id="hidra-m-extraccion"></span><span id="hidra-m-distribucion"></span>
         <span id="hidra-m-aifa"></span><span id="hidra-m-cdmilitar"></span>
@@ -137,6 +137,33 @@ describe('Hidráulicas · destino del agua por pozo', () => {
         escrituras = [];
         instancias = [];
         mod = await arrancar(escrituras, instancias);
+    });
+
+    test('si el mes en curso está vacío, abre en el último con información', async () => {
+        // Reloj en diciembre: sin captura. El último mes con volumen extraído
+        // es agosto (noviembre existe pero está todo en ceros).
+        jest.useFakeTimers().setSystemTime(new Date(2026, 11, 15));
+        try {
+            const otro = await arrancar([], []);
+            expect([otro.state.selectedYear, otro.state.selectedMonth, otro.state.selectedDay])
+                .toEqual([2026, 8, 0]);
+            const aviso = document.getElementById('hidra-auto-period');
+            expect(aviso.classList.contains('d-none')).toBe(false);
+            expect(aviso.textContent).toBe('Mostrando Agosto 2026, el último mes con información.');
+            // Y el panel ya trae números en vez de ceros.
+            expect(document.getElementById('hidra-m-extraccion').textContent).toBe('60');
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('si el mes en curso sí tiene datos, no se mueve ni avisa', () => {
+        // El reloj del entorno cae en agosto, que sí tiene captura: el tablero
+        // debe respetar el mes de hoy en lugar de saltar a otro.
+        const hoy = new Date();
+        expect([mod.state.selectedYear, mod.state.selectedMonth])
+            .toEqual([hoy.getFullYear(), hoy.getMonth() + 1]);
+        expect(document.getElementById('hidra-auto-period').classList.contains('d-none')).toBe(true);
     });
 
     test('la asignación de un mes sigue vigente en los meses siguientes', () => {
