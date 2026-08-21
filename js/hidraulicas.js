@@ -77,6 +77,7 @@
     };
     let initDone = false;
     let bound = false;
+    let periodoInicialAplicado = false;
 
     // ─── Helpers ───────────────────────────────────────────────
     const $ = (id) => document.getElementById(id);
@@ -468,6 +469,41 @@
         const dim = (Number(month) >= 1 && Number(month) <= 12) ? daysInMonth(year || new Date().getFullYear(), month) : 0;
         sel.value = String(Math.min(Number(prev) || 0, dim));
     }
+    /** Último (año, mes) con extracción capturada. null si no hay nada. */
+    function ultimoPeriodoConDatos() {
+        let mejor = null;
+        for (const r of state.daily) {
+            const anio = Number(r.anio), mes = Number(r.mes);
+            if (!Number.isFinite(anio) || !(mes >= 1 && mes <= 12)) continue;
+            if (!(Number(r.volumen_m3) > 0)) continue;
+            const ord = anio * 12 + (mes - 1);
+            if (!mejor || ord > mejor.ord) mejor = { ord, anio, mes };
+        }
+        return mejor;
+    }
+
+    /**
+     * El dashboard abría en el mes en curso aunque estuviera vacío y se veía
+     * todo en ceros. Si el mes de hoy no tiene extracción, arranca en el
+     * último que sí la tenga. Sólo la primera carga: después manda el filtro
+     * que elija el usuario.
+     */
+    function aplicarPeriodoInicial() {
+        if (periodoInicialAplicado) return;
+        periodoInicialAplicado = true;
+        if (extractionTotalForPeriod(state.selectedYear, state.selectedMonth, 0, '') > 0) return;
+        const ultimo = ultimoPeriodoConDatos();
+        if (!ultimo) return;
+        state.selectedYear = ultimo.anio;
+        state.selectedMonth = ultimo.mes;
+        state.selectedDay = 0;
+        const aviso = $('hidra-auto-period');
+        if (aviso) {
+            aviso.textContent = `Mostrando ${MES_NOMBRES_LARGOS[ultimo.mes - 1]} ${ultimo.anio}, el último mes con información.`;
+            aviso.classList.remove('d-none');
+        }
+    }
+
     function refreshSelects() {
         populateYearSelect('hidra-filter-year', state.selectedYear);
         populateMonthSelect('hidra-filter-month', state.selectedMonth, true);
@@ -1691,6 +1727,9 @@
             populateFilterDaySelect(state.selectedYear, state.selectedMonth, state.selectedDay);
             renderDashboard();
         });
+        const ocultarAvisoPeriodo = () => $('hidra-auto-period')?.classList.add('d-none');
+        $('hidra-filter-year')?.addEventListener('change', ocultarAvisoPeriodo);
+        $('hidra-filter-month')?.addEventListener('change', ocultarAvisoPeriodo);
         $('hidra-filter-month')?.addEventListener('change', () => {
             state.selectedMonth = Number($('hidra-filter-month').value) || 0;
             // al cambiar el mes, reconstruir días y resetear a "Todo el mes"
@@ -1758,6 +1797,7 @@
             initDone = true;
         }
         await loadAll(false);
+        aplicarPeriodoInicial();
         refreshSelects();
         updateCapQuarterBadge();
         renderDashboard();
