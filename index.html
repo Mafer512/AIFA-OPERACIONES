@@ -124,7 +124,7 @@
     <link rel="dns-prefetch" href="//code.jquery.com">
     <link rel="dns-prefetch" href="//cdn.datatables.net">
     <link media="print" onload="this.media='all'"
-        href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="style.css?v=20260804-airline-stats-v2">
@@ -1899,6 +1899,9 @@ FF
                                             </a>
                                             <a class="menu-item si-link si-link--l2" href="#" data-section="conciliacion">
                                                 <i class="fas fa-tasks si-ico"></i><span class="si-txt">Conciliación</span>
+                                            </a>
+                                            <a class="menu-item si-link si-link--l2" href="#" data-section="conciliacion" data-sub-tab="tab-conci-estadistica">
+                                                <i class="fas fa-chart-line si-ico"></i><span class="si-txt">Estadística</span>
                                             </a>
                                             <a class="menu-item si-link si-link--l2" href="#" data-section="portal-digitalizacion">
                                                 <i class="fas fa-cloud-upload-alt si-ico"></i><span class="si-txt">Portal Digital</span>
@@ -21265,6 +21268,11 @@ FF
                                                 <i class="fas fa-file-alt me-2 text-success"></i>Manifiestos
                                             </button>
                                         </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link fw-semibold" id="tab-conci-estadistica" data-bs-toggle="tab" data-bs-target="#pane-conci-estadistica" type="button" role="tab">
+                                                <i class="fas fa-chart-line me-2 text-info"></i>Estadística
+                                            </button>
+                                        </li>
                                         <li class="nav-item ms-auto d-flex align-items-center conci-tabs-menu-item" role="presentation">
                                             <button class="btn btn-sm btn-primary conci-toolbar-menu-btn" id="btn-conci-main-menu" type="button"
                                                 onclick="window.conciReturnToMainMenu &amp;&amp; window.conciReturnToMainMenu()"
@@ -22029,6 +22037,89 @@ FF
 
                                         </div>
                                     </div><!-- /pane-conci-comercial -->
+
+                                    <!--  Tab: Estadística  -->
+                                    <div class="tab-pane fade p-4" id="pane-conci-estadistica" role="tabpanel">
+
+                                        <div class="d-flex align-items-center gap-2 flex-wrap mb-3" id="informe-est-toolbar">
+                                            <span class="fw-semibold text-primary d-flex align-items-center gap-2" style="font-size:.85rem;white-space:nowrap;">
+                                                <i class="fas fa-chart-line"></i>Informe Estadístico
+                                            </span>
+                                            <select class="form-select form-select-sm" id="informe-est-anio" style="width:auto" title="Año del desglose mensual y participación por aerolínea"></select>
+                                            <span class="text-muted" style="font-size:.8rem;">vs</span>
+                                            <select class="form-select form-select-sm" id="informe-est-anio-comparar" style="width:auto" title="Comparar contra otro año"></select>
+                                            <span class="text-muted d-none" id="informe-est-cargando" style="font-size:.78rem;white-space:nowrap;"></span>
+                                            <span class="text-muted d-none" id="informe-est-frescura" style="font-size:.75rem;white-space:nowrap;"></span>
+                                            <span class="flex-grow-1"></span>
+                                            <span id="informe-est-visto-bueno-badge" class="badge rounded-pill bg-light text-dark border"></span>
+                                            <button class="btn btn-sm btn-outline-secondary" id="informe-est-btn-refresh" title="Actualizar">
+                                                <i class="fas fa-sync-alt me-1"></i>Actualizar
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-success" id="informe-est-btn-excel" title="Descargar Excel">
+                                                <i class="fas fa-file-excel me-1"></i>Excel
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-secondary" id="informe-est-btn-csv" title="Descargar CSV">
+                                                <i class="fas fa-file-csv me-1"></i>CSV
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-primary" id="informe-est-btn-resumen" title="Descargar el Resumen Estadístico (documento aparte del Informe)">
+                                                <i class="fas fa-file-pdf me-1"></i>Resumen Estadístico
+                                            </button>
+                                            <button class="btn btn-sm btn-success d-none" id="informe-est-btn-visto-bueno" title="Dar visto bueno y generar PDF">
+                                                <i class="fas fa-stamp me-1"></i>Dar visto bueno y generar PDF
+                                            </button>
+                                        </div>
+
+                                        <div class="alert alert-danger d-none" id="informe-est-error"></div>
+                                        <div class="alert alert-warning d-none" id="informe-est-alertas"></div>
+
+                                        <div id="informe-est-root">
+                                            <div class="airline-stats-summary mb-2" id="informe-est-acumulado"></div>
+                                            <div class="airline-stats-summary mb-2" id="informe-est-dia"></div>
+                                            <div class="airline-stats-summary mb-4" id="informe-est-proyeccion"></div>
+
+                                            <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-chart-bar me-2"></i>Operaciones por mes</h6>
+                                            <div class="mb-4" style="position:relative;height:280px;">
+                                                <canvas id="informe-est-chart-mensual"></canvas>
+                                            </div>
+
+                                            <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-table me-2"></i>Desglose mensual — Comercial / General / Carga</h6>
+                                            <div class="table-responsive mb-4">
+                                                <table class="table table-sm table-bordered align-middle mb-0" id="informe-est-tabla-mensual">
+                                                    <thead></thead>
+                                                    <tbody></tbody>
+                                                </table>
+                                            </div>
+
+                                            <div id="informe-est-comparativa" class="d-none">
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-scale-balanced me-2"></i>Comparativa año contra año</h6>
+                                                <div class="table-responsive mb-4">
+                                                    <table class="table table-sm table-bordered align-middle mb-0" id="informe-est-tabla-comparativa">
+                                                        <thead></thead>
+                                                        <tbody></tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+
+                                            <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-plane me-2"></i>Participación por aerolínea</h6>
+                                            <div class="table-responsive mb-4">
+                                                <table class="table table-sm table-bordered align-middle mb-0" id="informe-est-tabla-aerolinea">
+                                                    <thead></thead>
+                                                    <tbody></tbody>
+                                                </table>
+                                            </div>
+
+                                            <h6 class="fw-semibold text-primary mt-4 mb-2 d-flex align-items-center gap-2">
+                                                <i class="fas fa-percentage me-2"></i>Factor de ocupación (últimos 15 días)
+                                                <small class="text-muted fw-normal" id="informe-est-ocupacion-promedio"></small>
+                                            </h6>
+                                            <div class="table-responsive mb-2">
+                                                <table class="table table-sm table-bordered align-middle mb-0" id="informe-est-tabla-ocupacion">
+                                                    <thead></thead>
+                                                    <tbody></tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div><!-- /pane-conci-estadistica -->
 
                                     </div><!-- /tab-content -->
 
@@ -37643,6 +37734,10 @@ FF
 <script src="js/conci-manifiestos-table.js?v=1" defer></script>
 <script src="js/conci-manifiestos-captura.js?v=20260727-v1" defer></script>
 <script src="js/conci-manifiestos-historial.js?v=20260727-insert-chips" defer></script>
+<!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
+<script src="js/estadistico-informe-core.js?v=20260821-v6" defer></script>
+<script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>
+<script src="js/estadistico-informe.js?v=20260821-v6" defer></script>
 <!-- Navegación inline del picker de fecha en Itinerario -->
 <script>
 (function () {
