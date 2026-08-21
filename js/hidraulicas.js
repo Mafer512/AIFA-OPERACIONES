@@ -8,7 +8,12 @@
  *     (pozo, cd_militar_m3, aifa_m3, volumen_m3=total). Los totales
  *     mensuales / trimestrales / anuales se calculan sumando los días;
  *     ya NO se usa la tabla ancha public."Extracción_agua".
- *   - Demanda AIFA / Cd. Militar = suma por pozo de aifa_m3 / cd_militar_m3.
+ *   - Demanda AIFA / Cd. Militar = volumen de cada pozo asignado a su
+ *     destino en "hidra_pozo_destino". Cada fila de esa tabla rige DESDE
+ *     su (anio, mes) en adelante, hasta que otra mas reciente la reemplace,
+ *     asi que se configura una vez y los meses siguientes heredan solos.
+ *     Si una fila diaria trae desglose historico en aifa_m3/cd_militar_m3
+ *     se respeta ese dato; el pozo sin destino vigente cuenta "sin asignar".
  *   - Distribución (PAAP) diaria: "Suministro_paap_diario"
  *     (primaria_m3, secundaria_m3).
  *   - Tratamiento PTAR diario: "Tratamiento_ptar_diario" (a1_m3, a2_m3, a3_m3).
@@ -23,13 +28,18 @@
     const TBL_DIARIA  = 'Extracción_agua_diaria';
     const TBL_PAAP    = 'Suministro_paap_diario';
     const TBL_PTAR    = 'Tratamiento_ptar_diario';
+    const TBL_DESTINO = 'hidra_pozo_destino';
+
+    const DEST_AIFA   = 'AIFA';
+    const DEST_CDMIL  = 'CD_MILITAR';
+    const DEST_LABEL  = { [DEST_AIFA]: 'AIFA', [DEST_CDMIL]: 'Cd. Militar' };
 
     const POZOS_FIJOS = ['Pozo 1', 'Pozo 2', 'Pozo 3', 'Pozo 4', 'Pozo 5',
                          'Pozo 6', 'Pozo 7', 'Pozo 8', 'Pozo 10'];
     const POZOS_EXCLUIDOS = new Set(['Pozo 9']);
     const TRIMESTRES  = ['Q1', 'Q2', 'Q3', 'Q4'];
     const QUARTER_LABELS = ['Ene-Mar', 'Abr-Jun', 'Jul-Sep', 'Oct-Dic'];
-    const DEMANDA_COLORS = { aifa: '#e07a3c', cdmilitar: '#1d4ed8' };
+    const DEMANDA_COLORS = { aifa: '#e07a3c', cdmilitar: '#1d4ed8', sinAsignar: '#cbd5e1' };
 
     const MES_NOMBRES_CORTOS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
     const MES_NOMBRES_LARGOS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
@@ -46,12 +56,18 @@
         paap: [], paapLoaded: false,
         // tratamiento PTAR diario
         ptar: [], ptarLoaded: false,
+        // destino del agua por pozo (vigencia mensual)
+        destinos: [], destinosLoaded: false,
 
         // editor de captura por DÍA
         capYear: null, capMonth: null, capDay: null,
         capPozos: [],            // [{pozo, cd, aifa, _id, _orig...}]
         capPaap: null,           // {primaria, secundaria, _id, _orig...}
         capPtar: null,           // {a1, a2, a3, _id, _orig...}
+
+        // editor de destino por pozo (MENSUAL, no diario)
+        capDest: [],             // [{pozo, destino, _orig, _id, herencia, vol}]
+        capDestYear: null, capDestMonth: null,
     };
 
     const charts = {
@@ -216,32 +232,102 @@
             state.ptarLoaded = true;
         }
     }
+    async function loadDestinos(force) {
+        if (state.destinosLoaded && !force) return;
+        try {
+            const client = await getClient();
+            if (!client) throw new Error('Supabase no disponible');
+            const { data, error } = await client
+                .from(TBL_DESTINO)
+                .select('id,anio,mes,pozo,destino');
+            if (error) throw error;
+            state.destinos = data || [];
+            state.destinosLoaded = true;
+        } catch (err) {
+            console.error('[hidraulicas] loadDestinos error:', err);
+            state.destinos = [];
+            state.destinosLoaded = true;
+        }
+        invalidateDestIndex();
+    }
     async function loadAux(force) {
-        await Promise.all([loadDaily(force), loadPaap(force), loadPtar(force)]);
+        await Promise.all([loadDaily(force), loadPaap(force), loadPtar(force), loadDestinos(force)]);
+    }
+
+    // ─── Destino del agua por pozo (vigencia mensual) ──────────
+    //   Una fila de hidra_pozo_destino significa "DESDE (anio, mes) este pozo
+    //   surte a X". Sigue vigente hasta que otra fila más reciente la
+    //   reemplace, así que el usuario configura una vez y los meses
+    //   siguientes heredan solos.
+    let destIndex = null;     // pozo -> [{ord, anio, mes, destino}] ascendente
+    let destMemo  = null;     // 'anio-mes-pozo' -> hit | null
+    const monthOrd = (anio, mes) => Number(anio) * 12 + (Number(mes) - 1);
+
+    function invalidateDestIndex() { destIndex = null; destMemo = null; }
+
+    function buildDestIndex() {
+        destIndex = new Map();
+        destMemo = new Map();
+        for (const r of state.destinos) {
+            const pozo = String(r.pozo || '').trim();
+            const anio = Number(r.anio), mes = Number(r.mes);
+            if (!pozo || !Number.isFinite(anio) || !(mes >= 1 && mes <= 12)) continue;
+            if (r.destino !== DEST_AIFA && r.destino !== DEST_CDMIL) continue;
+            if (!destIndex.has(pozo)) destIndex.set(pozo, []);
+            destIndex.get(pozo).push({ ord: monthOrd(anio, mes), anio, mes, destino: r.destino });
+        }
+        for (const arr of destIndex.values()) arr.sort((a, b) => a.ord - b.ord);
+    }
+
+    /** Asignación vigente en (anio, mes) para un pozo, o null si nunca se asignó. */
+    function destinoVigente(anio, mes, pozo) {
+        if (!destIndex) buildDestIndex();
+        const key = String(pozo || '').trim();
+        if (!key) return null;
+        const memoKey = anio + '-' + mes + '-' + key;
+        if (destMemo.has(memoKey)) return destMemo.get(memoKey);
+        const arr = destIndex.get(key);
+        let hit = null;
+        if (arr) {
+            const ord = monthOrd(anio, mes);
+            for (const item of arr) { if (item.ord <= ord) hit = item; else break; }
+        }
+        destMemo.set(memoKey, hit);
+        return hit;
     }
 
     // ─── Demanda (AIFA / Cd. Militar) desde el detalle por pozo ──
-    /** Totales del mes para demanda AIFA / Cd. Militar (suma por pozo). */
-    function demandMonthTotals(year, month) {
-        const out = { aifa: 0, cdmil: 0 };
-        for (const r of state.daily) {
-            if (Number(r.anio) !== Number(year) || Number(r.mes) !== Number(month)) continue;
-            out.aifa  += Number(r.aifa_m3) || 0;
-            out.cdmil += Number(r.cd_militar_m3) || 0;
-        }
-        return out;
+    /**
+     * Reparte el volumen de una fila diaria entre los dos destinos.
+     * Si la fila trae desglose histórico capturado se respeta; si no, todo el
+     * volumen va al destino vigente del pozo. Sin destino vigente → "sin
+     * asignar", que nunca se pierde: aifa + cdmil + sinAsignar = extracción.
+     */
+    function splitDailyRow(r) {
+        const legacyAifa  = Number(r.aifa_m3) || 0;
+        const legacyCdmil = Number(r.cd_militar_m3) || 0;
+        if (legacyAifa || legacyCdmil) return { aifa: legacyAifa, cdmil: legacyCdmil, sin: 0 };
+        const vol = Number(r.volumen_m3) || 0;
+        const hit = destinoVigente(r.anio, r.mes, r.pozo);
+        if (hit && hit.destino === DEST_AIFA)  return { aifa: vol, cdmil: 0, sin: 0 };
+        if (hit && hit.destino === DEST_CDMIL) return { aifa: 0, cdmil: vol, sin: 0 };
+        return { aifa: 0, cdmil: 0, sin: vol };
     }
-    function dailyMonthlyField(year, field) {
+
+    /** Serie de 12 meses del año con el volumen que fue a un destino. */
+    function demandMonthlyByDestino(year, destino) {
         const arr = new Array(12).fill(0);
         for (const r of state.daily) {
             if (Number(r.anio) !== Number(year)) continue;
             const m = Number(r.mes);
-            if (m >= 1 && m <= 12) arr[m - 1] += Number(r[field]) || 0;
+            if (!(m >= 1 && m <= 12)) continue;
+            const part = splitDailyRow(r);
+            arr[m - 1] += destino === DEST_AIFA ? part.aifa : part.cdmil;
         }
         return arr;
     }
-    const aifaMonthly  = (y) => dailyMonthlyField(y, 'aifa_m3');
-    const cdmilMonthly = (y) => dailyMonthlyField(y, 'cd_militar_m3');
+    const aifaMonthly  = (y) => demandMonthlyByDestino(y, DEST_AIFA);
+    const cdmilMonthly = (y) => demandMonthlyByDestino(y, DEST_CDMIL);
 
     // ─── Distribución (PAAP = primaria + secundaria) ──────────
     function distribMonthly(year) {
@@ -341,8 +427,12 @@
     // ─── Selects ───────────────────────────────────────────────
     function populateYearSelect(id, value) {
         const sel = $(id); if (!sel) return;
-        const years = state.years.length ? state.years : [new Date().getFullYear()];
         const prev = value !== undefined ? value : sel.value;
+        const set = new Set(state.years.length ? state.years : [new Date().getFullYear()]);
+        // El año pedido siempre entra: si no, no habría forma de capturar un
+        // año que aún no tiene un solo registro.
+        if (Number.isFinite(Number(prev))) set.add(Number(prev));
+        const years = [...set].sort((a, b) => b - a);
         sel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
         if (prev && years.includes(Number(prev))) sel.value = String(prev);
     }
@@ -378,16 +468,6 @@
         const dim = (Number(month) >= 1 && Number(month) <= 12) ? daysInMonth(year || new Date().getFullYear(), month) : 0;
         sel.value = String(Math.min(Number(prev) || 0, dim));
     }
-    function populateDaySelect(id, year, month, value) {
-        const sel = $(id); if (!sel) return;
-        const dim = daysInMonth(year || new Date().getFullYear(), month || (new Date().getMonth() + 1));
-        const prev = value !== undefined ? value : (Number(sel.value) || state.capDay || new Date().getDate());
-        let html = '';
-        for (let d = 1; d <= dim; d++) html += `<option value="${d}">${d}</option>`;
-        sel.innerHTML = html;
-        sel.value = String(Math.min(Number(prev) || 1, dim));
-    }
-
     function refreshSelects() {
         populateYearSelect('hidra-filter-year', state.selectedYear);
         populateMonthSelect('hidra-filter-month', state.selectedMonth, true);
@@ -395,7 +475,7 @@
         populatePozoSelect('hidra-filter-pozo', true);
         populateYearSelect('hidra-cap-year', state.capYear);
         populateMonthSelect('hidra-cap-month', state.capMonth);
-        populateDaySelect('hidra-cap-day', state.capYear, state.capMonth, state.capDay);
+        renderDayGrid();
     }
 
     // ─── Charts: utilidades ────────────────────────────────────
@@ -408,7 +488,12 @@
         return new Chart(ctx.getContext('2d'), {
             type: 'doughnut',
             data: { labels: ['Sin datos'], datasets: [{ data: [1], backgroundColor: ['#e2e8f0'], borderWidth: 0 }] },
-            options: { responsive: true, maintainAspectRatio: false, cutout: '55%', plugins: { legend: { display: false }, tooltip: { enabled: false } } },
+            options: {
+                responsive: true, maintainAspectRatio: false, cutout: '55%',
+                // Sin esto, ChartDataLabels (registrado global por otro módulo)
+                // pinta el "1" de la rebanada ficticia como si fuera un dato.
+                plugins: { legend: { display: false }, tooltip: { enabled: false }, datalabels: { display: false } },
+            },
         });
     }
 
@@ -430,11 +515,13 @@
         return t;
     }
     function demandTotalsForPeriod(y, m, d) {
-        const out = { aifa: 0, cdmil: 0 };
+        const out = { aifa: 0, cdmil: 0, sinAsignar: 0 };
         for (const r of state.daily) {
             if (!matchPeriod(r, y, m, d)) continue;
-            out.aifa  += Number(r.aifa_m3) || 0;
-            out.cdmil += Number(r.cd_militar_m3) || 0;
+            const part = splitDailyRow(r);
+            out.aifa       += part.aifa;
+            out.cdmil      += part.cdmil;
+            out.sinAsignar += part.sin;
         }
         return out;
     }
@@ -485,16 +572,25 @@
         const extr = extractionTotalForPeriod(y, m, d, state.selectedPozo);
         const dem  = demandTotalsForPeriod(y, m, d);
         const dist = distribTotalForPeriod(y, m, d);
-        const aifa = dem.aifa;
-        const cdm  = dem.cdmil;
-
         setText('hidra-m-extraccion',  fmt(extr));
         setText('hidra-m-distribucion', fmt(dist));
-        setText('hidra-m-aifa',        fmt(aifa));
-        setText('hidra-m-cdmilitar',   fmt(cdm));
+        setText('hidra-m-aifa',        fmt(dem.aifa));
+        setText('hidra-m-cdmilitar',   fmt(dem.cdmil));
 
         renderPozoMonthChart(y, m, d);
-        renderDemandaMonthChart(aifa, cdm);
+        renderDemandaMonthChart(dem);
+        renderDemandaHint(dem);
+    }
+
+    /** Avisa cuándo hay volumen que no suma a ninguna demanda por falta de destino. */
+    function renderDemandaHint(dem) {
+        const hint = $('hidra-demanda-hint');
+        if (!hint) return;
+        if (!dem.sinAsignar) { hint.classList.add('d-none'); hint.textContent = ''; return; }
+        hint.classList.remove('d-none');
+        hint.innerHTML = '<i class="fas fa-triangle-exclamation me-1"></i>' +
+            `<strong>${fmt(dem.sinAsignar)} m³</strong> sin destino asignado. Márcalos en ` +
+            '<strong>Captura de datos → Destino del agua por pozo</strong> para que se repartan entre AIFA y Cd. Militar.';
     }
 
     function renderPozoMonthChart(year, month, day) {
@@ -529,18 +625,25 @@
         });
     }
 
-    function renderDemandaMonthChart(aifa, cdm) {
+    function renderDemandaMonthChart(dem) {
         const ctx = $('hidra-chart-demanda-month'); if (!ctx || typeof Chart === 'undefined') return;
         destroyChart('demandaMonth');
-        const total = (aifa + cdm) || 0;
+        // "Sin asignar" se grafica en gris: el volumen existe aunque nadie le
+        // haya puesto destino todavía, y así el total del pastel = extracción.
+        const partes = [
+            { label: 'AIFA',        valor: dem.aifa,       color: DEMANDA_COLORS.aifa },
+            { label: 'Cd. Militar', valor: dem.cdmil,      color: DEMANDA_COLORS.cdmilitar },
+            { label: 'Sin asignar', valor: dem.sinAsignar, color: DEMANDA_COLORS.sinAsignar },
+        ].filter(p => p.valor > 0);
+        const total = partes.reduce((s, p) => s + p.valor, 0);
         if (!total) { charts.demandaMonth = emptyDoughnut(ctx); return; }
         charts.demandaMonth = new Chart(ctx.getContext('2d'), {
             type: 'pie',
             data: {
-                labels: ['AIFA', 'Cd. Militar'],
+                labels: partes.map(p => p.label),
                 datasets: [{
-                    data: [aifa, cdm],
-                    backgroundColor: [DEMANDA_COLORS.aifa, DEMANDA_COLORS.cdmilitar],
+                    data: partes.map(p => p.valor),
+                    backgroundColor: partes.map(p => p.color),
                     borderColor: '#fff', borderWidth: 2,
                 }],
             },
@@ -550,7 +653,8 @@
                     legend: { position: 'right', labels: { boxWidth: 12, font: { size: 12 } } },
                     tooltip: { callbacks: { label: c => ` ${c.label}: ${fmt(c.parsed)} m³ (${fmtPct(c.parsed / total * 100)})` } },
                     datalabels: hasDL() ? {
-                        color: '#fff', font: { weight: '700', size: 14 },
+                        color: c => (partes[c.dataIndex] || {}).label === 'Sin asignar' ? '#475569' : '#fff',
+                        font: { weight: '700', size: 14 },
                         formatter: v => fmtPct(v / total * 100),
                     } : undefined,
                 },
@@ -847,6 +951,8 @@
     }
 
     function renderDashboard() {
+        renderDayGrid();
+        renderDestPanel();
         renderMonthlyPanel();
         renderAnnualPanel();
         renderQuarterlyKpis();
@@ -855,6 +961,328 @@
         renderPozosChart();
         renderYoyChart();
         renderTotalsTables();
+    }
+
+    // ─── Editor MENSUAL: destino del agua por pozo ─────────────
+    const POZOS_DESTINO = POZOS_FIJOS.filter(p => !POZOS_EXCLUIDOS.has(p));
+    const destEfectivo = r => r.destino || (r.herencia ? r.herencia.destino : '');
+    const mesCorto = (anio, mes) => `${MES_NOMBRES_CORTOS[mes - 1]} ${anio}`;
+
+    /** Arma el estado del panel para el año/mes de la pestaña de captura. */
+    function buildCapDest() {
+        const y = Number(state.capYear), m = Number(state.capMonth);
+        const explicitas = new Map();
+        for (const r of state.destinos) {
+            if (Number(r.anio) === y && Number(r.mes) === m) explicitas.set(String(r.pozo || '').trim(), r);
+        }
+        const vols = new Map();
+        for (const r of state.daily) {
+            if (Number(r.anio) !== y || Number(r.mes) !== m) continue;
+            const p = String(r.pozo || '').trim();
+            vols.set(p, (vols.get(p) || 0) + (Number(r.volumen_m3) || 0));
+        }
+        state.capDestYear = y;
+        state.capDestMonth = m;
+        state.capDest = POZOS_DESTINO.map(pozo => {
+            const fila = explicitas.get(pozo) || null;
+            return {
+                pozo,
+                destino: fila ? fila.destino : '',
+                _orig:   fila ? fila.destino : '',
+                _id:     fila ? fila.id : null,
+                // Lo vigente en el mes anterior: monthOrd ya cruza el fin de año.
+                herencia: destinoVigente(y, m - 1, pozo),
+                vol: vols.get(pozo) || 0,
+            };
+        });
+    }
+
+    function renderDestTotals() {
+        const host = $('hidra-dest-totals');
+        if (!host) return;
+        const acc = { [DEST_AIFA]: 0, [DEST_CDMIL]: 0, sin: 0 };
+        let pozosSinAsignar = 0;
+        for (const r of state.capDest) {
+            const dest = destEfectivo(r);
+            if (dest) acc[dest] += r.vol;
+            else { acc.sin += r.vol; pozosSinAsignar += 1; }
+        }
+        const chip = (color, label, valor, extra) =>
+            `<div class="hidra-dest-total"><span class="hidra-dest-dot" style="background:${color}"></span>` +
+            `<span>${label}</span><b>${fmt(valor)}</b><span>m³</span>${extra || ''}</div>`;
+        host.innerHTML =
+            chip(DEMANDA_COLORS.aifa, 'AIFA', acc[DEST_AIFA]) +
+            chip(DEMANDA_COLORS.cdmilitar, 'Cd. Militar', acc[DEST_CDMIL]) +
+            (pozosSinAsignar
+                ? chip(DEMANDA_COLORS.sinAsignar, 'Sin asignar', acc.sin,
+                    ` <span class="fw-bold" style="color:#b45309;">(${pozosSinAsignar} pozo${pozosSinAsignar === 1 ? '' : 's'})</span>`)
+                : '');
+    }
+
+    function renderDestGrid() {
+        const host = $('hidra-dest-grid');
+        if (!host) return;
+        const puedeEditar = canCaptureHidra();
+        setText('hidra-dest-period', `${MES_NOMBRES_LARGOS[(Number(state.capMonth) || 1) - 1]} ${state.capYear}`);
+        host.innerHTML = state.capDest.map(r => {
+            const dest = destEfectivo(r);
+            const sucio = r.destino !== r._orig;
+            let nota, warn = false;
+            if (r.destino && r.herencia && r.destino !== r.herencia.destino) {
+                nota = `Cambia aquí · antes ${DEST_LABEL[r.herencia.destino]}`;
+            } else if (r.destino) {
+                nota = 'Fijado en este mes';
+            } else if (r.herencia) {
+                nota = `Heredado de ${mesCorto(r.herencia.anio, r.herencia.mes)}`;
+            } else {
+                nota = 'Sin asignar · no suma a ninguna demanda';
+                warn = true;
+            }
+            const deshacer = (r.destino && r.herencia && puedeEditar)
+                ? ` <button type="button" class="hidra-dest-undo" data-dest-undo="${escapeHtml(r.pozo)}">usar heredado</button>`
+                : '';
+            const boton = (valor, etiqueta) =>
+                `<button type="button" data-dest-pozo="${escapeHtml(r.pozo)}" data-destino="${valor}"` +
+                `${dest === valor ? ' class="active"' : ''}${puedeEditar ? '' : ' disabled'}>${etiqueta}</button>`;
+            return `<div class="hidra-dest-card ${dest ? 'is-' + dest : ''}${sucio ? ' is-dirty' : ''}">
+                <div class="hidra-dest-head">
+                    <span class="hidra-dest-pozo">${escapeHtml(r.pozo)}</span>
+                    <span class="hidra-dest-vol">${fmt(r.vol)} m³</span>
+                </div>
+                <div class="hidra-dest-seg">${boton(DEST_AIFA, 'AIFA')}${boton(DEST_CDMIL, 'CD. MILITAR')}</div>
+                <div class="hidra-dest-note${warn ? ' is-warn' : ''}">${nota}${deshacer}</div>
+            </div>`;
+        }).join('');
+        renderDestTotals();
+    }
+
+    function renderDestPanel() {
+        if (!$('hidra-dest-grid')) return;
+        const pendientes = state.capDest.some(r => r.destino !== r._orig);
+        const mismoPeriodo = state.capDest.length
+            && state.capDestYear === Number(state.capYear)
+            && state.capDestMonth === Number(state.capMonth);
+        // Sólo se rearma desde los datos si no hay nada que el usuario pueda
+        // perder: con cambios pendientes del mismo mes se conserva lo tecleado.
+        if (!pendientes || !mismoPeriodo) buildCapDest();
+        renderDestGrid();
+        markDestDirty();
+        const save = $('hidra-dest-save');
+        if (save) save.disabled = !canCaptureHidra();
+    }
+
+    function markDestDirty() {
+        const status = $('hidra-dest-status');
+        if (!status) return;
+        const pend = state.capDest.filter(r => r.destino !== r._orig).length;
+        status.textContent = pend ? `${pend} cambio${pend === 1 ? '' : 's'} sin guardar` : '';
+        status.className = pend ? 'small fw-bold' : 'small text-muted';
+        if (pend) status.style.color = '#b45309'; else status.style.color = '';
+    }
+
+    /** Un clic sólo cambia el estado local; se persiste con "Guardar destinos". */
+    function onDestClick(ev) {
+        if (!canCaptureHidra()) return;
+        const undo = ev.target.closest('[data-dest-undo]');
+        if (undo) {
+            const row = state.capDest.find(r => r.pozo === undo.dataset.destUndo);
+            if (row) { row.destino = ''; renderDestGrid(); markDestDirty(); }
+            return;
+        }
+        const btn = ev.target.closest('[data-dest-pozo]');
+        if (!btn) return;
+        const row = state.capDest.find(r => r.pozo === btn.dataset.destPozo);
+        if (!row) return;
+        // Volver a picar el destino ya fijado en el mes lo suelta al heredado.
+        row.destino = (row.destino === btn.dataset.destino) ? '' : btn.dataset.destino;
+        renderDestGrid();
+        markDestDirty();
+    }
+
+    async function saveDestPanel() {
+        const status = $('hidra-dest-status');
+        const pinta = (texto, color) => {
+            if (!status) return;
+            status.textContent = texto;
+            status.className = color ? 'small fw-bold' : 'small text-muted';
+            status.style.color = color || '';
+        };
+        if (!canCaptureHidra()) { pinta('Modo solo lectura: no puedes capturar en Hidráulicas.', '#b45309'); return; }
+        const y = Number(state.capYear), m = Number(state.capMonth);
+        const upsert = [], borrar = [];
+        for (const r of state.capDest) {
+            if (r.destino === r._orig) continue;
+            if (!r.destino) { if (r._id) borrar.push(r._id); }
+            else upsert.push({ anio: y, mes: m, pozo: r.pozo, destino: r.destino });
+        }
+        if (!upsert.length && !borrar.length) { pinta('Sin cambios.', ''); return; }
+        pinta('Guardando…', '');
+        try {
+            const client = await getClient();
+            if (!client) throw new Error('Supabase no disponible');
+            if (borrar.length) {
+                const { error } = await client.from(TBL_DESTINO).delete().in('id', borrar);
+                if (error) throw error;
+            }
+            if (upsert.length) {
+                const { error } = await client.from(TBL_DESTINO).upsert(upsert, { onConflict: 'anio,mes,pozo' });
+                if (error) throw error;
+            }
+            state.destinosLoaded = false;
+            await loadDestinos(true);
+            buildCapDest();
+            renderDashboard();
+            pinta(`Guardado · ${MES_NOMBRES_LARGOS[m - 1]} ${y}`, '#15803d');
+        } catch (err) {
+            console.error('[hidraulicas] saveDestPanel error:', err);
+            pinta(`Error: ${err.message || err}`, '#b91c1c');
+        }
+    }
+
+    // ─── Calendario de captura: un mes, el estado real de cada día ─
+    //   Antes había un <select> de día + botón "Cargar": cambiar el filtro no
+    //   hacía nada visible y no había forma de saber qué días faltaban.
+    const DIAS_SEMANA = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+    /** dia -> {pozos, vol, paap, ptar} de ese día del mes. */
+    function resumenPorDia(anio, mes) {
+        const out = new Map();
+        const dela = dia => {
+            if (!out.has(dia)) out.set(dia, { nombres: new Set(), pozos: 0, vol: 0, paap: false, ptar: false });
+            return out.get(dia);
+        };
+        const delMes = r => Number(r.anio) === Number(anio) && Number(r.mes) === Number(mes)
+            && Number(r.dia) >= 1 && Number(r.dia) <= 31;
+        for (const r of state.daily) {
+            if (!delMes(r)) continue;
+            const d = dela(Number(r.dia));
+            d.nombres.add(String(r.pozo || '').trim());
+            d.pozos = d.nombres.size;
+            d.vol += Number(r.volumen_m3) || 0;
+        }
+        for (const r of state.paap) { if (delMes(r)) dela(Number(r.dia)).paap = true; }
+        for (const r of state.ptar) { if (delMes(r)) dela(Number(r.dia)).ptar = true; }
+        return out;
+    }
+
+    const DIAS_SEMANA_LARGOS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    let resumenMes = { anio: null, mes: null, datos: new Map() };
+
+    /** Panel flotante con el detalle del día bajo el cursor. */
+    function showDayTip(celda) {
+        const tip = $('hidra-capday-tip');
+        if (!tip || !celda) return;
+        const dia = Number(celda.dataset.dia);
+        const y = resumenMes.anio, m = resumenMes.mes;
+        if (!dia || !y || !m) return;
+        const d = resumenMes.datos.get(dia) || { pozos: 0, vol: 0, paap: false, ptar: false };
+        const totalPozos = POZOS_DESTINO.length;
+        const pct = Math.min(100, Math.round(d.pozos / totalPozos * 100));
+        const completo = d.pozos >= totalPozos;
+        const fecha = new Date(y, m - 1, dia);
+        const tag = (etiqueta, activo) =>
+            `<span class="hidra-tip-tag${activo ? ' is-ok' : ''}">${activo ? '✓ ' : ''}${etiqueta}</span>`;
+        tip.innerHTML =
+            `<div class="hidra-tip-fecha">${DIAS_SEMANA_LARGOS[fecha.getDay()]} ${dia} de ${MES_NOMBRES_LARGOS[m - 1]}</div>` +
+            `<div class="hidra-tip-bar${completo || !d.pozos ? '' : ' is-part'}"><span style="width:${pct}%"></span></div>` +
+            (d.pozos
+                ? `<div class="hidra-tip-row"><b>${d.pozos} de ${totalPozos}</b> pozos capturados</div>` +
+                  `<div class="hidra-tip-row"><b>${fmt(d.vol)}</b> m³ extraídos</div>`
+                : '<div class="hidra-tip-row">Sin captura todavía</div>') +
+            `<div class="hidra-tip-tags">${tag('PAAP', d.paap)}${tag('PTAR', d.ptar)}</div>`;
+        // Arriba de la celda, salvo en la primera fila donde no cabe.
+        const arriba = celda.offsetTop > 90;
+        tip.classList.toggle('is-below', !arriba);
+        tip.style.left = `${celda.offsetLeft + celda.offsetWidth / 2}px`;
+        tip.style.top = `${arriba ? celda.offsetTop : celda.offsetTop + celda.offsetHeight}px`;
+        tip.classList.add('is-on');
+        tip.setAttribute('aria-hidden', 'false');
+    }
+
+    function hideDayTip() {
+        const tip = $('hidra-capday-tip');
+        if (!tip) return;
+        tip.classList.remove('is-on');
+        tip.setAttribute('aria-hidden', 'true');
+    }
+
+    /** Lunes = 0, para que la rejilla empiece en L y no en domingo. */
+    function offsetPrimerDia(anio, mes) {
+        return (new Date(anio, mes - 1, 1).getDay() + 6) % 7;
+    }
+
+    function renderDayGrid() {
+        const grid = $('hidra-cap-daygrid');
+        if (!grid) return;
+        const y = Number(state.capYear), m = Number(state.capMonth);
+        if (!y || !m) { grid.innerHTML = ''; return; }
+        const dim = daysInMonth(y, m);
+        resumenMes = { anio: y, mes: m, datos: resumenPorDia(y, m) };
+        const capturados = resumenMes.datos;
+        const totalPozos = POZOS_DESTINO.length;
+        const hoy = new Date();
+        const esMesActual = hoy.getFullYear() === y && hoy.getMonth() + 1 === m;
+
+        let html = DIAS_SEMANA.map(d => `<div class="hidra-daygrid-head">${d}</div>`).join('');
+        html += '<div class="hidra-capday-blank"></div>'.repeat(offsetPrimerDia(y, m));
+        for (let dia = 1; dia <= dim; dia += 1) {
+            const conDato = (capturados.get(dia) || {}).pozos || 0;
+            const estado = !conDato ? '' : (conDato >= totalPozos ? 'is-full' : 'is-part');
+            const finde = [0, 6].includes(new Date(y, m - 1, dia).getDay());
+            const clases = ['hidra-capday'];
+            if (finde) clases.push('is-weekend');
+            if (esMesActual && hoy.getDate() === dia) clases.push('is-today');
+            if (Number(state.capDay) === dia) clases.push('is-selected');
+            const titulo = conDato
+                ? `${dia} de ${MES_NOMBRES_LARGOS[m - 1]}: ${conDato} de ${totalPozos} pozos capturados`
+                : `${dia} de ${MES_NOMBRES_LARGOS[m - 1]}: sin captura`;
+            html += `<button type="button" class="${clases.join(' ')}" data-dia="${dia}" aria-label="${titulo}"` +
+                `${Number(state.capDay) === dia ? ' aria-current="date"' : ''}>` +
+                `<span>${dia}</span><i class="hidra-daydot ${estado}"></i></button>`;
+        }
+        grid.innerHTML = html;
+
+        const conAlgo = [...capturados.values()].filter(d => d.pozos > 0).length;
+        const completos = [...capturados.values()].filter(d => d.pozos >= totalPozos).length;
+        const incompletos = conAlgo - completos;
+        setText('hidra-cap-month-summary', conAlgo
+            ? `${completos} de ${dim} días completos${incompletos ? ` · ${incompletos} incompleto${incompletos === 1 ? '' : 's'}` : ''}`
+            : `Ningún día capturado en ${MES_NOMBRES_LARGOS[m - 1]}`);
+        setText('hidra-cap-daytitle', Number(state.capDay)
+            ? `${state.capDay} de ${MES_NOMBRES_LARGOS[m - 1]} ${y}`
+            : '—');
+    }
+
+    /** Deja capDay dentro del mes elegido (31 → 30 al pasar a un mes corto). */
+    function clampCapDay() {
+        const dim = daysInMonth(Number(state.capYear), Number(state.capMonth));
+        state.capDay = Math.min(Math.max(Number(state.capDay) || 1, 1), dim);
+    }
+
+    /** Repinta y recarga a partir del período que ya está en el estado. */
+    function applyPeriod() {
+        clampCapDay();
+        updateCapQuarterBadge();
+        renderDayGrid();
+        renderDestPanel();
+        loadDayEditor();
+    }
+
+    /** Todo cambio de período recarga solo: ya no hay botón "Cargar". */
+    function onPeriodChange() {
+        state.capYear  = Number($('hidra-cap-year')?.value) || state.capYear;
+        state.capMonth = Number($('hidra-cap-month')?.value) || state.capMonth;
+        applyPeriod();
+    }
+
+    function shiftCapMonth(delta) {
+        let y = Number(state.capYear), m = Number(state.capMonth) + delta;
+        if (m < 1) { m = 12; y -= 1; }
+        if (m > 12) { m = 1; y += 1; }
+        state.capYear = y; state.capMonth = m;
+        populateYearSelect('hidra-cap-year', y);
+        populateMonthSelect('hidra-cap-month', m);
+        applyPeriod();
     }
 
     // ─── Editor de captura por DÍA ─────────────────────────────
@@ -871,7 +1299,7 @@
         const y = state.capYear, m = state.capMonth, d = state.capDay;
         updateCapQuarterBadge();
         if (!y || !m || !d) {
-            tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-4">Selecciona año, mes y día, y haz clic en <strong>Cargar</strong>.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-4">Elige un día en el calendario de arriba.</td></tr>';
             return;
         }
         if (status) status.textContent = 'Cargando…';
@@ -1076,6 +1504,8 @@
         if (tabEdit && tabEdit.parentElement) tabEdit.parentElement.style.display = canCap ? '' : 'none';
         const saveBtn = $('hidra-cap-save');
         if (saveBtn) saveBtn.disabled = !canCap;
+        const destBtn = $('hidra-dest-save');
+        if (destBtn) destBtn.disabled = !canCap;
         ['hidra-cap-clear-pozos', 'hidra-cap-clear-paap', 'hidra-cap-clear-ptar'].forEach(id => {
             const btn = $(id);
             if (btn) btn.disabled = !canCap;
@@ -1112,9 +1542,11 @@
             if (isEmpty && r._id) { exDelete.push(r._id); }
             else if (!isEmpty) {
                 const vtot = Number(total) || 0;
+                // No se tocan cd_militar_m3 / aifa_m3: el reparto vive ahora en
+                // hidra_pozo_destino y escribir 0 aquí borraría el histórico.
                 exUpsert.push({
                     anio: y, mes: m, dia: d, pozo: r.pozo,
-                    cd_militar_m3: 0, aifa_m3: 0, volumen_m3: vtot,
+                    volumen_m3: vtot,
                     observaciones: r.obs ? String(r.obs).trim() : null,
                 });
             }
@@ -1211,11 +1643,14 @@
             ['', 'Extracción mensual', 'Distribución mensual', 'Demanda AIFA mensual', 'Demanda Cd. Militar mensual'],
             ['Total', extrM[mIdx], distM[mIdx], aifaM[mIdx], cdmM[mIdx]],
             [],
-            ['Pozo', 'Extracción del mes (m³)', '% del total'],
+            ['Pozo', 'Extracción del mes (m³)', '% del total', 'Destino'],
         ];
         const pozoMonth = aggregateByPozoForMonth(y, mIdx);
         const totMonth = pozoMonth.reduce((s, d) => s + d[1], 0) || 1;
-        pozoMonth.forEach(([p, v]) => aoaM.push([p, v, Number((v / totMonth * 100).toFixed(2))]));
+        pozoMonth.forEach(([p, v]) => {
+            const hit = destinoVigente(y, mIdx + 1, p);
+            aoaM.push([p, v, Number((v / totMonth * 100).toFixed(2)), hit ? DEST_LABEL[hit.destino] : 'Sin asignar']);
+        });
         XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoaM), 'Mensual');
 
         // Hoja: Extracción por pozo (matriz)
@@ -1280,21 +1715,29 @@
         $('hidra-btn-export')?.addEventListener('click', buildAndDownloadExcel);
 
         // editor de captura por día
-        $('hidra-cap-month')?.addEventListener('change', () => {
-            state.capMonth = Number($('hidra-cap-month').value) || state.capMonth;
-            populateDaySelect('hidra-cap-day', state.capYear, state.capMonth, state.capDay);
-            updateCapQuarterBadge();
+        $('hidra-cap-month')?.addEventListener('change', onPeriodChange);
+        $('hidra-cap-year')?.addEventListener('change', onPeriodChange);
+        $('hidra-cap-prev-month')?.addEventListener('click', () => shiftCapMonth(-1));
+        $('hidra-cap-next-month')?.addEventListener('click', () => shiftCapMonth(1));
+        $('hidra-cap-daygrid')?.addEventListener('mouseover', ev => {
+            const celda = ev.target.closest('[data-dia]');
+            if (celda) showDayTip(celda); else hideDayTip();
         });
-        $('hidra-cap-year')?.addEventListener('change', () => {
-            state.capYear = Number($('hidra-cap-year').value) || state.capYear;
-            populateDaySelect('hidra-cap-day', state.capYear, state.capMonth, state.capDay);
+        $('hidra-cap-daygrid')?.addEventListener('mouseleave', hideDayTip);
+        $('hidra-cap-daygrid')?.addEventListener('focusin', ev => {
+            const celda = ev.target.closest('[data-dia]');
+            if (celda) showDayTip(celda);
         });
-        $('hidra-cap-load')?.addEventListener('click', () => {
-            state.capYear  = Number($('hidra-cap-year').value) || state.capYear;
-            state.capMonth = Number($('hidra-cap-month').value) || state.capMonth;
-            state.capDay   = Number($('hidra-cap-day').value) || state.capDay;
+        $('hidra-cap-daygrid')?.addEventListener('focusout', hideDayTip);
+        $('hidra-cap-daygrid')?.addEventListener('click', ev => {
+            const celda = ev.target.closest('[data-dia]');
+            if (!celda) return;
+            state.capDay = Number(celda.dataset.dia);
+            renderDayGrid();
             loadDayEditor();
         });
+        $('hidra-dest-grid')?.addEventListener('click', onDestClick);
+        $('hidra-dest-save')?.addEventListener('click', saveDestPanel);
         $('hidra-cap-save')?.addEventListener('click', saveDayEditor);
         $('hidra-cap-clear-pozos')?.addEventListener('click', clearCapPozos);
         $('hidra-cap-clear-paap')?.addEventListener('click', clearCapPaap);
@@ -1311,7 +1754,6 @@
             state.capMonth = curMonth;
             state.capDay   = now.getDate();
             populateMonthSelect('hidra-cap-month', curMonth);
-            populateDaySelect('hidra-cap-day', state.capYear, state.capMonth, state.capDay);
             bind();
             initDone = true;
         }
