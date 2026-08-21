@@ -32686,6 +32686,11 @@ FF
                       </select>
                       <!-- Botones vista + agregar -->
                       <div class="ms-auto d-flex align-items-center gap-2">
+                        <button class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                                onclick="window.vehiculosModule.openMantAllModal()"
+                                title="Ver todos los mantenimientos registrados">
+                          <i class="fas fa-wrench me-1"></i>Mantenimientos
+                        </button>
                         <div class="btn-group btn-group-sm" role="group" aria-label="Vista">
                           <button id="veh-view-grid"
                                   class="btn btn-primary rounded-start-pill px-3"
@@ -32774,6 +32779,111 @@ FF
                                 style="background:#E8770A;color:white;border:none;">
                           <i class="fas fa-edit me-1"></i>Editar
                         </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3"
+                                data-bs-dismiss="modal">
+                          <i class="fas fa-times me-1"></i>Cerrar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ════════════════════════════════════
+                     MODAL: Registrar mantenimiento
+                     ════════════════════════════════════ -->
+                <div class="modal fade" id="veh-mant-modal" tabindex="-1"
+                     aria-labelledby="veh-mant-title-label">
+                  <div class="modal-dialog modal-lg modal-dialog-centered">
+                    <div class="modal-content rounded-4 overflow-hidden">
+                      <div class="modal-header border-0"
+                           style="background:linear-gradient(135deg,#0a1f44,#1a3a6e);">
+                        <h5 class="modal-title text-white fw-bold" id="veh-mant-title">Registrar mantenimiento</h5>
+                        <button type="button" class="btn-close btn-close-white"
+                                data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                      </div>
+                      <div class="modal-body p-4">
+                        <div id="veh-mant-msg"></div>
+                        <div class="row g-3">
+                          <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Fecha *</label>
+                            <input type="date" id="vm-fecha" class="form-control form-control-sm rounded-3">
+                          </div>
+                          <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Tipo *</label>
+                            <select id="vm-tipo" class="form-select form-select-sm rounded-3">
+                              <option value="Preventivo">Preventivo</option>
+                              <option value="Correctivo">Correctivo</option>
+                            </select>
+                          </div>
+                          <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Kilometraje</label>
+                            <input type="number" id="vm-kilometraje" class="form-control form-control-sm rounded-3"
+                                   placeholder="Ej. 45000" min="0">
+                          </div>
+                          <div class="col-12">
+                            <label class="form-label small fw-semibold">Descripción del trabajo realizado *</label>
+                            <textarea id="vm-descripcion" class="form-control form-control-sm rounded-3" rows="2"
+                                      placeholder="Ej. Cambio de aceite y filtros"></textarea>
+                          </div>
+                          <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Costo</label>
+                            <input type="number" id="vm-costo" class="form-control form-control-sm rounded-3"
+                                   placeholder="0.00" min="0" step="0.01">
+                          </div>
+                          <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Taller / Proveedor</label>
+                            <input type="text" id="vm-taller" class="form-control form-control-sm rounded-3">
+                          </div>
+                          <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Responsable</label>
+                            <input type="text" id="vm-responsable" class="form-control form-control-sm rounded-3"
+                                   placeholder="Quién autorizó / realizó el registro">
+                          </div>
+                          <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Próximo mantenimiento sugerido</label>
+                            <input type="date" id="vm-proximo" class="form-control form-control-sm rounded-3">
+                          </div>
+                        </div>
+                      </div>
+                      <div class="modal-footer border-0 bg-light">
+                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3"
+                                data-bs-dismiss="modal">
+                          Cancelar
+                        </button>
+                        <button type="button" id="vm-save-btn"
+                                class="btn btn-sm rounded-pill px-4 fw-semibold"
+                                style="background:#E8770A;color:white;border:none;"
+                                onclick="window.vehiculosModule.saveMantenimiento()">
+                          <i class="fas fa-save me-1"></i>Guardar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ════════════════════════════════════
+                     MODAL: Mantenimientos Registrados (todos los vehículos)
+                     ════════════════════════════════════ -->
+                <div class="modal fade" id="veh-mant-all-modal" tabindex="-1"
+                     aria-labelledby="veh-mant-all-title-label">
+                  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                    <div class="modal-content rounded-4 overflow-hidden">
+                      <div class="modal-header border-0"
+                           style="background:linear-gradient(135deg,#0a1f44,#1a3a6e);">
+                        <h5 class="modal-title text-white fw-bold" id="veh-mant-all-title-label">
+                          <i class="fas fa-wrench me-2"></i>Mantenimientos Registrados
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white"
+                                data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                      </div>
+                      <div class="modal-body p-4">
+                        <div id="veh-mant-all-body">
+                          <p class="small text-muted text-center py-4 mb-0">
+                            <span class="spinner-border spinner-border-sm me-2"></span>Cargando mantenimientos…
+                          </p>
+                        </div>
+                      </div>
+                      <div class="modal-footer border-0 bg-light">
                         <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3"
                                 data-bs-dismiss="modal">
                           <i class="fas fa-times me-1"></i>Cerrar

@@ -14,7 +14,8 @@
         loading: false,
         isAdmin: false,
         editingId: null,  // UUID del registro en edición
-        uploadFile: null  // File object pendiente de subir
+        uploadFile: null, // File object pendiente de subir
+        mantVehiculoId: null // vehículo activo al registrar un mantenimiento
     };
 
     // ── Paleta de colores por tipo de vehículo ────────────────
@@ -479,6 +480,25 @@
               <h6 class="fw-bold text-uppercase small text-muted mb-2"><i class="fas fa-sticky-note me-1"></i>Notas</h6>
               <p class="small text-muted mb-0 ps-2">${v.notas}</p>
             </div>` : ''}
+
+            <!-- Mantenimientos realizados -->
+            <div class="col-12">
+              <hr class="my-2">
+              <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+                <h6 class="fw-bold text-uppercase small text-muted mb-0">
+                  <i class="fas fa-wrench me-1"></i>Mantenimientos Realizados
+                </h6>
+                ${state.isAdmin ? `<button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                        onclick="window.vehiculosModule.openMantModal('${v.id}')">
+                  <i class="fas fa-plus me-1"></i>Registrar mantenimiento
+                </button>` : ''}
+              </div>
+              <div id="veh-mant-list">
+                <p class="small text-muted text-center py-3 mb-0">
+                  <span class="spinner-border spinner-border-sm me-2"></span>Cargando historial…
+                </p>
+              </div>
+            </div>
           </div>`;
 
         document.getElementById('veh-detail-title').textContent = `${v.codigo_aifa} · ${fullName}`;
@@ -492,6 +512,233 @@
 
         const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('veh-detail-modal'));
         modal.show();
+        loadMantenimientos(v.id);
+    }
+
+    // ── Mantenimientos: helpers de presentación ───────────────
+    function mantTypeBadge(tipo) {
+        const map = { 'Preventivo': 'bg-info text-dark', 'Correctivo': 'bg-warning text-dark' };
+        return `<span class="badge ${map[tipo] || 'bg-secondary'}">${tipo || '—'}</span>`;
+    }
+
+    function formatMoney(val) {
+        if (val === null || val === undefined || val === '') return '—';
+        const n = Number(val);
+        if (Number.isNaN(n)) return '—';
+        return '$' + n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function mantenimientosListHTML(rows) {
+        if (!rows.length) {
+            return `<p class="small text-muted text-center py-3 mb-0">Sin mantenimientos registrados.</p>`;
+        }
+        return `
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead>
+                <tr class="small text-muted text-uppercase">
+                  <th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Km</th>
+                  <th>Costo</th><th>Taller</th><th>Responsable</th><th>Próximo</th>
+                  ${state.isAdmin ? '<th></th>' : ''}
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.map(m => `
+                  <tr>
+                    <td class="small text-nowrap">${formatDate(m.fecha)}</td>
+                    <td>${mantTypeBadge(m.tipo)}</td>
+                    <td class="small">${escapeHtml(m.descripcion)}</td>
+                    <td class="small text-nowrap">${m.kilometraje != null ? Number(m.kilometraje).toLocaleString('es-MX') + ' km' : '—'}</td>
+                    <td class="small text-nowrap">${formatMoney(m.costo)}</td>
+                    <td class="small">${m.taller ? escapeHtml(m.taller) : '—'}</td>
+                    <td class="small">${m.responsable ? escapeHtml(m.responsable) : '—'}</td>
+                    <td class="small text-nowrap">${m.proximo_mantenimiento ? formatDate(m.proximo_mantenimiento) : '—'}</td>
+                    ${state.isAdmin ? `<td class="text-center">
+                      <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2"
+                              onclick="window.vehiculosModule.deleteMantenimiento('${m.id}','${m.vehiculo_id}')"
+                              title="Eliminar registro">
+                        <i class="fas fa-trash-alt"></i>
+                      </button>
+                    </td>` : ''}
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`;
+    }
+
+    async function loadMantenimientos(vehiculoId) {
+        const container = document.getElementById('veh-mant-list');
+        if (!container) return;
+        try {
+            const supabase = await window.ensureSupabaseClient();
+            const { data, error } = await supabase
+                .from('vehiculo_mantenimientos')
+                .select('*')
+                .eq('vehiculo_id', vehiculoId)
+                .order('fecha', { ascending: false });
+            if (error) throw error;
+            container.innerHTML = mantenimientosListHTML(data || []);
+        } catch (err) {
+            console.error('[vehiculos] loadMantenimientos error:', err);
+            container.innerHTML = '';
+        }
+    }
+
+    // ── Mantenimientos: modal de registro ──────────────────────
+    function openMantModal(vehiculoId) {
+        state.mantVehiculoId = vehiculoId;
+        ['vm-kilometraje', 'vm-descripcion', 'vm-costo', 'vm-taller', 'vm-responsable', 'vm-proximo'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        const tipoEl = document.getElementById('vm-tipo');
+        if (tipoEl) tipoEl.value = 'Preventivo';
+        const fechaEl = document.getElementById('vm-fecha');
+        if (fechaEl) fechaEl.value = new Date().toISOString().slice(0, 10);
+        const msgEl = document.getElementById('veh-mant-msg');
+        if (msgEl) msgEl.innerHTML = '';
+
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('veh-mant-modal'));
+        modal.show();
+    }
+
+    async function saveMantenimiento() {
+        const msgEl = document.getElementById('veh-mant-msg');
+        const btn   = document.getElementById('vm-save-btn');
+        const setMsg = (html, type) => {
+            if (msgEl) msgEl.innerHTML = html ? `<div class="alert alert-${type} p-2 small mb-3">${html}</div>` : '';
+        };
+
+        const vehiculoId     = state.mantVehiculoId;
+        const fecha           = document.getElementById('vm-fecha')?.value || '';
+        const tipo             = document.getElementById('vm-tipo')?.value || '';
+        const descripcion     = document.getElementById('vm-descripcion')?.value.trim() || '';
+        const kilometrajeRaw  = document.getElementById('vm-kilometraje')?.value;
+        const costoRaw         = document.getElementById('vm-costo')?.value;
+        const taller           = document.getElementById('vm-taller')?.value.trim() || null;
+        const responsable     = document.getElementById('vm-responsable')?.value.trim() || null;
+        const proximo          = document.getElementById('vm-proximo')?.value || null;
+
+        if (!vehiculoId)  { setMsg('No se identificó el vehículo.', 'danger'); return; }
+        if (!fecha)       { setMsg('La fecha es obligatoria.', 'warning'); return; }
+        if (!tipo)        { setMsg('El tipo de mantenimiento es obligatorio.', 'warning'); return; }
+        if (!descripcion) { setMsg('La descripción del trabajo realizado es obligatoria.', 'warning'); return; }
+
+        const payload = {
+            vehiculo_id: vehiculoId,
+            fecha,
+            tipo,
+            descripcion,
+            kilometraje: kilometrajeRaw ? parseInt(kilometrajeRaw, 10) : null,
+            costo: costoRaw ? parseFloat(costoRaw) : null,
+            taller,
+            responsable,
+            proximo_mantenimiento: proximo || null
+        };
+
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Guardando…'; }
+        try {
+            const supabase = await window.ensureSupabaseClient();
+            const { error } = await supabase.from('vehiculo_mantenimientos').insert(payload);
+            if (error) throw error;
+
+            bootstrap.Modal.getInstance(document.getElementById('veh-mant-modal'))?.hide();
+            await loadMantenimientos(vehiculoId);
+            showToast('Mantenimiento registrado ✓', 'success');
+        } catch (err) {
+            console.error('[vehiculos] saveMantenimiento error:', err);
+            setMsg(escapeHtml(err.message || String(err)), 'danger');
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar'; }
+        }
+    }
+
+    // ── Mantenimientos: tabla consolidada (todos los vehículos) ──
+    function mantenimientosAllListHTML(rows) {
+        if (!rows.length) {
+            return `<p class="small text-muted text-center py-4 mb-0">Sin mantenimientos registrados.</p>`;
+        }
+        return `
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead>
+                <tr class="small text-muted text-uppercase">
+                  <th>Vehículo</th><th>Fecha</th><th>Tipo</th><th>Descripción</th><th>Km</th>
+                  <th>Costo</th><th>Taller</th><th>Responsable</th><th>Próximo</th>
+                  ${state.isAdmin ? '<th></th>' : ''}
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.map(m => {
+                    const veh = m.catalogo_vehiculos;
+                    const vehLabel = veh ? [veh.marca, veh.submarca].filter(Boolean).join(' ') : '';
+                    return `
+                      <tr>
+                        <td class="small text-nowrap">
+                          <span class="badge rounded-pill fw-bold px-2 py-1 me-1" style="background:#E8770A;color:#fff;font-size:.7rem;">${veh ? escapeHtml(veh.codigo_aifa) : '—'}</span>
+                          ${escapeHtml(vehLabel)}
+                        </td>
+                        <td class="small text-nowrap">${formatDate(m.fecha)}</td>
+                        <td>${mantTypeBadge(m.tipo)}</td>
+                        <td class="small">${escapeHtml(m.descripcion)}</td>
+                        <td class="small text-nowrap">${m.kilometraje != null ? Number(m.kilometraje).toLocaleString('es-MX') + ' km' : '—'}</td>
+                        <td class="small text-nowrap">${formatMoney(m.costo)}</td>
+                        <td class="small">${m.taller ? escapeHtml(m.taller) : '—'}</td>
+                        <td class="small">${m.responsable ? escapeHtml(m.responsable) : '—'}</td>
+                        <td class="small text-nowrap">${m.proximo_mantenimiento ? formatDate(m.proximo_mantenimiento) : '—'}</td>
+                        ${state.isAdmin ? `<td class="text-center">
+                          <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2"
+                                  onclick="window.vehiculosModule.deleteMantenimiento('${m.id}','${m.vehiculo_id}')"
+                                  title="Eliminar registro">
+                            <i class="fas fa-trash-alt"></i>
+                          </button>
+                        </td>` : ''}
+                      </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>`;
+    }
+
+    async function loadMantAll() {
+        const container = document.getElementById('veh-mant-all-body');
+        if (!container) return;
+        container.innerHTML = `<p class="small text-muted text-center py-4 mb-0"><span class="spinner-border spinner-border-sm me-2"></span>Cargando mantenimientos…</p>`;
+        try {
+            const supabase = await window.ensureSupabaseClient();
+            const { data, error } = await supabase
+                .from('vehiculo_mantenimientos')
+                .select('*, catalogo_vehiculos(codigo_aifa, marca, submarca)')
+                .order('fecha', { ascending: false });
+            if (error) throw error;
+            container.innerHTML = mantenimientosAllListHTML(data || []);
+        } catch (err) {
+            console.error('[vehiculos] loadMantAll error:', err);
+            container.innerHTML = '';
+        }
+    }
+
+    function openMantAllModal() {
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('veh-mant-all-modal'));
+        modal.show();
+        loadMantAll();
+    }
+
+    async function deleteMantenimiento(id, vehiculoId) {
+        if (!state.isAdmin) return;
+        if (!confirm('¿Eliminar este registro de mantenimiento?\nEsta acción no se puede deshacer.')) return;
+        try {
+            const supabase = await window.ensureSupabaseClient();
+            const { error } = await supabase.from('vehiculo_mantenimientos').delete().eq('id', id);
+            if (error) throw error;
+
+            if (vehiculoId && document.getElementById('veh-mant-list')) await loadMantenimientos(vehiculoId);
+            if (document.getElementById('veh-mant-all-body')) await loadMantAll();
+            showToast('Mantenimiento eliminado', 'warning');
+        } catch (err) {
+            console.error('[vehiculos] deleteMantenimiento error:', err);
+            showToast('Error al eliminar: ' + (err.message || err), 'danger');
+        }
     }
 
     function row2(label, value, icon) {
@@ -729,6 +976,10 @@
         editCell,
         saveCell,
         cancelCell,
+        openMantModal,
+        saveMantenimiento,
+        openMantAllModal,
+        deleteMantenimiento,
         confirmDelete,
         setView,
         applyFilters,
