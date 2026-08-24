@@ -26188,6 +26188,10 @@ function _conciStageCellDraft(td, rawValue) {
 function _conciQueueAutoSave(tr) {
     if (!tr || !tr.isConnected || !_conciEditMode || !_conciCanCurrentUserEdit()) return;
     if (tr.dataset.conciDescartada === '1') return;
+    // Una captura nueva estrena la espera: el retraso acumulado castigaba a los
+    // intentos anteriores, no a este. Sin esto, una fila que fallo mientras se
+    // completaba arrastraba su penalizacion hasta cuando ya estaba lista.
+    _conciReiniciarEsperaReintento();
     if (tr._conciAutoSaveTimer) clearTimeout(tr._conciAutoSaveTimer);
     tr._conciAutoSaveTimer = setTimeout(() => {
         tr._conciAutoSaveTimer = null;
@@ -26591,7 +26595,12 @@ function _conciRestaurarBorradores() {
 // segundos— y a partir de ahi se va espaciando igual que antes, para no
 // martillear a un servidor que de verdad este caido.
 const _CONCI_REINTENTO_MIN_MS = 1500;
-const _CONCI_REINTENTO_MAX_MS = 120000;
+// Dos minutos era una eternidad en un modulo de captura: si los primeros
+// intentos fallaban, la espera crecia y el guardado bueno se quedaba esperando
+// ese temporizador. Quien capturaba lo veia como "guarda si te esperas unos
+// minutos", y si refrescaba antes daba por perdido lo tecleado. Diez segundos
+// sigue siendo suave con el servidor y ya no se siente como una espera.
+const _CONCI_REINTENTO_MAX_MS = 10000;
 let _conciReintentoTimer = null;
 let _conciReintentoEspera = _CONCI_REINTENTO_MIN_MS;
 
@@ -27015,6 +27024,24 @@ const _CONCI_TABLA_PENDIENTES = 'conciliacion_capturas_pendientes';
 // recargas y entre pestañas del mismo navegador.
 const _CONCI_DEVICE_KEY = 'aifa-conci-device-id';
 let _conciDeviceIdCache = '';
+
+// Un uuid v4. crypto.randomUUID no existe en navegadores viejos ni fuera de
+// contexto seguro, y sin respaldo la fila se quedaria sin nombre justo donde
+// mas falta hace.
+function _conciNuevoUuid() {
+    try {
+        if (window.crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+        if (window.crypto && typeof crypto.getRandomValues === 'function') {
+            const b = crypto.getRandomValues(new Uint8Array(16));
+            b[6] = (b[6] & 0x0f) | 0x40;
+            b[8] = (b[8] & 0x3f) | 0x80;
+            const hex = [...b].map(n => n.toString(16).padStart(2, '0')).join('');
+            return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+        }
+    } catch (_) { /* se cae al respaldo de abajo */ }
+    const az = () => Math.floor(Math.random() * 0x10000).toString(16).padStart(4, '0');
+    return `${az()}${az()}-${az()}-4${az().slice(1)}-a${az().slice(1)}-${az()}${az()}${az()}`;
+}
 
 function _conciDeviceId() {
     if (_conciDeviceIdCache) return _conciDeviceIdCache;
@@ -27487,14 +27514,76 @@ function _conciGuardarPendientesYa() {
     });
 }
 
+// La tabla real, tal cual se llama en la base.
+const _CONCI_TABLA_MANIFIESTOS = 'Conciliación Manifiestos';
+
+// Lo pendiente de una fila que YA existe, escrito directamente en la tabla real
+// con `keepalive`.
+//
+// Antes, al cerrar o refrescar solo se dejaba una nota en la cola de rescate: el
+// dato no llegaba a la tabla, asi que al recargar la fila aparecia sin lo
+// capturado y para quien capturo eso es exactamente "se perdio". Refrescar es lo
+// primero que hace la gente cuando duda de si guardo, y era justo el gesto que
+// se lo llevaba.
+//
+// Una peticion con keepalive se la queda el sistema operativo y sobrevive a que
+// la pagina muera, asi que esto funciona aunque la conexion vaya lenta. La cola
+// de rescate se conserva para lo que no se puede escribir asi: una fila nueva
+// todavia no tiene id contra el que hacer PATCH.
+function _conciEscribirFilaAlCerrar(tr, url, apikey) {
+    const rowId = String(tr.dataset.rowId || '').trim();
+    const uuid = String(tr.dataset.clienteUuid || '').trim();
+    // Sin id y sin nombre propio no hay contra que escribir: eso ya solo le pasa
+    // a las filas de antes de este mecanismo, y para esas queda la cola.
+    if (!rowId && !uuid) return false;
+    const celdas = _conciCeldasPendientesDeFila(tr);
+    if (!celdas.length) return false;
+    const payload = {};
+    celdas.forEach(c => {
+        payload[c.col] = c.valor === '' ? null : _conciPrepareValueForDatabase(c.col, c.valor);
+    });
+    if (!Object.keys(payload).length) return false;
+
+    const tabla = encodeURIComponent(_CONCI_TABLA_MANIFIESTOS);
+    // Con id se corrige la fila; sin id se crea o se corrige por su nombre. El
+    // upsert es lo que hace seguro reintentar: dos envios del mismo dato dejan
+    // una sola fila, no dos.
+    const url_ = rowId
+        ? `${url}/rest/v1/${tabla}?id=eq.${encodeURIComponent(rowId)}`
+        : `${url}/rest/v1/${tabla}?on_conflict=cliente_uuid`;
+    const cuerpo = rowId ? payload : { ...payload, cliente_uuid: uuid };
+    try {
+        fetch(url_, {
+            method: rowId ? 'PATCH' : 'POST',
+            keepalive: true,
+            headers: {
+                'Content-Type': 'application/json',
+                apikey,
+                Authorization: `Bearer ${_conciTokenSesion || apikey}`,
+                Prefer: rowId ? 'return=minimal' : 'resolution=merge-duplicates,return=minimal',
+            },
+            body: JSON.stringify(cuerpo),
+        }).catch(() => { /* si no sale, queda encolado abajo como respaldo */ });
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
 function _conciEnviarPendientesAlCerrar() {
-    if (_conciColaDisponible === false) return;
     const tabla = document.getElementById('table-conci-manifiestos');
     if (!tabla) return;
     const url = window.SUPABASE_URL;
     const apikey = window.SUPABASE_ANON_KEY;
     if (!url || !apikey) return;
 
+    // Primero lo que puede guardarse de verdad. Se intenta SIEMPRE, aunque la
+    // cola de rescate no este disponible: son cosas independientes.
+    tabla.querySelectorAll('tbody tr').forEach(tr => {
+        _conciEscribirFilaAlCerrar(tr, url, apikey);
+    });
+
+    if (_conciColaDisponible === false) return;
     const filas = [];
     tabla.querySelectorAll('tbody tr').forEach(tr => {
         const rowId = String(tr.dataset.rowId || '').trim()
@@ -29130,7 +29219,14 @@ async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
         // y comprobamos los valores antes de considerar la captura guardada.
         let result = effectiveRowId
             ? await req.update(currentPayload).eq('id', effectiveRowId).select('*').maybeSingle()
-            : await req.insert(currentPayload).select('*').maybeSingle();
+            // Crear con nombre propio es un upsert sobre ese nombre, no un
+            // insert a ciegas. Asi, si la peticion si llego pero su respuesta se
+            // perdio, el reintento cae sobre la misma fila en vez de crear una
+            // gemela. Sin cliente_uuid (filas de antes de ese mecanismo, o la
+            // migracion 029 sin aplicar) se comporta igual que siempre.
+            : currentPayload.cliente_uuid
+                ? await req.upsert(currentPayload, { onConflict: 'cliente_uuid' }).select('*').maybeSingle()
+                : await req.insert(currentPayload).select('*').maybeSingle();
 
         if (!result.error) {
             const persistedRow = Array.isArray(result.data) ? result.data[0] : result.data;
@@ -29646,6 +29742,9 @@ async function _conciAutoSaveRow(tr, options = {}) {
             }
             const rowId = String(tr.dataset.rowId || '').trim();
             const writePayload = rowId ? {} : { ...payload };
+            // Al crear, la fila lleva su nombre: eso convierte el INSERT en un
+            // upsert idempotente y permite escribirla aunque todavia no tenga id.
+            if (!rowId && tr.dataset.clienteUuid) writePayload.cliente_uuid = tr.dataset.clienteUuid;
             if (rowId) {
                 Object.keys(payload).forEach(col => {
                     if (dirtyCols.has(col) || autoPersistedCols.has(col) || _conciShouldPersistCalculatedColumn(col)) {
@@ -29972,6 +30071,15 @@ function _conciAddBlankRow() {
     tr.dataset.rowIndex = 'new';
     tr.dataset.conciNew = '1';
     tr.dataset.dirty = '1';
+    // La fila se NOMBRA en el momento de crearse, sin esperar a la base.
+    //
+    // Hasta que el INSERT termina no hay id, y sin id no habia contra que
+    // escribir: si alguien refrescaba antes, lo capturado solo alcanzaba a
+    // dejar una nota en la cola de rescate. Con un uuid propio, toda escritura
+    // de esta fila es un upsert sobre el, asi que se puede guardar de verdad
+    // desde el primer instante — y reintentar no duplica la fila, porque el
+    // segundo intento cae sobre el mismo nombre. Ver 029_conciliacion_cliente_uuid.sql
+    tr.dataset.clienteUuid = _conciNuevoUuid();
     headerCells.forEach((th) => {
         const col = th.dataset.conciColumnKey;
         const td = document.createElement('td');

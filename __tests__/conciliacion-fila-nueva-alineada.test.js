@@ -39,6 +39,7 @@ const api = new Function('document', 'window', `
   function _conciAsegurarCeldaVisible() {}
   function _conciIsProtectedEditColumn(col) { return /^(MES|FECHA)$/i.test(col); }
   function _conciIsCalculatedColumn(col) { return /HRS\\. CUMPLIDAS/i.test(col); }
+  ${extraer('_conciNuevoUuid')}
   ${extraer('_conciNormalizeEditableCellText')}
   ${extraer('_conciFilaNuevaSinCapturar')}
   ${extraer('_conciBuscarFilaNuevaEnBlanco')}
