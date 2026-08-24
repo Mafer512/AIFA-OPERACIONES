@@ -29509,10 +29509,73 @@ function _conciBuscarFilaNuevaEnBlanco(tbody) {
         .find(tr => _conciFilaNuevaSinCapturar(tr)) || null;
 }
 
+// ── Bitácora del guardado ────────────────────────────────────────────────────
+//
+// El autoguardado tiene varios puntos donde ABANDONA una fila sin decir nada:
+// la fila ya no está en el DOM, se salió del modo captura, el permiso cambió,
+// la fila se descartó. Cada uno es razonable por separado, pero todos juntos
+// significan que una fila puede quedarse sin guardar sin dejar rastro — y eso
+// es exactamente lo que se ve como "capturé 16 filas y sólo se guardaron 8",
+// sin error, sin pendiente en la cola, sin nada que mirar después.
+//
+// Aquí queda constancia de cada abandono, con el vuelo y el motivo. No cambia
+// el comportamiento: solo deja de ser invisible. Se consulta desde la consola
+// del navegador con conciBitacora().
+const _CONCI_BITACORA_MAX = 300;
+const _conciBitacora = [];
+let _conciAvisoOmitidaAt = 0;
+
+function _conciAnotar(tr, evento, detalle) {
+    try {
+        // Solo interesa lo que tenía algo que perder.
+        const celdas = tr ? _conciCeldasPendientesDeFila(tr) : [];
+        if (evento === 'omitida' && !celdas.length) return;
+        _conciBitacora.push({
+            hora: new Date().toLocaleTimeString('es-MX'),
+            vuelo: tr ? (_conciVueloDeFilaElemento(tr) || '(sin vuelo)') : '',
+            fila: tr ? (String(tr.dataset.rowId || '').trim() || 'nueva') : '',
+            evento,
+            detalle: String(detalle || ''),
+            celdas: celdas.map(c => c.col).join(', '),
+        });
+        if (_conciBitacora.length > _CONCI_BITACORA_MAX) _conciBitacora.shift();
+        // Un abandono con captura encima es lo unico que merece ruido: sin esto
+        // el problema solo se nota horas despues, contando filas a mano.
+        if (evento === 'omitida') {
+            console.warn('[Conciliación] fila NO guardada:', detalle, _conciBitacora[_conciBitacora.length - 1]);
+            // Enterarse en el momento, no al final del dia contando filas. Con
+            // freno: varias filas seguidas suelen ser la misma causa, y un aviso
+            // por cada una se vuelve ruido que se aprende a ignorar.
+            const ahora = Date.now();
+            if (ahora - _conciAvisoOmitidaAt > 8000 && typeof showNotification === 'function') {
+                _conciAvisoOmitidaAt = ahora;
+                const ultima = _conciBitacora[_conciBitacora.length - 1];
+                showNotification(
+                    `Una captura no se guardó (${ultima.vuelo}): ${detalle}. `
+                    + 'Escribe conciBitacora() en la consola para ver el detalle.',
+                    'error'
+                );
+            }
+        }
+    } catch (_) { /* la bitacora jamas puede estorbar a la captura */ }
+}
+
+window.conciBitacora = function () {
+    if (!_conciBitacora.length) {
+        console.log('[Conciliación] sin incidencias registradas en esta sesión.');
+        return [];
+    }
+    console.table(_conciBitacora);
+    return _conciBitacora;
+};
+
 async function _conciAutoSaveRow(tr, options = {}) {
-    if (!tr || !tr.isConnected || !_conciEditMode || !_conciCanCurrentUserEdit()) return;
+    if (!tr) return;
+    if (!tr.isConnected) return _conciAnotar(tr, 'omitida', 'la fila ya no estaba en la tabla');
+    if (!_conciEditMode) return _conciAnotar(tr, 'omitida', 'el modo captura estaba apagado');
+    if (!_conciCanCurrentUserEdit()) return _conciAnotar(tr, 'omitida', 'sin permiso de captura');
     // La fila se descarto mientras esto esperaba su turno: no debe crearse.
-    if (tr.dataset.conciDescartada === '1') return;
+    if (tr.dataset.conciDescartada === '1') return _conciAnotar(tr, 'omitida', 'la fila se descartó');
     if (tr._conciAutoSavePromise) {
         tr._conciAutoSaveQueued = true;
         return tr._conciAutoSavePromise;
@@ -29620,7 +29683,9 @@ async function _conciAutoSaveRow(tr, options = {}) {
     //
     // Va antes de esos dos rellenos automáticos a propósito: son ellos los que
     // hacían pasar por "con datos" a una fila que el usuario nunca tocó.
-    if (!_conciFilaNuevaListaParaGuardar(tr, hasUserCapture)) return;
+    if (!_conciFilaNuevaListaParaGuardar(tr, hasUserCapture)) {
+        return _conciAnotar(tr, 'omitida', 'fila nueva sin nada capturado todavía');
+    }
     // Una fila nueva sin fecha capturada hereda la del filtro, pero SOLO cuando
     // el filtro apunta a un unico dia. Con un rango activo (del 1 al 15, por
     // ejemplo) se tomaba siempre el dia de inicio, sin importar en que parte de
@@ -29883,6 +29948,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
             tr.title = `Pendiente de guardar: ${msg}`;
             tr.classList.add('table-secondary');
             console.warn('[Conciliación] error de guardado automático:', error);
+            _conciAnotar(tr, 'error', msg);
             // Insiste solo hasta que la base lo acepte.
             _conciProgramarReintento();
             if (typeof showNotification === 'function') showNotification(`No se pudo guardar la fila: ${msg}`, 'error');
@@ -30169,6 +30235,13 @@ function _conciEnterEditMode() {
 
 async function _conciCancelBulkEdits() {
     if (!_conciEditMode) return;
+    // Cancelar SÍ descarta a propósito, pero descartar sin avisar lo capturado
+    // es indistinguible de perderlo.
+    if (_conciHasUnsavedCaptures()
+        && typeof confirm === 'function'
+        && !confirm('Hay capturas sin guardar. Si cancelas ahora se pierden. ¿Cancelar de todos modos?')) {
+        return;
+    }
     _conciEditMode = false;
     _conciUndoHistory.length = 0;
     _conciSetTableEditableState(false);
@@ -30215,9 +30288,19 @@ async function _conciSaveBulkEdits() {
 
         // Las filas nuevas se identifican explícitamente: al salir del último
         // editor una fila vacía puede perder la marca dirty aunque ya tenga datos.
+        //
+        // Y sobre todo: la captura ensucia CELDAS (td[data-dirty]), mientras que
+        // aquí sólo se miraba la marca de FILA. Una fila cuyas celdas seguían
+        // pendientes pero que había perdido su marca de fila no entraba en el
+        // guardado... y justo después se recargaba la tabla reemplazando el
+        // tbody, así que lo capturado en ella desaparecía sin decir nada. Eso es
+        // lo que se veía como "capturé 16 filas y sólo se guardaron 8".
         const dirtyRows = Array.from(new Set([
             ...tbody.querySelectorAll('tr[data-dirty="1"]'),
             ...tbody.querySelectorAll('tr[data-conci-new="1"]'),
+            ...[...tbody.querySelectorAll('td[data-dirty="1"]')]
+                .map(td => td.closest('tr'))
+                .filter(Boolean),
         ]));
         dirtyRows.forEach(tr => {
             const rowId = String(tr.dataset.rowId || '').trim();
@@ -30357,7 +30440,14 @@ async function _conciSaveBulkEdits() {
         _conciEditMode = false;
         _conciSetTableEditableState(false);
         _conciRefreshEditToolbar();
-        await loadConciliacionManifiestos({ forceRefresh: true, allowLocalEditsReplace: true });
+        // Red de seguridad: si algo quedó sin confirmar pese a todo lo anterior,
+        // NO se pasa por encima del aplazamiento. Que la tabla tarde un momento
+        // en refrescarse es molesto; que se lleve una captura por delante, no
+        // tiene arreglo. El refresco se reintenta solo al confirmarse la fila.
+        await loadConciliacionManifiestos({
+            forceRefresh: true,
+            allowLocalEditsReplace: !_conciHasUnsavedCaptures(),
+        });
     } catch (e) {
         alert('Error al guardar cambios: ' + e.message);
     } finally {

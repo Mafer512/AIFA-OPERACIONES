@@ -65,6 +65,8 @@ function construirApi() {
       return { ok: true, data: { id: rowId || siguienteId }, payload, droppedColumns: [] };
     }
 
+    // La bitácora sólo deja constancia; aquí basta con que exista.
+    function _conciAnotar() { }
     ${extraer('_conciNormalizeEditableCellText')}
     ${extraer('_conciAirlinePayloadEntry')}
     ${extraer('_conciFilaNuevaListaParaGuardar')}
