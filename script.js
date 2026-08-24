@@ -23800,6 +23800,47 @@ function _conciShouldPersistCalculatedColumn(column) {
         || /demora\s*\+\s*-?\s*15\s*min/.test(key);
 }
 
+// De qué celdas sale cada columna calculada que sí se guarda.
+const _CONCI_INSUMOS_CALCULADAS = [
+    {
+        salida: /^total\s+exentos$/,
+        insumos: /^(diplomaticos|en comision|infantes|transitos|conexiones|otros exentos)$/,
+    },
+    {
+        salida: /^pax\s+que\s+pagan\s+tua$/,
+        insumos: /^(total pax|tipo de manifiesto|diplomaticos|en comision|infantes|transitos|conexiones|otros exentos)$/,
+    },
+    {
+        salida: /^kgs?\.?\s*de\s*carga\s+total$/,
+        insumos: /^kgs?\.?\s*de\s*carga\s+(nacional|internacional)$/,
+    },
+    {
+        salida: /demora\s*\+\s*-?\s*15\s*min/,
+        insumos: /^(slot asignado|slot coordinado|hr\.?\s*de\s*operacion)$/,
+    },
+];
+
+// ¿Hay que reenviar esta columna calculada en un UPDATE?
+//
+// Sólo si la captura actual tocó alguno de sus insumos. Antes se mandaban
+// SIEMPRE, con el valor que tuviera la pantalla: dos personas capturando la
+// misma fila al mismo tiempo se pisaban los totales de exentos y de carga sin
+// haberlos tocado ninguna de las dos — la que guardaba última reponía en la
+// base el total viejo que ella traía en pantalla. Es el cruce de datos que hay
+// que evitar cuando varias sesiones capturan a la vez: cada UPDATE debe llevar
+// lo que esa persona cambió, y nada más.
+function _conciCalculadaDebeEnviarse(column, dirtyCols) {
+    if (!_conciShouldPersistCalculatedColumn(column)) return false;
+    const key = _conciNormalizedColumnName(column);
+    const regla = _CONCI_INSUMOS_CALCULADAS.find(r => r.salida.test(key));
+    if (!regla) return true;
+    const tocadas = dirtyCols instanceof Set ? [...dirtyCols] : (dirtyCols || []);
+    return tocadas.some(col => {
+        const claveTocada = _conciNormalizedColumnName(col);
+        return claveTocada === key || regla.insumos.test(claveTocada);
+    });
+}
+
 // Columnas de captura de pasajeros. En vuelos de carga (incluye mixtos
 // clasificados como carga) no aplican y se bloquea su edición.
 // Contadores que la base guarda como numero. Un solo caracter no numerico en
@@ -29061,18 +29102,42 @@ function _conciErrorEsperaCorreccion(error) {
     return String(error?.code || '') === 'CONCI_CAPTURA_NO_ACEPTADA';
 }
 
+// Lo que la celda manda es SIEMPRE texto ("1.50", "07", "+15"); lo que Postgres
+// devuelve de una columna numérica es el número ya normalizado (1.5, 7, 15).
+// Comparar esos dos como cadenas daba "no coincide" en un guardado que sí se
+// escribió. Aquí se reduce cada lado a número sólo cuando de verdad lo es, para
+// compararlos por su valor y no por cómo se escriben.
+function _conciNumeroComparable(valor) {
+    if (valor === null || valor === undefined) return null;
+    if (typeof valor === 'number') return Number.isFinite(valor) ? valor : null;
+    const texto = String(valor).trim();
+    if (!texto) return null;
+    // Sin notación de miles ni coma decimal: eso lo resuelve antes la captura.
+    // Aquí sólo interesa el caso "es un número escrito de otra manera".
+    if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(texto)) return null;
+    const numero = Number(texto);
+    return Number.isFinite(numero) ? numero : null;
+}
+
 function _conciDatabaseValueEquals(expected, actual) {
     if (expected === null || expected === undefined) {
-        return actual === null || actual === undefined;
-    }
-    if (typeof expected === 'number') {
-        return Number.isFinite(Number(actual)) && Number(actual) === expected;
+        // Una columna not-null que recibe null se queda con su default (''
+        // o 0 según el tipo). El borrado sí ocurrió: no es un guardado fallido.
+        if (actual === null || actual === undefined) return true;
+        const vacio = String(actual).trim();
+        return vacio === '' || vacio === '0';
     }
     if (typeof expected === 'boolean') {
         return String(actual).toLowerCase() === String(expected).toLowerCase();
     }
     if (typeof expected === 'object') {
         try { return JSON.stringify(actual) === JSON.stringify(expected); } catch (_) { return false; }
+    }
+    const esperadoNumero = _conciNumeroComparable(expected);
+    const realNumero = _conciNumeroComparable(actual);
+    if (esperadoNumero !== null && realNumero !== null) return esperadoNumero === realNumero;
+    if (typeof expected === 'number') {
+        return Number.isFinite(Number(actual)) && Number(actual) === expected;
     }
     return String(actual ?? '').trim() === String(expected).trim();
 }
@@ -29369,7 +29434,19 @@ const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bi
             }
         }
 
-        if (!mutated) return { ok: false, error: result.error, droppedColumns: [...droppedColumns] };
+        // Se devuelve también la fila que la base alcanzó a escribir. Un INSERT
+        // puede haber creado el registro y fallar después la comprobación de
+        // valores: sin este dato el llamador no se entera de que ya existe y el
+        // siguiente intento vuelve a insertarlo — una fila duplicada por cada
+        // reintento. Con el id a la vista, insistir se convierte en UPDATE.
+        if (!mutated) {
+            return {
+                ok: false,
+                error: result.error,
+                data: result.data || (recoveredRowId !== null ? { id: recoveredRowId } : null),
+                droppedColumns: [...droppedColumns],
+            };
+        }
     }
 
     return { ok: false, error: { message: 'Error desconocido al guardar.' }, droppedColumns: [...droppedColumns] };
@@ -29569,6 +29646,33 @@ window.conciBitacora = function () {
     return _conciBitacora;
 };
 
+// La escritura falló DESPUÉS de que la base ya creó (o localizó) el registro.
+// Pasa cuando el INSERT entra pero la comprobación de valores no cuadra, y
+// también cuando el conflicto de movement_key se resolvió sobre una fila ajena.
+// Sin adoptar aquí ese id, la fila sigue creyéndose "nueva" y el siguiente
+// guardado —el reintento automático, o la siguiente celda que el usuario
+// toque— vuelve a insertarla: una fila repetida por cada intento. Con el id
+// adoptado, lo capturado se termina de guardar con UPDATE sobre la fila que ya
+// existe, que es justo lo que se pidió: guardar en la fila que corresponde y no
+// crear filas nuevas.
+function _conciAdoptarFilaPersistida(tr, result) {
+    if (!tr || String(tr.dataset.rowId || '').trim()) return false;
+    const fila = Array.isArray(result?.data) ? result.data[0] : result?.data;
+    const id = fila?.id;
+    if (id === undefined || id === null || id === '') return false;
+    if (typeof _conciBorradorTrasladarFilaNueva === 'function') _conciBorradorTrasladarFilaNueva(tr, id);
+    tr.dataset.rowId = String(id);
+    tr.dataset.conciSummaryPersisted = '1';
+    tr.removeAttribute('data-conci-new');
+    if (tr.dataset.rowFuente === 'Solo Vuelos') {
+        tr.dataset.rowFuente = 'Manifiestos + Vuelos';
+        tr.classList.remove('conci-missing-manifiesto');
+    }
+    const actionTd = tr.querySelector('td.conci-row-action-col');
+    if (actionTd && typeof _conciFillRowActionCell === 'function') _conciFillRowActionCell(actionTd, String(id));
+    return true;
+}
+
 async function _conciAutoSaveRow(tr, options = {}) {
     if (!tr) return;
     if (!tr.isConnected) return _conciAnotar(tr, 'omitida', 'la fila ya no estaba en la tabla');
@@ -29755,7 +29859,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 // crear un registro real ahí, no perderse en la fila espejo.
                 const duplicateUpdatePayload = {};
                 Object.keys(payload).forEach(col => {
-                    if (dirtyCols.has(col) || autoPersistedCols.has(col) || _conciShouldPersistCalculatedColumn(col)) {
+                    if (dirtyCols.has(col) || autoPersistedCols.has(col) || _conciCalculadaDebeEnviarse(col, dirtyCols)) {
                         duplicateUpdatePayload[col] = payload[col];
                     }
                 });
@@ -29765,6 +29869,10 @@ async function _conciAutoSaveRow(tr, options = {}) {
                     columnasDeCaptura: identidadCapturada,
                 });
                 if (!result.ok) {
+                    // Si la base alcanzó a crear el registro, esta fila ya tiene
+                    // id: lo que falta se completará con UPDATE, no insertándola
+                    // otra vez (ver _conciAdoptarFilaPersistida).
+                    _conciAdoptarFilaPersistida(tr, result);
                     const msg = result.error?.message || 'error de base de datos';
                     tr.title = `Pendiente de guardar: ${msg}`;
                     tr.classList.add('table-secondary');
@@ -29824,7 +29932,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
             if (!rowId && tr.dataset.clienteUuid) writePayload.cliente_uuid = tr.dataset.clienteUuid;
             if (rowId) {
                 Object.keys(payload).forEach(col => {
-                    if (dirtyCols.has(col) || autoPersistedCols.has(col) || _conciShouldPersistCalculatedColumn(col)) {
+                    if (dirtyCols.has(col) || autoPersistedCols.has(col) || _conciCalculadaDebeEnviarse(col, dirtyCols)) {
                         writePayload[col] = payload[col];
                     }
                 });
@@ -29859,6 +29967,9 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 return;
             }
             if (!result.ok) {
+                // Igual que arriba: si el registro llegó a crearse, se adopta su
+                // id para que el reintento actualice en vez de duplicar la fila.
+                _conciAdoptarFilaPersistida(tr, result);
                 // Conserva la fila y sus valores para que el usuario pueda corregir
                 // el campo que causó el error; nunca se elimina silenciosamente.
                 const msg = result.error?.message || 'error de base de datos';

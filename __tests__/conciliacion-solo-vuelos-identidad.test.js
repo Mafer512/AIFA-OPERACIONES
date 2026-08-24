@@ -69,6 +69,7 @@ function construirApi() {
     function _conciEncolarPendientesDeFila() { estado.encolados++; }
     function _conciIsCalculatedColumn() { return false; }
     function _conciShouldPersistCalculatedColumn() { return false; }
+    function _conciCalculadaDebeEnviarse() { return false; }
     function _conciIsRoutingColumn() { return false; }
     function _conciPrepareValueForDatabase(col, value) { return value; }
     function _conciCoerceNumberCandidate(v) {
@@ -117,6 +118,8 @@ function construirApi() {
     ${extraer('_conciAirlinePayloadEntry')}
     ${extraer('_conciFilaNuevaListaParaGuardar')}
     ${extraer('_conciErrorEsperaCorreccion')}
+    ${extraer('_conciNumeroComparable')}
+    ${extraer('_conciAdoptarFilaPersistida')}
     ${extraer('_conciDatabaseValueEquals')}
     ${extraer('_conciPersistenceMismatch')}
     ${extraer('_conciMovementKeyFromDuplicateError')}
