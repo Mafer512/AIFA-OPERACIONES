@@ -26771,7 +26771,14 @@ function _conciActualizarIndicadorBorradores() {
     // Aqui solo se cuenta lo accionable; las huerfanas se descartan desde el
     // panel, que es el unico sitio donde hay algo que hacer con ellas.
     const ajenos = (typeof _conciPendientesAjenos === 'function') ? _conciPendientesAjenos() : [];
-    const rescatables = ajenos.filter(p => !_conciPendienteEsHuerfano(p));
+    // El aviso "N capturas de Fulano sin aplicar" se retiro de la barra: ponia
+    // el nombre de un companero delante de toda la sala y desde ahi no habia
+    // nada que hacer con ese numero. Lo pendiente de otra computadora sigue en
+    // la cola, se aplica solo y se sigue viendo completo en el panel.
+    const MOSTRAR_PENDIENTES_AJENOS = false;
+    const rescatables = MOSTRAR_PENDIENTES_AJENOS
+        ? ajenos.filter(p => !_conciPendienteEsHuerfano(p))
+        : [];
 
     if (!celdas && !rescatables.length) {
         el.classList.add('d-none');
@@ -27449,10 +27456,10 @@ function _conciAbrirInstrucciones() {
                 salir: es solo una advertencia, no una amenaza.</p>
 
                 <h6 class="mt-3">Si tu computadora se apaga o te cambias de equipo</h6>
-                <p class="mb-2">Lo pendiente queda registrado en el servidor. Cualquiera lo ve en la
-                etiqueta <span class="badge" style="background:#fff3cd;color:#664d03;border:1px solid #f0ad4e">capturas de … sin aplicar</span>
-                de la barra de arriba, y puede aplicarlo desde ahí con un clic. Esa etiqueta sólo cuenta
-                lo que todavía se puede colocar: en cuanto la base confirma un valor, deja de aparecer.</p>
+                <p class="mb-2">Lo pendiente queda registrado en el servidor: no se pierde. Al volver a
+                entrar en esa misma computadora se reintenta solo hasta que la base lo acepte. Si ya no
+                vuelves a ese equipo, vuelve a capturar esa celda desde donde estés; en cuanto la base
+                confirma el valor, el pendiente se retira de la cola por su cuenta.</p>
 
                 <h6 class="mt-3">Si alguien captura la misma celda que tú</h6>
                 <p class="mb-2">Manda lo tuyo: tu captura no se pisa nunca. La celda queda marcada en
@@ -27666,7 +27673,12 @@ function _conciActualizarBotonGuardarTodo() {
     if (!btn) return;
     const grupo = document.getElementById('grp-conci-save-all');
     const caret = document.getElementById('btn-conci-save-all-more');
-    const visible = _conciEditMode && _conciCanCurrentUserEdit();
+    // La captura se guarda sola, celda por celda, en cuanto se sale de ella. El
+    // boton solo repetia ese trabajo y ocupaba sitio en la barra, asi que se
+    // deja fuera de pantalla a peticion de operaciones. La funcion sigue viva:
+    // Ctrl+G y window.conciGuardarTodo fuerzan el guardado sin el boton.
+    const MOSTRAR_BOTON_GUARDAR_TODO = false;
+    const visible = MOSTRAR_BOTON_GUARDAR_TODO && _conciEditMode && _conciCanCurrentUserEdit();
     (grupo || btn).classList.toggle('d-none', !visible);
     // La reescritura completa puede pisar capturas ajenas: no es una accion de
     // captura, es de administracion del modulo. Un capturista guarda lo suyo,

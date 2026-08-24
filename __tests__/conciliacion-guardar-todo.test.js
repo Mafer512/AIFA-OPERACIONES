@@ -137,7 +137,7 @@ describe('el botón está en la barra', () => {
     expect(titulo).toContain('Ctrl+G');
   });
 
-  test('nace oculto: sólo aparece con la captura activa', () => {
+  test('nace oculto y así se queda', () => {
     const marca = html.indexOf('id="grp-conci-save-all"');
     expect(marca).toBeGreaterThan(-1);
     expect(html.slice(marca - 120, marca)).toContain('d-none');
@@ -326,25 +326,25 @@ describe('permisos y modo de captura', () => {
   });
 });
 
-describe('el contador del botón', () => {
-  test('aparece con el número de capturas sin confirmar', () => {
+describe('el botón no se pinta en la barra', () => {
+  // Operaciones pidió quitarlo de la vista: la captura se guarda sola celda a
+  // celda, y un botón de guardar al lado hacía dudar de si lo tecleado ya
+  // estaba en la base. El guardado a mano NO se retiró — vive en Ctrl+G y en
+  // window.conciGuardarTodo, y el resto de este archivo lo sigue cubriendo.
+  test('sigue oculto aunque haya capturas sin confirmar', () => {
     pintar([{ rowId: '1', sucias: ['TOTAL PAX', 'OBSERVACIONES'] }]);
     api._conciActualizarBotonGuardarTodo();
 
-    expect(grupo().classList.contains('d-none')).toBe(false);
-    expect(insignia().textContent).toBe('2');
-    expect(insignia().classList.contains('d-none')).toBe(false);
-    expect(boton().classList.contains('btn-success')).toBe(true);
+    expect(grupo().classList.contains('d-none')).toBe(true);
+    // Ni el contador amarillo: no hay nada visible que lo muestre.
+    expect(insignia().classList.contains('d-none')).toBe(true);
   });
 
-  test('se apaga cuando ya no queda nada pendiente', () => {
+  test('sigue oculto sin nada pendiente', () => {
     pintar([{ rowId: '1' }]);
     api._conciActualizarBotonGuardarTodo();
 
-    expect(insignia().classList.contains('d-none')).toBe(true);
-    expect(boton().classList.contains('btn-outline-success')).toBe(true);
-    // Sigue disponible: el sentido del botón es poder confirmar a mano.
-    expect(grupo().classList.contains('d-none')).toBe(false);
+    expect(grupo().classList.contains('d-none')).toBe(true);
   });
 
   test('se esconde fuera del modo captura', () => {
@@ -355,12 +355,12 @@ describe('el contador del botón', () => {
     expect(grupo().classList.contains('d-none')).toBe(true);
   });
 
-  test('un capturista ve "Guardar todo" pero no la reescritura completa', () => {
+  test('la reescritura completa tampoco asoma para un capturista', () => {
     pintar([{ rowId: '1', sucias: ['TOTAL PAX'] }]);
     api.permisoAdmin(false);
     api._conciActualizarBotonGuardarTodo();
 
-    expect(grupo().classList.contains('d-none')).toBe(false);
+    expect(grupo().classList.contains('d-none')).toBe(true);
     expect(caret().classList.contains('d-none')).toBe(true);
   });
 });
