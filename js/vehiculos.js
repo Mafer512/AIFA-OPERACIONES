@@ -14,7 +14,8 @@
         loading: false,
         isAdmin: false,
         editingId: null,  // UUID del registro en edición
-        uploadFile: null, // File object pendiente de subir
+        uploadFile: null, // File object pendiente de subir (foto)
+        resguardoFile: null, // File object pendiente de subir (PDF de resguardo)
         mantVehiculoId: null // vehículo activo al registrar un mantenimiento
     };
 
@@ -227,9 +228,17 @@
         const cfg = EDITABLE_FIELDS[field];
         const raw = v[field];
         const val = cfg.render ? cfg.render(v) : (raw ? escapeHtml(raw) : '<span class="text-muted">—</span>');
+        const pdfBtn = (field === 'numero_resguardo' && v.resguardo_pdf_path)
+            ? `<button type="button" class="btn btn-sm btn-link p-0 text-danger" style="font-size:.8rem;"
+                       onclick="window.vehiculosModule.viewResguardoPdf('${v.id}')"
+                       title="Ver PDF: ${escapeHtml(v.resguardo_pdf_nombre || 'resguardo.pdf')}">
+                 <i class="fas fa-file-pdf"></i>
+               </button>`
+            : '';
         return `
           <span class="d-inline-flex align-items-center gap-1">
             <span class="small">${val}</span>
+            ${pdfBtn}
             <button type="button" class="btn btn-sm btn-link p-0 text-muted" style="font-size:.72rem;"
                     onclick="window.vehiculosModule.editCell('${v.id}','${field}')" title="Editar ${cfg.label.toLowerCase()}">
               <i class="fas fa-pencil-alt"></i>
@@ -242,22 +251,43 @@
         const v    = state.all.find(x => x.id === id);
         const cell = document.getElementById(`veh-cell-${field}-${id}`);
         if (!v || !cell || !cfg) return;
+        state.resguardoFile = null;
         const isDate  = cfg.type === 'date';
         const rawVal  = v[field] ? String(v[field]).slice(0, 10) : '';
+        const pdfRow  = field === 'numero_resguardo' ? `
+            <div class="d-flex align-items-center justify-content-center gap-2 mt-1 w-100">
+              <label for="veh-input-resguardo-pdf-${id}"
+                     class="btn btn-sm btn-outline-primary rounded-pill py-0 px-2 mb-0 d-inline-flex align-items-center"
+                     style="font-size:.7rem;line-height:1;cursor:pointer;white-space:nowrap;">
+                <i class="fas fa-paperclip me-1"></i>Adjuntar PDF
+              </label>
+              <input type="file" accept="application/pdf,.pdf" class="d-none"
+                     id="veh-input-resguardo-pdf-${id}"
+                     onchange="window.vehiculosModule.handleResguardoFileChange('${id}', this)">
+              <span id="veh-resguardo-filename-${id}" class="small text-muted text-truncate d-inline-flex align-items-center" style="max-width:130px;font-size:.7rem;line-height:1;">
+                Ningún archivo seleccionado
+              </span>
+            </div>
+            ${v.resguardo_pdf_path ? `<div class="small text-muted mt-1" style="font-size:.7rem;">
+                <i class="fas fa-file-pdf me-1 text-danger"></i>Actual: ${escapeHtml(v.resguardo_pdf_nombre || 'archivo.pdf')}
+              </div>` : ''}` : '';
         cell.innerHTML = `
-          <div class="d-flex align-items-center gap-1">
-            <input type="${isDate ? 'date' : 'text'}" class="form-control form-control-sm"
-                   style="min-width:${isDate ? '150' : '130'}px;font-size:.78rem;"
-                   id="veh-input-${field}-${id}" value="${rawVal}"
-                   ${isDate ? '' : `placeholder="${cfg.placeholder}"`}>
-            <button type="button" class="btn btn-sm btn-success py-0 px-2"
-                    onclick="window.vehiculosModule.saveCell('${id}','${field}')" title="Guardar">
-              <i class="fas fa-check"></i>
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2"
-                    onclick="window.vehiculosModule.cancelCell('${id}','${field}')" title="Cancelar">
-              <i class="fas fa-times"></i>
-            </button>
+          <div class="d-flex flex-column gap-1">
+            <div class="d-flex align-items-center gap-1">
+              <input type="${isDate ? 'date' : 'text'}" class="form-control form-control-sm"
+                     style="min-width:${isDate ? '150' : '130'}px;font-size:.78rem;"
+                     id="veh-input-${field}-${id}" value="${rawVal}"
+                     ${isDate ? '' : `placeholder="${cfg.placeholder}"`}>
+              <button type="button" class="btn btn-sm btn-success py-0 px-2"
+                      onclick="window.vehiculosModule.saveCell('${id}','${field}')" title="Guardar">
+                <i class="fas fa-check"></i>
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2"
+                      onclick="window.vehiculosModule.cancelCell('${id}','${field}')" title="Cancelar">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+            ${pdfRow}
           </div>`;
         const input = document.getElementById(`veh-input-${field}-${id}`);
         if (input) {
@@ -270,7 +300,35 @@
         }
     }
 
+    function handleResguardoFileChange(id, input) {
+        const label = document.getElementById(`veh-resguardo-filename-${id}`);
+        const file  = input.files?.[0];
+        if (!file) {
+            state.resguardoFile = null;
+            if (label) label.textContent = 'Ningún archivo seleccionado';
+            return;
+        }
+        const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+        if (!isPdf) {
+            showToast('Solo se permiten archivos PDF.', 'danger');
+            input.value = '';
+            state.resguardoFile = null;
+            if (label) label.textContent = 'Ningún archivo seleccionado';
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            showToast('El PDF no debe superar 10 MB.', 'danger');
+            input.value = '';
+            state.resguardoFile = null;
+            if (label) label.textContent = 'Ningún archivo seleccionado';
+            return;
+        }
+        state.resguardoFile = file;
+        if (label) { label.textContent = file.name; label.title = file.name; }
+    }
+
     function cancelCell(id, field) {
+        state.resguardoFile = null;
         const v = state.all.find(x => x.id === id);
         const cell = document.getElementById(`veh-cell-${field}-${id}`);
         if (v && cell) cell.innerHTML = editableCellHTML(v, field);
@@ -282,29 +340,64 @@
         const cell  = document.getElementById(`veh-cell-${field}-${id}`);
         if (!input || !cell || !cfg) return;
         const value = input.value.trim() || null;
+        const file  = field === 'numero_resguardo' ? state.resguardoFile : null;
 
         cell.innerHTML = '<span class="small text-muted"><span class="spinner-border spinner-border-sm me-1"></span>Guardando…</span>';
         try {
             const supabase = await window.ensureSupabaseClient();
+            const payload = { [field]: value };
+
+            if (file) {
+                const v = state.all.find(x => x.id === id);
+                const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                const path = `${(v?.codigo_aifa || id).replace(/[^a-zA-Z0-9._-]/g, '_')}-${Date.now()}-${safeName}`;
+                const { error: upErr } = await supabase.storage
+                    .from('vehiculos-resguardos')
+                    .upload(path, file, { upsert: true, contentType: 'application/pdf' });
+                if (upErr) throw upErr;
+                payload.resguardo_pdf_path   = path;
+                payload.resguardo_pdf_nombre = file.name;
+            }
+
             const { error } = await supabase
                 .from('catalogo_vehiculos')
-                .update({ [field]: value })
+                .update(payload)
                 .eq('id', id);
             if (error) throw error;
 
             const v  = state.all.find(x => x.id === id);
             const vf = state.filtered.find(x => x.id === id);
-            if (v)  v[field]  = value;
-            if (vf) vf[field] = value;
+            Object.entries(payload).forEach(([k, val]) => {
+                if (v)  v[k]  = val;
+                if (vf) vf[k] = val;
+            });
             if (field === 'vigencia_seguro') updateKPIs(state.all);
 
-            cell.innerHTML = editableCellHTML(v || { id, [field]: value }, field);
+            state.resguardoFile = null;
+            cell.innerHTML = editableCellHTML(v || { id, ...payload }, field);
             showToast(`${cfg.label} actualizado ✓`, 'success');
         } catch (err) {
             console.error(`[vehiculos] saveCell(${field}) error:`, err);
             showToast(`Error al guardar ${cfg.label.toLowerCase()}: ` + (err.message || err), 'danger');
             const v = state.all.find(x => x.id === id);
             cell.innerHTML = editableCellHTML(v || {}, field);
+        }
+    }
+
+    // ── Ver PDF de resguardo (URL firmada, bucket privado) ─────
+    async function viewResguardoPdf(id) {
+        const v = state.all.find(x => x.id === id);
+        if (!v?.resguardo_pdf_path) return;
+        try {
+            const supabase = await window.ensureSupabaseClient();
+            const { data, error } = await supabase.storage
+                .from('vehiculos-resguardos')
+                .createSignedUrl(v.resguardo_pdf_path, 300);
+            if (error) throw error;
+            window.open(data.signedUrl, '_blank', 'noopener');
+        } catch (err) {
+            console.error('[vehiculos] viewResguardoPdf error:', err);
+            showToast('No se pudo abrir el PDF: ' + (err.message || err), 'danger');
         }
     }
 
@@ -444,7 +537,12 @@
                   ${row2('Placas',          v.placas, 'fa-car-side')}
                   ${row2('Área',            v.area_responsable, 'fa-building')}
                   ${row2('Responsable',        v.responsable_nombre, 'fa-user')}
-                  ${row2('Número de Resguardo', v.numero_resguardo, 'fa-file-signature')}
+                  ${row2('Número de Resguardo', (v.numero_resguardo || '—') + (v.resguardo_pdf_path
+                        ? ` <button type="button" class="btn btn-sm btn-link p-0 ms-1 text-danger" style="font-size:.85rem;"
+                                    onclick="window.vehiculosModule.viewResguardoPdf('${v.id}')"
+                                    title="Ver PDF: ${escapeHtml(v.resguardo_pdf_nombre || 'resguardo.pdf')}">
+                              <i class="fas fa-file-pdf"></i></button>`
+                        : ''), 'fa-file-signature')}
                 </tbody>
               </table>
             </div>
@@ -976,6 +1074,8 @@
         editCell,
         saveCell,
         cancelCell,
+        handleResguardoFileChange,
+        viewResguardoPdf,
         openMantModal,
         saveMantenimiento,
         openMantAllModal,
