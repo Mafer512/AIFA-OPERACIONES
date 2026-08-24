@@ -16,8 +16,24 @@
         editingId: null,  // UUID del registro en edición
         uploadFile: null, // File object pendiente de subir (foto)
         resguardoFile: null, // File object pendiente de subir (PDF de resguardo)
-        mantVehiculoId: null // vehículo activo al registrar un mantenimiento
+        previewRequest: null, // token de la última solicitud de vista previa (evita respuestas fuera de orden)
+        mantVehiculoId: null, // vehículo activo al registrar un mantenimiento
+        // Visor de PDF embebido (modal)
+        viewerRequest: 0,
+        viewerPdf: null,
+        viewerVehId: null,
+        viewerPage: 1,
+        viewerPages: null,
+        viewerScale: 1,
+        viewerFitMode: 'page',
+        viewerRenderRequest: 0,
+        viewerRenderTask: null,
+        viewerResizeTimer: null,
+        viewerSignedUrl: null
     };
+
+    // Cache de miniaturas ya renderizadas: "id:storage_path" -> dataURL
+    const resguardoPreviewCache = new Map();
 
     // ── Paleta de colores por tipo de vehículo ────────────────
     const TYPE_COLOR = {
@@ -231,6 +247,8 @@
         const pdfBtn = (field === 'numero_resguardo' && v.resguardo_pdf_path)
             ? `<button type="button" class="btn btn-sm btn-link p-0 text-danger" style="font-size:.8rem;"
                        onclick="window.vehiculosModule.viewResguardoPdf('${v.id}')"
+                       onmouseenter="window.vehiculosModule.showResguardoPreview(event,'${v.id}')"
+                       onmouseleave="window.vehiculosModule.hideResguardoPreview()"
                        title="Ver PDF: ${escapeHtml(v.resguardo_pdf_nombre || 'resguardo.pdf')}">
                  <i class="fas fa-file-pdf"></i>
                </button>`
@@ -268,8 +286,12 @@
                 Ningún archivo seleccionado
               </span>
             </div>
-            ${v.resguardo_pdf_path ? `<div class="small text-muted mt-1" style="font-size:.7rem;">
-                <i class="fas fa-file-pdf me-1 text-danger"></i>Actual: ${escapeHtml(v.resguardo_pdf_nombre || 'archivo.pdf')}
+            ${v.resguardo_pdf_path ? `<div class="d-flex align-items-center justify-content-center gap-2 small text-muted mt-1" style="font-size:.7rem;">
+                <span><i class="fas fa-file-pdf me-1 text-danger"></i>Actual: ${escapeHtml(v.resguardo_pdf_nombre || 'archivo.pdf')}</span>
+                <button type="button" class="btn btn-sm btn-link p-0 text-danger" style="font-size:.78rem;line-height:1;"
+                        onclick="window.vehiculosModule.removeResguardoPdf('${id}')" title="Eliminar PDF adjunto">
+                  <i class="fas fa-trash-alt"></i>
+                </button>
               </div>` : ''}` : '';
         cell.innerHTML = `
           <div class="d-flex flex-column gap-1">
@@ -384,20 +406,406 @@
         }
     }
 
-    // ── Ver PDF de resguardo (URL firmada, bucket privado) ─────
+    // ── Visor de PDF embebido (modal, sin abrir pestaña nueva) ──
+    function ensureViewerUI() {
+        if (document.getElementById('veh-pdf-modal')) return;
+        document.body.insertAdjacentHTML('beforeend', `
+          <div class="modal fade" id="veh-pdf-modal" tabindex="-1" aria-labelledby="veh-pdf-title">
+            <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content">
+                <div class="modal-header py-2">
+                  <div class="min-w-0 overflow-hidden">
+                    <h6 id="veh-pdf-title" class="modal-title mb-0 text-truncate">Documento PDF</h6>
+                    <small id="veh-pdf-meta" class="text-muted text-truncate d-block"></small>
+                  </div>
+                  <button class="btn-close flex-shrink-0" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body p-0 veh-pdf-body">
+                  <div class="veh-pdf-toolbar d-flex flex-wrap gap-2 align-items-center p-2 border-bottom bg-light">
+                    <button id="veh-pdf-prev" type="button" class="btn btn-sm btn-outline-secondary" title="Página anterior" aria-label="Página anterior" onclick="window.vehiculosModule.viewerPage(-1)"><i class="fas fa-chevron-left"></i></button>
+                    <span id="veh-pdf-page-label" class="small text-nowrap">Página 1</span>
+                    <button id="veh-pdf-next" type="button" class="btn btn-sm btn-outline-secondary" title="Página siguiente" aria-label="Página siguiente" onclick="window.vehiculosModule.viewerPage(1)"><i class="fas fa-chevron-right"></i></button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" title="Alejar" aria-label="Alejar" onclick="window.vehiculosModule.viewerZoom(-1)"><i class="fas fa-search-minus"></i></button>
+                    <span id="veh-pdf-zoom-label" class="small text-nowrap">100%</span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" title="Acercar" aria-label="Acercar" onclick="window.vehiculosModule.viewerZoom(1)"><i class="fas fa-search-plus"></i></button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.vehiculosModule.viewerFit()">Ajustar al ancho</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.vehiculosModule.viewerFitPage()">Ajustar página</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" title="Restablecer zoom inicial" onclick="window.vehiculosModule.viewerReset()"><i class="fas fa-rotate-left me-1"></i>Restablecer</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary ms-auto" onclick="window.vehiculosModule.viewerOpenTab()"><i class="fas fa-external-link-alt me-1"></i>Otra pestaña</button>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="window.vehiculosModule.viewerDownload()"><i class="fas fa-download me-1"></i>Descargar</button>
+                  </div>
+                  <div id="veh-pdf-stage" tabindex="0" aria-label="Visor PDF desplazable">
+                    <div id="veh-pdf-loading" class="position-absolute top-50 start-50 translate-middle text-center text-white">
+                      <span class="spinner-border"></span>
+                      <div class="small mt-2">Preparando documento…</div>
+                    </div>
+                    <div id="veh-pdf-canvas-wrap"><canvas id="veh-pdf-canvas" class="d-none" aria-label="Página del documento PDF"></canvas></div>
+                    <div id="veh-pdf-fallback" class="alert alert-warning position-absolute top-50 start-50 translate-middle d-none mb-0">
+                      No se pudo mostrar el PDF.
+                      <button type="button" class="btn btn-sm btn-outline-dark" onclick="window.vehiculosModule.viewerOpenTab()">Abrir en otra pestaña</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>`);
+        document.head.insertAdjacentHTML('beforeend', `<style id="veh-pdf-styles">
+          #veh-pdf-modal .modal-dialog{width:min(1500px,96vw);max-width:none;height:96vh;margin:2vh auto}
+          #veh-pdf-modal .modal-content{height:100%;overflow:hidden}
+          #veh-pdf-modal .modal-header{flex:0 0 auto}
+          #veh-pdf-modal .veh-pdf-body{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+          #veh-pdf-modal .veh-pdf-toolbar{flex:0 0 auto;z-index:2}
+          #veh-pdf-stage{position:relative;flex:1 1 auto;min-height:0;overflow:auto;background:#525659;overscroll-behavior:contain;touch-action:pan-x pan-y}
+          #veh-pdf-canvas-wrap{box-sizing:border-box;display:flex;align-items:center;justify-content:center;min-width:100%;min-height:100%;width:max-content;height:max-content;padding:16px}
+          #veh-pdf-canvas{display:block;flex:none;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.35)}
+          #veh-pdf-loading,#veh-pdf-fallback{z-index:3}
+          @media(max-width:767.98px){
+            #veh-pdf-modal .modal-dialog{width:100vw;max-width:none;height:100vh;height:100dvh;margin:0}
+            #veh-pdf-modal .modal-content{border:0;border-radius:0}
+            #veh-pdf-modal .modal-header{padding:.5rem .75rem}
+            #veh-pdf-modal .veh-pdf-toolbar{padding:.4rem!important;gap:.3rem!important}
+            #veh-pdf-modal .veh-pdf-toolbar .btn{padding:.25rem .45rem}
+            #veh-pdf-canvas-wrap{padding:8px}
+          }
+        </style>`);
+        document.getElementById('veh-pdf-modal')?.addEventListener('hidden.bs.modal', clearViewer);
+        window.addEventListener('resize', () => {
+            clearTimeout(state.viewerResizeTimer);
+            state.viewerResizeTimer = setTimeout(() => {
+                if (state.viewerPdf && document.getElementById('veh-pdf-modal')?.classList.contains('show')) {
+                    applyViewerChange(Boolean(state.viewerFitMode));
+                }
+            }, 150);
+        });
+    }
+
+    function cancelViewerRender() {
+        state.viewerRenderRequest = (state.viewerRenderRequest || 0) + 1;
+        try { state.viewerRenderTask?.cancel?.(); } catch (_) { /* noop */ }
+        state.viewerRenderTask = null;
+    }
+
+    function clearViewer() {
+        cancelViewerRender();
+        clearTimeout(state.viewerResizeTimer);
+        const pdf = state.viewerPdf;
+        state.viewerPdf = null;
+        state.viewerVehId = null;
+        state.viewerPages = null;
+        state.viewerPage = 1;
+        state.viewerScale = 1;
+        state.viewerFitMode = 'page';
+        try { pdf?.destroy?.()?.catch?.(() => {}); } catch (_) { /* noop */ }
+        const canvas = document.getElementById('veh-pdf-canvas');
+        const ctx = canvas?.getContext?.('2d');
+        if (canvas) { ctx?.clearRect(0, 0, canvas.width, canvas.height); canvas.width = 0; canvas.height = 0; canvas.classList.add('d-none'); }
+        document.getElementById('veh-pdf-loading')?.classList.remove('d-none');
+        document.getElementById('veh-pdf-fallback')?.classList.add('d-none');
+    }
+
+    function showViewerModal() {
+        const el = document.getElementById('veh-pdf-modal');
+        const modal = bootstrap.Modal.getOrCreateInstance(el);
+        if (el.classList.contains('show')) return Promise.resolve();
+        const shown = new Promise(resolve => el.addEventListener('shown.bs.modal', () => requestAnimationFrame(resolve), { once: true }));
+        modal.show();
+        return shown;
+    }
+
+    // ── Ver PDF de resguardo (visor embebido, URL firmada) ─────
     async function viewResguardoPdf(id) {
         const v = state.all.find(x => x.id === id);
         if (!v?.resguardo_pdf_path) return;
+        ensureViewerUI();
+
+        const request = (state.viewerRequest = (state.viewerRequest || 0) + 1);
+        let pdf = null;
         try {
             const supabase = await window.ensureSupabaseClient();
             const { data, error } = await supabase.storage
                 .from('vehiculos-resguardos')
                 .createSignedUrl(v.resguardo_pdf_path, 300);
             if (error) throw error;
-            window.open(data.signedUrl, '_blank', 'noopener');
+            if (!window.pdfjsLib?.getDocument) throw new Error('El visor PDF no está disponible en este momento.');
+
+            pdf = await window.pdfjsLib.getDocument({ url: data.signedUrl }).promise;
+            if (request !== state.viewerRequest) { pdf.destroy?.(); return; }
+            if (!pdf?.numPages) throw new Error('El archivo no contiene páginas PDF legibles.');
+
+            clearViewer();
+            state.viewerPdf       = pdf;
+            state.viewerVehId     = id;
+            state.viewerPage      = 1;
+            state.viewerPages     = pdf.numPages;
+            state.viewerScale     = 1;
+            state.viewerFitMode   = 'page';
+            state.viewerSignedUrl = data.signedUrl;
+
+            const titleEl = document.getElementById('veh-pdf-title');
+            const metaEl  = document.getElementById('veh-pdf-meta');
+            if (titleEl) titleEl.textContent = v.resguardo_pdf_nombre || 'Documento PDF';
+            if (metaEl)  metaEl.textContent  = `${v.codigo_aifa} · Núm. de resguardo: ${v.numero_resguardo || '—'}`;
+            document.getElementById('veh-pdf-fallback')?.classList.add('d-none');
+            document.getElementById('veh-pdf-loading')?.classList.remove('d-none');
+            updateViewerStatus();
+
+            await showViewerModal();
+            if (request !== state.viewerRequest) return;
+            await applyViewerChange(true);
         } catch (err) {
             console.error('[vehiculos] viewResguardoPdf error:', err);
-            showToast('No se pudo abrir el PDF: ' + (err.message || err), 'danger');
+            if (request === state.viewerRequest) {
+                if (state.viewerVehId) {
+                    showActiveViewerError(err);
+                } else {
+                    if (pdf && state.viewerPdf !== pdf) { try { pdf.destroy?.(); } catch (_) { /* noop */ } }
+                    clearViewer();
+                    showToast('No se pudo abrir el PDF: ' + (err.message || err), 'danger');
+                }
+            }
+        }
+    }
+
+    function viewerFitScale(baseViewport, mode) {
+        const stage = document.getElementById('veh-pdf-stage');
+        const padding = window.innerWidth < 768 ? 16 : 32;
+        const availableWidth  = Math.max(1, stage.clientWidth  - padding - 2);
+        const availableHeight = Math.max(1, stage.clientHeight - padding - 2);
+        const widthScale = availableWidth / baseViewport.width;
+        return Math.max(.1, mode === 'width' ? widthScale : Math.min(widthScale, availableHeight / baseViewport.height));
+    }
+
+    function updateViewerStatus() {
+        const pageLabel = document.getElementById('veh-pdf-page-label');
+        const zoomLabel = document.getElementById('veh-pdf-zoom-label');
+        if (pageLabel) pageLabel.textContent = `Página ${state.viewerPage}${state.viewerPages ? ` de ${state.viewerPages}` : ''}`;
+        if (zoomLabel) zoomLabel.textContent = `${Math.round((state.viewerScale || 1) * 100)}%`;
+        const prevBtn = document.getElementById('veh-pdf-prev');
+        const nextBtn = document.getElementById('veh-pdf-next');
+        if (prevBtn) prevBtn.disabled = state.viewerPage <= 1;
+        if (nextBtn) nextBtn.disabled = !state.viewerPages || state.viewerPage >= state.viewerPages;
+    }
+
+    async function refreshViewer(recalculateFit = false) {
+        if (!state.viewerPdf) return;
+        cancelViewerRender();
+        const request = state.viewerRenderRequest;
+        const pdf = state.viewerPdf;
+        state.viewerPage = Math.min(state.viewerPages, Math.max(1, state.viewerPage));
+        updateViewerStatus();
+        document.getElementById('veh-pdf-loading')?.classList.remove('d-none');
+        document.getElementById('veh-pdf-fallback')?.classList.add('d-none');
+
+        try {
+            const page = await pdf.getPage(state.viewerPage);
+            if (request !== state.viewerRenderRequest || pdf !== state.viewerPdf) return;
+            const base = page.getViewport({ scale: 1 });
+            if (recalculateFit) state.viewerScale = viewerFitScale(base, state.viewerFitMode || 'page');
+            state.viewerScale = Math.min(4, Math.max(.1, state.viewerScale));
+
+            const cssViewport    = page.getViewport({ scale: state.viewerScale });
+            const outputScale    = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+            const renderViewport = page.getViewport({ scale: state.viewerScale * outputScale });
+            const canvas  = document.getElementById('veh-pdf-canvas');
+            const context = canvas.getContext('2d', { alpha: false });
+            canvas.width  = Math.ceil(renderViewport.width);
+            canvas.height = Math.ceil(renderViewport.height);
+            canvas.style.width  = `${cssViewport.width}px`;
+            canvas.style.height = `${cssViewport.height}px`;
+
+            const task = page.render({ canvasContext: context, viewport: renderViewport });
+            state.viewerRenderTask = task;
+            await task.promise;
+            if (request !== state.viewerRenderRequest || pdf !== state.viewerPdf) return;
+            state.viewerRenderTask = null;
+            canvas.classList.remove('d-none');
+            document.getElementById('veh-pdf-loading')?.classList.add('d-none');
+            updateViewerStatus();
+            const stage = document.getElementById('veh-pdf-stage');
+            requestAnimationFrame(() => stage.scrollTo({ top: 0, left: Math.max(0, (stage.scrollWidth - stage.clientWidth) / 2), behavior: 'auto' }));
+        } catch (err) {
+            if (err?.name === 'RenderingCancelledException' || request !== state.viewerRenderRequest) return;
+            state.viewerRenderTask = null;
+            throw err;
+        }
+    }
+
+    function showActiveViewerError(err) {
+        const canvas   = document.getElementById('veh-pdf-canvas');
+        const fallback = document.getElementById('veh-pdf-fallback');
+        cancelViewerRender();
+        canvas?.classList.add('d-none');
+        document.getElementById('veh-pdf-loading')?.classList.add('d-none');
+        if (fallback) {
+            fallback.innerHTML = `No se pudo mostrar el PDF. ${escapeHtml(err?.message || '')}
+              <button type="button" class="btn btn-sm btn-outline-dark" onclick="window.vehiculosModule.viewerOpenTab()">Abrir en otra pestaña</button>`;
+            fallback.classList.remove('d-none');
+        }
+        showToast('No se pudo mostrar el PDF: ' + (err?.message || err), 'danger');
+    }
+
+    async function applyViewerChange(recalculateFit = false) {
+        try { await refreshViewer(recalculateFit); }
+        catch (err) { showActiveViewerError(err); }
+    }
+
+    async function viewerPage(delta) {
+        const next = Math.min(state.viewerPages || 1, Math.max(1, state.viewerPage + delta));
+        if (next === state.viewerPage) return;
+        state.viewerPage = next;
+        await applyViewerChange(false);
+    }
+
+    async function viewerZoom(direction) {
+        state.viewerFitMode = null;
+        state.viewerScale = Math.min(4, Math.max(.1, (state.viewerScale || 1) * (direction > 0 ? 1.15 : 1 / 1.15)));
+        await applyViewerChange(false);
+    }
+
+    async function viewerFit()     { state.viewerFitMode = 'width'; await applyViewerChange(true); }
+    async function viewerFitPage() { state.viewerFitMode = 'page';  await applyViewerChange(true); }
+    async function viewerReset()   { state.viewerFitMode = 'page';  await applyViewerChange(true); }
+
+    function viewerOpenTab() {
+        if (!state.viewerVehId || !state.viewerSignedUrl) return;
+        const opened = window.open(state.viewerSignedUrl, '_blank', 'noopener');
+        if (opened === null) showToast('El navegador bloqueó la nueva pestaña.', 'warning');
+    }
+
+    function viewerDownload() {
+        if (!state.viewerVehId || !state.viewerSignedUrl) return;
+        const v = state.all.find(x => x.id === state.viewerVehId);
+        const a = document.createElement('a');
+        a.href = state.viewerSignedUrl;
+        a.download = v?.resguardo_pdf_nombre || 'resguardo.pdf';
+        a.rel = 'noopener';
+        a.click();
+    }
+
+    // ── Vista previa al pasar el mouse sobre el ícono de PDF ────
+    function ensureResguardoPreviewEl() {
+        let el = document.getElementById('veh-resguardo-preview');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'veh-resguardo-preview';
+            el.style.cssText = 'position:fixed;z-index:3000;display:none;background:#fff;'
+                + 'border:1px solid rgba(0,0,0,.15);border-radius:10px;'
+                + 'box-shadow:0 10px 30px rgba(0,0,0,.25);padding:8px;pointer-events:none;';
+            el.innerHTML = `<div id="veh-resguardo-preview-body"
+                                  class="d-flex align-items-center justify-content-center"
+                                  style="width:200px;height:260px;"></div>`;
+            document.body.appendChild(el);
+        }
+        return el;
+    }
+
+    function positionResguardoPreview(el, evt) {
+        const margin = 14;
+        const w = el.offsetWidth  || 216;
+        const h = el.offsetHeight || 276;
+        let x = evt.clientX + margin;
+        let y = evt.clientY + margin;
+        if (x + w > window.innerWidth)  x = evt.clientX - w - margin;
+        if (y + h > window.innerHeight) y = window.innerHeight - h - margin;
+        el.style.left = `${Math.max(margin, x)}px`;
+        el.style.top  = `${Math.max(margin, y)}px`;
+    }
+
+    async function showResguardoPreview(evt, id) {
+        const v = state.all.find(x => x.id === id);
+        if (!v?.resguardo_pdf_path) return;
+
+        const el   = ensureResguardoPreviewEl();
+        const body = document.getElementById('veh-resguardo-preview-body');
+        el.style.display = 'block';
+        positionResguardoPreview(el, evt);
+
+        const cacheKey = `${id}:${v.resguardo_pdf_path}`;
+        const cached = resguardoPreviewCache.get(cacheKey);
+        if (cached) {
+            body.innerHTML = `<img src="${cached}" alt="Vista previa del PDF" style="max-width:100%;max-height:100%;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.15);">`;
+            positionResguardoPreview(el, evt);
+            return;
+        }
+
+        body.innerHTML = '<span class="spinner-border spinner-border-sm text-muted"></span>';
+        const token = `${id}:${Date.now()}`;
+        state.previewRequest = token;
+        try {
+            if (!window.pdfjsLib?.getDocument) throw new Error('PDF.js no está disponible.');
+            const supabase = await window.ensureSupabaseClient();
+            const { data, error } = await supabase.storage
+                .from('vehiculos-resguardos')
+                .createSignedUrl(v.resguardo_pdf_path, 120);
+            if (error) throw error;
+
+            const pdf   = await window.pdfjsLib.getDocument({ url: data.signedUrl }).promise;
+            const page  = await pdf.getPage(1);
+            const base  = page.getViewport({ scale: 1 });
+            const scale = 200 / base.width;
+            const viewport = page.getViewport({ scale });
+            const canvas = document.createElement('canvas');
+            canvas.width  = viewport.width;
+            canvas.height = viewport.height;
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport, background: '#fff' }).promise;
+            const src = canvas.toDataURL('image/jpeg', .85);
+            pdf.destroy?.();
+
+            resguardoPreviewCache.set(cacheKey, src);
+            if (state.previewRequest === token) {
+                body.innerHTML = `<img src="${src}" alt="Vista previa del PDF" style="max-width:100%;max-height:100%;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.15);">`;
+                positionResguardoPreview(el, evt);
+            }
+        } catch (err) {
+            console.error('[vehiculos] showResguardoPreview error:', err);
+            if (state.previewRequest === token) {
+                body.innerHTML = '<span class="small text-muted text-center px-2">Vista previa no disponible</span>';
+            }
+        }
+    }
+
+    function hideResguardoPreview() {
+        const el = document.getElementById('veh-resguardo-preview');
+        if (el) el.style.display = 'none';
+        state.previewRequest = null;
+    }
+
+    // ── Eliminar PDF de resguardo (archivo + referencia en BD) ──
+    async function removeResguardoPdf(id) {
+        const v = state.all.find(x => x.id === id);
+        if (!v?.resguardo_pdf_path) return;
+        if (!confirm(`¿Eliminar el PDF adjunto "${v.resguardo_pdf_nombre || 'archivo.pdf'}"?\nEsta acción no se puede deshacer.`)) return;
+
+        try {
+            const supabase = await window.ensureSupabaseClient();
+            const { error: rmErr } = await supabase.storage
+                .from('vehiculos-resguardos')
+                .remove([v.resguardo_pdf_path]);
+            if (rmErr) throw rmErr;
+
+            const { error } = await supabase
+                .from('catalogo_vehiculos')
+                .update({ resguardo_pdf_path: null, resguardo_pdf_nombre: null })
+                .eq('id', id);
+            if (error) throw error;
+
+            v.resguardo_pdf_path = null;
+            v.resguardo_pdf_nombre = null;
+            const vf = state.filtered.find(x => x.id === id);
+            if (vf) { vf.resguardo_pdf_path = null; vf.resguardo_pdf_nombre = null; }
+
+            showToast('PDF de resguardo eliminado', 'warning');
+
+            // Si la celda sigue en modo edición, la redibuja sin el PDF; si no, refresca la vista normal.
+            const cell = document.getElementById(`veh-cell-numero_resguardo-${id}`);
+            if (cell && document.getElementById(`veh-input-numero_resguardo-${id}`)) {
+                editCell(id, 'numero_resguardo');
+            } else if (cell) {
+                cell.innerHTML = editableCellHTML(v, 'numero_resguardo');
+            }
+        } catch (err) {
+            console.error('[vehiculos] removeResguardoPdf error:', err);
+            showToast('Error al eliminar el PDF: ' + (err.message || err), 'danger');
         }
     }
 
@@ -1076,6 +1484,16 @@
         cancelCell,
         handleResguardoFileChange,
         viewResguardoPdf,
+        removeResguardoPdf,
+        showResguardoPreview,
+        hideResguardoPreview,
+        viewerPage,
+        viewerZoom,
+        viewerFit,
+        viewerFitPage,
+        viewerReset,
+        viewerOpenTab,
+        viewerDownload,
         openMantModal,
         saveMantenimiento,
         openMantAllModal,
