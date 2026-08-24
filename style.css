@@ -20913,11 +20913,12 @@ body.conci-manifest-workspace #navdeck-back {
   outline: none;
 }
 
-/* Hay capturas sin guardar en OTRA computadora: eso no se resuelve solo, hace
-   falta que alguien las rescate. Se distingue del pendiente propio, que sí se
-   reintenta por su cuenta. */
+/* Quedó una captura a medias en OTRA computadora y todavía se puede colocar.
+   Es un aviso para revisar, no una falla: lo de esta máquina se guarda solo.
+   Iba en rojo de error y se leía como "se perdieron datos"; en ámbar dice lo
+   que es —algo que mirar cuando se pueda— sin alarmar a nadie. */
 #conci-pendientes-indicador.conci-pendientes-ajenos {
-  background: #f8d7da !important;
-  color: #842029 !important;
-  border-color: #dc3545 !important;
+  background: #fff3cd !important;
+  color: #664d03 !important;
+  border-color: #f0ad4e !important;
 }

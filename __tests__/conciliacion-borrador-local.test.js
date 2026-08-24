@@ -297,7 +297,9 @@ describe('indicador', () => {
 
     const el = document.getElementById('conci-pendientes-indicador');
     expect(el.classList.contains('d-none')).toBe(false);
-    expect(el.textContent).toBe('2 capturas sin guardar');
+    // 'sin guardar' sonaba a dato perdido; se reintenta solo, así que dice lo
+  // que de verdad está pasando.
+  expect(el.textContent).toBe('2 capturas guardándose');
     expect(el.title).toContain('1 fila');
   });
 
@@ -305,7 +307,7 @@ describe('indicador', () => {
     const { td } = pintarFila({ rowId: '42' });
     api._conciBorradorGuardarCelda(td('TOTAL PAX'), '178');
     expect(document.getElementById('conci-pendientes-indicador').textContent)
-      .toBe('1 captura sin guardar');
+      .toBe('1 captura guardándose');
   });
 });
 

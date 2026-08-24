@@ -39,6 +39,8 @@ function extraer(nombre) {
 
 const api = new Function('document', 'window', `
   let _conciLiveClientId = 'equipo-a';
+  // La cola se cuelga del equipo, no de la pestaña.
+  function _conciDeviceId() { return 'equipo-a'; }
   function _conciIsRoutingColumn(col) { return /destino|origen|routing/i.test(String(col || '')); }
   function _conciNormalizeEditableCellText(v) { return String(v ?? '').trim(); }
   ${extraer('_conciNormalizedColumnName')}

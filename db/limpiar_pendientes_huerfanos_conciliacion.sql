@@ -15,7 +15,7 @@
 --  rescate no encuentra su celda, y el contador de arriba lo sigue sumando como
 --  "capturas pendientes de otro equipo".
 --
---  Se acumularon sobre todo por tres fallos ya corregidos en script.js:
+--  Los "nueva:%" salieron de tres fallos, corregidos en script.js:
 --    · la guarda de identidad rechazaba capturas sobre vuelos del Itinerario
 --      que sí estaban identificados, y cada rechazo encolaba (ver
 --      _conciWriteRowSafe / conservaAlgoCapturado);
@@ -24,15 +24,37 @@
 --      bajo ids distintos;
 --    · y sobre todo: se usaba un id INVENTADO donde debía ir una identidad.
 --
---  YA NO SE GENERAN. Una fila sin id se encola ahora con la identidad real del
---  movimiento —"mov:AEROLINEA|VUELO|FECHA|A o D|OTRO EXTREMO", la misma llave
---  que calcula el trigger _aifa_movement_key—, que es idéntica antes y después
---  de guardar y desde cualquier computadora. Quien abra ese día vuelve a tener
---  el vuelo en pantalla y la captura se puede colocar donde va, con el botón
---  "Aplicar" del panel. Ver _conciIdColaDeFila / _conciBuscarFilaPorIdentidad.
+--  Una fila sin id se encola ahora con la identidad real del movimiento
+--  —"mov:AEROLINEA|VUELO|FECHA|A o D|OTRO EXTREMO", la misma llave que calcula
+--  el trigger _aifa_movement_key—, idéntica antes y después de guardar y desde
+--  cualquier computadora. Quien abra ese día vuelve a tener el vuelo en
+--  pantalla y la captura se puede colocar donde va, con el botón "Aplicar" del
+--  panel. Ver _conciIdColaDeFila / _conciBuscarFilaPorIdentidad.
 --
---  Los "nueva:%" que quedan son de antes de ese cambio. Ésos sí hay que
---  copiarlos a mano o descartarlos: no hay forma de saber a qué fila iban.
+--  ── AVISO: este archivo decía "YA NO SE GENERAN" y no era cierto ────────────
+--
+--  Los "nueva:%" dejaron de generarse, sí. Pero la cola siguió creciendo por
+--  una CUARTA causa, distinta y encontrada después (119 renglones acumulados):
+--
+--    · el dueño de un renglón era el id de PESTAÑA (sessionStorage), que muere
+--      al cerrarla, y retirar un renglón exigía ser su dueño. Al volver a
+--      entrar, el mismo equipo tenía otro id: sus propios renglones le salían
+--      como "de otro equipo" y ya nadie podía quitarlos nunca;
+--    · y encima se encolaba en 'visibilitychange → hidden', que se dispara al
+--      cambiar de pestaña o de aplicación —no sólo al cerrar—, así que bastaba
+--      con salir de la pestaña dentro de los 400 ms del autoguardado.
+--
+--  Esos renglones NO son capturas perdidas: el dato sí se guardó. Son
+--  contabilidad que se quedó atrás. Corregido en script.js: la cola se cuelga
+--  del equipo (localStorage), un valor confirmado por la base retira el
+--  pendiente lo haya encolado quien lo haya encolado, y al cargar se reconcilia
+--  contra lo que ya está guardado. Ver _conciDeviceId,
+--  _conciPurgarPendientesConfirmados y _conciReconciliarPendientesRemotos.
+--
+--  Por eso este script ya casi nunca hace falta: lo reconciliable se limpia
+--  solo conforme se abren esas fechas. Lo que sí queda para siempre son los
+--  "nueva:%", que no hay forma de saber a qué fila iban: ésos se copian a mano
+--  o se descartan.
 --
 --  La aplicación ya permite descartarlos uno por uno desde el panel de
 --  pendientes. Este script es para hacerlo de golpe cuando son muchos.
