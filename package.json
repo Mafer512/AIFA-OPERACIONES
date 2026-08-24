@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/isaacazhael161f-creator/AIFA-OPERACIONES.git"
+    "url": "git+https://github.com/mafer512/AIFA-OPERACIONES.git"
   },
   "keywords": [
     "aifa",
@@ -29,7 +29,7 @@
   "bugs": {
     "url": "https://github.com/isaacazhael161f-creator/AIFA-OPERACIONES/issues"
   },
-  "homepage": "https://github.com/isaacazhael161f-creator/AIFA-OPERACIONES#readme",
+  "homepage": "https://mafer512.github.io/AIFA-OPERACIONES/",
   "dependencies": {
     "@supabase/supabase-js": "^2.100.1",
     "bcryptjs": "^3.0.2",
