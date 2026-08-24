@@ -379,10 +379,16 @@ function pintarTabla(win, filas) {
 }
 
 // Lo que la pestana dejaria escrito en disco al cerrarse.
+// Lo que quedó escrito como BORRADOR. Se deja fuera el id de equipo: es un
+// identificador de instalación, no una captura, y al ser un UUID al azar podía
+// contener por casualidad el valor que la prueba busca no encontrar.
+const CLAVES_NO_BORRADOR = new Set(['aifa-conci-device-id']);
+
 function volcarAlmacenamiento(win) {
   const salida = {};
   for (let i = 0; i < win.localStorage.length; i++) {
     const k = win.localStorage.key(i);
+    if (CLAVES_NO_BORRADOR.has(k)) continue;
     salida[k] = win.localStorage.getItem(k);
   }
   return salida;
