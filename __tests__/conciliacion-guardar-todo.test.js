@@ -70,6 +70,14 @@ const api = new Function('document', 'console', 'espias', `
   ${extraer('_conciContarCeldasSinGuardar')}
   ${extraer('_conciFilasPorGuardar')}
   ${extraer('_conciActualizarBotonGuardarTodo')}
+  ${extraer('_conciNuevoUuid')}
+  ${extraer('_conciUuidDeterminista')}
+  ${extraer('_conciAsegurarClienteUuid')}
+  ${extraer('_conciClaveEscrituraDeFila')}
+  ${extraer('_conciValorSeguroEnSelector')}
+  ${extraer('_conciFilaVivaParaClave')}
+  ${extraer('_conciPropagarIdPorNombre')}
+  const _conciEscriturasEnVuelo = new Map();
   ${extraer('_conciEsperarEscriturasEnVuelo')}
   ${extraer('_conciGuardarTodoAhora')}
   return {

@@ -20727,6 +20727,20 @@ async function loadConciliacionManifiestos(options = {}) {
             badge.style.display = '';
         }
 
+        // Segunda comprobación, justo antes de reemplazar el tbody.
+        //
+        // La primera (al entrar en esta función) ocurre ANTES de consultar a
+        // Supabase, y esa consulta tarda: en ese hueco —segundos, con la tabla de
+        // un mes— da tiempo de sobra a capturar varias celdas, o a que un
+        // guardado siga en vuelo. Al volver, el render pintaba las filas tal y
+        // como estaban en la base ANTES de esa captura, y lo tecleado desaparecía
+        // de la pantalla sin haberse guardado. Aquí se descarta el repintado y
+        // queda apuntado: se aplica solo en cuanto la captura quede confirmada
+        // (ver _conciMaybeApplyDeferredRemoteRefresh).
+        if (_conciDeferRefreshForLocalEdits({
+            allowLocalEditsReplace: config.allowLocalEditsReplace === true,
+            notify: false,
+        })) return;
         _conciRenderedKey = cacheKey;
         _renderConciManifiestosTable(chronoRows, columns, year);
         _conciNotifyOvercapacity(chronoRows);
@@ -22775,6 +22789,11 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                 tr.dataset.conciVueloId = String(row._conci_vuelo_id);
                 tr.dataset.conciVueloDireccion = String(row._conci_vuelo_direccion || '');
             }
+            // Una fila que todavía no existe en la base necesita su nombre propio
+            // ANTES de que alguien capture en ella: es lo que convierte su alta
+            // en un upsert idempotente (ver _conciAsegurarClienteUuid) y lo que
+            // permite reencontrarla tras un repintado.
+            if (!_rowId) _conciAsegurarClienteUuid(tr);
 
             // Etiqueta la fila para los filtros por pill (clase pax/carga y dirección).
             const _tipoRaw = _tipoCol ? String(row[_tipoCol] || '').toLowerCase() : '';
@@ -26347,6 +26366,10 @@ function _conciBorradorGuardarCelda(td, valor) {
     entrada.fecha = (typeof _conciFechaUnicaDelFiltro === 'function' ? _conciFechaUnicaDelFiltro() : '')
         || entrada.fecha || '';
     entrada.esNueva = tr.dataset.conciNew === '1';
+    // El nombre propio de la fila viaja con el borrador. Al reponerla tras una
+    // recarga vuelve a llamarse igual, así que el alta que quedó a medias se
+    // completa sobre la MISMA fila en vez de crear otra.
+    entrada.clienteUuid = String(tr.dataset.clienteUuid || '') || entrada.clienteUuid || '';
     datos[clave] = entrada;
     _conciBorradoresEscribir(datos);
     _conciActualizarIndicadorBorradores();
@@ -26722,6 +26745,9 @@ function _conciRestaurarFilasNuevas(datos) {
         // dejaria huerfano al anterior y mezclaria dos capturas en una fila.
         if (tr.dataset.conciBorradorClave && tr.dataset.conciBorradorClave !== clave) return;
         tr.dataset.conciBorradorClave = clave;
+        // Recupera el nombre con el que ya se intentó darla de alta: el reintento
+        // cae sobre la misma fila en vez de crear una segunda.
+        if (entrada.clienteUuid) tr.dataset.clienteUuid = entrada.clienteUuid;
 
         const tdsFila = [...tr.querySelectorAll('td[data-col]')];
         Object.keys(celdas).forEach(col => {
@@ -27752,7 +27778,14 @@ function _conciActualizarBotonGuardarTodo() {
 // pasadas y se corta al quedar todo quieto.
 async function _conciEsperarEscriturasEnVuelo(filas, maxPasadas = 6) {
     for (let pasada = 0; pasada < maxPasadas; pasada++) {
-        const enVuelo = filas.map(tr => tr._conciAutoSavePromise).filter(Boolean);
+        const enVuelo = filas
+            .map(tr => {
+                // El registro por identidad es la fuente buena: una escritura
+                // lanzada antes de un repintado ya no cuelga de este nodo.
+                const registro = _conciEscriturasEnVuelo.get(_conciClaveEscrituraDeFila(tr));
+                return (registro && registro.promesa) || tr._conciAutoSavePromise;
+            })
+            .filter(Boolean);
         if (!enVuelo.length) return;
         await Promise.allSettled(enVuelo);
     }
@@ -28266,8 +28299,20 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     td.dataset.raw = nextRaw;
     if (_conciIsRoutingColumn(td.dataset.col)) td.dataset.routeRaw = nextRaw;
 
-    if (nextRaw !== origRaw) td.dataset.dirty = '1';
-    else td.removeAttribute('data-dirty');
+    if (nextRaw !== origRaw) {
+        td.dataset.dirty = '1';
+        // A salvo en esta computadora desde que se confirma la celda, no sólo
+        // desde que se teclea. Los editores de lista y de fecha (destino/origen,
+        // aeronave, código de demora, tipo de manifiesto, tipo de operación,
+        // estatus de matrícula, fecha+hora) no pasan por _conciStageCellDraft:
+        // confirman su valor aquí. Sin esta línea, lo capturado en esas columnas
+        // vivía ÚNICAMENTE en el DOM, y un repintado del tbody antes de que la
+        // base confirmara se lo llevaba sin dejar rastro.
+        if (typeof _conciBorradorGuardarCelda === 'function') _conciBorradorGuardarCelda(td, nextRaw);
+    } else {
+        td.removeAttribute('data-dirty');
+        if (typeof _conciBorradorQuitarCelda === 'function') _conciBorradorQuitarCelda(td);
+    }
     const tr = td.closest('tr');
     if (tr) {
         if (tr._conciAutoSaveTimer) {
@@ -29185,6 +29230,143 @@ async function _conciFilaExisteEnBase(client, rowId) {
     }
 }
 
+// ── Identidad estable de una fila para el guardado ───────────────────────────
+//
+// Dos cosas colgaban del nodo <tr>: el candado que impide dos escrituras
+// simultáneas de la misma fila y el nombre propio con el que se da de alta
+// (cliente_uuid). El nodo, sin embargo, no sobrevive a un repintado del tbody —
+// y el tbody se repinta por un refresco, un cambio remoto o una restauración de
+// borradores, incluso con una escritura en vuelo.
+//
+// Cuando eso pasa, el <tr> nuevo no sabe nada del anterior: su candado está
+// libre, así que vuelve a escribir. Si la fila aún no tenía id (una fila nueva,
+// o el espejo de un vuelo del Itinerario) ese segundo envío es otro INSERT y la
+// fila aparece DUPLICADA; si ya tenía id, son dos UPDATE que pueden llegar en
+// orden inverso y el valor viejo pisa al nuevo.
+//
+// La identidad de una fila no puede vivir en un nodo del DOM. Aquí se deriva de
+// lo que la fila ES: su id en la base, o —mientras no exista allá— un nombre
+// propio calculado a partir del vuelo que representa. Ese nombre es el mismo en
+// cada repintado y en cada pestaña, así que el alta se vuelve un upsert
+// idempotente: dos personas capturando el mismo vuelo a la vez llenan la MISMA
+// fila en lugar de crear dos.
+function _conciUuidDeterminista(semilla) {
+    const texto = String(semilla || '');
+    const revoltura = (siembra) => {
+        let h = (0x811c9dc5 ^ siembra) >>> 0;
+        for (let i = 0; i < texto.length; i++) {
+            h ^= texto.charCodeAt(i);
+            h = Math.imul(h, 0x01000193) >>> 0;
+        }
+        return h >>> 0;
+    };
+    const hex = [revoltura(0), revoltura(0x9e3779b9), revoltura(0x85ebca6b), revoltura(0xc2b2ae35)]
+        .map(x => x.toString(16).padStart(8, '0')).join('');
+    // Con forma de uuid v4 para que Postgres lo acepte en una columna uuid.
+    const version = `4${hex.slice(13, 16)}`;
+    const variante = `${((parseInt(hex[16], 16) & 0x3) | 0x8).toString(16)}${hex.slice(17, 20)}`;
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${version}-${variante}-${hex.slice(20, 32)}`;
+}
+
+// Nombre propio de una fila que todavía no existe en la base.
+function _conciAsegurarClienteUuid(tr) {
+    if (!tr) return '';
+    const actual = String(tr.dataset.clienteUuid || '').trim();
+    if (actual) return actual;
+    const vueloId = String(tr.dataset.conciVueloId || '').trim();
+    const direccion = String(tr.dataset.conciVueloDireccion || '').trim().toUpperCase();
+    // El espejo de un vuelo del Itinerario sí tiene de dónde derivar un nombre
+    // estable: el vuelo que representa. Misma semilla en cualquier pestaña, así
+    // que dos capturistas sobre el mismo vuelo escriben la misma fila.
+    const uuid = (vueloId && direccion)
+        ? _conciUuidDeterminista(`conci-vuelo:${vueloId}|${direccion}`)
+        : _conciNuevoUuid();
+    tr.dataset.clienteUuid = uuid;
+    return uuid;
+}
+
+function _conciClaveEscrituraDeFila(tr) {
+    const rowId = String(tr?.dataset?.rowId || '').trim();
+    if (rowId) return `id:${rowId}`;
+    return `uuid:${_conciAsegurarClienteUuid(tr)}`;
+}
+
+// La fila viva que representa esa identidad ahora mismo. Tras un repintado, el
+// <tr> con el que empezó una escritura ya no está en la tabla; lo que quede
+// pendiente hay que aplicarlo sobre el nodo que ocupa su lugar.
+// Un valor que puede ir dentro de un selector de atributo sin escaparlo. Los
+// dos que aquí se buscan lo cumplen siempre (un bigint y un uuid), pero la
+// comprobación es barata y evita que un dato inesperado rompa el selector.
+function _conciValorSeguroEnSelector(valor) {
+    return /^[A-Za-z0-9_.:-]+$/.test(String(valor || ''));
+}
+
+function _conciFilaVivaParaClave(clave, trPreferida) {
+    if (trPreferida && trPreferida.isConnected) return trPreferida;
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (!tbody) return null;
+    // Selector de atributo antes que recorrido en JS: esto corre al terminar
+    // CADA guardado y la tabla de un mes pasa de las mil filas.
+    const porId = (rowId) => {
+        if (!rowId) return null;
+        if (_conciValorSeguroEnSelector(rowId)) return tbody.querySelector(`tr[data-row-id="${rowId}"]`);
+        return [...tbody.querySelectorAll('tr[data-row-id]')]
+            .find(fila => String(fila.dataset.rowId || '') === rowId) || null;
+    };
+    const porNombre = (uuid) => {
+        if (!uuid) return null;
+        if (_conciValorSeguroEnSelector(uuid)) return tbody.querySelector(`tr[data-cliente-uuid="${uuid}"]`);
+        return [...tbody.querySelectorAll('tr[data-cliente-uuid]')]
+            .find(fila => String(fila.dataset.clienteUuid || '') === uuid) || null;
+    };
+    const texto = String(clave || '');
+    const encontrada = texto.startsWith('id:') ? porId(texto.slice(3)) : porNombre(texto.slice(5));
+    if (encontrada) return encontrada;
+    // Segundo intento por el OTRO nombre de la misma fila. Una fila que acaba de
+    // nacer cambia de identidad dentro del propio guardado ("uuid:…" → "id:N"),
+    // y el nodo que la representa en pantalla puede seguir conociéndola sólo por
+    // el nombre viejo: el repintado que lo dibujó ocurrió antes del alta. Sin
+    // este segundo intento, lo capturado en ese nodo no se reintentaba nunca.
+    if (!trPreferida) return null;
+    return porId(String(trPreferida.dataset.rowId || '').trim())
+        || porNombre(String(trPreferida.dataset.clienteUuid || '').trim());
+}
+
+// Reparte el id recién obtenido entre los nodos que representan a esa misma fila.
+//
+// Tras un alta, el <tr> que la lanzó ya sabe su id; el que lo reemplazó en un
+// repintado anterior no, porque se dibujó cuando la fila todavía no existía en
+// la base. Dejarlo sin id haría que su siguiente captura volviera a entrar por
+// el camino del alta —que ahora es idempotente y no duplica, pero es una vuelta
+// innecesaria— y que la papelera y el historial de esa fila siguieran ausentes.
+function _conciPropagarIdPorNombre(tr) {
+    const rowId = String(tr?.dataset?.rowId || '').trim();
+    const nombre = String(tr?.dataset?.clienteUuid || '').trim();
+    if (!rowId || !nombre) return;
+    if (!_conciValorSeguroEnSelector(nombre)) return;
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (!tbody) return;
+    // Sólo los nodos que llevan ese mismo nombre: es un selector de atributo, no
+    // un recorrido de toda la tabla, porque esto corre al final de cada guardado.
+    tbody.querySelectorAll(`tr[data-cliente-uuid="${nombre}"]`).forEach(otra => {
+        if (otra === tr) return;
+        if (String(otra.dataset.rowId || '').trim()) return;
+        otra.dataset.rowId = rowId;
+        otra.dataset.conciSummaryPersisted = '1';
+        otra.removeAttribute('data-conci-new');
+        if (otra.dataset.rowFuente === 'Solo Vuelos') {
+            otra.dataset.rowFuente = 'Manifiestos + Vuelos';
+            otra.classList.remove('conci-missing-manifiesto');
+        }
+        const actionTd = otra.querySelector('td.conci-row-action-col');
+        if (actionTd && typeof _conciFillRowActionCell === 'function') _conciFillRowActionCell(actionTd, rowId);
+    });
+}
+
+// Escrituras en vuelo, indexadas por identidad de fila (no por nodo del DOM).
+// clave -> { promesa, encolado }
+const _conciEscriturasEnVuelo = new Map();
+
 async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
     let currentPayload = { ...payload };
     let effectiveRowId = String(rowId ?? '').trim();
@@ -29392,7 +29574,16 @@ const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bi
             if (missingColMatch) {
                 const badColNorm = _norm(missingColMatch[1]);
                 const key = Object.keys(currentPayload).find(k => _norm(k) === badColNorm);
-                if (key) { delete currentPayload[key]; droppedColumns.add(key); mutated = true; }
+                if (key) {
+                    delete currentPayload[key];
+                    // cliente_uuid no es una captura: es el nombre propio con el
+                    // que la fila se da de alta de forma idempotente. Si la base
+                    // todavía no tiene esa columna (migración 029 sin aplicar) se
+                    // sigue sin ella, pero no se le reporta al capturista como un
+                    // dato suyo que no se pudo guardar.
+                    if (key !== 'cliente_uuid') droppedColumns.add(key);
+                    mutated = true;
+                }
             }
         }
 
@@ -29675,14 +29866,34 @@ function _conciAdoptarFilaPersistida(tr, result) {
 
 async function _conciAutoSaveRow(tr, options = {}) {
     if (!tr) return;
-    if (!tr.isConnected) return _conciAnotar(tr, 'omitida', 'la fila ya no estaba en la tabla');
+    // El tbody se repinta por debajo de la captura: un refresco, un cambio
+    // remoto o una restauración de borradores lo reemplazan entero. Cuando eso
+    // pasa, ESTE nodo ya no está en la tabla, pero la fila que representa sigue
+    // ahí con otro <tr>. Antes se abandonaba la escritura ("la fila ya no estaba
+    // en la tabla") y lo capturado se quedaba sin enviar; ahora se continúa
+    // sobre el nodo que ocupa su lugar.
+    if (!tr.isConnected) {
+        const relevo = _conciFilaVivaParaClave(_conciClaveEscrituraDeFila(tr), null);
+        if (!relevo) return _conciAnotar(tr, 'omitida', 'la fila ya no estaba en la tabla');
+        tr = relevo;
+    }
     if (!_conciEditMode) return _conciAnotar(tr, 'omitida', 'el modo captura estaba apagado');
     if (!_conciCanCurrentUserEdit()) return _conciAnotar(tr, 'omitida', 'sin permiso de captura');
     // La fila se descarto mientras esto esperaba su turno: no debe crearse.
     if (tr.dataset.conciDescartada === '1') return _conciAnotar(tr, 'omitida', 'la fila se descartó');
-    if (tr._conciAutoSavePromise) {
+    // Un solo escritor por FILA, no por nodo del DOM. El candado vive en
+    // _conciEscriturasEnVuelo, indexado por la identidad estable de la fila, así
+    // que sobrevive a los repintados: una escritura lanzada por un <tr> anterior
+    // sigue bloqueando a la que quiera lanzar el <tr> que lo reemplazó. Sin
+    // esto, un repintado a media escritura dejaba el candado libre y la fila se
+    // enviaba dos veces: dos INSERT (la fila duplicada) o dos UPDATE que podían
+    // llegar en orden inverso y reponer el valor viejo.
+    let claveFila = _conciClaveEscrituraDeFila(tr);
+    const escrituraPrevia = _conciEscriturasEnVuelo.get(claveFila);
+    if (escrituraPrevia) {
+        escrituraPrevia.encolado = true;
         tr._conciAutoSaveQueued = true;
-        return tr._conciAutoSavePromise;
+        return escrituraPrevia.promesa || Promise.resolve();
     }
     const cells = Array.from(tr.querySelectorAll('td[data-col]'));
     // Un editor de alguna celda de esta fila puede seguir abierto sin que el
@@ -29705,9 +29916,14 @@ async function _conciAutoSaveRow(tr, options = {}) {
     }
     // Cerrar otro editor de la fila puede disparar recursivamente su propio
     // autoguardado. No iniciar una segunda escritura ni sobrescribir la promesa.
-    if (tr._conciAutoSavePromise) {
+    // La clave se recalcula: ese guardado recursivo pudo crear la fila y darle
+    // id, con lo que su identidad pasa de "uuid:…" a "id:N".
+    claveFila = _conciClaveEscrituraDeFila(tr);
+    const escrituraTrasCerrar = _conciEscriturasEnVuelo.get(claveFila);
+    if (escrituraTrasCerrar) {
+        escrituraTrasCerrar.encolado = true;
         tr._conciAutoSaveQueued = true;
-        return tr._conciAutoSavePromise;
+        return escrituraTrasCerrar.promesa || Promise.resolve();
     }
     const savedCellValues = new Map();
     const payload = {};
@@ -29831,7 +30047,9 @@ async function _conciAutoSaveRow(tr, options = {}) {
     _conciPendingAutoSaveCount++;
     tr.classList.add('conci-row-saving');
     let didWriteSuccessfully = false;
-    tr._conciAutoSavePromise = (async () => {
+    const escrituraActual = { promesa: null, encolado: false };
+    _conciEscriturasEnVuelo.set(claveFila, escrituraActual);
+    escrituraActual.promesa = (async () => {
         try {
             let client = window.supabaseClient;
             if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
@@ -29863,6 +30081,15 @@ async function _conciAutoSaveRow(tr, options = {}) {
                         duplicateUpdatePayload[col] = payload[col];
                     }
                 });
+                // La fila nace con nombre propio, igual que una fila nueva. Es
+                // el mismo nombre en cada repintado y en cada pestaña (ver
+                // _conciAsegurarClienteUuid), así que este alta es un upsert
+                // idempotente: un reintento, un repintado a media escritura o
+                // dos capturistas sobre el mismo vuelo llenan la MISMA fila en
+                // vez de crear una copia. Faltaba justo en esta rama, que es la
+                // que usa quien captura un manifiesto sobre un vuelo que aún no
+                // lo tiene — el camino más transitado del módulo.
+                payload.cliente_uuid = _conciAsegurarClienteUuid(tr);
                 const result = await _conciWriteRowSafe(client, payload, null, {
                     recoverMovementConflict: true,
                     duplicateUpdatePayload,
@@ -30078,14 +30305,41 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 _conciRenderCache.clear();
                 _conciRenderedKey = '';
             }
-            const shouldRetry = tr._conciAutoSaveQueued && !!tr.querySelector('td[data-dirty="1"]');
-            tr._conciAutoSaveQueued = false;
+            // Se libera el candado con la MISMA clave con la que se tomó: una
+            // fila que acaba de nacer ya cambió de identidad ("uuid:…" → "id:N")
+            // y borrar por la nueva dejaría la vieja bloqueada para siempre.
+            _conciEscriturasEnVuelo.delete(claveFila);
             tr._conciAutoSavePromise = null;
-            if (shouldRetry) _conciAutoSaveRow(tr, options);
+            _conciPropagarIdPorNombre(tr);
+            // Lo capturado MIENTRAS esto escribía no puede quedarse esperando a
+            // que alguien vuelva a tocar la fila. Se reintenta sobre la fila
+            // viva, que tras un repintado ya no es este nodo.
+            const filaViva = _conciFilaVivaParaClave(_conciClaveEscrituraDeFila(tr), tr);
+            const shouldRetry = (escrituraActual.encolado || tr._conciAutoSaveQueued)
+                && !!(filaViva && filaViva.querySelector('td[data-dirty="1"]'));
+            tr._conciAutoSaveQueued = false;
+            if (filaViva) filaViva._conciAutoSaveQueued = false;
+            if (shouldRetry) _conciAutoSaveRow(filaViva, options);
             else _conciMaybeApplyDeferredRemoteRefresh();
         }
     })();
-    return tr._conciAutoSavePromise;
+    // El cuerpo de arriba puede haber terminado YA, sin llegar a esperar a la
+    // red: hay salidas tempranas (una fila del Itinerario sin nada modificado,
+    // un UPDATE que se queda sin columnas que enviar) que se alcanzan antes del
+    // primer await, y entonces su propio finally corre aquí mismo, de forma
+    // síncrona, y deja tr._conciAutoSavePromise en null.
+    //
+    // Publicar la promesa después sin comprobarlo dejaba a la fila marcada como
+    // "escribiendo" PARA SIEMPRE: la primera guarda de _conciAutoSaveRow la veía
+    // ocupada en cada intento posterior y devolvía sin escribir. Bastaba con
+    // atravesar una celda sin cambiarla —Tab o flechas, el gesto más repetido de
+    // la captura— para que esa fila dejara de guardar en el resto de la sesión,
+    // sin error a la vista y sin quedar marcada como pendiente. Es el "no guarda
+    // todas las filas ni todos los campos" que se reportó.
+    if (_conciEscriturasEnVuelo.get(claveFila) === escrituraActual) {
+        tr._conciAutoSavePromise = escrituraActual.promesa;
+    }
+    return escrituraActual.promesa;
 }
 
 // Descarta una fila nueva. Quitarla de la pantalla no basta.

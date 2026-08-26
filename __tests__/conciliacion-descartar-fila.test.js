@@ -264,7 +264,7 @@ describe('integración en el módulo', () => {
 
   test('el autoguardado se detiene en una fila descartada', () => {
     const guardar = source.slice(source.indexOf('async function _conciAutoSaveRow'));
-    expect(guardar.slice(0, 700)).toContain("tr.dataset.conciDescartada === '1'");
+    expect(guardar.slice(0, 1600)).toContain("tr.dataset.conciDescartada === '1'");
     const encolar = source.slice(source.indexOf('function _conciQueueAutoSave'));
     expect(encolar.slice(0, 400)).toContain("tr.dataset.conciDescartada === '1'");
   });

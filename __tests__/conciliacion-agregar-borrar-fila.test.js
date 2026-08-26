@@ -73,6 +73,14 @@ function construirApi() {
     ${extraer('_conciSummaryColumnKey')}
     const _CONCI_COLUMNAS_IDENTIDAD = ['AEROLINEA', 'MATRICULA', '# DE VUELO', 'TIPO DE MANIFIESTO', 'AERONAVE', 'DESTINO / ORIGEN', 'TOTAL PAX'];
     ${extraer('_conciEsColumnaIdentidad')}
+    ${extraer('_conciNuevoUuid')}
+    ${extraer('_conciUuidDeterminista')}
+    ${extraer('_conciAsegurarClienteUuid')}
+    ${extraer('_conciClaveEscrituraDeFila')}
+    ${extraer('_conciValorSeguroEnSelector')}
+    ${extraer('_conciFilaVivaParaClave')}
+    ${extraer('_conciPropagarIdPorNombre')}
+    const _conciEscriturasEnVuelo = new Map();
     ${extraer('_conciAutoSaveRow')}
     return { _conciAutoSaveRow };
   `)(document, window, console, escrituras, 1000);

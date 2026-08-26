@@ -125,7 +125,7 @@ describe('cuándo se avisa en pantalla', () => {
 describe('las guardas del autoguardado dejan constancia', () => {
     const bloque = source.slice(
         source.indexOf('async function _conciAutoSaveRow(tr, options = {})'),
-        source.indexOf('async function _conciAutoSaveRow(tr, options = {})') + 900
+        source.indexOf('async function _conciAutoSaveRow(tr, options = {})') + 2600
     );
 
     test.each([

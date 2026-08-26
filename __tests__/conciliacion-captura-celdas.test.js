@@ -429,11 +429,17 @@ describe('captura de celdas en Conciliacion > Manifiestos', () => {
     );
     expect(bulkSource).toContain('Mantener el DOM y sus celdas dirty');
     expect(bulkSource).toMatch(/if \(fail\.length > 0\)[\s\S]*?_conciRefreshEditToolbar\(\);\s*return;/);
+    // Un solo escritor por fila. El candado ya no cuelga del nodo <tr> —no
+    // sobrevivía a un repintado del tbody y dejaba entrar una segunda
+    // escritura— sino del registro por identidad de fila.
     expect(source).toMatch(
-      /if \(tr\._conciAutoSavePromise\)\s*\{\s*tr\._conciAutoSaveQueued = true;\s*return tr\._conciAutoSavePromise;/
+      /const escrituraPrevia = _conciEscriturasEnVuelo\.get\(claveFila\);\s*if \(escrituraPrevia\) \{\s*escrituraPrevia\.encolado = true;/
     );
+    expect(source).toContain('_conciEscriturasEnVuelo.delete(claveFila);');
     expect(source).toContain('async function _conciAutoSaveRow(tr, options = {})');
     expect(source).toContain('if (!options.keepEditorsOpen)');
-    expect(source).toContain('if (shouldRetry) _conciAutoSaveRow(tr, options);');
+    // El reintento va sobre la fila VIVA: tras un repintado del tbody, el <tr>
+    // que lanzó la escritura ya no es el que está en la tabla.
+    expect(source).toContain('if (shouldRetry) _conciAutoSaveRow(filaViva, options);');
   });
 });

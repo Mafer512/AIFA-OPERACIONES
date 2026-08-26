@@ -70,6 +70,7 @@ function construirApi() {
         const api = {
           select(){ return api; }, eq(){ return api; }, maybeSingle(){ return api; },
           insert(d){ st.op='insert'; st.datos=d; return api; },
+          upsert(d){ st.op='insert'; st.datos=d; return api; },
           update(d){ st.op='update'; st.datos=d; return api; },
           then(res, rej){ return run().then(res, rej); },
         };
@@ -99,6 +100,14 @@ function construirApi() {
     ${extraer('_conciSummaryColumnKey')}
     ${extraer('_conciEsColumnaIdentidad')}
     ${extraer('_conciWriteRowSafe')}
+    ${extraer('_conciNuevoUuid')}
+    ${extraer('_conciUuidDeterminista')}
+    ${extraer('_conciAsegurarClienteUuid')}
+    ${extraer('_conciClaveEscrituraDeFila')}
+    ${extraer('_conciValorSeguroEnSelector')}
+    ${extraer('_conciFilaVivaParaClave')}
+    ${extraer('_conciPropagarIdPorNombre')}
+    const _conciEscriturasEnVuelo = new Map();
     ${extraer('_conciAutoSaveRow')}
     return { _conciAutoSaveRow };
   `)(document, window, console, inserts, avisos);

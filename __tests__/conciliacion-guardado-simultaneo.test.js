@@ -110,6 +110,7 @@ function construirSesion(filaEnBase) {
           eq(c, v) { st.id = v; return api; },
           maybeSingle() { return api; },
           insert(d) { st.op = 'insert'; st.datos = d; return api; },
+          upsert(d) { st.op = 'insert'; st.datos = d; return api; },
           update(d) { st.op = 'update'; st.datos = d; return api; },
           then(res, rej) { return run().then(res, rej); },
         };
@@ -160,6 +161,14 @@ function construirSesion(filaEnBase) {
     const _CONCI_COLUMNAS_IDENTIDAD = ['AEROLINEA', 'MATRICULA', '# DE VUELO', 'TIPO DE MANIFIESTO', 'AERONAVE', 'DESTINO / ORIGEN', 'TOTAL PAX'];
     ${extraer('_conciEsColumnaIdentidad')}
     ${extraer('_conciWriteRowSafe')}
+    ${extraer('_conciNuevoUuid')}
+    ${extraer('_conciUuidDeterminista')}
+    ${extraer('_conciAsegurarClienteUuid')}
+    ${extraer('_conciClaveEscrituraDeFila')}
+    ${extraer('_conciValorSeguroEnSelector')}
+    ${extraer('_conciFilaVivaParaClave')}
+    ${extraer('_conciPropagarIdPorNombre')}
+    const _conciEscriturasEnVuelo = new Map();
     ${extraer('_conciAutoSaveRow')}
     return { _conciAutoSaveRow: _conciAutoSaveRow };
   `)(document, window, console, registro, NUMERICAS, filaEnBase);
