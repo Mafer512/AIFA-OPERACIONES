@@ -20758,6 +20758,31 @@ async function loadConciliacionManifiestos(options = {}) {
     }
 }
 
+// Puente usado por Gestión de Datos al ejecutar "Eliminar todo". La operación
+// en la base ya terminó en este punto; aquí se descartan las fotografías
+// locales para que ninguna de las dos pestañas vuelva a mostrar filas borradas.
+window.loadConciliacionManifiestos = loadConciliacionManifiestos;
+window.conciliacionBulkDelete = {
+    hasUnsavedCaptures: _conciHasUnsavedCaptures,
+    afterDelete: async function () {
+        try { localStorage.removeItem('aifa-conciliacion-borradores-v1'); } catch (_) {}
+        _conciLoadRequestSeq++;
+        _conciRenderCache.clear();
+        _conciRenderedKey = '';
+        _conciRawCache = null;
+        _conciVuelosCache = null;
+        _conciPendingRemoteRefresh = false;
+        _conciSummaryLiveOverrides.clear();
+        _conciUndoHistory.length = 0;
+        _conciPendientesRemotos = [];
+        _conciActualizarIndicadorBorradores();
+        await loadConciliacionManifiestos({
+            forceRefresh: true,
+            allowLocalEditsReplace: true,
+        });
+    },
+};
+
 function _conciIsReceptionColumn(column) {
     return /^hr\.?\s+de\s+recepcion$/.test(_conciNormalizedColumnName(column));
 }

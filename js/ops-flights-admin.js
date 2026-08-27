@@ -20,6 +20,16 @@ window.opsFlightsAdmin = (function () {
     // vuelo fantasma del lado de Conciliación. Ahora cada eliminación borra
     // de las 3 a la vez.
     var FLIGHT_TABLES = ['vuelos_parte_operaciones_csv', 'itinerario_vuelos_editable', 'manifiestos_vuelos_editable'];
+    var DELETE_ALL_RPC = 'conciliacion_eliminar_todos_los_vuelos';
+    var DELETE_ALL_TABLES = [
+        { name: 'conciliacion_capturas_pendientes', key: 'capturas_pendientes', optional: true },
+        { name: 'conciliacion_vuelo_overrides', key: 'ajustes_conciliacion', optional: true },
+        { name: 'Conciliación Manifiestos', key: 'manifiestos_capturados' },
+        { name: 'manifiestos_vuelos_editable', key: 'vuelos_manifiestos' },
+        { name: 'itinerario_vuelos_editable', key: 'itinerario' },
+        { name: 'vuelos_parte_operaciones_csv', key: 'bitacora_importacion' }
+    ];
+    var deleteAllBusy = false;
 
     // Un .in('id', ids) con miles de ids genera una URL demasiado larga
     // (PostgREST codifica cada id en la query string) y el navegador la
@@ -60,6 +70,82 @@ window.opsFlightsAdmin = (function () {
             if (results[mainIndex].error) throw results[mainIndex].error;
         }
         return firstError;
+    }
+
+    function rpcMissing(error) {
+        var code = String(error && error.code || '').toUpperCase();
+        var message = String(error && error.message || error || '').toLowerCase();
+        return code === 'PGRST202' || code === '42883'
+            || (message.includes('function') && (message.includes('not found') || message.includes('schema cache') || message.includes('does not exist')));
+    }
+
+    async function tableCount(sb, table) {
+        var result = await sb.from(table).select('id', { count: 'exact', head: true });
+        if (result.error) throw result.error;
+        return Number(result.count) || 0;
+    }
+
+    // Respaldo para el intervalo entre publicar la interfaz y aplicar la RPC.
+    // RLS sigue siendo la autoridad: si el usuario no puede borrar, la
+    // verificacion posterior detecta que quedaron filas y reporta el fallo.
+    async function deleteAllDirect(sb) {
+        var counts = {};
+        for (var i = 0; i < DELETE_ALL_TABLES.length; i++) {
+            var target = DELETE_ALL_TABLES[i];
+            var before;
+            try {
+                before = await tableCount(sb, target.name);
+            } catch (countError) {
+                if (target.optional) continue;
+                throw new Error('No se pudo contar ' + target.name + ': ' + (countError.message || countError));
+            }
+
+            counts[target.key] = before;
+            if (before > 0) {
+                var deletion = await sb.from(target.name).delete().not('id', 'is', null);
+                if (deletion.error) {
+                    if (target.optional) {
+                        console.warn('[Conciliación Admin] no se pudo limpiar la tabla opcional ' + target.name + ':', deletion.error);
+                        continue;
+                    }
+                    throw new Error('No se pudo vaciar ' + target.name + ': ' + (deletion.error.message || deletion.error));
+                }
+            }
+
+            var remaining;
+            try {
+                remaining = await tableCount(sb, target.name);
+            } catch (verifyError) {
+                if (target.optional) {
+                    console.warn('[Conciliación Admin] no se pudo verificar la tabla opcional ' + target.name + ':', verifyError);
+                    continue;
+                }
+                throw verifyError;
+            }
+            if (remaining !== 0) {
+                if (target.optional) {
+                    console.warn('[Conciliación Admin] quedaron ' + remaining + ' registros en la tabla opcional ' + target.name + '.');
+                    continue;
+                }
+                throw new Error('La base no autorizó eliminar todos los registros de ' + target.name + '. Quedan ' + remaining + '.');
+            }
+        }
+        counts.metodo = 'respaldo_rls';
+        return counts;
+    }
+
+    function normalizeDeleteAllResult(data) {
+        if (Array.isArray(data)) return data[0] || {};
+        return data && typeof data === 'object' ? data : {};
+    }
+
+    function deleteAllSummary(counts) {
+        var itinerary = Number(counts.itinerario) || 0;
+        var mirror = Number(counts.vuelos_manifiestos) || 0;
+        var captured = Number(counts.manifiestos_capturados) || 0;
+        var raw = Number(counts.bitacora_importacion) || 0;
+        return itinerary + ' itinerario, ' + mirror + ' vuelos espejo, '
+            + captured + ' manifiestos capturados y ' + raw + ' registros de importación';
     }
 
     function getEl(id) { return document.getElementById(id); }
@@ -492,6 +578,75 @@ window.opsFlightsAdmin = (function () {
         }
     }
 
+    async function deleteAll() {
+        if (deleteAllBusy) return;
+        if (window.conciliacionBulkDelete && typeof window.conciliacionBulkDelete.hasUnsavedCaptures === 'function'
+            && window.conciliacionBulkDelete.hasUnsavedCaptures()) {
+            showStatus('Hay capturas de manifiestos pendientes de guardar. Guárdalas o descártalas antes de eliminar todo.', 'warning');
+            return;
+        }
+
+        var typed = prompt(
+            'Esta acción eliminará TODOS los vuelos del Itinerario y TODOS los registros de la pestaña Manifiestos, incluidos los capturados manualmente.\n\nEscribe BORRAR TODO para continuar:'
+        );
+        if (String(typed || '').trim().toUpperCase() !== 'BORRAR TODO') {
+            if (typed !== null) showStatus('No se eliminó nada: la frase de confirmación no coincide.', 'warning');
+            return;
+        }
+        var confirmed = confirm(
+            'CONFIRMACIÓN FINAL\n\nSe vaciarán Itinerario de Vuelos, Conciliación Manifiestos y la bitácora usada para reimportar.\n\nEsta acción es permanente y no se puede deshacer. ¿Continuar?'
+        );
+        if (!confirmed) return;
+
+        var button = getEl('btn-delete-admin-all');
+        var defaultHtml = button ? button.innerHTML : '';
+        deleteAllBusy = true;
+        if (button) {
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Eliminando todo...';
+        }
+        showStatus('Eliminando todos los vuelos y manifiestos capturados…', 'warning');
+
+        try {
+            var sb = window.supabaseClient;
+            if (!sb && typeof window.ensureSupabaseClient === 'function') sb = await window.ensureSupabaseClient();
+            if (!sb) throw new Error('Supabase no disponible');
+
+            var rpcResult = await sb.rpc(DELETE_ALL_RPC);
+            var counts;
+            if (rpcResult.error) {
+                if (!rpcMissing(rpcResult.error)) throw rpcResult.error;
+                console.warn('[Conciliación Admin] RPC de borrado total aún no disponible; usando respaldo con RLS.');
+                counts = await deleteAllDirect(sb);
+            } else {
+                counts = normalizeDeleteAllResult(rpcResult.data);
+            }
+
+            try { localStorage.removeItem('aifa-conciliacion-borradores-v1'); } catch (_) {}
+            adminData = [];
+            adminFilters = {};
+            renderTable();
+            updateBadge();
+
+            if (window.conciliacionBulkDelete && typeof window.conciliacionBulkDelete.afterDelete === 'function') {
+                await window.conciliacionBulkDelete.afterDelete(counts);
+            } else if (typeof window.loadConciliacionManifiestos === 'function') {
+                await window.loadConciliacionManifiestos({ forceRefresh: true, allowLocalEditsReplace: true });
+            }
+            window.dispatchEvent(new CustomEvent('conciliacion:delete-all-complete', { detail: counts }));
+            showStatus('Borrado total confirmado: ' + deleteAllSummary(counts) + '.', 'success');
+        } catch (e) {
+            console.error('[Conciliación Admin] error en borrado total:', e);
+            showStatus('No se completó el borrado total: ' + (e.message || e), 'danger');
+        } finally {
+            deleteAllBusy = false;
+            if (button) {
+                button.disabled = false;
+                button.innerHTML = defaultHtml;
+            }
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         var today = new Date();
         var fmt = function (d) { return d.toISOString().slice(0, 10); };
@@ -515,6 +670,7 @@ window.opsFlightsAdmin = (function () {
         previewRange:       previewRange,
         deleteById:         deleteById,
         deleteSelected:     deleteSelected,
+        deleteAll:          deleteAll,
         toggleSelectAll:    toggleSelectAll,
         updateDeleteBtn:    updateDeleteBtn,
         filterToDay:        filterToDay,

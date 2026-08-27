@@ -4545,7 +4545,7 @@ FF
                                             <div class="alert alert-danger border-danger py-2 px-3 mb-2 flex-wrap" role="alert" style="font-size:.85rem">
                                                 <div class="d-flex align-items-center gap-3 flex-wrap">
                                                     <i class="fas fa-exclamation-triangle fa-lg"></i>
-                                                    <span><strong>Zona de Administración</strong> — Los cambios son permanentes e irreversibles. Cada eliminación borra el vuelo de las 3 tablas relacionadas (bitácora cruda de importación, Itinerario de Vuelos y el lado "vuelos" de Conciliación Manifiestos), para que el mismo vuelo pueda reimportarse limpio si lo necesitas.</span>
+                                                    <span><strong>Zona de Administración</strong> — Los cambios son permanentes e irreversibles. Eliminar por día, rango o selección borra la bitácora, el Itinerario y sus vuelos espejo. La opción <strong>Eliminar todo</strong> también borra todos los manifiestos capturados para dejar vacías ambas pestañas.</span>
                                                 </div>
                                                 <!-- Row 1: single day -->
                                                 <div class="d-flex align-items-center gap-2 mt-2 flex-wrap">
@@ -4566,6 +4566,13 @@ FF
                                                     <span id="admin-range-preview" class="badge bg-warning text-dark d-none" style="font-size:.78rem"></span>
                                                     <button class="btn btn-sm btn-danger" onclick="window.opsFlightsAdmin.deleteByRange()" aria-label="Eliminar todos los vuelos del rango de fechas seleccionado">
                                                         <i class="fas fa-trash-alt me-1" aria-hidden="true"></i>Eliminar rango
+                                                    </button>
+                                                </div>
+                                                <!-- Row 3: complete purge across Itinerary and Manifests -->
+                                                <div class="d-flex align-items-center justify-content-between gap-3 mt-2 pt-2 flex-wrap border-top border-danger">
+                                                    <span class="fw-semibold"><i class="fas fa-database me-2" aria-hidden="true"></i>Vaciar Itinerario de Vuelos y Manifiestos, incluidos los registros capturados.</span>
+                                                    <button class="btn btn-sm btn-dark" id="btn-delete-admin-all" onclick="window.opsFlightsAdmin.deleteAll()" aria-label="Eliminar todos los vuelos y manifiestos capturados">
+                                                        <i class="fas fa-trash-alt me-1" aria-hidden="true"></i>Eliminar todo
                                                     </button>
                                                 </div>
                                             </div>
@@ -36521,7 +36528,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260826-guardado-por-celda" defer></script>
+    <script src="script.js?v=20260827-delete-all-manifests" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>
@@ -37734,7 +37741,7 @@ FF
 </script>
 
 <!-- ====== Conciliación Admin Module — extraído a js/ops-flights-admin.js (v=20260616m) ====== -->
-<script src="js/ops-flights-admin.js?v=20260730-delete-chunked" defer></script>
+<script src="js/ops-flights-admin.js?v=20260827-delete-all-manifests" defer></script>
 <!-- Conciliación Manifiestos table + inline editing -->
 <script src="js/conci-manifiestos-table.js?v=1" defer></script>
 <script src="js/conci-manifiestos-captura.js?v=20260727-v1" defer></script>
