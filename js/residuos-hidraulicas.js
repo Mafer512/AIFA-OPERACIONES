@@ -1,6 +1,6 @@
 /* ============================================================
  * GOMIH | Residuos de manejo especial, peligrosos y valorizables
- * Dashboard mensual con captura, totales, graficas y exportacion.
+ * Dashboard historico/mensual con captura, totales, graficas y exportacion.
  * ============================================================ */
 ;(function () {
     'use strict';
@@ -13,6 +13,26 @@
         { n: 7, long: 'Julio', short: 'Jul' }, { n: 8, long: 'Agosto', short: 'Ago' },
         { n: 9, long: 'Septiembre', short: 'Sep' }, { n: 10, long: 'Octubre', short: 'Oct' },
         { n: 11, long: 'Noviembre', short: 'Nov' }, { n: 12, long: 'Diciembre', short: 'Dic' }
+    ];
+    // Respaldo de lectura para que el historico sea visible aun antes de aplicar
+    // la migracion. Si una fila ya existe en Supabase, siempre prevalece la BD.
+    const HISTORICAL_SOURCE_ROWS = [
+        { anio: 2022, mes_num: 3, mes_nombre: 'Marzo', inorganicos_kg: 5280, organicos_kg: 0, peligrosos_kg: null, observaciones: 'Sin generación' },
+        { anio: 2022, mes_num: 4, mes_nombre: 'Abril', inorganicos_kg: 22640, organicos_kg: 0, peligrosos_kg: null, observaciones: 'Sin generación' },
+        { anio: 2022, mes_num: 5, mes_nombre: 'Mayo', inorganicos_kg: null, organicos_kg: null, peligrosos_kg: null, observaciones: 'Sin generación' },
+        { anio: 2022, mes_num: 6, mes_nombre: 'Junio', inorganicos_kg: null, organicos_kg: null, peligrosos_kg: null, observaciones: 'Sin disposición' },
+        { anio: 2022, mes_num: 7, mes_nombre: 'Julio', inorganicos_kg: null, organicos_kg: null, peligrosos_kg: null, observaciones: 'Sin disposición' },
+        { anio: 2022, mes_num: 8, mes_nombre: 'Agosto', inorganicos_kg: null, organicos_kg: null, peligrosos_kg: null, observaciones: 'Sin disposición' },
+        { anio: 2022, mes_num: 9, mes_nombre: 'Septiembre', inorganicos_kg: null, organicos_kg: null, peligrosos_kg: null, observaciones: 'Sin disposición' },
+        { anio: 2022, mes_num: 10, mes_nombre: 'Octubre', inorganicos_kg: null, organicos_kg: null, peligrosos_kg: null, observaciones: 'Sin disposición' },
+        { anio: 2022, mes_num: 11, mes_nombre: 'Noviembre', inorganicos_kg: null, organicos_kg: null, peligrosos_kg: null, observaciones: 'Sin disposición' },
+        { anio: 2022, mes_num: 12, mes_nombre: 'Diciembre', inorganicos_kg: null, organicos_kg: null, peligrosos_kg: 403.6, observaciones: null },
+        { anio: 2023, mes_num: 1, mes_nombre: 'Enero', inorganicos_kg: 41420, organicos_kg: 82860, peligrosos_kg: 476.6, observaciones: null },
+        { anio: 2023, mes_num: 2, mes_nombre: 'Febrero', inorganicos_kg: 29650, organicos_kg: 108120, peligrosos_kg: 0, observaciones: null },
+        { anio: 2024, mes_num: 1, mes_nombre: 'Enero', inorganicos_kg: 52180, organicos_kg: 12830, peligrosos_kg: 172.2, observaciones: null },
+        { anio: 2024, mes_num: 2, mes_nombre: 'Febrero', inorganicos_kg: 68840, organicos_kg: 3640, peligrosos_kg: 575, observaciones: null },
+        { anio: 2025, mes_num: 1, mes_nombre: 'Enero', inorganicos_kg: 91836, organicos_kg: 2950, peligrosos_kg: 173, observaciones: null },
+        { anio: 2025, mes_num: 2, mes_nombre: 'Febrero', inorganicos_kg: 17710, organicos_kg: 86390, peligrosos_kg: 1624.4, observaciones: null }
     ];
     const CHART_THEME = Object.freeze({
         colors: Object.freeze({
@@ -29,8 +49,10 @@
     });
     const COLORS = CHART_THEME.colors;
     const CHART_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    const HISTORICAL_FIRST_YEAR = 2022;
+    const HISTORICAL_LAST_YEAR = 2025;
     const state = { rows: [], years: [], selectedYear: null, editMonth: 1, loaded: false, loading: false, bound: false };
-    const charts = { monthly: null, composition: null, trend: null };
+    const charts = { monthly: null, composition: null, trend: null, annual: null };
     let dataLabelsRegistered = false;
 
     const $ = id => document.getElementById(id);
@@ -50,8 +72,26 @@
         return Number.isFinite(n) ? n.toLocaleString('es-MX', { maximumFractionDigits: 2 }) : '0';
     };
     const sum = values => values.reduce((total, value) => total + (Number(value) || 0), 0);
-    const hasData = row => ['inorganicos_kg', 'organicos_kg', 'lodos_kg', 'manejo_especial_kg', 'peligrosos_kg', 'valorizables_kg'].some(k => row && row[k] !== null && row[k] !== undefined);
-    const specialOf = row => sum([row?.inorganicos_kg, row?.organicos_kg, row?.lodos_kg, row?.manejo_especial_kg]);
+    const numericFields = ['inorganicos_kg', 'organicos_kg', 'lodos_kg', 'manejo_especial_kg', 'peligrosos_kg', 'valorizables_kg'];
+    const isHistoricalYear = year => Number(year) >= HISTORICAL_FIRST_YEAR && Number(year) <= HISTORICAL_LAST_YEAR;
+    const hasNumericData = row => (isHistoricalYear(row?.anio)
+        ? ['inorganicos_kg', 'organicos_kg', 'peligrosos_kg']
+        : numericFields).some(k => row && row[k] !== null && row[k] !== undefined);
+    const hasData = row => hasNumericData(row) || !!String(row?.observaciones || '').trim();
+    const specialOf = row => sum(isHistoricalYear(row?.anio)
+        ? [row?.inorganicos_kg, row?.organicos_kg]
+        : [row?.inorganicos_kg, row?.organicos_kg, row?.lodos_kg, row?.manejo_especial_kg]);
+    const monthsForYear = year => Number(year) === HISTORICAL_FIRST_YEAR ? MONTHS.filter(month => month.n >= 3) : MONTHS;
+    const hazardStatus = row => {
+        if (!row || row.peligrosos_kg !== null && row.peligrosos_kg !== undefined) return '';
+        const observation = String(row.observaciones || '').trim();
+        if (/^sin generaci[oó]n\.?$/i.test(observation)) return 'Sin generación';
+        if (/^sin disposici[oó]n\.?$/i.test(observation)) return 'Sin disposición';
+        return '';
+    };
+    const hazardDisplay = row => row?.peligrosos_kg !== null && row?.peligrosos_kg !== undefined
+        ? fmt(row.peligrosos_kg)
+        : hazardStatus(row) || '—';
     const withAlpha = (hex, alpha) => {
         const value = String(hex).replace('#', '');
         const red = parseInt(value.slice(0, 2), 16);
@@ -105,7 +145,11 @@
             const sb = await client();
             const result = await sb.from(TABLE).select('*').order('anio', { ascending: false }).order('mes_num');
             if (result.error) throw result.error;
-            state.rows = normalizeRows(result.data);
+            const databaseRows = normalizeRows(result.data);
+            const databaseKeys = new Set(databaseRows.map(row => `${row.anio}-${row.mes_num}`));
+            const fallbackRows = normalizeRows(HISTORICAL_SOURCE_ROWS)
+                .filter(row => !databaseKeys.has(`${row.anio}-${row.mes_num}`));
+            state.rows = [...databaseRows, ...fallbackRows];
             const yearSet = new Set(state.rows.map(row => row.anio).filter(Number.isFinite));
             yearSet.add(new Date().getFullYear());
             state.years = [...yearSet].sort((a, b) => b - a);
@@ -133,7 +177,9 @@
     function populateEditMonth() {
         const select = $('residuos-edit-month');
         if (!select) return;
-        select.innerHTML = MONTHS.map(month => `<option value="${month.n}">${month.long}</option>`).join('');
+        const availableMonths = monthsForYear(state.selectedYear);
+        if (!availableMonths.some(month => month.n === Number(state.editMonth))) state.editMonth = availableMonths[0].n;
+        select.innerHTML = availableMonths.map(month => `<option value="${month.n}">${month.long}</option>`).join('');
         select.value = String(state.editMonth);
         loadEditorValues();
     }
@@ -144,25 +190,41 @@
         const danger = sum(rows.map(row => row.peligrosos_kg));
         const value = sum(rows.map(row => row.valorizables_kg));
         const months = rows.filter(hasData).length;
+        const availableMonths = monthsForYear(state.selectedYear);
         const set = (id, text) => { if ($(id)) $(id).textContent = text; };
         set('residuos-kpi-especial', fmt(special));
         set('residuos-kpi-peligrosos', fmt(danger));
         set('residuos-kpi-valorizables', fmt(value));
-        set('residuos-kpi-meses', `${months} / 12`);
+        set('residuos-kpi-meses', `${months} / ${availableMonths.length}`);
     }
 
     function renderTable() {
+        const head = $('residuos-table-head');
         const body = $('residuos-table-body');
         const foot = $('residuos-table-foot');
         if (!body || !foot) return;
-        const rows = MONTHS.map(month => rowForMonth(month.n));
+        const historical = isHistoricalYear(state.selectedYear);
+        const availableMonths = monthsForYear(state.selectedYear);
+        const rows = availableMonths.map(month => rowForMonth(month.n));
+        if (head) head.innerHTML = historical
+            ? '<tr><th rowspan="2" class="res-th-base">Año</th><th rowspan="2" class="res-th-base">Mes</th><th colspan="2" class="res-th-especial">Residuos de manejo especial y sólidos urbanos</th><th rowspan="2" class="res-th-peligrosos">Residuos<br>peligrosos<br>(kg)</th><th rowspan="2" class="res-th-base">Acciones</th></tr><tr><th class="res-th-sub">Inorgánico<br>(kg)</th><th class="res-th-sub">Orgánico<br>(kg)</th></tr>'
+            : '<tr><th rowspan="2" class="res-th-base">Año</th><th rowspan="2" class="res-th-base">Mes</th><th colspan="4" class="res-th-especial">Residuos de manejo especial y sólidos urbanos</th><th rowspan="2" class="res-th-peligrosos">Residuos<br>peligrosos<br>(kg)</th><th rowspan="2" class="res-th-valorizables">Residuos<br>valorizables<br>(kg)</th><th rowspan="2" class="res-th-base">Acciones</th></tr><tr><th class="res-th-sub">Inorgánico<br>(kg)</th><th class="res-th-sub">Orgánico<br>(kg)</th><th class="res-th-sub">Lodos<br>(kg)</th><th class="res-th-sub">Residuos de<br>Manejo Especial<br>(kg)</th></tr>';
         body.innerHTML = rows.map((row, index) => {
             const empty = !hasData(row);
+            const hazard = hazardDisplay(row);
+            const hazardClass = hazardStatus(row) ? ' class="text-center residuos-hazard-status"' : '';
+            const month = availableMonths[index];
+            if (historical) return `<tr class="${empty ? 'residuos-no-data' : ''}">
+                <td>${state.selectedYear}</td><td>${month.long}</td>
+                <td>${fmt(row?.inorganicos_kg)}</td><td>${fmt(row?.organicos_kg)}</td>
+                <td${hazardClass}>${hazard}</td>
+                <td class="text-center"><button type="button" class="btn btn-outline-primary btn-sm residuos-edit-row" data-month="${month.n}" title="Editar ${month.long}"><i class="fas fa-pen"></i></button></td>
+            </tr>`;
             return `<tr class="${empty ? 'residuos-no-data' : ''}">
-                <td>${state.selectedYear}</td><td>${MONTHS[index].long}</td>
+                <td>${state.selectedYear}</td><td>${month.long}</td>
                 <td>${fmt(row?.inorganicos_kg)}</td><td>${fmt(row?.organicos_kg)}</td><td>${fmt(row?.lodos_kg)}</td><td>${fmt(row?.manejo_especial_kg)}</td>
-                <td>${fmt(row?.peligrosos_kg)}</td><td>${fmt(row?.valorizables_kg)}</td>
-                <td class="text-center"><button type="button" class="btn btn-outline-primary btn-sm residuos-edit-row" data-month="${MONTHS[index].n}" title="Editar ${MONTHS[index].long}"><i class="fas fa-pen"></i></button></td>
+                <td${hazardClass}>${hazard}</td><td>${fmt(row?.valorizables_kg)}</td>
+                <td class="text-center"><button type="button" class="btn btn-outline-primary btn-sm residuos-edit-row" data-month="${month.n}" title="Editar ${month.long}"><i class="fas fa-pen"></i></button></td>
             </tr>`;
         }).join('');
         const totals = {
@@ -173,8 +235,13 @@
             peligrosos_kg: sum(rows.map(row => row?.peligrosos_kg)),
             valorizables_kg: sum(rows.map(row => row?.valorizables_kg))
         };
-        const special = totals.inorganicos_kg + totals.organicos_kg + totals.lodos_kg + totals.manejo_especial_kg;
-        foot.innerHTML = `<tr>
+        const special = totals.inorganicos_kg + totals.organicos_kg
+            + (historical ? 0 : totals.lodos_kg + totals.manejo_especial_kg);
+        foot.innerHTML = historical ? `<tr>
+            <td colspan="2">Subtotal (kg)</td><td>${fmt(totals.inorganicos_kg)}</td><td>${fmt(totals.organicos_kg)}</td><td rowspan="2" class="residuos-total-danger">${fmt(totals.peligrosos_kg)}</td><td rowspan="2"></td>
+        </tr><tr>
+            <td colspan="2">Total manejo especial y sólidos urbanos</td><td colspan="2" class="residuos-total-special text-center">${fmt(special)} kg</td>
+        </tr>` : `<tr>
             <td colspan="2">Subtotal (kg)</td><td>${fmt(totals.inorganicos_kg)}</td><td>${fmt(totals.organicos_kg)}</td><td>${fmt(totals.lodos_kg)}</td><td>${fmt(totals.manejo_especial_kg)}</td><td rowspan="2" class="residuos-total-danger">${fmt(totals.peligrosos_kg)}</td><td rowspan="2" class="residuos-total-value">${fmt(totals.valorizables_kg)}</td><td rowspan="2"></td>
         </tr><tr>
             <td colspan="2">Total generado</td><td colspan="4" class="residuos-total-special text-center">${fmt(special)} kg</td>
@@ -373,16 +440,18 @@
     function renderCharts() {
         if (typeof Chart === 'undefined') return;
         ensureChartPlugins();
-        const rows = MONTHS.map(month => rowForMonth(month.n));
-        const lastDataIndex = rows.reduce((last, row, index) => hasData(row) ? index : last, -1);
+        const historical = isHistoricalYear(state.selectedYear);
+        const availableMonths = monthsForYear(state.selectedYear);
+        const rows = availableMonths.map(month => rowForMonth(month.n));
+        const lastDataIndex = rows.reduce((last, row, index) => hasNumericData(row) ? index : last, -1);
         const visibleRows = rows.slice(0, Math.max(lastDataIndex + 1, 1));
-        const visibleMonths = MONTHS.slice(0, Math.max(lastDataIndex + 1, 1));
+        const visibleMonths = availableMonths.slice(0, Math.max(lastDataIndex + 1, 1));
         const labels = visibleMonths.map(month => month.short);
-        const special = visibleRows.map(row => hasData(row) ? specialOf(row) : null);
-        const danger = visibleRows.map(row => hasData(row) ? row.peligrosos_kg : null);
-        const value = visibleRows.map(row => hasData(row) ? row.valorizables_kg : null);
-        const total = visibleRows.map((row, i) => hasData(row) ? special[i] + (danger[i] || 0) + (value[i] || 0) : null);
-        destroyChart('monthly'); destroyChart('composition'); destroyChart('trend');
+        const special = visibleRows.map(row => hasNumericData(row) ? specialOf(row) : null);
+        const danger = visibleRows.map(row => hasNumericData(row) ? row.peligrosos_kg : null);
+        const value = visibleRows.map(row => hasNumericData(row) ? row.valorizables_kg : null);
+        const total = visibleRows.map((row, i) => hasNumericData(row) ? special[i] + (danger[i] || 0) + (historical ? 0 : value[i] || 0) : null);
+        destroyChart('monthly'); destroyChart('composition'); destroyChart('trend'); destroyChart('annual');
 
         const monthlyCanvas = $('residuos-chart-mensual');
         const monthlyOptions = chartOptions({ stacked: true, offset: true });
@@ -421,27 +490,35 @@
             maxBarThickness: 68,
             stack: 'residuos'
         });
+        const monthlyDatasets = [
+            barDataset('Manejo especial y sólidos urbanos', special, COLORS.special),
+            barDataset('Peligrosos', danger, COLORS.danger)
+        ];
+        if (!historical) monthlyDatasets.push(barDataset('Valorizables', value, COLORS.value));
         if (monthlyCanvas) charts.monthly = new Chart(monthlyCanvas, {
             type: 'bar',
-            data: { labels, datasets: [
-                barDataset('Manejo especial y sólidos urbanos', special, COLORS.special),
-                barDataset('Peligrosos', danger, COLORS.danger),
-                barDataset('Valorizables', value, COLORS.value)
-            ] },
+            data: { labels, datasets: monthlyDatasets },
             options: monthlyOptions
         });
 
         const compCanvas = $('residuos-chart-composicion');
-        const compositionData = [sum(rows.map(specialOf)), sum(rows.map(row => row?.peligrosos_kg)), sum(rows.map(row => row?.valorizables_kg))];
+        const compositionLabels = ['Manejo especial y sólidos urbanos', 'Peligrosos'];
+        const compositionData = [sum(rows.map(specialOf)), sum(rows.map(row => row?.peligrosos_kg))];
+        const compositionColors = [COLORS.special, COLORS.danger];
+        if (!historical) {
+            compositionLabels.push('Valorizables');
+            compositionData.push(sum(rows.map(row => row?.valorizables_kg)));
+            compositionColors.push(COLORS.value);
+        }
         if (compCanvas) charts.composition = new Chart(compCanvas, {
             type: 'doughnut',
             plugins: [doughnutCenterText],
             data: {
-                labels: ['Manejo especial y sólidos urbanos', 'Peligrosos', 'Valorizables'],
+                labels: compositionLabels,
                 datasets: [{
                     data: compositionData,
-                    backgroundColor: [COLORS.special, COLORS.danger, COLORS.value],
-                    hoverBackgroundColor: [COLORS.special, COLORS.danger, COLORS.value],
+                    backgroundColor: compositionColors,
+                    hoverBackgroundColor: compositionColors,
                     borderColor: CHART_THEME.white,
                     borderWidth: 2,
                     spacing: 1,
@@ -506,9 +583,55 @@
             },
             options: trendOptions
         });
+
+        const annualCanvas = $('residuos-chart-anual');
+        const annualYears = state.years.filter(Number.isFinite).sort((a, b) => a - b);
+        const annualRows = annualYears.map(year => state.rows.filter(row => row.anio === year));
+        const annualSpecial = annualRows.map(yearRows => sum(yearRows.map(specialOf)));
+        const annualDanger = annualRows.map(yearRows => sum(yearRows.map(row => row.peligrosos_kg)));
+        const annualValue = annualRows.map((yearRows, index) => isHistoricalYear(annualYears[index])
+            ? null
+            : sum(yearRows.map(row => row.valorizables_kg)));
+        const annualOptions = chartOptions({ stacked: true, offset: true, padding: { top: 20, right: 24, left: 16 } });
+        annualOptions.plugins.datalabels = { display: false };
+        const annualDatasets = [
+            barDataset('Manejo especial y sólidos urbanos', annualSpecial, COLORS.special),
+            barDataset('Peligrosos', annualDanger, COLORS.danger)
+        ];
+        if (annualValue.some(valueToShow => valueToShow > 0)) annualDatasets.push(barDataset('Valorizables', annualValue, COLORS.value));
+        if (annualCanvas) charts.annual = new Chart(annualCanvas, {
+            type: 'bar',
+            data: { labels: annualYears.map(String), datasets: annualDatasets },
+            options: annualOptions
+        });
     }
 
-    function renderAll() { renderKpis(); renderTable(); renderCharts(); applyAccess(); }
+    function updateYearPresentation() {
+        const historical = isHistoricalYear(state.selectedYear);
+        const setText = (id, text) => { if ($(id)) $(id).textContent = text; };
+        setText('residuos-hero-subtitle', historical
+            ? 'Manejo especial y sólidos urbanos (orgánicos e inorgánicos) · Residuos peligrosos · GOMIH'
+            : 'Residuos de manejo especial, peligrosos y valorizables · GOMIH');
+        setText('residuos-kpi-especial-unit', historical ? 'kg · inorgánico + orgánico' : 'kg · inorgánico + orgánico + lodos + manejo especial');
+        setText('residuos-kpi-meses-unit', `de ${monthsForYear(state.selectedYear).length} meses del periodo`);
+        setText('residuos-table-help', historical
+            ? 'Los guiones representan valores que no aparecen desglosados en el archivo histórico proporcionado.'
+            : 'Los guiones representan meses sin información capturada.');
+        setText('residuos-table-source', historical ? 'Fuente: archivo histórico 2022–2025' : 'Fuente: ASECA · datos preliminares');
+        $('residuos-note-historical')?.classList.toggle('d-none', !historical);
+        $('residuos-note-current')?.classList.toggle('d-none', historical);
+        $('residuos-note-preliminary')?.classList.toggle('d-none', historical);
+        $('residuos-kpi-card-valorizables')?.classList.toggle('d-none', historical);
+        document.querySelectorAll('.residuos-kpi-col').forEach(element => {
+            element.classList.toggle('col-xl-3', !historical);
+            element.classList.toggle('col-xl-4', historical);
+        });
+        ['residuos-editor-lodos', 'residuos-editor-manejo-especial', 'residuos-editor-valorizables'].forEach(id => {
+            $(id)?.classList.toggle('d-none', historical);
+        });
+    }
+
+    function renderAll() { updateYearPresentation(); renderKpis(); renderTable(); renderCharts(); applyAccess(); }
 
     function loadEditorValues() {
         const row = rowForMonth(state.editMonth) || {};
@@ -518,20 +641,23 @@
 
     function applyAccess() {
         const editable = canEdit();
+        const historical = isHistoricalYear(state.selectedYear);
         const locked = $('residuos-capture-locked');
         if (locked) locked.classList.toggle('d-none', editable);
-        ['residuos-edit-month', 'residuos-inorganicos', 'residuos-organicos', 'residuos-lodos', 'residuos-manejo-especial', 'residuos-peligrosos', 'residuos-valorizables', 'residuos-observaciones', 'residuos-save'].forEach(id => { if ($(id)) $(id).disabled = !editable; });
+        ['residuos-edit-month', 'residuos-inorganicos', 'residuos-organicos', 'residuos-peligrosos', 'residuos-observaciones', 'residuos-save'].forEach(id => { if ($(id)) $(id).disabled = !editable; });
+        ['residuos-lodos', 'residuos-manejo-especial', 'residuos-valorizables'].forEach(id => { if ($(id)) $(id).disabled = !editable || historical; });
     }
 
     async function saveMonth() {
         if (!canEdit()) { setStatus('No tienes permiso para capturar en Hidráulicas.', 'warning'); return; }
         const month = monthByNumber(state.editMonth);
+        const historical = isHistoricalYear(state.selectedYear);
         const payload = {
             anio: Number(state.selectedYear), mes_num: month.n, mes_nombre: month.long,
             inorganicos_kg: num($('residuos-inorganicos')?.value), organicos_kg: num($('residuos-organicos')?.value),
-            lodos_kg: num($('residuos-lodos')?.value), manejo_especial_kg: num($('residuos-manejo-especial')?.value),
+            lodos_kg: historical ? null : num($('residuos-lodos')?.value), manejo_especial_kg: historical ? null : num($('residuos-manejo-especial')?.value),
             peligrosos_kg: num($('residuos-peligrosos')?.value),
-            valorizables_kg: num($('residuos-valorizables')?.value), observaciones: $('residuos-observaciones')?.value.trim() || null
+            valorizables_kg: historical ? null : num($('residuos-valorizables')?.value), observaciones: $('residuos-observaciones')?.value.trim() || null
         };
         const status = $('residuos-edit-status');
         if (status) status.textContent = 'Guardando…';
@@ -551,9 +677,19 @@
 
     function exportExcel() {
         if (typeof XLSX === 'undefined') { setStatus('La librería de Excel no está disponible.', 'warning'); return; }
-        const rows = MONTHS.map(month => { const row = rowForMonth(month.n) || {}; return [state.selectedYear, month.long, row.inorganicos_kg, row.organicos_kg, row.lodos_kg, row.manejo_especial_kg, row.peligrosos_kg, row.valorizables_kg]; });
-        const totals = [state.selectedYear, 'Subtotal (kg)', sum(rows.map(r => r[2])), sum(rows.map(r => r[3])), sum(rows.map(r => r[4])), sum(rows.map(r => r[5])), sum(rows.map(r => r[6])), sum(rows.map(r => r[7]))];
-        const aoa = [['Residuos de manejo especial y sólidos urbanos, peligrosos y valorizables', state.selectedYear], [], ['Año', 'Mes', 'Inorgánico (kg)', 'Orgánico (kg)', 'Lodos (kg)', 'Residuos de Manejo Especial (kg)', 'Peligrosos (kg)', 'Valorizables (kg)'], ...rows, totals, [], ['Notas'], ['Los datos presentados son proporcionados por ASECA, S.A. de C.V., a través de la Gerencia de Servicios Generales.'], ['Las cantidades mensuales son preliminares y podrán actualizarse cuando se reciban los manifiestos oficiales.']];
+        const historical = isHistoricalYear(state.selectedYear);
+        const months = monthsForYear(state.selectedYear);
+        const rows = months.map(month => {
+            const row = rowForMonth(month.n) || {};
+            if (historical) return [state.selectedYear, month.long, row.inorganicos_kg, row.organicos_kg, row.peligrosos_kg ?? (hazardStatus(row) || null)];
+            return [state.selectedYear, month.long, row.inorganicos_kg, row.organicos_kg, row.lodos_kg, row.manejo_especial_kg, row.peligrosos_kg, row.valorizables_kg];
+        });
+        const totals = historical
+            ? [state.selectedYear, 'Subtotal (kg)', sum(rows.map(r => r[2])), sum(rows.map(r => r[3])), sum(months.map(month => rowForMonth(month.n)?.peligrosos_kg))]
+            : [state.selectedYear, 'Subtotal (kg)', sum(rows.map(r => r[2])), sum(rows.map(r => r[3])), sum(rows.map(r => r[4])), sum(rows.map(r => r[5])), sum(rows.map(r => r[6])), sum(rows.map(r => r[7]))];
+        const aoa = historical
+            ? [['Residuos de manejo especial y sólidos urbanos y residuos peligrosos', state.selectedYear], [], ['Año', 'Mes', 'Inorgánico (kg)', 'Orgánico (kg)', 'Peligrosos (kg)'], ...rows, totals, [], ['Notas'], ['Fuente: Registros de residuos 2022-2025.xlsx.'], ['Los campos vacíos no se convierten en cero; se conservan como información no desglosada en el archivo histórico.']]
+            : [['Residuos de manejo especial y sólidos urbanos, peligrosos y valorizables', state.selectedYear], [], ['Año', 'Mes', 'Inorgánico (kg)', 'Orgánico (kg)', 'Lodos (kg)', 'Residuos de Manejo Especial (kg)', 'Peligrosos (kg)', 'Valorizables (kg)'], ...rows, totals, [], ['Notas'], ['Los datos presentados son proporcionados por ASECA, S.A. de C.V., a través de la Gerencia de Servicios Generales.'], ['Las cantidades mensuales son preliminares y podrán actualizarse cuando se reciban los manifiestos oficiales.']];
         const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Residuos'); XLSX.writeFile(wb, `Residuos_GOMIH_${state.selectedYear}.xlsx`);
     }
 
@@ -574,7 +710,7 @@
                 } catch (_) { tabButton.click(); }
             }, 100);
         });
-        $('residuos-year-select')?.addEventListener('change', () => { state.selectedYear = Number($('residuos-year-select').value); loadEditorValues(); renderAll(); });
+        $('residuos-year-select')?.addEventListener('change', () => { state.selectedYear = Number($('residuos-year-select').value); populateEditMonth(); renderAll(); });
         $('residuos-edit-month')?.addEventListener('change', () => { state.editMonth = Number($('residuos-edit-month').value) || 1; loadEditorValues(); });
         $('residuos-refresh')?.addEventListener('click', () => { state.loaded = false; load(true); });
         $('residuos-export')?.addEventListener('click', exportExcel);

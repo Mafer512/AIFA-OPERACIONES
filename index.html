@@ -22713,6 +22713,7 @@ FF
                     #hidraulicas-section .residuos-table tbody td:first-child,
                     #hidraulicas-section .residuos-table tbody td:nth-child(2){ text-align:center; font-weight:700; }
                     #hidraulicas-section .residuos-table tbody tr.residuos-no-data td{ color:#94a3b8; background:#f8fafc; }
+                    #hidraulicas-section .residuos-table tbody td.residuos-hazard-status{ color:#991b1b; font-size:.7rem; font-weight:800; letter-spacing:.01em; background:#fff1f2; }
                     #hidraulicas-section .residuos-table tfoot td{ font-weight:800; text-align:right; background:#e2e8f0; }
                     #hidraulicas-section .residuos-table tfoot td:first-child{ text-align:left; }
                     #hidraulicas-section .residuos-table .residuos-total-special{ background:#0b3040; color:#fff; }
@@ -23140,15 +23141,16 @@ FF
                           <div class="residuos-shell">
                             <aside class="residuos-notes" aria-labelledby="residuos-notes-title">
                               <div class="residuos-notes-title" id="residuos-notes-title"><i class="fas fa-note-sticky" aria-hidden="true"></i>Notas</div>
-                              <p><i class="fas fa-circle" aria-hidden="true"></i>Los datos presentados son proporcionados por la empresa ASECA, S.A. de C.V., a través de la Gerencia de Servicios Generales.</p>
-                              <p><i class="fas fa-circle" aria-hidden="true"></i>Las cantidades registradas de manera mensual corresponden a datos preliminares, ya que los manifiestos que contienen las cantidades oficiales son emitidos por el sitio de disposición final con un desfase aproximado de 2 a 3 meses. Una vez recibidos dichos manifiestos, la información será actualizada, en su caso, para reflejar las cantidades definitivas.</p>
-                              <p class="mb-0"><i class="fas fa-circle" aria-hidden="true"></i>Con la información presentada en esta tabla, se elaborarán gráficas que muestren el comportamiento mensual de las cantidades generadas para cada tipo de residuo (manejo especial, peligrosos y valorizables), con la finalidad de facilitar el análisis de su comportamiento durante el año.</p>
+                              <p id="residuos-note-current"><i class="fas fa-circle" aria-hidden="true"></i>Los datos presentados son proporcionados por la empresa ASECA, S.A. de C.V., a través de la Gerencia de Servicios Generales.</p>
+                              <p id="residuos-note-preliminary"><i class="fas fa-circle" aria-hidden="true"></i>Las cantidades registradas de manera mensual corresponden a datos preliminares, ya que los manifiestos que contienen las cantidades oficiales son emitidos por el sitio de disposición final con un desfase aproximado de 2 a 3 meses. Una vez recibidos dichos manifiestos, la información será actualizada, en su caso, para reflejar las cantidades definitivas.</p>
+                              <p id="residuos-note-historical" class="d-none"><i class="fas fa-circle" aria-hidden="true"></i>Para 2022–2025 se conserva el esquema del archivo histórico: orgánicos e inorgánicos dentro de manejo especial y sólidos urbanos, más residuos peligrosos. Los campos no desglosados en la fuente se muestran con guion y no se consideran cero.</p>
+                              <p class="mb-0"><i class="fas fa-circle" aria-hidden="true"></i>Las gráficas permiten analizar el comportamiento mensual y comparar la generación acumulada entre años.</p>
                             </aside>
                             <div class="residuos-hero mb-3">
                               <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
                                 <div>
                                   <h3><i class="fas fa-recycle me-2"></i>Residuos generados</h3>
-                                  <p>Residuos de manejo especial, peligrosos y valorizables · GOMIH</p>
+                                  <p id="residuos-hero-subtitle">Residuos de manejo especial, peligrosos y valorizables · GOMIH</p>
                                 </div>
                                 <div class="d-flex align-items-center gap-2">
                                   <label for="residuos-year-select" class="small fw-bold mb-0">Año</label>
@@ -23162,10 +23164,10 @@ FF
                             <div id="residuos-status" class="alert alert-info py-2 small d-none" role="status"></div>
 
                             <div class="row g-3 mb-3">
-                              <div class="col-12 col-md-6 col-xl-3"><div class="residuos-kpi" style="--res-color:#17658a;"><div class="residuos-kpi-label"><i class="fas fa-layer-group me-1"></i>Manejo especial y sólidos urbanos</div><div class="residuos-kpi-value" id="residuos-kpi-especial">—</div><div class="residuos-kpi-unit">kg · inorgánico + orgánico + lodos + manejo especial</div></div></div>
-                              <div class="col-12 col-md-6 col-xl-3"><div class="residuos-kpi" style="--res-color:#c00000;"><div class="residuos-kpi-label"><i class="fas fa-triangle-exclamation me-1"></i>Peligrosos</div><div class="residuos-kpi-value" id="residuos-kpi-peligrosos">—</div><div class="residuos-kpi-unit">kg acumulados</div></div></div>
-                              <div class="col-12 col-md-6 col-xl-3"><div class="residuos-kpi" style="--res-color:#e0a800;"><div class="residuos-kpi-label"><i class="fas fa-arrows-rotate me-1"></i>Valorizables</div><div class="residuos-kpi-value" id="residuos-kpi-valorizables">—</div><div class="residuos-kpi-unit">kg acumulados</div></div></div>
-                              <div class="col-12 col-md-6 col-xl-3"><div class="residuos-kpi" style="--res-color:#047857;"><div class="residuos-kpi-label"><i class="fas fa-calendar-check me-1"></i>Meses con información</div><div class="residuos-kpi-value" id="residuos-kpi-meses">—</div><div class="residuos-kpi-unit">de 12 meses</div></div></div>
+                              <div class="col-12 col-md-6 col-xl-3 residuos-kpi-col"><div class="residuos-kpi" style="--res-color:#17658a;"><div class="residuos-kpi-label"><i class="fas fa-layer-group me-1"></i>Manejo especial y sólidos urbanos</div><div class="residuos-kpi-value" id="residuos-kpi-especial">—</div><div class="residuos-kpi-unit" id="residuos-kpi-especial-unit">kg · inorgánico + orgánico + lodos + manejo especial</div></div></div>
+                              <div class="col-12 col-md-6 col-xl-3 residuos-kpi-col"><div class="residuos-kpi" style="--res-color:#c00000;"><div class="residuos-kpi-label"><i class="fas fa-triangle-exclamation me-1"></i>Peligrosos</div><div class="residuos-kpi-value" id="residuos-kpi-peligrosos">—</div><div class="residuos-kpi-unit">kg acumulados</div></div></div>
+                              <div class="col-12 col-md-6 col-xl-3 residuos-kpi-col" id="residuos-kpi-card-valorizables"><div class="residuos-kpi" style="--res-color:#e0a800;"><div class="residuos-kpi-label"><i class="fas fa-arrows-rotate me-1"></i>Valorizables</div><div class="residuos-kpi-value" id="residuos-kpi-valorizables">—</div><div class="residuos-kpi-unit">kg acumulados</div></div></div>
+                              <div class="col-12 col-md-6 col-xl-3 residuos-kpi-col"><div class="residuos-kpi" style="--res-color:#047857;"><div class="residuos-kpi-label"><i class="fas fa-calendar-check me-1"></i>Meses con información</div><div class="residuos-kpi-value" id="residuos-kpi-meses">—</div><div class="residuos-kpi-unit" id="residuos-kpi-meses-unit">de 12 meses del periodo</div></div></div>
                             </div>
 
                             <div class="row g-3 mb-3">
@@ -23175,15 +23177,18 @@ FF
                             <div class="row g-3 mb-3">
                               <div class="col-12"><div class="residuos-panel residuos-chart-panel"><div class="residuos-panel-title"><i class="fas fa-chart-line me-2 text-primary"></i>Tendencia mensual · kg generados</div><div class="residuos-chart-host"><canvas id="residuos-chart-tendencia"></canvas></div></div></div>
                             </div>
+                            <div class="row g-3 mb-3">
+                              <div class="col-12"><div class="residuos-panel residuos-chart-panel"><div class="residuos-panel-title"><i class="fas fa-chart-column me-2 text-primary"></i>Comportamiento anual · comparación de generación</div><div class="residuos-chart-host"><canvas id="residuos-chart-anual"></canvas></div><small class="text-muted d-block mt-2">Se suman únicamente los valores disponibles; los campos sin desglose no se convierten en cero.</small></div></div>
+                            </div>
 
                             <div class="residuos-panel mb-3">
                               <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                                <div><div class="residuos-panel-title mb-0"><i class="fas fa-table me-2 text-success"></i>Registro mensual de residuos</div><small class="text-muted">Los guiones representan meses sin información capturada.</small></div>
+                                <div><div class="residuos-panel-title mb-0"><i class="fas fa-table me-2 text-success"></i>Registro mensual de residuos</div><small class="text-muted" id="residuos-table-help">Los guiones representan meses sin información capturada.</small></div>
                                 <span id="residuos-table-source" class="badge text-bg-light border">Fuente: ASECA · datos preliminares</span>
                               </div>
                               <div class="residuos-table-wrap">
                                 <table class="table table-bordered residuos-table align-middle">
-                                  <thead><tr><th rowspan="2" class="res-th-base">Año</th><th rowspan="2" class="res-th-base">Mes</th><th colspan="4" class="res-th-especial">Residuos de manejo especial y sólidos urbanos</th><th rowspan="2" class="res-th-peligrosos">Residuos<br>peligrosos<br>(kg)</th><th rowspan="2" class="res-th-valorizables">Residuos<br>valorizables<br>(kg)</th><th rowspan="2" class="res-th-base">Acciones</th></tr><tr><th class="res-th-sub">Inorgánico<br>(kg)</th><th class="res-th-sub">Orgánico<br>(kg)</th><th class="res-th-sub">Lodos<br>(kg)</th><th class="res-th-sub">Residuos de<br>Manejo Especial<br>(kg)</th></tr></thead>
+                                  <thead id="residuos-table-head"><tr><th rowspan="2" class="res-th-base">Año</th><th rowspan="2" class="res-th-base">Mes</th><th colspan="4" class="res-th-especial">Residuos de manejo especial y sólidos urbanos</th><th rowspan="2" class="res-th-peligrosos">Residuos<br>peligrosos<br>(kg)</th><th rowspan="2" class="res-th-valorizables">Residuos<br>valorizables<br>(kg)</th><th rowspan="2" class="res-th-base">Acciones</th></tr><tr><th class="res-th-sub">Inorgánico<br>(kg)</th><th class="res-th-sub">Orgánico<br>(kg)</th><th class="res-th-sub">Lodos<br>(kg)</th><th class="res-th-sub">Residuos de<br>Manejo Especial<br>(kg)</th></tr></thead>
                                   <tbody id="residuos-table-body"><tr><td colspan="9" class="text-center text-muted py-4">Cargando información…</td></tr></tbody>
                                   <tfoot id="residuos-table-foot"></tfoot>
                                 </table>
@@ -23197,10 +23202,10 @@ FF
                                 <div class="col-12 col-sm-3 col-lg-2"><label class="form-label" for="residuos-edit-month">Mes</label><select id="residuos-edit-month" class="form-select form-select-sm"></select></div>
                                 <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-inorganicos">Inorgánico (kg)</label><input id="residuos-inorganicos" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
                                 <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-organicos">Orgánico (kg)</label><input id="residuos-organicos" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
-                                <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-lodos">Lodos (kg)</label><input id="residuos-lodos" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
-                                <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-manejo-especial">Manejo especial (kg)</label><input id="residuos-manejo-especial" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
+                                <div class="col-6 col-sm-3 col-lg-2" id="residuos-editor-lodos"><label class="form-label" for="residuos-lodos">Lodos (kg)</label><input id="residuos-lodos" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
+                                <div class="col-6 col-sm-3 col-lg-2" id="residuos-editor-manejo-especial"><label class="form-label" for="residuos-manejo-especial">Manejo especial (kg)</label><input id="residuos-manejo-especial" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
                                 <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-peligrosos">Peligrosos (kg)</label><input id="residuos-peligrosos" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
-                                <div class="col-6 col-sm-3 col-lg-2"><label class="form-label" for="residuos-valorizables">Valorizables (kg)</label><input id="residuos-valorizables" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
+                                <div class="col-6 col-sm-3 col-lg-2" id="residuos-editor-valorizables"><label class="form-label" for="residuos-valorizables">Valorizables (kg)</label><input id="residuos-valorizables" class="form-control form-control-sm" type="number" min="0" step="0.01" placeholder="—"></div>
                                 <div class="col-6 col-sm-3 col-lg-2"><button id="residuos-save" class="btn btn-success btn-sm w-100" type="button"><i class="fas fa-save me-1"></i>Guardar mes</button></div>
                               </div>
                               <div class="mt-2"><label class="form-label mb-1" for="residuos-observaciones">Observaciones</label><input id="residuos-observaciones" class="form-control form-control-sm" type="text" placeholder="Ej. Manifiesto pendiente de confirmación..." maxlength="1000"></div>
@@ -36320,7 +36325,7 @@ FF
     <script src="js/medicas.js?v=2"></script>
     <script src="js/fauna.js"></script>
     <script src="js/hidraulicas.js?v=20-periodo-inicial"></script>
-    <script src="js/residuos-hidraulicas.js?v=20260803-chart-theme"></script>
+    <script src="js/residuos-hidraulicas.js?v=20260827-historico-2022-2025"></script>
     <script src="js/ggen-energia.js?v=5"></script>
     <script src="js/gtrans-energia.js?v=1"></script>
     <script src="js/gtrans-preventivos.js?v=2"></script>
