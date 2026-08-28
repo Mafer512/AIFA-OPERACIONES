@@ -20,10 +20,15 @@
  *    quedaba en NULL y las dos funciones salían con "No se detecto columna de
  *    numero de empleado en agenda_2026".
  *
- * Encima, el número de empleado y el nombre no se pueden editar desde el QR: los
- * asigna el área de personal. No basta con poner readonly en el input, porque
- * cualquiera edita el DOM o llama al RPC a mano; el backend tiene que ignorar lo
- * que venga en el payload.
+ * Encima, hay datos que no se editan desde el QR porque los asigna el área de
+ * personal: el número de empleado, el nombre, el puesto y toda la adscripción.
+ * No basta con poner readonly en el input, porque cualquiera edita el DOM o llama
+ * al RPC a mano; el backend tiene que ignorar lo que venga en el payload.
+ *
+ * Esa lista vive en tres sitios que se tienen que mover juntos —locked_keys en el
+ * SQL, LOCKED_SPECS en el portal y COLAB_ONBOARDING_FIJOS en el alta de index.html—
+ * así que aquí se comparan entre sí. Si alguien agrega un campo bloqueado en uno
+ * solo, el colaborador acabaría viendo un campo vacío que nadie puede llenar.
  */
 
 const fs = require('fs');
@@ -32,6 +37,12 @@ const path = require('path');
 const raiz = path.resolve(__dirname, '..');
 const sql = fs.readFileSync(path.join(raiz, 'db/create_colab_onboarding_portal.sql'), 'utf8');
 const portal = fs.readFileSync(path.join(raiz, 'colaborador-registro.html'), 'utf8');
+const app = fs.readFileSync(path.join(raiz, 'index.html'), 'utf8');
+
+// El numero de empleado va aparte: sale del token, no de un campo del alta.
+const CAMPOS_FIJOS = [
+  'nombre', 'puesto', 'nivel', 'plaza', 'direccion', 'subdireccion', 'gerencia', 'coordinacion',
+];
 
 /** Cuerpo de una función plpgsql del script, partido en DECLARE y BEGIN. */
 function funcion(nombre) {
@@ -132,36 +143,80 @@ describe('los patrones de columna casan con agenda_2026', () => {
       expect(resolver(pats.get('col_f_tia'))).not.toBe('Vigencia de la TIA');
       expect(resolver(pats.get('col_vig_credencial'))).toBe('Vigencia de la TIA');
     });
+
+    test(nombre + ' manda cada campo fijo a una columna distinta', () => {
+      // Si dos patrones cayeran en la misma columna, el ultimo del bucle pisaria
+      // al anterior y la adscripcion quedaria mal escrita sin que nadie se entere.
+      const pats = patronesDe(nombre);
+      const columnas = CAMPOS_FIJOS.map(c => resolver(pats.get('col_' + c)));
+      expect(columnas).not.toContain(null);
+      expect(new Set(columnas).size).toBe(CAMPOS_FIJOS.length);
+    });
   }
 });
 
-describe('número de empleado y nombre no se editan desde el QR', () => {
-  test('el backend ignora el nombre que mande el portal', () => {
-    const { begin } = funcion('save_colab_onboarding');
-    // El único origen válido es el expediente o la metadata del link.
-    expect(begin).not.toMatch(/p_payload->>'nombre'/);
-    expect(begin).toMatch(/lnk\.metadata ->> 'nombre'/);
+describe('los campos fijos son los mismos en los tres lados', () => {
+  test('el SQL bloquea exactamente esa lista', () => {
+    const { declare } = funcion('save_colab_onboarding');
+    const arr = declare.match(/locked_keys text\[\] := ARRAY\[(.*?)\];/);
+    expect(arr).not.toBeNull();
+    const claves = [...arr[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+    expect(claves.sort()).toEqual([...CAMPOS_FIJOS].sort());
+  });
+
+  test('el portal los pinta como fijos', () => {
+    const arr = portal.match(/const LOCKED_SPECS = \[([\s\S]*?)\n {6}\];/);
+    expect(arr).not.toBeNull();
+    const claves = [...arr[1].matchAll(/\['[^']+', '([^']+)'/g)].map(m => m[1]);
+    expect(claves.sort()).toEqual(['num_empleado', ...CAMPOS_FIJOS].sort());
+  });
+
+  test('el alta los exige para poder generar el QR', () => {
+    const arr = app.match(/const COLAB_ONBOARDING_FIJOS = \[([\s\S]*?)\n {24}\];/);
+    expect(arr).not.toBeNull();
+    const campos = [...arr[1].matchAll(/clave: '([^']+)',\s*input: '([^']+)'/g)];
+    expect(campos.map(m => m[1]).sort()).toEqual([...CAMPOS_FIJOS].sort());
+
+    // Un id mal escrito dejaria el campo siempre vacio y el QR nunca se generaria.
+    for (const [, clave, input] of campos) {
+      expect(app.includes('id="' + input + '"')).toBe(true);
+    }
+  });
+});
+
+describe('el backend no acepta los campos fijos del portal', () => {
+  const { begin } = funcion('save_colab_onboarding');
+
+  test.each(CAMPOS_FIJOS)('ignora el %s que mande el payload', (clave) => {
+    expect(begin).not.toMatch(new RegExp("p_payload->>'" + clave + "'"));
+  });
+
+  test('los resuelve del expediente o de la metadata del link', () => {
+    expect(begin).toMatch(/lnk\.metadata ->> locked_key/);
+    expect(begin).toMatch(/FROM public\.agenda_2026 WHERE %I = \$1 LIMIT 1', locked_col, col_num/);
   });
 
   test('el número de empleado sale del token, no del payload', () => {
-    const { begin } = funcion('save_colab_onboarding');
     expect(begin).toMatch(/jsonb_build_object\(col_num, lnk\.num_empleado\)/);
     expect(begin).not.toMatch(/p_payload->>'num_empleado'/);
   });
+});
 
-  test('los inputs de identidad son de solo lectura', () => {
-    for (const id of ['f-num', 'f-nombre']) {
+describe('el formulario del portal no deja tocarlos', () => {
+  test.each(['f-num', 'f-nombre', 'f-puesto', 'f-nivel', 'f-plaza',
+             'f-direccion', 'f-subdireccion', 'f-gerencia', 'f-coordinacion'])(
+    '%s es de solo lectura', (id) => {
       const input = portal.match(new RegExp('<input id="' + id + '"[^>]*>'));
       expect(input).not.toBeNull();
       expect(input[0]).toMatch(/\breadonly\b/);
-    }
-  });
+    });
 
-  test('el formulario no manda el nombre entre los campos capturables', () => {
+  test('ninguno viaja entre los campos capturables', () => {
     const specs = portal.match(/const FIELD_SPECS = \[([\s\S]*?)\n {6}\];/);
     expect(specs).not.toBeNull();
-    expect(specs[1]).not.toMatch(/'nombre'/);
-    expect(specs[1]).not.toMatch(/f-nombre/);
+    for (const clave of CAMPOS_FIJOS) {
+      expect(specs[1]).not.toMatch(new RegExp("'" + clave + "'"));
+    }
   });
 });
 
@@ -196,33 +251,35 @@ describe('el payload que sale del portal', () => {
 
   test('lleva los datos que sí captura el colaborador', () => {
     const ctx = montarPortal();
-    document.getElementById('f-puesto').value = 'Jefe de Plataforma';
+    document.getElementById('f-turno').value = 'Matutino';
     document.getElementById('f-curp').value = 'gxpa900101hdfxxx01';
 
     const payload = ctx.collectPayload();
-    expect(payload.puesto).toBe('Jefe de Plataforma');
+    expect(payload.turno).toBe('Matutino');
     expect(payload.curp).toBe('GXPA900101HDFXXX01');
   });
 
-  test('no lleva el nombre ni el número de empleado', () => {
+  test('no lleva ninguno de los campos fijos', () => {
     const ctx = montarPortal();
     const payload = ctx.collectPayload();
 
-    expect(payload).not.toHaveProperty('nombre');
     expect(payload).not.toHaveProperty('num_empleado');
+    for (const clave of CAMPOS_FIJOS) {
+      expect(payload).not.toHaveProperty(clave);
+    }
   });
 
-  test('sigue sin llevarlos aunque le quiten el readonly al input', () => {
+  test('sigue sin llevarlos aunque le quiten el readonly a los inputs', () => {
     const ctx = montarPortal();
     // Lo que haría cualquiera desde las herramientas del navegador.
-    const inputNombre = document.getElementById('f-nombre');
-    inputNombre.removeAttribute('readonly');
-    inputNombre.value = 'Nombre Suplantado';
-    document.getElementById('f-num').value = '9999-9';
+    for (const id of ['f-num', 'f-nombre', 'f-puesto', 'f-nivel', 'f-plaza',
+                      'f-direccion', 'f-subdireccion', 'f-gerencia', 'f-coordinacion']) {
+      const input = document.getElementById(id);
+      input.removeAttribute('readonly');
+      input.value = 'SUPLANTADO';
+    }
 
     const payload = ctx.collectPayload();
-    expect(payload).not.toHaveProperty('nombre');
-    expect(payload).not.toHaveProperty('num_empleado');
-    expect(JSON.stringify(payload)).not.toContain('Suplantado');
+    expect(JSON.stringify(payload)).not.toContain('SUPLANTADO');
   });
 });

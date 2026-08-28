@@ -18,20 +18,38 @@
 
 ## Campos bloqueados
 
-**El número de empleado y el nombre no se pueden modificar desde el QR.** Los
-asigna el área de personal y en el portal aparecen como solo lectura.
+**Hay nueve datos que no se pueden modificar desde el QR**, porque los asigna el
+área de personal. En el portal salen con la marca 🔒 **Fijo** y en solo lectura:
+
+| Campo | De dónde sale |
+|---|---|
+| No. Empleado | del token del QR |
+| Nombre completo | del expediente, o del alta que generó el QR |
+| Puesto | ídem |
+| Nivel | ídem |
+| Plaza | ídem |
+| Dirección | ídem |
+| Subdirección | ídem |
+| Gerencia | ídem |
+| Coordinación | ídem |
 
 El candado no es sólo visual, porque un `readonly` se quita editando el DOM o
 llamando al RPC a mano:
 
 - El **número de empleado** sale siempre de `colab_onboarding_links.num_empleado`,
-  es decir del token. `save_colab_onboarding` nunca lo lee del payload.
-- El **nombre** lo resuelve el servidor: primero el del expediente en
+  es decir del token.
+- **Los otros ocho** los resuelve el servidor: primero el valor del expediente en
   `agenda_2026` y, si el registro todavía no existe, el que capturó el área al
-  generar el QR (`metadata.nombre` del link). Lo que mande el portal se ignora.
+  generar el QR (la `metadata` del link). Lo que mande el portal para esas claves
+  se ignora, venga del formulario o de una llamada directa al RPC.
 
-Si el enlace se generó sin nombre, el portal deja guardar avances pero no
-finalizar, y pide que el área regenere el QR.
+Si al enlace le falta alguno, el portal deja guardar avances pero no finalizar:
+devuelve `locked_missing` y pide que el área regenere el QR.
+
+> La lista vive en tres sitios que se mueven juntos: `locked_keys` en
+> `save_colab_onboarding`, `LOCKED_SPECS` en el portal y
+> `COLAB_ONBOARDING_FIJOS` en el alta de `index.html`. Las pruebas los comparan
+> entre sí; si agregas un campo bloqueado, van los tres.
 
 ## Paso 1: ejecutar el SQL en Supabase
 
@@ -46,9 +64,20 @@ correr sobre una base donde ya se intentó antes.
 
 ## Paso 2: generar el QR desde la aplicación
 
-En **Colaboradores → Nuevo Colaborador**, captura al menos No. Empleado y Nombre
-y pulsa **Generar QR onboarding**. El panel muestra el QR, el enlace y su fecha
-de expiración (30 días).
+En **Colaboradores → Nuevo Colaborador**, captura los datos que el colaborador ya
+no puede llenar y pulsa **Generar QR onboarding**. El panel muestra el QR, el
+enlace y su fecha de expiración (30 días).
+
+Son obligatorios para generar el QR, y en el formulario de alta llevan un icono
+de código QR junto a su etiqueta:
+
+- **Generales**: No. Empleado, Nombre completo, Puesto
+- **Clasificación**: Nivel, Plaza
+- **Organización**: Dirección, Subdirección, Gerencia, Coordinación
+
+Si falta alguno, el botón no genera nada: avisa cuáles son y salta a la pestaña
+del primero que falte. El resto de campos del alta siguen siendo opcionales,
+porque el colaborador sí los captura desde el portal.
 
 La primera vez hay que capturar la **URL pública del portal** en ese mismo panel
 (por ejemplo `https://tu-dominio-aifa/colaborador-registro.html`) y guardarla: si
@@ -59,11 +88,21 @@ También se puede crear un token a mano desde el SQL Editor, autenticado como
 admin/editor:
 
 ```sql
-select public.create_colab_onboarding_link('1299-2', 30, '{"nombre":"Nombre Apellido"}'::jsonb);
+select public.create_colab_onboarding_link('1299-2', 30, jsonb_build_object(
+  'nombre',       'Nombre Apellido',
+  'puesto',       'Analista de Operaciones',
+  'nivel',        '11',
+  'plaza',        'Base',
+  'direccion',    'Dirección de Operación',
+  'subdireccion', 'Subdirección de Operaciones',
+  'gerencia',     'Gerencia de Plataforma',
+  'coordinacion', 'Coordinación de Rampa'
+));
 ```
 
-La salida trae `token`, `url_suffix` y `expires_at`. Manda siempre `nombre` en la
-metadata: es lo que verá bloqueado el colaborador si aún no existe su registro.
+La salida trae `token`, `url_suffix` y `expires_at`. Manda la metadata completa:
+es lo que verá bloqueado el colaborador mientras su registro no exista todavía en
+`agenda_2026`.
 
 ## Paso 3: reingreso para completar lo que falte
 
@@ -76,12 +115,15 @@ Las funciones no asumen los nombres de columna de `agenda_2026` —son los del
 Excel original, con puntos, espacios y acentos— sino que los detectan por
 patrones, igual que hace el directorio en `index.html`.
 
-Se actualiza lo que el colaborador captura: puesto, profesión, grado académico,
-matrícula, cédula, nivel, plaza, adscripción, CURP, RFC, NSS, domicilio, estado
+Se actualiza lo que el colaborador captura: profesión, grado académico, matrícula,
+cédula, turno, militar/civil, comisionado, CURP, RFC, NSS, domicilio, estado
 civil, dependientes, tipo de sangre, alergias, celular, extensión, correos,
 fecha de ingreso, fecha de nacimiento, licencias y vigencias, contactos de
 emergencia, CV, INE frente, INE reverso y TIA, más
 `onboarding_actualizado_en` y `onboarding_estado`.
+
+Los nueve campos bloqueados también se escriben en cada guardado, pero con el
+valor que resolvió el servidor, no con el que mandó el portal.
 
 Los campos cuya columna no existe en la tabla (hoy `turno`, `ryr` y `grado`) se
 omiten sin romper el guardado, y tampoco se exigen para finalizar.

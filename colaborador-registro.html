@@ -81,11 +81,11 @@
             <input id="f-nombre" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-12">
-            <div class="lock-hint" id="lock-hint">&#128274; El número de empleado y el nombre los asigna el área de personal y no se pueden editar desde aquí.</div>
+            <div class="lock-hint" id="lock-hint">&#128274; Los campos marcados como <strong>Fijo</strong> los asigna el área de personal y no se editan desde aquí.</div>
           </div>
           <div class="col-md-4">
-            <label class="form-label">Puesto</label>
-            <input id="f-puesto" class="form-control">
+            <label class="form-label">Puesto <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-puesto" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-4">
             <label class="form-label">Profesión</label>
@@ -112,14 +112,15 @@
 
       <section class="panel">
         <h2 class="sec-title">Datos laborales</h2>
+        <div class="lock-hint mb-3">&#128274; Tu adscripción la registra el área de personal. Aquí solo capturas turno, si eres militar o civil, y si estás comisionado.</div>
         <div class="row g-3">
           <div class="col-md-3">
-            <label class="form-label">Nivel</label>
-            <input id="f-nivel" class="form-control">
+            <label class="form-label">Nivel <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-nivel" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-3">
-            <label class="form-label">Plaza</label>
-            <input id="f-plaza" class="form-control">
+            <label class="form-label">Plaza <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-plaza" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-3">
             <label class="form-label">Turno</label>
@@ -134,20 +135,20 @@
             <input id="f-comisionado" class="form-control">
           </div>
           <div class="col-md-4">
-            <label class="form-label">Dirección</label>
-            <input id="f-direccion" class="form-control">
+            <label class="form-label">Dirección <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-direccion" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-4">
-            <label class="form-label">Subdirección</label>
-            <input id="f-subdireccion" class="form-control">
+            <label class="form-label">Subdirección <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-subdireccion" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-6">
-            <label class="form-label">Gerencia</label>
-            <input id="f-gerencia" class="form-control">
+            <label class="form-label">Gerencia <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-gerencia" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-6">
-            <label class="form-label">Coordinación</label>
-            <input id="f-coordinacion" class="form-control">
+            <label class="form-label">Coordinación <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-coordinacion" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
         </div>
       </section>
@@ -332,23 +333,16 @@
       'use strict';
 
       let token = '';
-      // f-num y f-nombre quedan fuera: son identidad bloqueada que resuelve el backend.
+      // Los campos de LOCKED_SPECS quedan fuera: los resuelve el backend.
       const FIELD_SPECS = [
-        ['f-puesto', 'puesto'],
         ['f-profesion', 'profesion'],
         ['f-grado-academico', 'grado_academico'],
         ['f-matricula', 'matricula'],
         ['f-cedula', 'cedula'],
         ['f-ryr', 'ryr'],
-        ['f-nivel', 'nivel'],
-        ['f-plaza', 'plaza'],
         ['f-turno', 'turno'],
         ['f-militar', 'militar'],
         ['f-comisionado', 'comisionado'],
-        ['f-direccion', 'direccion'],
-        ['f-subdireccion', 'subdireccion'],
-        ['f-gerencia', 'gerencia'],
-        ['f-coordinacion', 'coordinacion'],
         ['f-curp', 'curp'],
         ['f-rfc', 'rfc'],
         ['f-sangre', 'sangre'],
@@ -377,6 +371,19 @@
         ['f-c2-nombre', 'c2_nombre'],
         ['f-c2-parentesco', 'c2_parentesco'],
         ['f-c2-tel', 'c2_tel']
+      ];
+
+      // Los captura el área de personal al generar el QR; el portal solo los muestra.
+      const LOCKED_SPECS = [
+        ['f-num', 'num_empleado', 'No. Empleado'],
+        ['f-nombre', 'nombre', 'Nombre completo'],
+        ['f-puesto', 'puesto', 'Puesto'],
+        ['f-nivel', 'nivel', 'Nivel'],
+        ['f-plaza', 'plaza', 'Plaza'],
+        ['f-direccion', 'direccion', 'Dirección'],
+        ['f-subdireccion', 'subdireccion', 'Subdirección'],
+        ['f-gerencia', 'gerencia', 'Gerencia'],
+        ['f-coordinacion', 'coordinacion', 'Coordinación']
       ];
 
       const FIELD_LABELS = {
@@ -473,20 +480,25 @@
         el.innerHTML = '<a class="badge-lite" href="' + escapeHtml(dataUrl) + '" target="_blank" rel="noopener">Abrir archivo</a>';
       }
 
-      function setLockedIdentity(numEmpleado, nombre) {
-        const num = String(numEmpleado == null ? '' : numEmpleado).trim();
-        const nom = String(nombre == null ? '' : nombre).trim();
-        $('f-num').value = num;
-        $('f-nombre').value = nom;
+      function pintarCamposFijos(locked) {
+        const faltan = [];
+        LOCKED_SPECS.forEach(function (spec) {
+          const input = $(spec[0]);
+          if (!input) return;
+          const valor = locked && locked[spec[1]] != null ? String(locked[spec[1]]).trim() : '';
+          input.value = valor;
+          if (!valor) faltan.push(spec[2]);
+        });
 
         const hint = $('lock-hint');
         if (!hint) return;
-        if (nom) {
-          hint.className = 'lock-hint';
-          hint.innerHTML = '&#128274; El número de empleado y el nombre los asigna el área de personal y no se pueden editar desde aquí. Si alguno tiene un error, avísales antes de finalizar.';
-        } else {
+        if (faltan.length) {
           hint.className = 'lock-hint warn';
-          hint.innerHTML = '&#9888;&#65039; Tu enlace no trae nombre asignado. Puedes guardar avances, pero para finalizar pide al área de personal que genere de nuevo tu QR.';
+          hint.innerHTML = '&#9888;&#65039; Tu enlace no trae ' + escapeHtml(faltan.join(', ')) +
+            '. Puedes guardar avances, pero para finalizar pide al área de personal que genere de nuevo tu QR.';
+        } else {
+          hint.className = 'lock-hint';
+          hint.innerHTML = '&#128274; Los campos marcados como <strong>Fijo</strong> los asigna el área de personal y no se editan desde aquí. Si alguno tiene un error, avísales antes de finalizar.';
         }
       }
 
@@ -602,7 +614,7 @@
         }
 
         const d = data.data || {};
-        setLockedIdentity(data.num_empleado, data.nombre != null ? data.nombre : d.nombre);
+        pintarCamposFijos(data.locked || { num_empleado: data.num_empleado, nombre: data.nombre });
         populateForm(d);
 
         $('onboarding-form').classList.remove('d-none');
@@ -640,6 +652,11 @@
           return;
         }
         if (!data || data.ok !== true) {
+          if (data && data.locked_missing && data.locked_missing.length) {
+            setStatus('save-status', 'Tu enlace no trae ' + etiquetar(data.locked_missing) +
+              '. Pide al área de personal que genere de nuevo tu QR.', 'warn');
+            return;
+          }
           if (data && data.missing_fields && data.missing_fields.length) {
             setStatus('save-status', 'Para finalizar faltan estos datos: ' + etiquetar(data.missing_fields) + '.', 'warn');
             return;
@@ -648,7 +665,7 @@
           return;
         }
 
-        setLockedIdentity(data.num_empleado || $('f-num').value, data.nombre != null ? data.nombre : $('f-nombre').value);
+        if (data.locked) pintarCamposFijos(data.locked);
         setStatus('save-status', finalMode ? 'Registro final guardado correctamente.' : 'Avance guardado correctamente.', 'ok');
       }
 

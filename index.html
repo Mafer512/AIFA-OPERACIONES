@@ -9255,6 +9255,7 @@ FF
                         #colabNuevoModal .modal-body { background: #f8faff; }
                         #colabNuevoModal .nav-tabs .nav-link { font-size: .82rem; }
                         #colabNuevoModal .tab-content { min-height: 240px; }
+                        .cn-req-qr { color: #0277bd; font-size: .72rem; margin-left: 3px; vertical-align: middle; cursor: help; }
 
                         /* --- CURSOS Y CAPACITACIONES --- */
                         .colab-cursos-panel {
@@ -11035,12 +11036,13 @@ FF
                                             <div class="alert alert-info py-2 small mb-3">
                                                 <i class="fas fa-info-circle me-1"></i>
                                                 Los campos marcados con <strong>*</strong> son obligatorios.
+                                                Los que llevan <i class="fas fa-qrcode text-primary"></i> hacen falta además para generar el QR de onboarding, porque el colaborador ya no los captura.
                                             </div>
                                             <div class="row g-3">
                                                 <div class="col-12 col-md-3"><label class="form-label fw-semibold small">No. Empleado <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="cn-num" placeholder="Ej: 1234" required></div>
                                                 <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Nombre completo <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="cn-nombre" placeholder="Apellido Apellido Nombre" required></div>
                                                 <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Profesión</label><input type="text" class="form-control form-control-sm" id="cn-profesion" placeholder="Ing. Industrial…"></div>
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Puesto</label><input type="text" class="form-control form-control-sm" id="cn-puesto" placeholder="Analista de Operaciones…"></div>
+                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Puesto <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-puesto" placeholder="Analista de Operaciones…"></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Sexo</label><select class="form-select form-select-sm" id="cn-sexo"><option value="">-- Seleccionar --</option><option>Femenino</option><option>Masculino</option></select></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Militar / Civil</label><input type="text" class="form-control form-control-sm" id="cn-militar" placeholder="Civil"></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Turno</label><input type="text" class="form-control form-control-sm" id="cn-turno" placeholder="Matutino"></div>
@@ -11056,8 +11058,8 @@ FF
                                         <!-- TAB: Clasificación -->
                                         <div class="tab-pane fade" id="cnuevo-clas" role="tabpanel">
                                             <div class="row g-3">
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Nivel</label><input type="text" class="form-control form-control-sm" id="cn-nivel"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Plaza</label><input type="text" class="form-control form-control-sm" id="cn-plaza"></div>
+                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Nivel <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-nivel"></div>
+                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Plaza <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-plaza"></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">RyR</label><input type="text" class="form-control form-control-sm" id="cn-ryr"></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Grado</label><input type="text" class="form-control form-control-sm" id="cn-grado"></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Matrícula</label><input type="text" class="form-control form-control-sm" id="cn-matricula"></div>
@@ -11070,10 +11072,10 @@ FF
                                         <div class="tab-pane fade" id="cnuevo-org" role="tabpanel">
                                             <div class="row g-3">
                                                 <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Personal Comisionado</label><input type="text" class="form-control form-control-sm" id="cn-comisionado"></div>
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Dirección</label><input type="text" class="form-control form-control-sm" id="cn-direccion"></div>
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Subdireccion</label><input type="text" class="form-control form-control-sm" id="cn-subdireccion"></div>
-                                                <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Gerencia</label><input type="text" class="form-control form-control-sm" id="cn-gerencia"></div>
-                                                <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Coordinación</label><input type="text" class="form-control form-control-sm" id="cn-coordinacion"></div>
+                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Dirección <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-direccion"></div>
+                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Subdireccion <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-subdireccion"></div>
+                                                <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Gerencia <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-gerencia"></div>
+                                                <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Coordinación <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-coordinacion"></div>
                                             </div>
                                         </div>
 
@@ -11130,6 +11132,7 @@ FF
                                         <div class="alert alert-info py-2 small mb-3">
                                             <i class="fas fa-info-circle me-1"></i>
                                             Este enlace vence en 30 días y puede reutilizarse para que el colaborador continúe su captura.
+                                            Su puesto y adscripción viajan en el QR y le aparecen bloqueados: solo captura sus datos personales y sus documentos.
                                         </div>
                                         <div class="row g-4 align-items-center">
                                             <div class="col-md-6 text-center">
@@ -13615,6 +13618,18 @@ FF
                             window.open(link, '_blank', 'noopener');
                         };
 
+                        /* -- Datos que fija el área al generar el QR; el colaborador los ve bloqueados -- */
+                        const COLAB_ONBOARDING_FIJOS = [
+                            { clave: 'nombre',       input: 'cn-nombre',       label: 'Nombre completo', tab: '#cnuevo-gen'  },
+                            { clave: 'puesto',       input: 'cn-puesto',       label: 'Puesto',          tab: '#cnuevo-gen'  },
+                            { clave: 'nivel',        input: 'cn-nivel',        label: 'Nivel',           tab: '#cnuevo-clas' },
+                            { clave: 'plaza',        input: 'cn-plaza',        label: 'Plaza',           tab: '#cnuevo-clas' },
+                            { clave: 'direccion',    input: 'cn-direccion',    label: 'Dirección',       tab: '#cnuevo-org'  },
+                            { clave: 'subdireccion', input: 'cn-subdireccion', label: 'Subdirección',    tab: '#cnuevo-org'  },
+                            { clave: 'gerencia',     input: 'cn-gerencia',     label: 'Gerencia',        tab: '#cnuevo-org'  },
+                            { clave: 'coordinacion', input: 'cn-coordinacion', label: 'Coordinación',    tab: '#cnuevo-org'  }
+                        ];
+
                         async function colabGenerarOnboardingQrDesdeDatos(datosBase) {
                             let sb = window.supabaseClient;
                             if (!sb && typeof window.ensureSupabaseClient === 'function') sb = await window.ensureSupabaseClient();
@@ -13624,8 +13639,8 @@ FF
                             }
 
                             const numEmpl = String(datosBase?.numEmpl || '').trim();
-                            const nombre = String(datosBase?.nombre || '').trim() || 'Colaborador';
-                            const puesto = String(datosBase?.puesto || '').trim();
+                            const fijos = datosBase?.fijos || {};
+                            const nombre = String(fijos.nombre || '').trim() || 'Colaborador';
                             if (!numEmpl) {
                                 alert('El colaborador no tiene número de empleado identificable.');
                                 return;
@@ -13640,7 +13655,9 @@ FF
                             });
 
                             try {
-                                const metadata = { nombre, puesto };
+                                // Van todos porque el registro puede no existir todavía en agenda_2026:
+                                // el portal los lee de aquí para mostrárselos bloqueados.
+                                const metadata = fijos;
                                 const { data, error } = await sb.rpc('create_colab_onboarding_link', {
                                     p_num_empleado: numEmpl,
                                     p_days_valid: 30,
@@ -13672,21 +13689,32 @@ FF
                         window.colabGenerarNuevoOnboardingQr = async function() {
                             if (!colabRequireEdit()) return;
                             const numEmpl = (document.getElementById('cn-num')?.value || '').trim();
-                            const nombre = (document.getElementById('cn-nombre')?.value || '').trim();
-                            const puesto = (document.getElementById('cn-puesto')?.value || '').trim();
 
-                            if (!numEmpl || !nombre) {
+                            const fijos = {};
+                            const faltan = [];
+                            COLAB_ONBOARDING_FIJOS.forEach(function(campo) {
+                                const valor = (document.getElementById(campo.input)?.value || '').trim();
+                                if (valor) fijos[campo.clave] = valor;
+                                else faltan.push(campo);
+                            });
+
+                            if (!numEmpl || faltan.length) {
+                                // Estos datos no se pueden dejar para después: el portal los muestra
+                                // bloqueados y el colaborador no tiene forma de capturarlos.
+                                const pendientes = (numEmpl ? [] : ['No. Empleado']).concat(faltan.map(c => c.label));
                                 const errEl = document.getElementById('colab-nuevo-error');
                                 if (errEl) {
-                                    errEl.textContent = 'Para generar el onboarding captura al menos No. Empleado y Nombre.';
+                                    errEl.textContent = 'Falta capturar ' + pendientes.join(', ') + '. El colaborador no puede llenarlos desde el QR.';
                                     errEl.style.display = '';
                                 }
-                                const genTab = document.querySelector('#colabNuevoTabs .nav-link');
-                                if (genTab && typeof bootstrap !== 'undefined') bootstrap.Tab.getOrCreateInstance(genTab).show();
+                                const primero = numEmpl ? faltan[0] : { tab: '#cnuevo-gen', input: 'cn-num' };
+                                const tab = document.querySelector('#colabNuevoTabs [data-bs-target="' + primero.tab + '"]');
+                                if (tab && typeof bootstrap !== 'undefined') bootstrap.Tab.getOrCreateInstance(tab).show();
+                                document.getElementById(primero.input)?.focus();
                                 return;
                             }
 
-                            await colabGenerarOnboardingQrDesdeDatos({ numEmpl, nombre, puesto });
+                            await colabGenerarOnboardingQrDesdeDatos({ numEmpl, fijos });
                         };
 
                         /* -- Preview CV inline (ficha) -- */
