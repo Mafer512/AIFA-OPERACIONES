@@ -5,7 +5,8 @@
 - [colaborador-registro.html](colaborador-registro.html) — portal público que abre el colaborador.
 - [db/create_colab_onboarding_portal.sql](db/create_colab_onboarding_portal.sql) — tabla de tokens y los tres RPC.
 - [index.html](index.html) — panel "QR de onboarding" dentro del modal de alta de colaborador.
-- [__tests__/colaboradores-onboarding-qr.test.js](__tests__/colaboradores-onboarding-qr.test.js) — regresiones del módulo.
+- [__tests__/colaboradores-onboarding-qr.test.js](__tests__/colaboradores-onboarding-qr.test.js) — regresiones del backend y de los campos bloqueados.
+- [__tests__/colaboradores-onboarding-faltantes.test.js](__tests__/colaboradores-onboarding-faltantes.test.js) — el modal que pide lo que falta antes de generar el QR.
 
 ## Qué hace
 
@@ -75,9 +76,13 @@ de código QR junto a su etiqueta:
 - **Clasificación**: Nivel, Plaza
 - **Organización**: Dirección, Subdirección, Gerencia, Coordinación
 
-Si falta alguno, el botón no genera nada: avisa cuáles son y salta a la pestaña
-del primero que falte. El resto de campos del alta siguen siendo opcionales,
-porque el colaborador sí los captura desde el portal.
+Si falta alguno, el botón no genera nada: abre un modal con los que faltan,
+agrupados por la pestaña de la que salen, para capturarlos ahí de una vez en vez
+de ir a buscarlos por todo el alta. Al confirmar se copian a su campo original
+—así "Registrar Colaborador" también los guarda— y el QR se genera enseguida.
+
+El resto de campos del alta siguen siendo opcionales, porque el colaborador sí
+los captura desde el portal.
 
 La primera vez hay que capturar la **URL pública del portal** en ese mismo panel
 (por ejemplo `https://tu-dominio-aifa/colaborador-registro.html`) y guardarla: si

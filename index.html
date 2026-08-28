@@ -9257,6 +9257,17 @@ FF
                         #colabNuevoModal .tab-content { min-height: 240px; }
                         .cn-req-qr { color: #0277bd; font-size: .72rem; margin-left: 3px; vertical-align: middle; cursor: help; }
 
+                        /* Se abre encima del alta. Sin backdrop propio —lo dibuja el
+                           propio .modal— porque dos backdrops de Bootstrap apilados
+                           dejan el de arriba por debajo del modal de abajo. */
+                        #colabOnboardingFaltantesModal { z-index: 1080; background: rgba(9,24,43,.55); }
+                        #colabOnboardingFaltantesModal .modal-header { background: linear-gradient(135deg,#0b6b73,#12909b); }
+                        .colab-faltantes-grupo + .colab-faltantes-grupo { margin-top: 1.1rem; }
+                        .colab-faltantes-seccion {
+                            font-size: .76rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+                            color: #0b6b73; border-bottom: 1px solid #d8ecef; padding-bottom: .3rem; margin-bottom: .65rem;
+                        }
+
                         /* --- CURSOS Y CAPACITACIONES --- */
                         .colab-cursos-panel {
                             background: #f8faff;
@@ -11180,6 +11191,37 @@ FF
                             </div>
                         </div>
                     </div><!-- /colabNuevoModal -->
+
+                    <!-- ----------------------------------------------
+                         MODAL: DATOS QUE FALTAN PARA EL QR DE ONBOARDING
+                    ---------------------------------------------- -->
+                    <div class="modal fade" id="colabOnboardingFaltantesModal" tabindex="-1" data-bs-backdrop="false" aria-labelledby="colabOnboardingFaltantesLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                            <div class="modal-content">
+                                <div class="modal-header py-2">
+                                    <h5 class="modal-title text-white mb-0" id="colabOnboardingFaltantesLabel"><i class="fas fa-qrcode me-2"></i>Faltan datos para generar el QR</h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="alert alert-warning py-2 small mb-3">
+                                        <i class="fas fa-triangle-exclamation me-1"></i>
+                                        El colaborador verá estos datos bloqueados en su portal, así que no puede capturarlos él.
+                                        Están repartidos en varias pestañas del alta; complétalos aquí de una vez y se copian a su lugar.
+                                    </div>
+                                    <div id="colab-faltantes-body"></div>
+                                </div>
+                                <div class="modal-footer justify-content-between">
+                                    <small class="text-danger fw-semibold" id="colab-faltantes-error" style="display:none"></small>
+                                    <div>
+                                        <button type="button" class="btn btn-secondary btn-sm me-2" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="button" class="btn btn-success btn-sm" onclick="colabConfirmarFaltantesOnboarding()">
+                                            <i class="fas fa-qrcode me-1"></i>Guardar y generar QR
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div><!-- /colabOnboardingFaltantesModal -->
 
                     <!-- ----------------------------------------------
                          MODAL: TABLA COMPLETA DE COLABORADORES
@@ -13633,6 +13675,100 @@ FF
                             { clave: 'coordinacion', input: 'cn-coordinacion', label: 'Coordinación',    tab: '#cnuevo-org'  }
                         ];
 
+                        // El numero de empleado va aparte en el RPC, pero para el alta es
+                        // un campo mas de los que hay que tener antes de generar el QR.
+                        const COLAB_ONBOARDING_REQUERIDOS = [
+                            { clave: 'num_empleado', input: 'cn-num', label: 'No. Empleado', tab: '#cnuevo-gen' }
+                        ].concat(COLAB_ONBOARDING_FIJOS);
+
+                        /* -- Nombre de la pestaña donde vive un campo, leido de la pestaña misma -- */
+                        function colabSeccionDeTab(tabSelector) {
+                            const btn = document.querySelector('#colabNuevoTabs [data-bs-target="' + tabSelector + '"]');
+                            return btn ? btn.textContent.trim() : 'Otros datos';
+                        }
+
+                        function colabPintarFaltantesOnboarding(faltan) {
+                            const body = document.getElementById('colab-faltantes-body');
+                            if (!body) return;
+                            const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+                            // Agrupados por pestaña: es justo lo que hace molesto capturarlos,
+                            // así el área ve de dónde salen y no los busca uno por uno.
+                            const secciones = [];
+                            faltan.forEach(function(campo) {
+                                let grupo = secciones.find(g => g.tab === campo.tab);
+                                if (!grupo) {
+                                    grupo = { tab: campo.tab, nombre: colabSeccionDeTab(campo.tab), campos: [] };
+                                    secciones.push(grupo);
+                                }
+                                grupo.campos.push(campo);
+                            });
+
+                            body.innerHTML = secciones.map(function(grupo) {
+                                const campos = grupo.campos.map(function(campo) {
+                                    return '<div class="col-12 col-md-6">' +
+                                        '<label class="form-label fw-semibold small" for="cf-' + esc(campo.input) + '">' +
+                                            esc(campo.label) + ' <span class="text-danger">*</span>' +
+                                        '</label>' +
+                                        '<input type="text" class="form-control form-control-sm" id="cf-' + esc(campo.input) + '" ' +
+                                            'data-destino="' + esc(campo.input) + '" autocomplete="off">' +
+                                    '</div>';
+                                }).join('');
+                                return '<div class="colab-faltantes-grupo">' +
+                                    '<div class="colab-faltantes-seccion">' + esc(grupo.nombre) + '</div>' +
+                                    '<div class="row g-3">' + campos + '</div>' +
+                                '</div>';
+                            }).join('');
+                        }
+
+                        function colabAbrirFaltantesOnboarding(faltan) {
+                            colabPintarFaltantesOnboarding(faltan);
+                            const errEl = document.getElementById('colab-faltantes-error');
+                            if (errEl) errEl.style.display = 'none';
+
+                            const el = document.getElementById('colabOnboardingFaltantesModal');
+                            if (!el || typeof bootstrap === 'undefined') return;
+                            el.addEventListener('shown.bs.modal', function() {
+                                el.querySelector('input[data-destino]')?.focus();
+                            }, { once: true });
+                            el.addEventListener('hidden.bs.modal', function() {
+                                // Bootstrap quita modal-open al cerrar el de arriba y deja
+                                // el alta, que sigue abierta, sin poder hacer scroll.
+                                if (document.getElementById('colabNuevoModal')?.classList.contains('show')) {
+                                    document.body.classList.add('modal-open');
+                                }
+                            }, { once: true });
+                            bootstrap.Modal.getOrCreateInstance(el).show();
+                        }
+
+                        window.colabConfirmarFaltantesOnboarding = async function() {
+                            const body = document.getElementById('colab-faltantes-body');
+                            const errEl = document.getElementById('colab-faltantes-error');
+                            const inputs = body ? Array.from(body.querySelectorAll('input[data-destino]')) : [];
+
+                            const vacios = inputs.filter(i => !i.value.trim());
+                            inputs.forEach(i => i.classList.toggle('is-invalid', !i.value.trim()));
+                            if (vacios.length) {
+                                if (errEl) {
+                                    errEl.textContent = 'Todos son obligatorios para generar el QR.';
+                                    errEl.style.display = '';
+                                }
+                                vacios[0].focus();
+                                return;
+                            }
+                            if (errEl) errEl.style.display = 'none';
+
+                            // Se copian al alta para que "Registrar Colaborador" los guarde igual.
+                            inputs.forEach(function(i) {
+                                const destino = document.getElementById(i.dataset.destino);
+                                if (destino) destino.value = i.value.trim();
+                            });
+
+                            const el = document.getElementById('colabOnboardingFaltantesModal');
+                            if (el && typeof bootstrap !== 'undefined') bootstrap.Modal.getInstance(el)?.hide();
+                            await window.colabGenerarNuevoOnboardingQr();
+                        };
+
                         async function colabGenerarOnboardingQrDesdeDatos(datosBase) {
                             let sb = window.supabaseClient;
                             if (!sb && typeof window.ensureSupabaseClient === 'function') sb = await window.ensureSupabaseClient();
@@ -13691,33 +13827,27 @@ FF
 
                         window.colabGenerarNuevoOnboardingQr = async function() {
                             if (!colabRequireEdit()) return;
-                            const numEmpl = (document.getElementById('cn-num')?.value || '').trim();
 
                             const fijos = {};
                             const faltan = [];
-                            COLAB_ONBOARDING_FIJOS.forEach(function(campo) {
+                            COLAB_ONBOARDING_REQUERIDOS.forEach(function(campo) {
                                 const valor = (document.getElementById(campo.input)?.value || '').trim();
-                                if (valor) fijos[campo.clave] = valor;
-                                else faltan.push(campo);
+                                if (!valor) { faltan.push(campo); return; }
+                                if (campo.clave !== 'num_empleado') fijos[campo.clave] = valor;
                             });
 
-                            if (!numEmpl || faltan.length) {
-                                // Estos datos no se pueden dejar para después: el portal los muestra
-                                // bloqueados y el colaborador no tiene forma de capturarlos.
-                                const pendientes = (numEmpl ? [] : ['No. Empleado']).concat(faltan.map(c => c.label));
-                                const errEl = document.getElementById('colab-nuevo-error');
-                                if (errEl) {
-                                    errEl.textContent = 'Falta capturar ' + pendientes.join(', ') + '. El colaborador no puede llenarlos desde el QR.';
-                                    errEl.style.display = '';
-                                }
-                                const primero = numEmpl ? faltan[0] : { tab: '#cnuevo-gen', input: 'cn-num' };
-                                const tab = document.querySelector('#colabNuevoTabs [data-bs-target="' + primero.tab + '"]');
-                                if (tab && typeof bootstrap !== 'undefined') bootstrap.Tab.getOrCreateInstance(tab).show();
-                                document.getElementById(primero.input)?.focus();
+                            if (faltan.length) {
+                                // No se pueden dejar para después: el portal los muestra bloqueados
+                                // y el colaborador no tiene forma de capturarlos. Se piden en un
+                                // modal porque están repartidos en tres pestañas distintas del alta.
+                                colabAbrirFaltantesOnboarding(faltan);
                                 return;
                             }
 
-                            await colabGenerarOnboardingQrDesdeDatos({ numEmpl, fijos });
+                            await colabGenerarOnboardingQrDesdeDatos({
+                                numEmpl: (document.getElementById('cn-num')?.value || '').trim(),
+                                fijos
+                            });
                         };
 
                         /* -- Preview CV inline (ficha) -- */
