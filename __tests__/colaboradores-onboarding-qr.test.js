@@ -104,6 +104,17 @@ function resolver(patrones) {
 
 const FUNCIONES_DEL_PORTAL = ['get_colab_onboarding', 'save_colab_onboarding'];
 
+const vm = require('vm');
+
+/** Recorta un bloque del script del portal desde su declaracion hasta el cierre. */
+function bloque(inicio, cierre) {
+  const desde = portal.indexOf(inicio);
+  if (desde < 0) throw new Error('No se encontro: ' + inicio);
+  const hasta = portal.indexOf(cierre, desde);
+  if (hasta < 0) throw new Error('Bloque sin cerrar: ' + inicio);
+  return portal.slice(desde, hasta + cierre.length);
+}
+
 describe('el script SQL se puede instalar', () => {
   for (const nombre of FUNCIONES_DEL_PORTAL) {
     test(nombre + ' no usa variables sin declarar', () => {
@@ -221,17 +232,6 @@ describe('el formulario del portal no deja tocarlos', () => {
 });
 
 describe('el payload que sale del portal', () => {
-  const vm = require('vm');
-
-  /** Recorta un bloque del script del portal desde su declaracion hasta el cierre. */
-  function bloque(inicio, cierre) {
-    const desde = portal.indexOf(inicio);
-    if (desde < 0) throw new Error('No se encontro: ' + inicio);
-    const hasta = portal.indexOf(cierre, desde);
-    if (hasta < 0) throw new Error('Bloque sin cerrar: ' + inicio);
-    return portal.slice(desde, hasta + cierre.length);
-  }
-
   /** El portal real, con su formulario y sus funciones, corriendo en jsdom. */
   function montarPortal() {
     document.body.innerHTML = bloque('<form id="onboarding-form"', '</form>');
@@ -281,5 +281,77 @@ describe('el payload que sale del portal', () => {
 
     const payload = ctx.collectPayload();
     expect(JSON.stringify(payload)).not.toContain('SUPLANTADO');
+  });
+});
+
+describe('lo que ve quien abre el QR', () => {
+  /** El formulario real del portal con la función que pinta los campos fijos. */
+  function montarPortalConFijos() {
+    document.body.innerHTML = bloque('<form id="onboarding-form"', '</form>');
+    const contexto = { document };
+    vm.createContext(contexto);
+    vm.runInContext(
+      [
+        bloque('const LOCKED_SPECS = [', '\n      ];'),
+        bloque('function $(id)', '}'),
+        bloque('function escapeHtml(text)', '\n      }'),
+        bloque('function pintarCamposFijos(locked)', '\n      }'),
+      ].join('\n'),
+      contexto
+    );
+    return contexto;
+  }
+
+  // Tal cual lo devuelve get_colab_onboarding en su clave 'locked'.
+  const LOCKED_DEL_BACKEND = {
+    num_empleado: '1299-2',
+    nombre: 'Pérez López Juan',
+    puesto: 'Analista de Operaciones',
+    nivel: '11',
+    plaza: 'Base',
+    direccion: 'Dirección de Operación',
+    subdireccion: 'Subdirección de Operaciones',
+    gerencia: 'Gerencia de Plataforma',
+    coordinacion: 'Coordinación de Rampa',
+  };
+
+  const INPUT_DE = {
+    num_empleado: 'f-num', nombre: 'f-nombre', puesto: 'f-puesto', nivel: 'f-nivel',
+    plaza: 'f-plaza', direccion: 'f-direccion', subdireccion: 'f-subdireccion',
+    gerencia: 'f-gerencia', coordinacion: 'f-coordinacion',
+  };
+
+  test('los nueve que exige el QR llegan llenos y en solo lectura', () => {
+    const ctx = montarPortalConFijos();
+    ctx.pintarCamposFijos(LOCKED_DEL_BACKEND);
+
+    for (const [clave, id] of Object.entries(INPUT_DE)) {
+      const input = document.getElementById(id);
+      expect(input.value).toBe(LOCKED_DEL_BACKEND[clave]);
+      expect(input.readOnly).toBe(true);
+    }
+  });
+
+  test('los que sí le tocan capturar siguen libres', () => {
+    const ctx = montarPortalConFijos();
+    ctx.pintarCamposFijos(LOCKED_DEL_BACKEND);
+
+    for (const id of ['f-curp', 'f-domicilio', 'f-turno', 'f-celular', 'f-comisionado']) {
+      expect(document.getElementById(id).readOnly).toBe(false);
+    }
+  });
+
+  test('un enlace viejo avisa en vez de dejar campos fijos vacíos sin explicación', () => {
+    const ctx = montarPortalConFijos();
+    // Los QR generados antes de este cambio sólo llevaban nombre y puesto en la
+    // metadata, así que la adscripción vuelve vacía y no hay quien la capture.
+    ctx.pintarCamposFijos({ num_empleado: '1299-2', nombre: 'Pérez López Juan', puesto: 'Analista' });
+
+    const aviso = document.getElementById('lock-hint');
+    expect(aviso.className).toContain('warn');
+    expect(aviso.textContent).toContain('Nivel');
+    expect(aviso.textContent).toContain('Coordinación');
+    expect(document.getElementById('f-nivel').value).toBe('');
+    expect(document.getElementById('f-nivel').readOnly).toBe(true);
   });
 });
