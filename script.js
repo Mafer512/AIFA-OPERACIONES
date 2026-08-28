@@ -20011,8 +20011,12 @@ function _conciRowIsCargo(row, optypeCol, airlineCol) {
     return false;
 }
 
-// Build a synthetic manifest row from a vuelos row, given 'LLEGADA' or 'SALIDA'
-function _conciVueloToRow(vRow, tipo, outputCols, colm, hasManifestSchema) {
+// Convierte un movimiento del itinerario en una fila de la tabla, escrita
+// siempre en las columnas reales de "Conciliación Manifiestos". Antes había un
+// segundo juego de columnas sintéticas para el caso "sin esquema", pero esos
+// nombres no coincidían con los encabezados y la fila salía en blanco; el
+// esquema hoy nunca falta (ver _conciBuildEnriched).
+function _conciVueloToRow(vRow, tipo, outputCols, colm) {
     const isArr = tipo === 'LLEGADA';
     const overrideKey = `${vRow.id}|${tipo}`;
     const overriddenAirline = _conciAirlineOverrides.get(overrideKey);
@@ -20020,72 +20024,41 @@ function _conciVueloToRow(vRow, tipo, outputCols, colm, hasManifestSchema) {
     const airlineValue = overriddenAirline || sourceAirline || '';
     const assignedSlot = _conciGetAssignedSlot(vRow, isArr);
     const operationHour = _conciGetOperationHour(vRow, isArr);
-    if (hasManifestSchema) {
-        const row = {};
-        outputCols.forEach(c => { row[c] = ''; });
-        if (colm.tipo)      row[colm.tipo]      = tipo;
-        if (colm.vuelo)     row[colm.vuelo]      = isArr ? vRow['[Arr] Flight Designator'] : vRow['[Dep] Flight Designator'];
-        if (colm.aerolinea) row[colm.aerolinea]  = airlineValue;
-        if (colm.optype)    row[colm.optype]     = isArr ? vRow['[Arr] Service Type']      : vRow['[Dep] Service Type'];
-        if (colm.aeronave)  row[colm.aeronave]   = vRow['Aircraft type'] || '';
-        if (colm.matricula) row[colm.matricula]  = vRow['Registration']  || '';
-        if (colm.routing)   row[colm.routing]    = vRow['Routing']       || '';
-        if (Object.prototype.hasOwnProperty.call(row, 'RUTA')) row['RUTA'] = vRow['Routing'] || '';
-        if (colm.stand)     row[colm.stand]      = isArr ? vRow['[Arr] Stand']  : vRow['[Dep] Stand'];
-        if (colm.puerta)    row[colm.puerta]     = isArr ? vRow['[Arr] Gates']  : vRow['[Dep] Gates'];
-        if (colm.pax)       row[colm.pax]        = isArr ? vRow['[Arr] Boarded']: vRow['[Dep] Boarded'];
-        if (colm.slotAsignado) row[colm.slotAsignado] = assignedSlot;
-        if (colm.hrOperacion) row[colm.hrOperacion] = operationHour;
-        if (colm.status)    row[colm.status]     = vRow['Status'] || '';
-        const _dp2 = _conciExtractVueloDateParts(vRow, isArr);
-        if (colm.mes)       row[colm.mes]        = _dp2 ? String(_dp2.month) : '';
-        if (colm.fecha)     row[colm.fecha]      = _dp2 ? `${_dp2.day}/${String(_dp2.month).padStart(2,'0')}` : '';
-        if (isArr) {
-            if (colm.cinta) row[colm.cinta]      = vRow['[Arr] Baggage Belts'] || '';
-            if (colm.sibt)  row[colm.sibt]       = vRow['[Arr] SIBT'] || '';
-            if (colm.aibt)  row[colm.aibt]       = vRow['[Arr] AIBT'] || '';
-            if (colm.aldt)  row[colm.aldt]       = vRow['[Arr] ALDT'] || '';
-        } else {
-            if (colm.sobt)  row[colm.sobt]       = vRow['[Dep] SOBT'] || '';
-            if (colm.aobt)  row[colm.aobt]       = vRow['[Dep] AOBT'] || '';
-            if (colm.atot)  row[colm.atot]       = vRow['[Dep] ATOT'] || '';
-        }
-        row['_validado_itinerario'] = vRow.validado === true;
-        row['_validado_por_itinerario'] = vRow.validado_por || '';
-        row['_fuente'] = 'Solo Vuelos';
-        row['_conci_vuelo_id'] = vRow.id;
-        row['_conci_vuelo_direccion'] = tipo;
-        return row;
+    const row = {};
+    outputCols.forEach(c => { row[c] = ''; });
+    if (colm.tipo)      row[colm.tipo]      = tipo;
+    if (colm.vuelo)     row[colm.vuelo]      = isArr ? vRow['[Arr] Flight Designator'] : vRow['[Dep] Flight Designator'];
+    if (colm.aerolinea) row[colm.aerolinea]  = airlineValue;
+    if (colm.optype)    row[colm.optype]     = isArr ? vRow['[Arr] Service Type']      : vRow['[Dep] Service Type'];
+    if (colm.aeronave)  row[colm.aeronave]   = vRow['Aircraft type'] || '';
+    if (colm.matricula) row[colm.matricula]  = vRow['Registration']  || '';
+    if (colm.routing)   row[colm.routing]    = vRow['Routing']       || '';
+    if (Object.prototype.hasOwnProperty.call(row, 'RUTA')) row['RUTA'] = vRow['Routing'] || '';
+    if (colm.stand)     row[colm.stand]      = isArr ? vRow['[Arr] Stand']  : vRow['[Dep] Stand'];
+    if (colm.puerta)    row[colm.puerta]     = isArr ? vRow['[Arr] Gates']  : vRow['[Dep] Gates'];
+    if (colm.pax)       row[colm.pax]        = isArr ? vRow['[Arr] Boarded']: vRow['[Dep] Boarded'];
+    if (colm.slotAsignado) row[colm.slotAsignado] = assignedSlot;
+    if (colm.hrOperacion) row[colm.hrOperacion] = operationHour;
+    if (colm.status)    row[colm.status]     = vRow['Status'] || '';
+    const _dp2 = _conciExtractVueloDateParts(vRow, isArr);
+    if (colm.mes)       row[colm.mes]        = _dp2 ? String(_dp2.month) : '';
+    if (colm.fecha)     row[colm.fecha]      = _dp2 ? `${_dp2.day}/${String(_dp2.month).padStart(2,'0')}` : '';
+    if (isArr) {
+        if (colm.cinta) row[colm.cinta]      = vRow['[Arr] Baggage Belts'] || '';
+        if (colm.sibt)  row[colm.sibt]       = vRow['[Arr] SIBT'] || '';
+        if (colm.aibt)  row[colm.aibt]       = vRow['[Arr] AIBT'] || '';
+        if (colm.aldt)  row[colm.aldt]       = vRow['[Arr] ALDT'] || '';
+    } else {
+        if (colm.sobt)  row[colm.sobt]       = vRow['[Dep] SOBT'] || '';
+        if (colm.aobt)  row[colm.aobt]       = vRow['[Dep] AOBT'] || '';
+        if (colm.atot)  row[colm.atot]       = vRow['[Dep] ATOT'] || '';
     }
-    // No manifest schema — use synthetic columns
-    const synthetic = {
-        'Tipo de Manifiesto': tipo,
-        '# de Vuelo':         isArr ? (vRow['[Arr] Flight Designator'] || '') : (vRow['[Dep] Flight Designator'] || ''),
-        'Aerolínea':          isArr ? (vRow['[Arr] Airline code']      || '') : (vRow['[Dep] Airline code']      || ''),
-        'Tipo de Operación':  isArr ? (vRow['[Arr] Service Type']      || '') : (vRow['[Dep] Service Type']      || ''),
-        'Aeronave':           vRow['Aircraft type']         || '',
-        'Matrícula':          vRow['Registration']          || '',
-        'Routing':            vRow['Routing']               || '',
-        'Slot asignado':      assignedSlot,
-        'HR. DE OPERACIÓN':   operationHour,
-        'Stand':              isArr ? (vRow['[Arr] Stand']  || '') : (vRow['[Dep] Stand']  || ''),
-        'Puerta':             isArr ? (vRow['[Arr] Gates']  || '') : (vRow['[Dep] Gates']  || ''),
-        'Pax / Embarcados':   isArr ? (vRow['[Arr] Boarded']|| '') : (vRow['[Dep] Boarded']|| ''),
-        'Cinta':              isArr ? (vRow['[Arr] Baggage Belts'] || '') : '',
-        'Hora Prog.':         isArr ? (vRow['[Arr] SIBT']   || '') : (vRow['[Dep] SOBT']   || ''),
-        'Hora Real':          isArr ? (vRow['[Arr] AIBT']   || '') : (vRow['[Dep] AOBT']   || ''),
-        'ALDT / ATOT':        isArr ? (vRow['[Arr] ALDT']   || '') : (vRow['[Dep] ATOT']   || ''),
-        'ATTT':               isArr ? '' : (vRow['[Dep] ATTT'] || ''),
-        'Status':             vRow['Status'] || '',
-        '_validado_itinerario': vRow.validado === true,
-        '_validado_por_itinerario': vRow.validado_por || '',
-        '_fuente':            'Solo Vuelos',
-    };
-    const syntheticAirlineKey = Object.keys(synthetic).find(k => /aerol/i.test(k));
-    if (syntheticAirlineKey) synthetic[syntheticAirlineKey] = airlineValue;
-    synthetic._conci_vuelo_id = vRow.id;
-    synthetic._conci_vuelo_direccion = tipo;
-    return synthetic;
+    row['_validado_itinerario'] = vRow.validado === true;
+    row['_validado_por_itinerario'] = vRow.validado_por || '';
+    row['_fuente'] = 'Solo Vuelos';
+    row['_conci_vuelo_id'] = vRow.id;
+    row['_conci_vuelo_direccion'] = tipo;
+    return row;
 }
 
 // Build enriched rows merging manifest + vuelos data
@@ -20120,10 +20093,18 @@ const _CONCI_OUTPUT_COLUMNS = [
 function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
     const _schemaSource = (schemaRows && schemaRows.length > 0) ? schemaRows : manifestRows;
     const _sysCols = new Set(['id', 'created_at', 'updated_at']);
+    // Cuando NO existe ni una fila de manifiesto —tabla recién vaciada, o un
+    // día que todavía nadie captura— no hay de dónde leer el esquema. Antes
+    // eso dejaba `colm` sin una sola columna detectada, y cada vuelo se
+    // pintaba en llaves inventadas ("# de Vuelo", "Aerolínea") que la tabla
+    // nunca consulta: salían los encabezados correctos con TODAS las celdas
+    // vacías, y los contadores de llegadas/salidas en cero.
+    // La lista canónica es el esquema —sus nombres son los mismos de la base,
+    // por eso se captura contra ella—, así que sirve de fuente igual de buena
+    // y el cruce con vuelos funciona haya manifiestos o no.
     const manifestKeys = _schemaSource.length > 0
         ? Object.keys(_schemaSource[0]).filter(k => !_sysCols.has(k))
-        : [];
-    const hasManifest  = _schemaSource.length > 0;
+        : _CONCI_OUTPUT_COLUMNS.filter(k => !_sysCols.has(k));
 
     // Detect semantic columns in manifest schema
     const colm = {};
@@ -20351,10 +20332,10 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
         const depFlight = (vRow['[Dep] Flight Designator'] || '').trim().toUpperCase();
 
         if (arrFlight && !usedVuelo.has(`${idx}|arr`)) {
-            enrichedRows.push(_conciVueloToRow(vRow, 'LLEGADA', outputCols, colm, hasManifest));
+            enrichedRows.push(_conciVueloToRow(vRow, 'LLEGADA', outputCols, colm));
         }
         if (depFlight && !usedVuelo.has(`${idx}|dep`)) {
-            enrichedRows.push(_conciVueloToRow(vRow, 'SALIDA', outputCols, colm, hasManifest));
+            enrichedRows.push(_conciVueloToRow(vRow, 'SALIDA', outputCols, colm));
         }
     }
 
@@ -20554,6 +20535,14 @@ async function loadConciliacionManifiestos(options = {}) {
         let client = window.supabaseClient;
         if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
         if (!client) throw new Error('No se pudo inicializar el cliente de Supabase.');
+
+        // El botón de refrescar tiene que servir también cuando lo que cambió
+        // es la FORMA de los datos, no solo su contenido: manifiestos que se
+        // vaciaron o que volvieron a existir, o columnas nuevas. Ese esquema se
+        // resuelve una vez por sesión, así que sin soltarlo aquí había que
+        // recargar la página para que la tabla volviera a cruzar bien los
+        // vuelos.
+        if (config.forceRefresh) _conciManifestColInfo = null;
 
         let manifestRows;
         let vuelosRows;
