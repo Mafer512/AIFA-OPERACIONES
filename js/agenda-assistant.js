@@ -29,7 +29,7 @@
     /* ══════════════════════════════════════════════════════════════
        GROQ — llamada a la API REST (OpenAI-compatible)
     ══════════════════════════════════════════════════════════════ */
-    const GROQ_MODEL   = 'llama-3.3-70b-versatile';
+    const GROQ_MODEL   = 'openai/gpt-oss-120b';  // llama-3.3-70b-versatile fue retirado por Groq
     const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
     function _groqKey() {
