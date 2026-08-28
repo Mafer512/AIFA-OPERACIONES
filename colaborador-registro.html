@@ -35,6 +35,11 @@
     .status.ok { color: var(--ok); font-weight: 600; }
     .status.warn { color: var(--warn); font-weight: 600; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .locked-field { background: #eef3fa !important; color: #3d4f6b; font-weight: 600; cursor: not-allowed; border-color: #c6d7ee; }
+    .locked-field:focus { box-shadow: none; border-color: #c6d7ee; }
+    .lock-tag { font-size: .72rem; font-weight: 600; color: #47607f; background: #e7eefa; border: 1px solid #c6d7ee; border-radius: 999px; padding: 1px 8px; margin-left: 6px; white-space: nowrap; }
+    .lock-hint { font-size: .85rem; color: var(--muted); background: #f2f7ff; border: 1px solid #d7e5f8; border-radius: 10px; padding: 8px 10px; }
+    .lock-hint.warn { color: #8a5a00; background: #fff6e6; border-color: #f0d9a8; }
     @media (max-width: 768px) {
       .hero h1 { font-size: 1.3rem; }
       .panel { padding: 12px; }
@@ -68,12 +73,15 @@
         <h2 class="sec-title">Identificación básica</h2>
         <div class="row g-3">
           <div class="col-md-3">
-            <label class="form-label">No. Empleado</label>
-            <input id="f-num" class="form-control" readonly>
+            <label class="form-label">No. Empleado <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-num" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-9">
-            <label class="form-label">Nombre completo</label>
-            <input id="f-nombre" class="form-control" required>
+            <label class="form-label">Nombre completo <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-nombre" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
+          </div>
+          <div class="col-12">
+            <div class="lock-hint" id="lock-hint">&#128274; El número de empleado y el nombre los asigna el área de personal y no se pueden editar desde aquí.</div>
           </div>
           <div class="col-md-4">
             <label class="form-label">Puesto</label>
@@ -324,8 +332,8 @@
       'use strict';
 
       let token = '';
+      // f-num y f-nombre quedan fuera: son identidad bloqueada que resuelve el backend.
       const FIELD_SPECS = [
-        ['f-nombre', 'nombre'],
         ['f-puesto', 'puesto'],
         ['f-profesion', 'profesion'],
         ['f-grado-academico', 'grado_academico'],
@@ -371,13 +379,29 @@
         ['f-c2-tel', 'c2_tel']
       ];
 
-      const REQUIRED_FINAL_KEYS = [
-        'nombre', 'puesto', 'profesion', 'grado_academico', 'matricula', 'cedula', 'ryr', 'nivel', 'plaza', 'turno', 'militar', 'comisionado', 'direccion', 'subdireccion', 'gerencia', 'coordinacion',
-        'curp', 'rfc', 'sangre', 'estado_civil', 'dependientes', 'domicilio', 'nss', 'alerg_med', 'alerg_ali', 'rubrica', 'doc_ingreso',
-        'celular', 'extension', 'correo', 'correo_personal', 'fecha_ingreso', 'onomastico', 'vig_licencia', 'vig_credencial', 'vig_ine', 'licencia', 'licencia_tipo',
-        'c1_nombre', 'c1_parentesco', 'c1_tel', 'c2_nombre', 'c2_parentesco', 'c2_tel',
-        'cv_url', 'foto_ine', 'foto_ine_rev', 'foto_cred'
-      ];
+      const FIELD_LABELS = {
+        nombre: 'Nombre completo', puesto: 'Puesto', profesion: 'Profesión',
+        grado_academico: 'Grado académico', matricula: 'Matrícula', cedula: 'Cédula', ryr: 'RYR',
+        nivel: 'Nivel', plaza: 'Plaza', turno: 'Turno', militar: 'Militar / civil',
+        comisionado: 'Comisionado', direccion: 'Dirección', subdireccion: 'Subdirección',
+        gerencia: 'Gerencia', coordinacion: 'Coordinación', curp: 'CURP', rfc: 'RFC',
+        sangre: 'Tipo de sangre', estado_civil: 'Estado civil', dependientes: 'Dependientes',
+        domicilio: 'Domicilio', nss: 'NSS', alerg_med: 'Alergia a medicamento',
+        alerg_ali: 'Alergia a alimento', rubrica: 'Rubrica', doc_ingreso: 'Documento de ingreso',
+        celular: 'Celular', extension: 'Extensión', correo: 'Correo institucional',
+        correo_personal: 'Correo personal', fecha_ingreso: 'Fecha de ingreso',
+        onomastico: 'Onomástico', licencia: 'Licencia', licencia_tipo: 'Tipo de licencia',
+        vig_licencia: 'Vigencia licencia', vig_credencial: 'Vigencia credencial',
+        vig_ine: 'Vigencia INE', c1_nombre: 'Contacto 1 nombre',
+        c1_parentesco: 'Contacto 1 parentesco', c1_tel: 'Contacto 1 teléfono',
+        c2_nombre: 'Contacto 2 nombre', c2_parentesco: 'Contacto 2 parentesco',
+        c2_tel: 'Contacto 2 teléfono', cv_url: 'CV', foto_ine: 'INE frente',
+        foto_ine_rev: 'INE reverso', foto_cred: 'TIA / Credencial'
+      };
+
+      function etiquetar(keys) {
+        return (keys || []).map(function (k) { return FIELD_LABELS[k] || k; }).join(', ');
+      }
 
       let currentData = {
         cv_url: '',
@@ -447,6 +471,23 @@
           return;
         }
         el.innerHTML = '<a class="badge-lite" href="' + escapeHtml(dataUrl) + '" target="_blank" rel="noopener">Abrir archivo</a>';
+      }
+
+      function setLockedIdentity(numEmpleado, nombre) {
+        const num = String(numEmpleado == null ? '' : numEmpleado).trim();
+        const nom = String(nombre == null ? '' : nombre).trim();
+        $('f-num').value = num;
+        $('f-nombre').value = nom;
+
+        const hint = $('lock-hint');
+        if (!hint) return;
+        if (nom) {
+          hint.className = 'lock-hint';
+          hint.innerHTML = '&#128274; El número de empleado y el nombre los asigna el área de personal y no se pueden editar desde aquí. Si alguno tiene un error, avísales antes de finalizar.';
+        } else {
+          hint.className = 'lock-hint warn';
+          hint.innerHTML = '&#9888;&#65039; Tu enlace no trae nombre asignado. Puedes guardar avances, pero para finalizar pide al área de personal que genere de nuevo tu QR.';
+        }
       }
 
       function setInputValue(key, value) {
@@ -535,12 +576,6 @@
         refreshDocsState();
       }
 
-      function missingFinalFields(payload) {
-        return REQUIRED_FINAL_KEYS.filter(function (key) {
-          return !String(payload[key] || '').trim();
-        });
-      }
-
       async function loadByToken() {
         const sb = window.supabaseClient || (window.ensureSupabaseClient ? window.ensureSupabaseClient() : null);
         if (!sb) {
@@ -567,7 +602,7 @@
         }
 
         const d = data.data || {};
-        $('f-num').value = data.num_empleado || '';
+        setLockedIdentity(data.num_empleado, data.nombre != null ? data.nombre : d.nombre);
         populateForm(d);
 
         $('onboarding-form').classList.remove('d-none');
@@ -587,16 +622,9 @@
         }
 
         const payload = collectPayload();
-        if (finalMode) {
-          const missing = missingFinalFields(payload);
-          if (missing.length) {
-            setStatus('save-status', 'Para finalizar faltan campos personales obligatorios: ' + missing.join(', '), 'warn');
-            return;
-          }
-          if (!payload.cv_url || !payload.foto_ine || !payload.foto_ine_rev || !payload.foto_cred) {
-            setStatus('save-status', 'Para finalizar debes cargar CV, INE frente, INE reverso y TIA.', 'warn');
-            return;
-          }
+        if (finalMode && (!payload.cv_url || !payload.foto_ine || !payload.foto_ine_rev || !payload.foto_cred)) {
+          setStatus('save-status', 'Para finalizar debes cargar CV, INE frente, INE reverso y TIA.', 'warn');
+          return;
         }
 
         setStatus('save-status', finalMode ? 'Guardando registro final...' : 'Guardando avance...', '');
@@ -612,10 +640,15 @@
           return;
         }
         if (!data || data.ok !== true) {
+          if (data && data.missing_fields && data.missing_fields.length) {
+            setStatus('save-status', 'Para finalizar faltan estos datos: ' + etiquetar(data.missing_fields) + '.', 'warn');
+            return;
+          }
           setStatus('save-status', (data && data.error) ? data.error : 'No se pudo guardar.', 'warn');
           return;
         }
 
+        setLockedIdentity(data.num_empleado || $('f-num').value, data.nombre != null ? data.nombre : $('f-nombre').value);
         setStatus('save-status', finalMode ? 'Registro final guardado correctamente.' : 'Avance guardado correctamente.', 'ok');
       }
 

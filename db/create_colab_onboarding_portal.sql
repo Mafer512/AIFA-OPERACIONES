@@ -117,6 +117,7 @@ BEGIN
     WHERE table_schema = 'public'
       AND table_name = 'agenda_2026'
       AND column_name ~* p
+    ORDER BY ordinal_position
     LIMIT 1;
 
     IF c IS NOT NULL THEN
@@ -241,10 +242,13 @@ DECLARE
   col_cv_url text;
   col_grado_acad text;
   col_sangre text;
+  col_domicilio text;
+  col_rfc text;
   col_f_ine text;
   col_f_ine_rev text;
   col_f_tia text;
   row_json jsonb;
+  v_nombre text;
 BEGIN
   SELECT * INTO lnk
   FROM public.colab_onboarding_links
@@ -257,7 +261,7 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'Token invalido o expirado');
   END IF;
 
-  col_num        := public._agenda_col_by_patterns(ARRAY['no\\.?\\s*empl', 'num.*empl', '^empleado$']);
+  col_num        := public._agenda_col_by_patterns(ARRAY['no\.?\s*empl', 'num.*empl', 'empleado', '^id$']);
   col_nombre     := public._agenda_col_by_patterns(ARRAY['^nombre$', 'nombre']);
   col_puesto     := public._agenda_col_by_patterns(ARRAY['^puesto$', 'cargo', 'posici']);
   col_profesion  := public._agenda_col_by_patterns(ARRAY['licenciatura', 'maestr[ií]a', 'nombre.*lic', 'nombre.*maest', 'profesi[oó]n$', '^profes[^i]']);
@@ -269,15 +273,15 @@ BEGIN
   col_grado      := public._agenda_col_by_patterns(ARRAY['^grado$']);
   col_matricula  := public._agenda_col_by_patterns(ARRAY['matr[íi]cula', 'matricula']);
   col_cedula     := public._agenda_col_by_patterns(ARRAY['c[eé]dula']);
-  col_comisionado:= public._agenda_col_by_patterns(ARRAY['comision']);
+  col_comisionado:= public._agenda_col_by_patterns(ARRAY['^personal\s+comisionado$', 'comision']);
   col_direccion  := public._agenda_col_by_patterns(ARRAY['^dir\.', 'dir\..*org', '^direcci[oó]n', 'direcci(?!.*sub)']);
   col_subdireccion := public._agenda_col_by_patterns(ARRAY['^subdir\.', 'subdir\..*org', 'subdir']);
   col_gerencia   := public._agenda_col_by_patterns(ARRAY['gerencia.*org', 'gerencia']);
   col_coordinacion := public._agenda_col_by_patterns(ARRAY['coordinac.*org', 'coordinaci']);
-  col_licencia   := public._agenda_col_by_patterns(ARRAY['^licencia$']);
+  col_licencia   := public._agenda_col_by_patterns(ARRAY['^licencia$', 'licencia.*manejo']);
   col_licencia_tipo := public._agenda_col_by_patterns(ARRAY['tipo.*lic', '^tipo$']);
   col_vig_licencia := public._agenda_col_by_patterns(ARRAY['vig.*lic', 'licencia.*vig']);
-  col_vig_credencial := public._agenda_col_by_patterns(ARRAY['vig.*cred', 'cred.*vig']);
+  col_vig_credencial := public._agenda_col_by_patterns(ARRAY['vig.*cred', 'cred.*vig', 'vigencia.*tia', 'tia.*vig']);
   col_vig_ine    := public._agenda_col_by_patterns(ARRAY['vig.*ine', 'ine.*vig']);
   col_estado_civil := public._agenda_col_by_patterns(ARRAY['estado.*civil']);
   col_dependientes := public._agenda_col_by_patterns(ARRAY['dependiente', 'hijo']);
@@ -293,18 +297,20 @@ BEGIN
   col_c2_parentesco := public._agenda_col_by_patterns(ARRAY['contacto.*2.*par', 'parentesco.*2']);
   col_c2_tel     := public._agenda_col_by_patterns(ARRAY['contacto.*2.*tel', 'tel.*2', 'tel[eé]fono.*2']);
   col_curp       := public._agenda_col_by_patterns(ARRAY['^curp$']);
-  col_cel        := public._agenda_col_by_patterns(ARRAY['cel', 'movil', 'telefono']);
+  col_cel        := public._agenda_col_by_patterns(ARRAY['cel[uú]lar', 'm[oó]vil', 'celular', 'cel', 'tel[eé]f[oó]nico', 'no\.?\s*tel', 'tel[eé]fono']);
   col_extension  := public._agenda_col_by_patterns(ARRAY['^ext\.?$', 'extensi']);
   col_correo     := public._agenda_col_by_patterns(ARRAY['correo.*inst', 'institucional.*correo']);
   col_correo_pers:= public._agenda_col_by_patterns(ARRAY['correo.*pers', 'personal.*correo', '^correo$', '^email$']);
-  col_fecha_ing  := public._agenda_col_by_patterns(ARRAY['fecha.*ingreso', 'fecha.*alta']);
-  col_onom       := public._agenda_col_by_patterns(ARRAY['onom', 'cumple', 'nacim']);
+  col_fecha_ing  := public._agenda_col_by_patterns(ARRAY['fecha.*ingreso', 'fecha.*alta', 'ingreso', 'alta']);
+  col_onom       := public._agenda_col_by_patterns(ARRAY['^fecha\s+de\s+nacimiento$', 'fecha.*nac', 'nacimient', '^cumplea[nñ]os$', 'onom', 'birth']);
   col_cv_url     := public._agenda_col_by_patterns(ARRAY['^cv_url$', '^cv$', 'curriculum', 'curr[ií]culum']);
   col_grado_acad := public._agenda_col_by_patterns(ARRAY['grado.*acad', 'academ']);
   col_sangre     := public._agenda_col_by_patterns(ARRAY['sangre']);
+  col_domicilio  := public._agenda_col_by_patterns(ARRAY['domicil']);
+  col_rfc        := public._agenda_col_by_patterns(ARRAY['^rfc$']);
   col_f_ine      := public._agenda_col_by_patterns(ARRAY['foto.*ine', 'ine.*frente']);
   col_f_ine_rev  := public._agenda_col_by_patterns(ARRAY['ine.*rev', 'rev.*ine', 'ine.*reverso']);
-  col_f_tia      := public._agenda_col_by_patterns(ARRAY['foto.*cred', 'tia', 'credencial']);
+  col_f_tia      := public._agenda_col_by_patterns(ARRAY['foto.*cred', 'cred.*foto', 'fotograf[ií]a.*tia', 'foto.*tia']);
 
   IF col_num IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'error', 'No se detecto columna de numero de empleado en agenda_2026');
@@ -314,13 +320,22 @@ BEGIN
     INTO row_json
     USING lnk.num_empleado;
 
+  -- Identidad no editable desde el portal: el nombre sale del expediente y, si aun no
+  -- existe el registro, del que capturo el area al generar el QR.
+  v_nombre := nullif(btrim(COALESCE(row_json ->> col_nombre, '')), '');
+  IF v_nombre IS NULL THEN
+    v_nombre := nullif(btrim(COALESCE(lnk.metadata ->> 'nombre', '')), '');
+  END IF;
+
   RETURN jsonb_build_object(
     'ok', true,
     'token', lnk.token,
     'num_empleado', lnk.num_empleado,
+    'nombre', COALESCE(v_nombre, ''),
+    'locked_fields', jsonb_build_array('num_empleado', 'nombre'),
     'metadata', lnk.metadata,
     'data', jsonb_build_object(
-      'nombre', COALESCE(row_json ->> col_nombre, ''),
+      'nombre', COALESCE(v_nombre, ''),
       'puesto', COALESCE(row_json ->> col_puesto, ''),
       'profesion', COALESCE(row_json ->> col_profesion, ''),
       'militar', COALESCE(row_json ->> col_militar, ''),
@@ -444,13 +459,15 @@ DECLARE
   col_ob_sta text;
 
   v_exists int;
+  v_nombre text;
   db_payload jsonb := '{}'::jsonb;
   kv record;
   set_sql text := '';
   cols_sql text := '';
   vals_sql text := '';
+  -- 'nombre' no se valida aqui: es campo bloqueado y lo resuelve el servidor.
   required_keys text[] := ARRAY[
-    'nombre', 'puesto', 'profesion', 'grado_academico', 'matricula', 'cedula', 'ryr', 'nivel', 'plaza', 'turno', 'militar', 'comisionado', 'direccion', 'subdireccion', 'gerencia', 'coordinacion',
+    'puesto', 'profesion', 'grado_academico', 'matricula', 'cedula', 'ryr', 'nivel', 'plaza', 'turno', 'militar', 'comisionado', 'direccion', 'subdireccion', 'gerencia', 'coordinacion',
     'curp', 'celular', 'extension', 'correo_personal', 'fecha_ingreso', 'onomastico',
     'cv_url', 'sangre', 'domicilio', 'rfc', 'nss',
     'estado_civil', 'dependientes', 'alerg_med', 'alerg_ali', 'licencia', 'licencia_tipo', 'vig_licencia', 'vig_credencial', 'vig_ine', 'rubrica', 'doc_ingreso',
@@ -474,7 +491,7 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'Token invalido o expirado');
   END IF;
 
-  col_num          := public._agenda_col_by_patterns(ARRAY['no\\.?\\s*empl', 'num.*empl', '^empleado$']);
+  col_num          := public._agenda_col_by_patterns(ARRAY['no\.?\s*empl', 'num.*empl', 'empleado', '^id$']);
   col_nombre       := public._agenda_col_by_patterns(ARRAY['^nombre$', 'nombre']);
   col_puesto       := public._agenda_col_by_patterns(ARRAY['^puesto$', 'cargo', 'posici']);
   col_profesion    := public._agenda_col_by_patterns(ARRAY['licenciatura', 'maestr[ií]a', 'nombre.*lic', 'nombre.*maest', 'profesi[oó]n$', '^profes[^i]']);
@@ -486,23 +503,23 @@ BEGIN
   col_grado        := public._agenda_col_by_patterns(ARRAY['^grado$']);
   col_matricula    := public._agenda_col_by_patterns(ARRAY['matr[íi]cula', 'matricula']);
   col_cedula       := public._agenda_col_by_patterns(ARRAY['c[eé]dula']);
-  col_comisionado  := public._agenda_col_by_patterns(ARRAY['comision']);
+  col_comisionado  := public._agenda_col_by_patterns(ARRAY['^personal\s+comisionado$', 'comision']);
   col_direccion    := public._agenda_col_by_patterns(ARRAY['^dir\.', 'dir\..*org', '^direcci[oó]n', 'direcci(?!.*sub)']);
   col_subdireccion := public._agenda_col_by_patterns(ARRAY['^subdir\.', 'subdir\..*org', 'subdir']);
   col_gerencia     := public._agenda_col_by_patterns(ARRAY['gerencia.*org', 'gerencia']);
   col_coordinacion := public._agenda_col_by_patterns(ARRAY['coordinac.*org', 'coordinaci']);
-  col_licencia     := public._agenda_col_by_patterns(ARRAY['^licencia$']);
+  col_licencia     := public._agenda_col_by_patterns(ARRAY['^licencia$', 'licencia.*manejo']);
   col_licencia_tipo := public._agenda_col_by_patterns(ARRAY['tipo.*lic', '^tipo$']);
   col_vig_licencia := public._agenda_col_by_patterns(ARRAY['vig.*lic', 'licencia.*vig']);
-  col_vig_credencial := public._agenda_col_by_patterns(ARRAY['vig.*cred', 'cred.*vig']);
+  col_vig_credencial := public._agenda_col_by_patterns(ARRAY['vig.*cred', 'cred.*vig', 'vigencia.*tia', 'tia.*vig']);
   col_vig_ine      := public._agenda_col_by_patterns(ARRAY['vig.*ine', 'ine.*vig']);
   col_curp         := public._agenda_col_by_patterns(ARRAY['^curp$']);
-  col_cel          := public._agenda_col_by_patterns(ARRAY['cel', 'movil', 'telefono']);
+  col_cel          := public._agenda_col_by_patterns(ARRAY['cel[uú]lar', 'm[oó]vil', 'celular', 'cel', 'tel[eé]f[oó]nico', 'no\.?\s*tel', 'tel[eé]fono']);
   col_extension    := public._agenda_col_by_patterns(ARRAY['^ext\.?$', 'extensi']);
   col_correo       := public._agenda_col_by_patterns(ARRAY['correo.*inst', 'institucional.*correo']);
   col_correo_pers  := public._agenda_col_by_patterns(ARRAY['correo.*pers', 'personal.*correo', '^correo$', '^email$']);
-  col_fecha_ing    := public._agenda_col_by_patterns(ARRAY['fecha.*ingreso', 'fecha.*alta']);
-  col_onom         := public._agenda_col_by_patterns(ARRAY['onom', 'cumple', 'nacim']);
+  col_fecha_ing    := public._agenda_col_by_patterns(ARRAY['fecha.*ingreso', 'fecha.*alta', 'ingreso', 'alta']);
+  col_onom         := public._agenda_col_by_patterns(ARRAY['^fecha\s+de\s+nacimiento$', 'fecha.*nac', 'nacimient', '^cumplea[nñ]os$', 'onom', 'birth']);
   col_cv_url       := public._agenda_col_by_patterns(ARRAY['^cv_url$', '^cv$', 'curriculum', 'curr[ií]culum']);
   col_grado_acad   := public._agenda_col_by_patterns(ARRAY['grado.*acad', 'academ']);
   col_sangre       := public._agenda_col_by_patterns(ARRAY['sangre']);
@@ -523,7 +540,7 @@ BEGIN
   col_c2_tel       := public._agenda_col_by_patterns(ARRAY['contacto.*2.*tel', 'tel.*2', 'tel[eé]fono.*2']);
   col_f_ine        := public._agenda_col_by_patterns(ARRAY['foto.*ine', 'ine.*frente']);
   col_f_ine_rev    := public._agenda_col_by_patterns(ARRAY['ine.*rev', 'rev.*ine', 'ine.*reverso']);
-  col_f_tia        := public._agenda_col_by_patterns(ARRAY['foto.*cred', 'tia', 'credencial']);
+  col_f_tia        := public._agenda_col_by_patterns(ARRAY['foto.*cred', 'cred.*foto', 'fotograf[ií]a.*tia', 'foto.*tia']);
   col_ob_upt       := public._agenda_col_by_patterns(ARRAY['onboarding_actualizado_en']);
   col_ob_sta       := public._agenda_col_by_patterns(ARRAY['onboarding_estado']);
 
@@ -531,11 +548,29 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'No se detecto columna de numero de empleado en agenda_2026');
   END IF;
 
+  -- Campos bloqueados: el numero de empleado sale del token y el nombre del expediente
+  -- (o de la metadata que capturo el area al generar el QR). Lo que mande el portal se ignora.
+  IF col_nombre IS NOT NULL THEN
+    EXECUTE format('SELECT nullif(btrim(%I::text), '''') FROM public.agenda_2026 WHERE %I = $1 LIMIT 1', col_nombre, col_num)
+      INTO v_nombre
+      USING lnk.num_empleado;
+  END IF;
+
+  IF v_nombre IS NULL THEN
+    v_nombre := nullif(btrim(COALESCE(lnk.metadata ->> 'nombre', '')), '');
+  END IF;
+
+  IF p_final AND col_nombre IS NOT NULL AND v_nombre IS NULL THEN
+    RETURN jsonb_build_object(
+      'ok', false,
+      'error', 'Tu enlace no trae nombre asignado. Pide al area de personal que genere de nuevo tu QR.'
+    );
+  END IF;
+
   IF p_final THEN
     FOR i IN 1..COALESCE(array_length(required_keys, 1), 0) LOOP
       required_key := required_keys[i];
       required_col := CASE required_key
-        WHEN 'nombre' THEN col_nombre
         WHEN 'puesto' THEN col_puesto
         WHEN 'profesion' THEN col_profesion
         WHEN 'grado_academico' THEN col_grado_acad
@@ -606,7 +641,7 @@ BEGIN
 
   db_payload := db_payload || jsonb_build_object(col_num, lnk.num_empleado);
 
-  IF p_payload ? 'nombre'          AND col_nombre IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_nombre,       nullif(btrim(p_payload->>'nombre'), '')); END IF;
+  IF col_nombre IS NOT NULL AND v_nombre IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_nombre, v_nombre); END IF;
   IF p_payload ? 'puesto'          AND col_puesto IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_puesto,       nullif(btrim(p_payload->>'puesto'), '')); END IF;
   IF p_payload ? 'profesion'       AND col_profesion IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_profesion,   nullif(btrim(p_payload->>'profesion'), '')); END IF;
   IF p_payload ? 'grado_academico' AND col_grado_acad IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_grado_acad,   nullif(btrim(p_payload->>'grado_academico'), '')); END IF;
@@ -696,7 +731,12 @@ BEGIN
     EXECUTE format('INSERT INTO public.agenda_2026 (%s) VALUES (%s)', cols_sql, vals_sql);
   END IF;
 
-  RETURN jsonb_build_object('ok', true, 'num_empleado', lnk.num_empleado);
+  RETURN jsonb_build_object(
+    'ok', true,
+    'num_empleado', lnk.num_empleado,
+    'nombre', COALESCE(v_nombre, ''),
+    'locked_fields', jsonb_build_array('num_empleado', 'nombre')
+  );
 END;
 $$;
 
