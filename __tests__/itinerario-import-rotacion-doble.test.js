@@ -56,6 +56,11 @@ const FUNCTIONS = [
   '    function prepareFlightIdentity(',
   '    function resolveMovementMatches(',
   '    function chunkArray(',
+  '    function escapeHtml(',
+  '    function ensureImportDialogStyles(',
+  '    function showImportDialog(',
+  '    function formatDateLabel(',
+  '    function hideUploadCsvModal(',
   '    async function fetchAllFlightIdentityRows(',
   '    async function importCsvFromFile(',
   '    async function _mirrorRowsToEditableTables(',
@@ -76,6 +81,7 @@ function buildImporter() {
     extractConst('FLIGHT_IDENTITY_COLUMNS', "';"),
     extractConst('FLIGHT_FULL_SELECT', "].join(',');"),
     extractConst('_EXCLUDED_STATUS_RE', '/i;'),
+    extractConst('IMPORT_DIALOG_STYLES', '`;'),
     'let lastImportYear = null;',
     'let _flightProbeCache = null;',
     'async function loadFlights() { _flightProbeCache = null; }',
@@ -280,13 +286,27 @@ async function runImport(csvRows, seedRows = []) {
   window.supabaseClient = supabase;
   const alerts = [];
   window.alert = message => alerts.push(String(message));
-  window.confirm = () => true;
   global.alert = window.alert;
-  global.confirm = window.confirm;
   global.bootstrap = { Modal: { getInstance: () => null } };
 
+  // El resumen de importación ya no es un confirm() del navegador sino un
+  // diálogo propio: se lee su texto y se pulsa el botón de confirmar.
+  const observer = new MutationObserver(() => {
+    document.querySelectorAll('.ops-imp-overlay').forEach(overlay => {
+      if (overlay.dataset.autoConfirmed) return;
+      overlay.dataset.autoConfirmed = '1';
+      alerts.push(overlay.textContent.replace(/\s+/g, ' ').trim());
+      overlay.querySelector('[data-imp="confirm"]').click();
+    });
+  });
+  observer.observe(document.body, { childList: true });
+
   const file = { name: 'Visits_11AUG26.csv', text: async () => toCsv(csvRows) };
-  await importer.importCsvFromFile(file);
+  try {
+    await importer.importCsvFromFile(file);
+  } finally {
+    observer.disconnect();
+  }
   return { supabase, alerts, rows: supabase.__tables.vuelos_parte_operaciones_csv };
 }
 
@@ -294,7 +314,7 @@ describe('importación del itinerario con doble rotación del mismo vuelo', () =
   test('guarda las dos rotaciones de XN 1107 del mismo día como vuelos distintos', async () => {
     const { alerts, rows } = await runImport([PRIMERA_ROTACION, SEGUNDA_ROTACION, OTRO_VUELO]);
 
-    expect(alerts.some(message => /Error al importar/i.test(message))).toBe(false);
+    expect(alerts.some(message => /No se pudo importar/i.test(message))).toBe(false);
     expect(rows).toHaveLength(3);
 
     const xn1107 = rows.filter(row => row['[Arr] Flight Designator'] === 'XN 1107');
@@ -312,9 +332,9 @@ describe('importación del itinerario con doble rotación del mismo vuelo', () =
       first.rows.map(row => ({ ...row }))
     );
 
-    expect(second.alerts.some(message => /Error al importar/i.test(message))).toBe(false);
+    expect(second.alerts.some(message => /No se pudo importar/i.test(message))).toBe(false);
     expect(second.rows).toHaveLength(3);
-    expect(second.alerts.some(message => /ya existen en la base de datos/i.test(message))).toBe(true);
+    expect(second.alerts.some(message => /No hay nada nuevo que importar/i.test(message))).toBe(true);
   });
 
   test('la segunda rotación se agrega cuando la primera ya estaba guardada', async () => {
@@ -323,7 +343,7 @@ describe('importación del itinerario con doble rotación del mismo vuelo', () =
       [PRIMERA_ROTACION]
     );
 
-    expect(alerts.some(message => /Error al importar/i.test(message))).toBe(false);
+    expect(alerts.some(message => /No se pudo importar/i.test(message))).toBe(false);
     expect(rows).toHaveLength(2);
     expect(rows.map(row => row.arr_movement_slot).sort()).toEqual(['01:55', '23:05']);
   });
@@ -336,7 +356,7 @@ describe('importación del itinerario con doble rotación del mismo vuelo', () =
     });
     const { alerts, rows } = await runImport([reprogramado], [PRIMERA_ROTACION]);
 
-    expect(alerts.some(message => /Error al importar/i.test(message))).toBe(false);
+    expect(alerts.some(message => /No se pudo importar/i.test(message))).toBe(false);
     expect(rows).toHaveLength(1);
     expect(rows[0]['[Arr] SIBT']).toBe('10AUG 02:10');
     expect(rows[0]['[Arr] Stand']).toBe('109B');
