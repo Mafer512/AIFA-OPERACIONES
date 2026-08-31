@@ -355,3 +355,59 @@ describe('lo que ve quien abre el QR', () => {
     expect(document.getElementById('f-nivel').readOnly).toBe(true);
   });
 });
+
+/**
+ * La TIA se la entregan al colaborador DESPUÉS de darse de alta. Exigirla para
+ * cerrar el registro lo dejaba atorado por un documento que todavía no tiene:
+ * obligatorios son el CV y las dos caras de la INE, y lo demás se sube luego.
+ */
+describe('los documentos que se exigen para finalizar', () => {
+  test('el backend pide CV e INE, y deja fuera la foto de la TIA', () => {
+    const { declare } = funcion('save_colab_onboarding');
+    const arr = declare.match(/required_keys text\[\] := ARRAY\[([\s\S]*?)\n {2}\];/);
+    expect(arr).not.toBeNull();
+    const claves = [...arr[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+
+    expect(claves).toEqual(expect.arrayContaining(['cv_url', 'foto_ine', 'foto_ine_rev']));
+    expect(claves).not.toContain('foto_cred');
+  });
+
+  test('el portal tampoco la pide para el guardado final', () => {
+    const chequeo = portal.match(/if \(finalMode && \(([^)]*)\)\)/);
+    expect(chequeo).not.toBeNull();
+    expect(chequeo[1]).toContain('payload.cv_url');
+    expect(chequeo[1]).toContain('payload.foto_ine');
+    expect(chequeo[1]).toContain('payload.foto_ine_rev');
+    expect(chequeo[1]).not.toContain('foto_cred');
+  });
+
+  test('con el CV y la INE el portal ya se da por servido', () => {
+    document.body.innerHTML = bloque('<form id="onboarding-form"', '</form>');
+    const ctx = { document };
+    vm.createContext(ctx);
+    vm.runInContext([
+      bloque('let currentData = {', '\n      };'),
+      bloque('function $(id)', '}'),
+      bloque('function setStatus(id, text, cls)', '\n      }'),
+      bloque('function refreshDocsState()', '\n      }'),
+    ].join('\n'), ctx);
+
+    const estado = () => document.getElementById('docs-state');
+
+    ctx.refreshDocsState();
+    expect(estado().className).toContain('warn');
+    expect(estado().textContent).toContain('CV');
+
+    // currentData se declara con let: no asoma como propiedad del contexto.
+    vm.runInContext([
+      "currentData.cv_url = 'data:application/pdf;base64,AA';",
+      "currentData.foto_ine = 'data:image/png;base64,AA';",
+      "currentData.foto_ine_rev = 'data:image/png;base64,AA';",
+      'refreshDocsState();',
+    ].join('\n'), ctx);
+
+    // Sin TIA: ya está listo, y se le dice que puede subirla después.
+    expect(estado().className).toContain('ok');
+    expect(estado().textContent).toMatch(/TIA/);
+  });
+});

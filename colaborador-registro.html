@@ -215,6 +215,18 @@
       padding: 1px 8px;
       white-space: nowrap;
     }
+    /* Obligatorio para cerrar el registro / se puede subir después. */
+    .req-tag, .opt-tag {
+      font-size: .66rem;
+      font-weight: 700;
+      letter-spacing: .02em;
+      border-radius: 999px;
+      padding: 1px 8px;
+      white-space: nowrap;
+    }
+    .req-tag { color: #9a4b00; background: #fff4e2; border: 1px solid #f3d9ae; }
+    .opt-tag { color: #5d6f88; background: #f2f5fa; border: 1px solid #e0e7f2; }
+
     .lock-hint {
       display: flex;
       gap: 10px;
@@ -611,37 +623,38 @@
 
       <section class="panel">
         <h2 class="sec-title"><span class="sec-num">6</span>Documentos</h2>
+        <div class="lock-hint mb-3">Para finalizar tu registro solo necesitas tu <strong>CV</strong> y tu <strong>INE</strong> por los dos lados. La TIA la subes después, cuando te la entreguen.</div>
         <div class="row g-3">
           <div class="col-md-4">
-            <label class="form-label">CV</label>
+            <label class="form-label">CV <span class="req-tag">Obligatorio</span></label>
             <div class="dropzone">
               <input id="doc-cv" class="form-control form-control-sm" type="file" accept="application/pdf,.pdf">
               <div id="prev-cv" class="preview"></div>
             </div>
           </div>
           <div class="col-md-4">
-            <label class="form-label">INE frente</label>
+            <label class="form-label">INE frente <span class="req-tag">Obligatorio</span></label>
             <div class="dropzone">
               <input id="doc-ine" class="form-control form-control-sm" type="file" accept="image/*">
               <div id="prev-ine" class="preview"></div>
             </div>
           </div>
           <div class="col-md-4">
-            <label class="form-label">INE reverso</label>
+            <label class="form-label">INE reverso <span class="req-tag">Obligatorio</span></label>
             <div class="dropzone">
               <input id="doc-ine-rev" class="form-control form-control-sm" type="file" accept="image/*">
               <div id="prev-ine-rev" class="preview"></div>
             </div>
           </div>
           <div class="col-md-4">
-            <label class="form-label">TIA / Credencial</label>
+            <label class="form-label">TIA / Credencial <span class="opt-tag">Opcional</span></label>
             <div class="dropzone">
               <input id="doc-tia" class="form-control form-control-sm" type="file" accept="image/*">
               <div id="prev-tia" class="preview"></div>
             </div>
           </div>
         </div>
-        <div id="docs-state" class="status mt-2">Aun faltan documentos por cargar.</div>
+        <div id="docs-state" class="status mt-2">Te falta subir: CV, INE frente, INE reverso.</div>
       </section>
 
       <div class="actionbar">
@@ -856,21 +869,25 @@
         });
       }
 
+      // La TIA se la entregan al colaborador despues de darse de alta, asi que
+      // no puede ser requisito para cerrar su registro. Obligatorios: el CV y
+      // las dos caras de la INE; lo demas se sube cuando lo tenga.
       function refreshDocsState() {
         const okIne = !!currentData.foto_ine;
         const okIneRev = !!currentData.foto_ine_rev;
         const okTia = !!currentData.foto_cred;
         const okCv = !!currentData.cv_url;
-        if (okCv && okIne && okIneRev && okTia) {
-          setStatus('docs-state', 'Documentacion completa.', 'ok');
-        } else {
-          const missing = [];
-          if (!okCv) missing.push('CV');
-          if (!okIne) missing.push('INE frente');
-          if (!okIneRev) missing.push('INE reverso');
-          if (!okTia) missing.push('TIA');
-          setStatus('docs-state', 'Falta: ' + missing.join(', '), 'warn');
+        const missing = [];
+        if (!okCv) missing.push('CV');
+        if (!okIne) missing.push('INE frente');
+        if (!okIneRev) missing.push('INE reverso');
+        if (missing.length) {
+          setStatus('docs-state', 'Te falta subir: ' + missing.join(', ') + '.', 'warn');
+          return;
         }
+        setStatus('docs-state', okTia
+          ? 'Documentación completa.'
+          : 'Ya tienes lo obligatorio. La TIA la puedes subir después.', 'ok');
       }
 
       function collectPayload() {
@@ -994,8 +1011,8 @@
         }
 
         const payload = collectPayload();
-        if (finalMode && (!payload.cv_url || !payload.foto_ine || !payload.foto_ine_rev || !payload.foto_cred)) {
-          setStatus('save-status', 'Para finalizar debes cargar CV, INE frente, INE reverso y TIA.', 'warn');
+        if (finalMode && (!payload.cv_url || !payload.foto_ine || !payload.foto_ine_rev)) {
+          setStatus('save-status', 'Para finalizar necesitas tu CV y tu INE por los dos lados. La TIA la puedes subir después.', 'warn');
           return;
         }
 

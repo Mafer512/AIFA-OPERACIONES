@@ -502,7 +502,11 @@ DECLARE
     'cv_url', 'sangre', 'domicilio', 'rfc', 'nss',
     'estado_civil', 'dependientes', 'alerg_med', 'alerg_ali', 'licencia', 'licencia_tipo', 'vig_licencia', 'vig_credencial', 'vig_ine', 'rubrica', 'doc_ingreso',
     'c1_nombre', 'c1_parentesco', 'c1_tel', 'c2_nombre', 'c2_parentesco', 'c2_tel',
-    'foto_ine', 'foto_ine_rev', 'foto_cred'
+    -- De los documentos solo se exigen el CV y las dos caras de la INE. La foto
+    -- de la TIA (foto_cred) queda fuera a proposito: la credencial se entrega
+    -- despues del alta, asi que exigirla aqui dejaba al colaborador sin poder
+    -- cerrar su registro por algo que todavia no tiene en la mano.
+    'foto_ine', 'foto_ine_rev'
   ];
   required_key text;
   required_col text;
