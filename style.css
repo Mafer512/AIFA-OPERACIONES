@@ -20958,29 +20958,57 @@ body.conci-manifest-workspace #navdeck-back {
    }
 }
 
+/* ── 1 bis. En el teléfono el menú de tarjetas ES la pantalla de inicio ──────
+   Las reglas que hacen del deck la portada (esconder .main-content mientras no
+   hay módulo abierto, y esconder el deck cuando sí lo hay) vivían dentro de
+   @media (min-width: 992px). En el teléfono no aplicaba ninguna: el deck se
+   quedaba escondido como hoja desplegable y, al entrar, uno se topaba con el
+   área de contenido vacía. Además, esa hoja se abría a 92 % del alto y dejaba
+   una franja muerta abajo. Aquí el teléfono usa el mismo modelo que el
+   escritorio: el deck se ve completo al entrar y las tres líneas del header
+   salen del módulo y devuelven el inicio (ver toggleSidebar en script.js). */
+@media (max-width: 991.98px) {
+   body.navdeck-mode:not(.navdeck-active) .sidebar.nav-deck {
+      position: static !important;
+      transform: none !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      max-height: none !important;
+      overflow: visible !important;
+      box-shadow: none !important;
+      z-index: auto !important;
+   }
+
+   body.navdeck-mode:not(.navdeck-active) .main-content,
+   body.navdeck-mode:not(.navdeck-active) .content-section {
+      display: none !important;
+   }
+
+   body.navdeck-mode.navdeck-active .sidebar.nav-deck {
+      display: none !important;
+   }
+
+   /* Sin hoja desplegable no hay nada que velar. */
+   body.navdeck-mode .sidebar-overlay {
+      display: none !important;
+   }
+}
+
 @media (max-width: 575.98px) {
-   /* ── 2. El panel del menú ────────────────────────────────────────────────
-      Con 90vh el panel cambiaba de alto cada vez que el navegador escondía o
-      mostraba su barra de direcciones, y el desplazamiento dentro del panel se
-      sentía trabado. dvh mide el viewport real y evita ese salto. */
-   body.navdeck-mode .sidebar.nav-deck {
-      max-height: 92dvh !important;
+   /* ── 2. La pantalla de inicio ────────────────────────────────────────────
+      El deck ya no es un panel deslizante (ver el apartado 1 bis): ocupa la
+      pantalla como cualquier contenido. Aquí solo se ajusta su respiro. */
+   body.navdeck-mode:not(.navdeck-active) .sidebar.nav-deck {
       padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-      overscroll-behavior: contain;
-      -webkit-overflow-scrolling: touch;
    }
 
    .sidebar {
-      width: min(var(--sidebar-width), 88vw);
       padding-bottom: env(safe-area-inset-bottom, 0px);
    }
 
    .si-brand {
       padding: .7rem .85rem .6rem;
-      position: sticky;
-      top: 0;
-      z-index: 2;
-      background: var(--sidebar-bg, #151d27);
    }
 
    .si-brand-logo { width: 32px; height: 32px; border-radius: 8px; }

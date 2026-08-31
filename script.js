@@ -4560,6 +4560,24 @@ function toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('sidebar-overlay');
         if (!sidebar || !overlay) return;
+        // En modo deck el menú no es un cajón lateral: el lanzador de tarjetas
+        // ES la pantalla de inicio (igual que en escritorio). Las tres líneas
+        // salen del módulo y devuelven ese inicio completo, en vez de deslizar
+        // una hoja que solo cubría parte de la pantalla.
+        if (document.body.classList.contains('navdeck-mode')) {
+            sidebar.classList.remove('visible');
+            overlay.classList.remove('active');
+            document.body.classList.remove('sidebar-open', 'sidebar-collapsed');
+            if (document.body.classList.contains('navdeck-active')) {
+                if (typeof window._navdeckShowMenu === 'function') window._navdeckShowMenu();
+                else {
+                    document.body.classList.remove('navdeck-active');
+                    if (typeof window.exitSectionToMenu === 'function') window.exitSectionToMenu();
+                }
+            }
+            try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { window.scrollTo(0, 0); }
+            return;
+        }
         const willShow = !sidebar.classList.contains('visible');
         if (willShow) {
             document.body.classList.remove('sidebar-collapsed');

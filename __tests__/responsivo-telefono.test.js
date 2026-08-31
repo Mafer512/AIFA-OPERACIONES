@@ -49,8 +49,20 @@ describe('pasada móvil para teléfonos', () => {
         expect(capas).toMatch(/body\.sidebar-open #_aga-fab[\s\S]*?display:\s*none/);
     });
 
-    test('el panel del menú mide el viewport real (dvh), no 90vh', () => {
-        expect(declaration(apartado(2), 'body.navdeck-mode .sidebar.nav-deck', 'max-height')).toMatch(/dvh/);
+    test('en el teléfono el deck de tarjetas es la pantalla de inicio', () => {
+        const modelo = pasada.slice(pasada.indexOf('── 1 bis.'), pasada.indexOf('── 2.'));
+        const deck = 'body.navdeck-mode:not(.navdeck-active) .sidebar.nav-deck';
+        // Se ve completo al entrar: contenido normal de la página, no una hoja
+        // desplegable escondida que además dejaba una franja muerta abajo.
+        expect(declaration(modelo, deck, 'position')).toBe('static');
+        expect(declaration(modelo, deck, 'max-height')).toBe('none');
+        expect(declaration(modelo, deck, 'transform')).toBe('none');
+        // Y mientras no hay módulo abierto, el área de contenido vacía no se ve.
+        expect(modelo).toMatch(/:not\(\.navdeck-active\) \.main-content[\s\S]*?display:\s*none/);
+        // Dentro de un módulo el deck desaparece, como en escritorio.
+        expect(modelo).toMatch(/\.navdeck-active \.sidebar\.nav-deck \{\s*display:\s*none/);
+        // Ya no queda ninguna hoja recortada al 92 % del alto.
+        expect(pasada).not.toContain('92dvh');
     });
 
     test('el hero del banner deja de ser una fila apretada', () => {
@@ -80,7 +92,8 @@ describe('pasada móvil para teléfonos', () => {
         queries.forEach(q => {
             expect(q).toMatch(/max-width:\s*(991\.98px|575\.98px|360px)/);
         });
-        // El único ≤ 991.98 px permitido es el de capas (corrige el encimamiento).
-        expect(queries.filter(q => q.includes('991.98px'))).toHaveLength(1);
+        // Los únicos ≤ 991.98 px son los dos que arreglan defectos que también
+        // se daban en tableta: el encimamiento de capas y el modelo del deck.
+        expect(queries.filter(q => q.includes('991.98px'))).toHaveLength(2);
     });
 });
