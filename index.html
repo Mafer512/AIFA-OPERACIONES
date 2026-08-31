@@ -11874,6 +11874,24 @@ FF
                            conteo no cuadra: qué valores trae la columna, cómo se
                            clasifica cada uno y quiénes tienen el texto peleado con
                            su CURP (que es el dato que no admite dos lecturas). */
+                        /* Por qué no se guarda la fecha de baja: dice si la columna existe en la
+                           tabla y con qué nombre exacto la ve la aplicación. */
+                        window.colabDiagnosticoBaja = function() {
+                            const columnas = Object.keys((colabCache && colabCache[0]) || {});
+                            const info = {
+                                columnaFechaDetectada: (colabCols && colabCols.fecha_baja) || null,
+                                columnaMotivoDetectada: (colabCols && colabCols.motivo_baja) || null,
+                                columnasDeLaTablaQueHablanDeBaja: columnas.filter(k => /baja/i.test(k)),
+                                columnasEnLaTabla: columnas.length,
+                                registrosCargados: (colabCache || []).length,
+                            };
+                            console.table(info);
+                            if (!info.columnaFechaDetectada) {
+                                console.warn('[Colaboradores] agenda_2026 no tiene columna de fecha de baja: corre db/agregar_fecha_baja.sql en Supabase.');
+                            }
+                            return info;
+                        };
+
                         window.colabAuditarSexos = function(numeroEmpleado) {
                             const policy = window.ColaboradoresDirectoryPolicy;
                             const universe = colabObtenerUniversoDirectorio();
@@ -15232,6 +15250,21 @@ FF
                                         cambios.push({ campo: colKey, valor_anterior: oldVal || null, valor_nuevo: newVal || null });
                                     }
                                 });
+
+                                /* El bucle de arriba se salta los campos cuya columna no existe en la
+                                   base. Para la baja eso significaba perder la captura sin decir nada:
+                                   si hay algo escrito y no hay columna, se avisa en vez de guardar a
+                                   medias. */
+                                const bajaSinColumna = [
+                                    ['ce-fecha-baja', 'fecha_baja', 'Fecha de baja'],
+                                    ['ce-motivo-baja', 'motivo_baja', 'Motivos de baja'],
+                                ].find(([formId, colKey]) =>
+                                    !colabCols?.[colKey] && String(document.getElementById(formId)?.value || '').trim());
+                                if (bajaSinColumna) {
+                                    throw new Error(
+                                        `La tabla agenda_2026 todavía no tiene la columna "${bajaSinColumna[2]}", así que ese dato no se guardaría. `
+                                        + 'Corre db/agregar_fecha_baja.sql en Supabase (SQL Editor) y vuelve a intentarlo.');
+                                }
 
                                 const cambioEstatus = cambios.find(ch => ch.campo === 'estatus');
                                 if (cambioEstatus) {

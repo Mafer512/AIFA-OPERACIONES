@@ -62,6 +62,18 @@ describe('el editor del colaborador', () => {
         expect(app).toMatch(/id="cedit-tab-estatus"[^>]*>[\s\S]{0,120}Estatus y baja/);
     });
 
+    test('si la columna no existe, el guardado avisa en vez de perder la captura', () => {
+        const guardar = trozo('window.colabGuardarCambios = async function()', 'const cambioEstatus');
+        expect(guardar).toContain("['ce-fecha-baja', 'fecha_baja', 'Fecha de baja']");
+        expect(guardar).toMatch(/throw new Error\(/);
+        expect(guardar).toContain('agregar_fecha_baja.sql');
+    });
+
+    test('hay un diagnóstico de consola para saber si la columna está', () => {
+        expect(app).toContain('window.colabDiagnosticoBaja = function()');
+        expect(app).toContain('columnasDeLaTablaQueHablanDeBaja');
+    });
+
     test('los guarda con el resto de la ficha', () => {
         const mapa = trozo('const COLAB_EDIT_FIELD_MAP = {', '};');
         expect(mapa).toContain("'ce-fecha-baja':'fecha_baja'");
