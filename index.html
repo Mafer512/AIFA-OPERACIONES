@@ -7696,6 +7696,19 @@ FF
                             margin-bottom: 1.25rem;
                             flex-wrap: wrap;
                         }
+                        /* Cada tarjeta del resumen abre justo lo que cuenta: las de personas
+                           listan a esas personas, y las de categorías listan las categorías
+                           para poder entrar a cualquiera. */
+                        .cd-kpi[data-kpi] { cursor: pointer; transition: transform .13s ease, box-shadow .16s ease, border-color .16s ease; }
+                        .cd-kpi[data-kpi]:hover { transform: translateY(-2px); border-color: #1558d6; box-shadow: 0 8px 20px rgba(21,88,214,.14); }
+                        .cd-kpi[data-kpi]:focus-visible { outline: 2px solid #1558d6; outline-offset: 2px; }
+                        .cd-kpi[data-kpi] .cd-kpi-go {
+                            margin-left: auto; align-self: flex-start; font-size: .72rem; color: #b7c2d4;
+                            opacity: 0; transition: opacity .16s ease, color .16s ease;
+                        }
+                        .cd-kpi[data-kpi]:hover .cd-kpi-go { opacity: 1; color: #1558d6; }
+                        .cd-kpi-pct.cd-kpi-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+                        .cd-kpi-pct.cd-kpi-link:hover { color: #1558d6; }
                         .cd-kpi {
                             flex: 1 1 130px;
                             display: flex;
@@ -8318,6 +8331,19 @@ FF
                         }
                         #colab-grupo-modal-search input:focus { border-color: #1558d6; }
                         #colab-grupo-modal-list { overflow-y: auto; flex: 1; }
+                        #colab-grupo-modal-back {
+                            background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.35);
+                            color: #fff; border-radius: 7px; font-size: .74rem; font-weight: 700;
+                            padding: .12rem .5rem; cursor: pointer; white-space: nowrap;
+                        }
+                        #colab-grupo-modal-back:hover { background: rgba(255,255,255,.28); }
+                        /* Fila de categoría: el nombre y cuánta gente hay dentro. */
+                        .colab-grupo-cat-count {
+                            background: #eef3fb; color: #1558d6; border-radius: 999px;
+                            font-size: .74rem; font-weight: 800; padding: .1rem .55rem; white-space: nowrap;
+                        }
+                        .colab-grupo-item.sin-dato .colab-grupo-item-name { color: #8a94a6; font-style: italic; }
+                        .colab-grupo-item.sin-dato .colab-grupo-cat-count { background: #f2f4f7; color: #7a8699; }
                         .colab-grupo-item {
                             display: flex; align-items: center; gap: .65rem;
                             padding: .45rem 1rem; border-bottom: 1px solid #f3f3f3;
@@ -9880,57 +9906,64 @@ FF
 
                                     <!-- Fila KPIs -->
                                     <div class="cd-kpi-row">
-                                        <div class="cd-kpi cd-kpi-total">
+                                        <div class="cd-kpi cd-kpi-total" data-kpi="total" role="button" tabindex="0" title="Ver a los colaboradores que suman este total">
                                             <div class="cd-kpi-icon"><i class="fas fa-users"></i></div>
                                             <div>
                                                 <div class="cd-kpi-val" id="cd-kpi-total">—</div>
                                                 <div class="cd-kpi-pct" id="cd-kpi-total-note">Sólo personal activo</div>
                                                 <div class="cd-kpi-label">Total Colaboradores</div>
                                             </div>
+                                            <i class="fas fa-arrow-right cd-kpi-go" aria-hidden="true"></i>
                                         </div>
-                                        <div class="cd-kpi cd-kpi-masc">
+                                        <div class="cd-kpi cd-kpi-masc" data-kpi="hombres" role="button" tabindex="0" title="Ver a los hombres del directorio">
                                             <div class="cd-kpi-icon"><i class="fas fa-mars"></i></div>
                                             <div>
                                                 <div class="cd-kpi-val" id="cd-kpi-masc"></div>
                                                 <div class="cd-kpi-pct" id="cd-kpi-masc-pct"></div>
                                                 <div class="cd-kpi-label">Hombres</div>
                                             </div>
+                                            <i class="fas fa-arrow-right cd-kpi-go" aria-hidden="true"></i>
                                         </div>
-                                        <div class="cd-kpi cd-kpi-fem">
+                                        <div class="cd-kpi cd-kpi-fem" data-kpi="mujeres" role="button" tabindex="0" title="Ver a las mujeres del directorio">
                                             <div class="cd-kpi-icon"><i class="fas fa-venus"></i></div>
                                             <div>
                                                 <div class="cd-kpi-val" id="cd-kpi-fem"></div>
                                                 <div class="cd-kpi-pct" id="cd-kpi-fem-pct"></div>
                                                 <div class="cd-kpi-label">Mujeres</div>
                                             </div>
+                                            <i class="fas fa-arrow-right cd-kpi-go" aria-hidden="true"></i>
                                         </div>
-                                        <div class="cd-kpi cd-kpi-dir">
+                                        <div class="cd-kpi cd-kpi-dir" data-kpi="direccion" role="button" tabindex="0" title="Ver las direcciones y entrar a cualquiera">
                                             <div class="cd-kpi-icon"><i class="fas fa-building"></i></div>
                                             <div>
                                                 <div class="cd-kpi-val" id="cd-kpi-dirs">—</div>
                                                 <div class="cd-kpi-label">Direcciones</div>
                                             </div>
+                                            <i class="fas fa-arrow-right cd-kpi-go" aria-hidden="true"></i>
                                         </div>
-                                        <div class="cd-kpi cd-kpi-sub">
+                                        <div class="cd-kpi cd-kpi-sub" data-kpi="subdireccion" role="button" tabindex="0" title="Ver las subdirecciones y entrar a cualquiera">
                                             <div class="cd-kpi-icon"><i class="fas fa-sitemap"></i></div>
                                             <div>
                                                 <div class="cd-kpi-val" id="cd-kpi-subdirs">—</div>
                                                 <div class="cd-kpi-label">Subdirecciones</div>
                                             </div>
+                                            <i class="fas fa-arrow-right cd-kpi-go" aria-hidden="true"></i>
                                         </div>
-                                        <div class="cd-kpi cd-kpi-prof">
+                                        <div class="cd-kpi cd-kpi-prof" data-kpi="profesion" role="button" tabindex="0" title="Ver las profesiones y entrar a cualquiera">
                                             <div class="cd-kpi-icon"><i class="fas fa-graduation-cap"></i></div>
                                             <div>
                                                 <div class="cd-kpi-val" id="cd-kpi-profs">—</div>
                                                 <div class="cd-kpi-label">Profesiones</div>
                                             </div>
+                                            <i class="fas fa-arrow-right cd-kpi-go" aria-hidden="true"></i>
                                         </div>
-                                        <div class="cd-kpi cd-kpi-ger">
+                                        <div class="cd-kpi cd-kpi-ger" data-kpi="gerencia" role="button" tabindex="0" title="Ver las gerencias y entrar a cualquiera">
                                             <div class="cd-kpi-icon"><i class="fas fa-user-tie"></i></div>
                                             <div>
                                                 <div class="cd-kpi-val" id="cd-kpi-gers">—</div>
                                                 <div class="cd-kpi-label">Gerencias</div>
                                             </div>
+                                            <i class="fas fa-arrow-right cd-kpi-go" aria-hidden="true"></i>
                                         </div>
                                     </div>
 
@@ -10487,6 +10520,7 @@ FF
                             <div id="colab-grupo-modal-header">
                                 <i class="fas fa-users me-2" id="colab-grupo-modal-icon"></i>
                                 <h6 id="colab-grupo-modal-title">Colaboradores</h6>
+                                <button id="colab-grupo-modal-back" class="d-none" onclick="colabGrupoModalVolver()">&larr; Volver</button>
                                 <button id="colab-grupo-modal-close" onclick="colabGrupoModalClose()" aria-label="Cerrar">&times;</button>
                             </div>
                             <div id="colab-grupo-modal-search">
@@ -12463,6 +12497,14 @@ FF
                                     ? `${universe.summary.genderOther} sin sexo definido`
                                     : 'Sólo personal activo'
                             );
+                            // Esa nota también es una puerta: son los expedientes a los que les
+                            // falta capturar el sexo, y desde aquí se ve quiénes son.
+                            const notaTotal = document.getElementById('cd-kpi-total-note');
+                            if (notaTotal) {
+                                const haySinSexo = universe.summary.genderOther > 0;
+                                notaTotal.classList.toggle('cd-kpi-link', haySinSexo);
+                                notaTotal.title = haySinSexo ? 'Ver a quiénes les falta capturar el sexo' : '';
+                            }
 
                             // Hombres y mujeres se calculan sobre el mismo universo activo.
                             var masc = universe.summary.men;
@@ -12478,6 +12520,70 @@ FF
                             setKpi('cd-kpi-subdirs', bySubDir.filter(([k]) => k !== '(Sin dato)').length);
                             setKpi('cd-kpi-profs',   byProf.filter(([k]) => k !== '(Sin dato)').length);
                             setKpi('cd-kpi-gers',    byGer.filter(([k]) => k !== '(Sin dato)').length);
+                            
+                            /* ---------- LAS TARJETAS DEL RESUMEN, COMO FILTROS ----------
+                               Cada una abre lo que cuenta: las de personas listan a esas personas,
+                               y las de categorías (direcciones, subdirecciones, profesiones,
+                               gerencias) listan las categorías con su gente para entrar a una.
+                               Se arma aquí porque el universo del resumen ya está resuelto: lo que
+                               se abre coincide exactamente con el número que muestra la tarjeta. */
+                            const _policy = window.ColaboradoresDirectoryPolicy;
+                            const _sexoDe = r => (_policy && typeof _policy.normalizeGender === 'function')
+                                ? _policy.normalizeGender(gc(r, 'sexo'))
+                                : '?';
+                            
+                            window.colabKpiFiltro = function(tipo) {
+                                switch (tipo) {
+                                    case 'total':
+                                        _abrirGrupoModalPersonas('Total de colaboradores', 'fas fa-users', data);
+                                        break;
+                                    case 'hombres':
+                                        _abrirGrupoModalPersonas('Hombres', 'fas fa-mars',
+                                            data.filter(r => _sexoDe(r) === 'H'));
+                                        break;
+                                    case 'mujeres':
+                                        _abrirGrupoModalPersonas('Mujeres', 'fas fa-venus',
+                                            data.filter(r => _sexoDe(r) === 'M'));
+                                        break;
+                                    case 'sin-sexo':
+                                        _abrirGrupoModalPersonas('Sin sexo capturado', 'fas fa-circle-question',
+                                            data.filter(r => _sexoDe(r) === '?'));
+                                        break;
+                                    case 'direccion':
+                                        window.colabAbrirCategoriasModal('direccion', 'Direcciones', 'fas fa-building', 'dirección');
+                                        break;
+                                    case 'subdireccion':
+                                        window.colabAbrirCategoriasModal('subdireccion', 'Subdirecciones', 'fas fa-sitemap', 'subdirección');
+                                        break;
+                                    case 'profesion':
+                                        window.colabAbrirCategoriasModal('profesion', 'Profesiones', 'fas fa-graduation-cap', 'profesión');
+                                        break;
+                                    case 'gerencia':
+                                        window.colabAbrirCategoriasModal('gerencia', 'Gerencias', 'fas fa-user-tie', 'gerencia');
+                                        break;
+                                }
+                            };
+                            
+                            const _kpiRow = document.querySelector('.cd-kpi-row');
+                            if (_kpiRow && !_kpiRow.dataset.kpiWired) {
+                                _kpiRow.dataset.kpiWired = '1';
+                                const abrirDesdeTarjeta = ev => {
+                                    const nota = ev.target.closest('.cd-kpi-link');
+                                    if (nota) {
+                                        ev.stopPropagation();
+                                        window.colabKpiFiltro('sin-sexo');
+                                        return;
+                                    }
+                                    const tarjeta = ev.target.closest('.cd-kpi[data-kpi]');
+                                    if (tarjeta) window.colabKpiFiltro(tarjeta.dataset.kpi);
+                                };
+                                _kpiRow.addEventListener('click', abrirDesdeTarjeta);
+                                _kpiRow.addEventListener('keydown', ev => {
+                                    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                                    ev.preventDefault();
+                                    abrirDesdeTarjeta(ev);
+                                });
+                            }
 
                             // Colores de barra por tabla
                             const barColors = {
@@ -12926,6 +13032,13 @@ FF
                             /* -- Modal drill-down genérico: colaboradores por cualquier grupo -- */
                             let _grupoModalRecords = [];
                             let _grupoModalOpts    = null;
+                            /* El modal tiene dos modos: 'personas' lista colaboradores y
+                               'categorias' lista direcciones, gerencias, profesiones… con su
+                               conteo, para entrar desde ahí a la gente de cualquiera. */
+                            let _grupoModalMode       = 'personas';
+                            let _grupoModalCategorias = [];
+                            let _grupoModalVolver     = null;
+                            let _grupoModalSinDato    = null;
                             const _grupoIconMap = {
                                 profesion:    'fas fa-graduation-cap',
                                 direccion:    'fas fa-building',
@@ -12935,31 +13048,127 @@ FF
                                 nivel:        'fas fa-layer-group',
                             };
 
-                            window.colabAbrirGrupoModal = function(colKey, groupValue, opts) {
-                                const todos = opts && opts.allRecords
-                                    ? (colabCache || [])
-                                    : (colabDirectoryUniverse || colabObtenerUniversoDirectorio()).included;
-                                const extraFilter = opts && opts.filter;
-                                _grupoModalRecords = todos.filter(r => {
-                                    const v = (gc(r, colKey) || '').toString().trim();
-                                    return v === groupValue && (!extraFilter || extraFilter(r));
-                                }).sort((a, b) => {
+                            /** Abre el modal con una lista de colaboradores ya resuelta. */
+                            function _abrirGrupoModalPersonas(titulo, iconClass, registros, opts) {
+                                _grupoModalMode = 'personas';
+                                _grupoModalRecords = registros.slice().sort((a, b) => {
                                     const na = (gc(a, 'nombre') || '').toLowerCase();
                                     const nb = (gc(b, 'nombre') || '').toLowerCase();
                                     return na.localeCompare(nb, 'es');
                                 });
                                 _grupoModalOpts = opts || null;
-                                const suffix = (opts && opts.subtitulo) ? ` — ${opts.subtitulo}` : '';
-                                const title = document.getElementById('colab-grupo-modal-title');
-                                if (title) title.textContent = `${groupValue} (${_grupoModalRecords.length})${suffix}`;
-                                const icon = document.getElementById('colab-grupo-modal-icon');
-                                if (icon) icon.className = (_grupoIconMap[colKey] || 'fas fa-users') + ' me-2';
-                                const inp = document.getElementById('colab-grupo-modal-inp');
-                                if (inp) inp.value = '';
+                                _grupoModalVolver = (opts && opts.volver) || null;
+                                _pintarCabeceraGrupoModal(
+                                    `${titulo} (${_grupoModalRecords.length})`,
+                                    iconClass || 'fas fa-users',
+                                    'Buscar por nombre, número o puesto');
                                 _renderGrupoModalList(_grupoModalRecords);
+                                _abrirGrupoModalBackdrop();
+                            }
+                            
+                            /** Abre el modal con las categorías de un campo y cuánta gente tiene cada una. */
+                            window.colabAbrirCategoriasModal = function(colKey, titulo, iconClass, singular) {
+                                const universo = (colabDirectoryUniverse || colabObtenerUniversoDirectorio()).included;
+                                const conteo = {};
+                                let sinDato = 0;
+                                universo.forEach(r => {
+                                    const v = (gc(r, colKey) || '').toString().trim();
+                                    if (!v) { sinDato++; return; }
+                                    conteo[v] = (conteo[v] || 0) + 1;
+                                });
+                                _grupoModalMode = 'categorias';
+                                _grupoModalCategorias = Object.entries(conteo).sort((a, b) => b[1] - a[1]);
+                                _grupoModalOpts = null;
+                                _grupoModalVolver = null;
+                                _grupoModalSinDato = {
+                                    colKey,
+                                    total: sinDato,
+                                    titulo,
+                                    icono: iconClass,
+                                    singular: singular || titulo.toLowerCase(),
+                                };
+                                _pintarCabeceraGrupoModal(
+                                    `${titulo} (${_grupoModalCategorias.length})`,
+                                    iconClass || _grupoIconMap[colKey] || 'fas fa-layer-group',
+                                    `Buscar en ${titulo.toLowerCase()}`);
+                                _renderGrupoModalCategorias(_grupoModalCategorias);
+                                _abrirGrupoModalBackdrop();
+                            };
+                            
+                            window.colabAbrirGrupoModal = function(colKey, groupValue, opts) {
+                                const todos = opts && opts.allRecords
+                                    ? (colabCache || [])
+                                    : (colabDirectoryUniverse || colabObtenerUniversoDirectorio()).included;
+                                const extraFilter = opts && opts.filter;
+                                const registros = todos.filter(r => {
+                                    const v = (gc(r, colKey) || '').toString().trim();
+                                    return v === groupValue && (!extraFilter || extraFilter(r));
+                                });
+                                const suffix = (opts && opts.subtitulo) ? ` — ${opts.subtitulo}` : '';
+                                _abrirGrupoModalPersonas(
+                                    `${groupValue}${suffix}`,
+                                    _grupoIconMap[colKey] || 'fas fa-users',
+                                    registros,
+                                    opts);
+                            };
+                            
+                            function _pintarCabeceraGrupoModal(titulo, iconClass, placeholder) {
+                                const title = document.getElementById('colab-grupo-modal-title');
+                                if (title) title.textContent = titulo;
+                                const icon = document.getElementById('colab-grupo-modal-icon');
+                                if (icon) icon.className = iconClass + ' me-2';
+                                const inp = document.getElementById('colab-grupo-modal-inp');
+                                if (inp) { inp.value = ''; inp.placeholder = '\u{1F50D} ' + placeholder; }
+                                const back = document.getElementById('colab-grupo-modal-back');
+                                if (back) back.classList.toggle('d-none', !_grupoModalVolver);
+                            }
+                            
+                            function _abrirGrupoModalBackdrop() {
                                 const bd = document.getElementById('colab-grupo-modal-backdrop');
                                 if (bd) bd.classList.add('open');
+                            }
+                            
+                            window.colabGrupoModalVolver = function() {
+                                if (typeof _grupoModalVolver === 'function') _grupoModalVolver();
                             };
+                            
+                            /** Filas de categoría; al tocar una se entra a su gente y queda el volver. */
+                            function _renderGrupoModalCategorias(categorias) {
+                                const list = document.getElementById('colab-grupo-modal-list');
+                                if (!list) return;
+                                const info = _grupoModalSinDato || {};
+                                const esc = s => String(s == null ? '' : s)
+                                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                                const filas = categorias.map(([nombre, cuantos]) => `
+                                    <div class="colab-grupo-item" data-cat="${esc(nombre)}">
+                                        <span class="colab-grupo-item-name">${esc(nombre)}</span>
+                                        <span class="colab-grupo-cat-count">${cuantos}</span>
+                                    </div>`).join('');
+                                const sinDato = info.total
+                                    ? `<div class="colab-grupo-item sin-dato" data-cat="">
+                                        <span class="colab-grupo-item-name">Sin ${esc(info.singular)} registrada</span>
+                                        <span class="colab-grupo-cat-count">${info.total}</span>
+                                       </div>`
+                                    : '';
+                                list.innerHTML = (filas + sinDato) ||
+                                    '<div style="padding:1.5rem;text-align:center;color:#aaa;font-size:.85rem;">Sin resultados</div>';
+                                list._records = null;
+                            
+                                const volver = () => window.colabAbrirCategoriasModal(info.colKey, info.titulo, info.icono, info.singular);
+                                list.querySelectorAll('[data-cat]').forEach(fila => {
+                                    fila.addEventListener('click', function () {
+                                        const valor = this.getAttribute('data-cat');
+                                        if (valor) {
+                                            window.colabAbrirGrupoModal(info.colKey, valor, { volver });
+                                            return;
+                                        }
+                                        const universo = (colabDirectoryUniverse || colabObtenerUniversoDirectorio()).included;
+                                        const sin = universo.filter(r => !(gc(r, info.colKey) || '').toString().trim());
+                                        _abrirGrupoModalPersonas(`Sin ${info.singular} registrada`,
+                                            'fas fa-circle-question', sin, { volver });
+                                    });
+                                });
+                            }
 
                             function _renderGrupoModalList(records) {
                                 const list = document.getElementById('colab-grupo-modal-list');
@@ -12987,6 +13196,12 @@ FF
 
                             window.colabGrupoModalFiltrar = function(q) {
                                 const query = (q || '').toLowerCase().trim();
+                                if (_grupoModalMode === 'categorias') {
+                                    _renderGrupoModalCategorias(query
+                                        ? _grupoModalCategorias.filter(([nombre]) => nombre.toLowerCase().includes(query))
+                                        : _grupoModalCategorias);
+                                    return;
+                                }
                                 const filtered = query
                                     ? _grupoModalRecords.filter(r => {
                                         const nombre = (gc(r, 'nombre') || '').toLowerCase();
@@ -13013,6 +13228,10 @@ FF
                                 }
                                 const bd = document.getElementById('colab-grupo-modal-backdrop');
                                 if (bd) bd.classList.remove('open');
+                                // Al cerrar no queda camino de vuelta pendiente de la sesión anterior.
+                                _grupoModalVolver = null;
+                                const back = document.getElementById('colab-grupo-modal-back');
+                                if (back) back.classList.add('d-none');
                             };
                         }   /* -- fin colabRenderDashboard -- */
 
