@@ -9294,6 +9294,20 @@ FF
                         }
                         #colabNuevoModal .modal-footer { background: #fff; border-top: 1px solid #e9eef6; padding: .75rem 1.1rem; }
                         .cn-req-obl { color: #d92d20; font-weight: 800; }
+                        /* Aviso de que ese numero ya pertenece a alguien del directorio. */
+                        #colabNuevoModal .cn-num-aviso {
+                            margin-top: .3rem; padding: .35rem .55rem; border-radius: 8px;
+                            font-size: .73rem; font-weight: 600; line-height: 1.35;
+                            color: #9a3412; background: #fff6ed; border: 1px solid #fbd3ab;
+                        }
+                        #colabNuevoModal .cn-dup-alert {
+                            display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .9rem;
+                            margin: .8rem 1rem 0; padding: .7rem .9rem; border-radius: 12px;
+                            font-size: .84rem; line-height: 1.4;
+                            color: #7c3306; background: #fff6ed; border: 1px solid #fbd3ab; border-left: 3px solid #ea8c1c;
+                        }
+                        #colabNuevoModal .cn-dup-alert strong { color: #6b2c05; }
+                        #colabNuevoModal .cn-dup-alert .cn-dup-msg { flex: 1 1 320px; min-width: 0; }
                         /* Distintivo de los campos que el QR necesita porque el colaborador
                            ya no los captura desde el portal. */
                         .cn-req-qr {
@@ -11091,6 +11105,7 @@ FF
                                         <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-docs" type="button"><i class="fas fa-folder-open me-1"></i>Documentos</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-emerg" type="button"><i class="fas fa-kit-medical me-1"></i>Emergencias</button></li>
                                     </ul>
+                                    <div class="cn-dup-alert d-none" id="cn-dup-alert" role="alert"></div>
                                     <div class="tab-content p-3" id="colabNuevoContent">
 
                                         <!-- TAB: Generales -->
@@ -11101,7 +11116,7 @@ FF
                                             </div>
                                             <div class="cn-sheet">
                                                 <div class="row g-3">
-                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">No. Empleado <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="cn-num" placeholder="Ej: 1234" required></div>
+                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">No. Empleado <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="cn-num" placeholder="Ej: 1234" required><div class="cn-num-aviso d-none" id="cn-num-aviso"></div></div>
                                                     <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Nombre completo <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="cn-nombre" placeholder="Apellido Apellido Nombre" required></div>
                                                     <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Profesión</label><input type="text" class="form-control form-control-sm" id="cn-profesion" placeholder="Ing. Industrial…"></div>
                                                     <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Puesto <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-puesto" placeholder="Analista de Operaciones…"></div>
@@ -14909,6 +14924,74 @@ FF
                             'cn-alerg-ali':'alerg_ali','cn-nss':'nss',
                         };
 
+                        /* Control de contratos le agrega un sufijo al numero cuando alguien
+                           renueva: el 1551-2 es el MISMO 1551, no otra persona. Comparar los
+                           numeros tal cual dejaba pasar esa alta repetida, asi que se compara
+                           contra la base, sin el sufijo. */
+                        function colabNumBase(num) {
+                            return String(num == null ? '' : num)
+                                .trim()
+                                .replace(/\s+/g, '')
+                                .replace(/[-\/]\d{1,2}$/, '')
+                                .toUpperCase();
+                        }
+
+                        /** El colaborador ya registrado que es esta misma persona, si lo hay. */
+                        function colabBuscarMismaPersona(num) {
+                            const base = colabNumBase(num);
+                            if (!base) return null;
+                            return (colabCache || []).find(r => colabNumBase(gc(r, 'num')) === base) || null;
+                        }
+
+                        /* Se pone en true solo cuando el area confirma, a proposito, que quiere
+                           un expediente nuevo pese al aviso. Se reinicia con cada alta. */
+                        let colabDupConfirmado = false;
+
+                        /** Aviso en vivo debajo del numero, mientras se escribe. */
+                        function colabAvisarMismaPersona() {
+                            const aviso = document.getElementById('cn-num-aviso');
+                            const input = document.getElementById('cn-num');
+                            if (!aviso || !input) return;
+                            const valor = (input.value || '').trim();
+                            const previo = valor ? colabBuscarMismaPersona(valor) : null;
+                            if (!previo) {
+                                aviso.classList.add('d-none');
+                                aviso.textContent = '';
+                                input.classList.remove('is-invalid');
+                                return;
+                            }
+                            const numPrevio = String(gc(previo, 'num') || '').trim();
+                            const nombrePrevio = String(gc(previo, 'nombre') || '').trim();
+                            aviso.textContent = numPrevio === valor
+                                ? 'Este número ya está registrado' + (nombrePrevio ? ': ' + nombrePrevio : '') + '.'
+                                : 'Es la misma persona que el ' + numPrevio + (nombrePrevio ? ' — ' + nombrePrevio : '') +
+                                  '. El sufijo solo marca la renovación de contrato.';
+                            aviso.classList.remove('d-none');
+                            input.classList.add('is-invalid');
+                        }
+
+                        /** Caja de confirmacion cuando el numero es una renovacion. */
+                        function colabMostrarAvisoRenovacion(previo, numVal) {
+                            const caja = document.getElementById('cn-dup-alert');
+                            if (!caja) return;
+                            const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                            const numPrevio = String(gc(previo, 'num') || '').trim();
+                            const nombrePrevio = String(gc(previo, 'nombre') || '').trim();
+                            caja.innerHTML =
+                                '<div class="cn-dup-msg"><i class="fas fa-triangle-exclamation me-2"></i>' +
+                                'El <strong>' + esc(numVal) + '</strong> es una renovación de contrato del ' +
+                                '<strong>' + esc(numPrevio) + '</strong>' + (nombrePrevio ? ' (' + esc(nombrePrevio) + ')' : '') +
+                                ', que ya está en el directorio: es la misma persona. Si continúas, quedará dos veces.</div>' +
+                                '<button type="button" class="btn btn-sm btn-warning fw-semibold" id="cn-dup-force">' +
+                                'Registrar de todos modos</button>';
+                            caja.classList.remove('d-none');
+                            document.getElementById('cn-dup-force')?.addEventListener('click', function () {
+                                colabDupConfirmado = true;
+                                caja.classList.add('d-none');
+                                window.colabGuardarNuevo();
+                            });
+                        }
+
                         /** Abrir modal de nuevo colaborador */
                         window.colabAbrirNuevo = function() {
                             if (!colabRequireEdit()) return;
@@ -14921,6 +15004,19 @@ FF
                             // Limpiar errores
                             const errEl = document.getElementById('colab-nuevo-error');
                             if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+                            // Cada alta arranca sin la confirmación de la anterior.
+                            colabDupConfirmado = false;
+                            document.getElementById('cn-dup-alert')?.classList.add('d-none');
+                            const numInput = document.getElementById('cn-num');
+                            if (numInput && !numInput.dataset.avisoNumWired) {
+                                numInput.dataset.avisoNumWired = '1';
+                                numInput.addEventListener('input', function () {
+                                    colabDupConfirmado = false;
+                                    document.getElementById('cn-dup-alert')?.classList.add('d-none');
+                                    colabAvisarMismaPersona();
+                                });
+                            }
+                            colabAvisarMismaPersona();
                             // Ir al primer tab
                             const firstTab = document.querySelector('#colabNuevoTabs .nav-link');
                             if (firstTab && typeof bootstrap !== 'undefined') {
@@ -14958,10 +15054,21 @@ FF
                                 await colabCargarTodos();
                                 if (!colabCols) throw new Error('No se detectaron las columnas de la tabla.');
 
-                                // Verificar que el número de empleado no exista ya
-                                const todos = colabCache || [];
-                                const yaExiste = todos.some(r => String(gc(r, 'num') || '').trim() === numVal);
-                                if (yaExiste) throw new Error(`Ya existe un colaborador con el No. de Empleado "${numVal}".`);
+                                // El número de empleado no puede repetirse, y el sufijo de renovación
+                                // tampoco hace a otra persona: 1551-2 es el mismo 1551.
+                                const previo = colabBuscarMismaPersona(numVal);
+                                if (previo) {
+                                    const numPrevio = String(gc(previo, 'num') || '').trim();
+                                    const nombrePrevio = String(gc(previo, 'nombre') || '').trim();
+                                    if (numPrevio === numVal) {
+                                        throw new Error(`Ya existe un colaborador con el No. de Empleado "${numVal}"` +
+                                            (nombrePrevio ? `: ${nombrePrevio}` : '') + '.');
+                                    }
+                                    if (!colabDupConfirmado) {
+                                        colabMostrarAvisoRenovacion(previo, numVal);
+                                        return;
+                                    }
+                                }
 
                                 // Construir payload con las columnas reales
                                 const payload = {};
