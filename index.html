@@ -9521,9 +9521,12 @@ FF
                         .ca-day.sel { border-color:#22c55e; box-shadow:0 0 0 1px rgba(34,197,94,.35) inset; }
                         .ca-day-num { font-size:.74rem; font-weight:700; color:#e2e8f0; }
                         .ca-day-count { margin-top:.2rem; display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; border-radius:10px; padding:0 .36rem; font-size:.68rem; font-weight:700; background:#1d4ed8; color:#fff; }
-                        .ca-list { max-height:305px; overflow:auto; }
-                        .ca-item { background:#0b1324; border:1px solid #334155; border-radius:10px; padding:.7rem .75rem; margin-bottom:.55rem; }
-                        .ca-item:last-child { margin-bottom:0; }
+                        /* Ojo: .ca-list y .ca-item tambien los usa la ficha de Colaboradores
+                           (amonestaciones y comentarios, fondo claro). Estas reglas oscuras van
+                           acotadas a #ca-list para no pintarle encima el fondo negro. */
+                        #ca-list { max-height:305px; overflow:auto; }
+                        #ca-list .ca-item { background:#0b1324; border:1px solid #334155; border-radius:10px; padding:.7rem .75rem; margin-bottom:.55rem; }
+                        #ca-list .ca-item:last-child { margin-bottom:0; }
                         .ca-item-top { display:flex; align-items:flex-start; justify-content:space-between; gap:.65rem; flex-wrap:wrap; }
                         .ca-item-title { font-size:.88rem; font-weight:700; color:#e2e8f0; line-height:1.2; }
                         .ca-item-meta { font-size:.73rem; color:#94a3b8; }
