@@ -8359,6 +8359,69 @@ FF
                         .colab-grupo-item-name { flex: 1; font-size: .84rem; font-weight: 600; color: #1a1a2e; }
                         .colab-grupo-item-puesto { font-size: .76rem; color: #888; }
 
+                        /* --- AVISO DE BAJA EN LA FICHA --- */
+                        .colab-baja-aviso {
+                            display: flex;
+                            align-items: center;
+                            gap: 1rem;
+                            flex-wrap: wrap;
+                            margin: 0 0 1.1rem;
+                            padding: .85rem 1.1rem;
+                            border: 1px solid #e2e6ee;
+                            border-left: 4px solid #64748b;
+                            border-radius: 12px;
+                            background: linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%);
+                            box-shadow: 0 1px 2px rgba(16, 35, 63, .05);
+                        }
+                        .colab-baja-icono {
+                            display: inline-flex;
+                            align-items: center;
+                            justify-content: center;
+                            width: 2.5rem;
+                            height: 2.5rem;
+                            flex-shrink: 0;
+                            border-radius: 11px;
+                            font-size: 1.05rem;
+                            color: #475569;
+                            background: #e2e8f0;
+                        }
+                        .colab-baja-texto { display: flex; flex-direction: column; line-height: 1.3; min-width: 0; }
+                        .colab-baja-titulo {
+                            font-size: .68rem;
+                            font-weight: 800;
+                            letter-spacing: .1em;
+                            text-transform: uppercase;
+                            color: #64748b;
+                        }
+                        .colab-baja-fecha { font-size: .95rem; font-weight: 700; color: #334155; }
+                        .colab-baja-fecha .colab-baja-relativo { font-weight: 500; color: #7c8798; margin-left: .35rem; }
+                        .colab-baja-fecha .colab-baja-pendiente { font-weight: 600; color: #9a6a00; }
+                        .colab-baja-motivo {
+                            display: flex;
+                            align-items: baseline;
+                            gap: .5rem;
+                            flex: 1 1 260px;
+                            min-width: 0;
+                            margin-left: auto;
+                            padding: .45rem .75rem;
+                            border-radius: 9px;
+                            background: #fff;
+                            border: 1px solid #e2e6ee;
+                        }
+                        .colab-baja-motivo-lbl {
+                            font-size: .64rem;
+                            font-weight: 800;
+                            letter-spacing: .08em;
+                            text-transform: uppercase;
+                            color: #94a3b8;
+                            flex-shrink: 0;
+                        }
+                        .colab-baja-motivo-txt { font-size: .88rem; color: #334155; overflow-wrap: anywhere; }
+                        @media (max-width: 575.98px) {
+                            .colab-baja-aviso { gap: .7rem; padding: .75rem .85rem; }
+                            .colab-baja-motivo { margin-left: 0; flex-basis: 100%; }
+                        }
+
                         /* --- TABLA COMPACTA DE FICHA --- */
                         .colab-tabla {
                             width: 100%; border-collapse: collapse;
@@ -10180,6 +10243,20 @@ FF
                                 <!-- +------------------ CUERPO ------------------+ -->
                                 <div class="colab-ficha-body">
 
+                                    <!-- Aviso de baja: encabeza el expediente cuando la persona ya no
+                                         está activa, con la fecha y el motivo si están capturados. -->
+                                    <section class="colab-baja-aviso" id="colab-baja-aviso" style="display:none" aria-live="polite">
+                                        <span class="colab-baja-icono" aria-hidden="true"><i class="fas fa-user-slash"></i></span>
+                                        <div class="colab-baja-texto">
+                                            <span class="colab-baja-titulo">Baja del personal</span>
+                                            <span class="colab-baja-fecha" id="colab-baja-fecha"></span>
+                                        </div>
+                                        <div class="colab-baja-motivo" id="colab-baja-motivo" hidden>
+                                            <span class="colab-baja-motivo-lbl">Motivo</span>
+                                            <span class="colab-baja-motivo-txt" id="colab-baja-motivo-txt"></span>
+                                        </div>
+                                    </section>
+
                                     <!-- -- BLOQUE 1: DATOS DEL COLABORADOR -- -->
                                     <table class="colab-tabla" aria-label="Datos del colaborador">
                                         <tbody>
@@ -10196,13 +10273,6 @@ FF
                                             <tr>
                                                 <th style="width:13%">Militar / Civil</th>
                                                 <td colspan="5" id="cf-militar">—</td>
-                                            </tr>
-                                            <!-- Solo aparece cuando la persona causó baja. -->
-                                            <tr id="cf-row-baja" style="display:none">
-                                                <th>Fecha de baja</th>
-                                                <td id="cf-fecha-baja">—</td>
-                                                <th>Motivo de baja</th>
-                                                <td colspan="3" id="cf-motivo-baja">—</td>
                                             </tr>
                                             <tr>
                                                 <th>Fecha de Ingreso</th>
@@ -12021,6 +12091,34 @@ FF
                             return `${dmy[3]}-${String(dmy[2]).padStart(2, '0')}-${String(dmy[1]).padStart(2, '0')}`;
                         }
 
+                        const COLAB_MESES = [
+                            'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                            'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+                        ];
+
+                        /* "15 de marzo de 2026": en la ficha se lee mejor que 15/03/2026. */
+                        function colabFechaLarga(valor) {
+                            const iso = colabFechaISO(valor);
+                            if (!iso) return '';
+                            const [anio, mes, dia] = iso.split('-').map(Number);
+                            return `${dia} de ${COLAB_MESES[mes - 1]} de ${anio}`;
+                        }
+
+                        /* Cuánto hace de esa fecha, para no tener que sacar la cuenta. */
+                        function colabHaceCuanto(valor) {
+                            const iso = colabFechaISO(valor);
+                            if (!iso) return '';
+                            const dias = Math.floor((Date.now() - Date.parse(iso + 'T00:00:00')) / 86400000);
+                            if (!Number.isFinite(dias) || dias < 0) return '';
+                            if (dias === 0) return 'hoy';
+                            if (dias === 1) return 'ayer';
+                            if (dias < 30) return `hace ${dias} días`;
+                            const meses = Math.floor(dias / 30.44);
+                            if (meses < 12) return `hace ${meses} ${meses === 1 ? 'mes' : 'meses'}`;
+                            const anios = Math.floor(dias / 365.25);
+                            return `hace ${anios} ${anios === 1 ? 'año' : 'años'}`;
+                        }
+
                         function colabFechaCorta(valor) {
                             const texto = String(valor == null ? '' : valor).trim();
                             if (!texto) return '';
@@ -12279,14 +12377,37 @@ FF
                             if (nomEl) nomEl.textContent = val(gc(c, 'nombre')) || '—';
                             const estatusEl = document.getElementById('colab-h-estatus');
                             if (estatusEl) estatusEl.innerHTML = colabEstatusChipHtml(gc(c, 'estatus'), c);
-                            // Fila de baja: solo se muestra cuando hay algo que mostrar.
+                            /* Aviso de baja. Encabeza el expediente solo cuando la persona ya no
+                               está activa; la fecha y el motivo se muestran si están capturados, y
+                               si falta la fecha lo dice, que también es información. */
                             const esBaja = colabNormalizarEstatus(gc(c, 'estatus')) === 'Baja';
-                            const fechaBaja = colabFechaCorta(gc(c, 'fecha_baja'));
+                            const fechaBajaCruda = gc(c, 'fecha_baja');
                             const motivoBaja = val(gc(c, 'motivo_baja'));
-                            const filaBaja = document.getElementById('cf-row-baja');
-                            if (filaBaja) filaBaja.style.display = (esBaja || fechaBaja || motivoBaja) ? '' : 'none';
-                            fillField('cf-fecha-baja',  fechaBaja);
-                            fillField('cf-motivo-baja', motivoBaja);
+                            const avisoBaja = document.getElementById('colab-baja-aviso');
+                            if (avisoBaja) {
+                                const visible = esBaja || Boolean(colabFechaISO(fechaBajaCruda)) || Boolean(motivoBaja);
+                                avisoBaja.style.display = visible ? '' : 'none';
+                                if (visible) {
+                                    const larga = colabFechaLarga(fechaBajaCruda);
+                                    const crudo = val(fechaBajaCruda);
+                                    const fechaEl = document.getElementById('colab-baja-fecha');
+                                    if (fechaEl && larga) {
+                                        // larga y hace salen de una fecha ya validada: dígitos y meses.
+                                        const hace = colabHaceCuanto(fechaBajaCruda);
+                                        fechaEl.innerHTML = `Causó baja el ${larga}`
+                                            + (hace ? ` <span class="colab-baja-relativo">· ${hace}</span>` : '');
+                                    } else if (fechaEl && crudo) {
+                                        // Lo capturado no parece una fecha: se respeta como texto.
+                                        fechaEl.textContent = `Causó baja el ${crudo}`;
+                                    } else if (fechaEl) {
+                                        fechaEl.innerHTML = '<span class="colab-baja-pendiente">Sin fecha de baja capturada</span>';
+                                    }
+                                    const motivoEl = document.getElementById('colab-baja-motivo');
+                                    const motivoTxt = document.getElementById('colab-baja-motivo-txt');
+                                    if (motivoTxt) motivoTxt.textContent = motivoBaja;
+                                    if (motivoEl) motivoEl.hidden = !motivoBaja;
+                                }
+                            }
                             const puesEl = document.getElementById('colab-h-puesto');
                             if (puesEl) puesEl.textContent = val(gc(c, 'puesto')) || '—';
                             const semEl = document.getElementById('colab-h-semaforo');

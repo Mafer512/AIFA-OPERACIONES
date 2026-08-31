@@ -70,13 +70,27 @@ describe('el editor del colaborador', () => {
 });
 
 describe('la ficha', () => {
-    test('trae la fila de baja, oculta mientras no haya nada que mostrar', () => {
-        document.body.innerHTML = '<table>' + trozo('<tr id="cf-row-baja"', '</tr>') + '</tr></table>';
-        const fila = document.getElementById('cf-row-baja');
-        expect(fila).not.toBeNull();
-        expect(fila.style.display).toBe('none');
-        expect(document.getElementById('cf-fecha-baja')).not.toBeNull();
-        expect(document.getElementById('cf-motivo-baja')).not.toBeNull();
+    test('encabeza el expediente con el aviso de baja, oculto mientras no haga falta', () => {
+        document.body.innerHTML = trozo('<section class="colab-baja-aviso"', '</section>') + '</section>';
+        const aviso = document.getElementById('colab-baja-aviso');
+        expect(aviso).not.toBeNull();
+        expect(aviso.style.display).toBe('none');
+        expect(aviso.querySelector('.colab-baja-titulo').textContent).toBe('Baja del personal');
+        expect(document.getElementById('colab-baja-fecha')).not.toBeNull();
+        // El motivo va aparte y solo se enciende cuando está capturado.
+        expect(document.getElementById('colab-baja-motivo').hidden).toBe(true);
+        expect(document.getElementById('colab-baja-motivo-txt')).not.toBeNull();
+    });
+
+    test('el aviso se enciende con la baja y se apaga con quien está activo', () => {
+        const render = trozo('/* Aviso de baja. Encabeza el expediente', 'buildChips(c);');
+        // Se lee del estatus y de lo capturado, no de una bandera aparte.
+        expect(render).toContain("colabNormalizarEstatus(gc(c, 'estatus')) === 'Baja'");
+        expect(render).toContain("gc(c, 'fecha_baja')");
+        expect(render).toContain("val(gc(c, 'motivo_baja'))");
+        expect(render).toMatch(/avisoBaja\.style\.display = visible \? '' : 'none'/);
+        // El motivo lo escribe el usuario: va como texto, nunca como HTML.
+        expect(render).toContain('motivoTxt.textContent = motivoBaja;');
     });
 
     test('las fechas van y vienen entre la base y el campo del navegador', () => {
@@ -94,5 +108,27 @@ describe('la ficha', () => {
         expect(ctx.colabFechaISO('15/03/2026')).toBe('2026-03-15');
         expect(ctx.colabFechaISO('2026-03-15')).toBe('2026-03-15');
         expect(ctx.colabFechaISO('Pendiente')).toBe('');
+    });
+
+    test('la fecha del aviso se lee en palabras y dice cuánto hace', () => {
+        const ctx = {};
+        vm.createContext(ctx);
+        vm.runInContext(trozo('function colabFechaISO(valor)', 'function colabEstatusChipHtml'), ctx);
+
+        expect(ctx.colabFechaLarga('2026-03-15')).toBe('15 de marzo de 2026');
+        expect(ctx.colabFechaLarga('01/12/2025')).toBe('1 de diciembre de 2025');
+        expect(ctx.colabFechaLarga('Pendiente')).toBe('');
+
+        const haceDias = dias => {
+            const d = new Date(Date.now() - dias * 86400000);
+            return d.toISOString().slice(0, 10);
+        };
+        expect(ctx.colabHaceCuanto(haceDias(0))).toBe('hoy');
+        expect(ctx.colabHaceCuanto(haceDias(1))).toBe('ayer');
+        expect(ctx.colabHaceCuanto(haceDias(10))).toBe('hace 10 días');
+        expect(ctx.colabHaceCuanto(haceDias(70))).toBe('hace 2 meses');
+        expect(ctx.colabHaceCuanto(haceDias(800))).toBe('hace 2 años');
+        // Una fecha futura no dice "hace"; simplemente no se comenta.
+        expect(ctx.colabHaceCuanto('2099-01-01')).toBe('');
     });
 });
