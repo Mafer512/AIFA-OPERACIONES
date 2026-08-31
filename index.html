@@ -10197,6 +10197,13 @@ FF
                                                 <th style="width:13%">Militar / Civil</th>
                                                 <td colspan="5" id="cf-militar">—</td>
                                             </tr>
+                                            <!-- Solo aparece cuando la persona causó baja. -->
+                                            <tr id="cf-row-baja" style="display:none">
+                                                <th>Fecha de baja</th>
+                                                <td id="cf-fecha-baja">—</td>
+                                                <th>Motivo de baja</th>
+                                                <td colspan="3" id="cf-motivo-baja">—</td>
+                                            </tr>
                                             <tr>
                                                 <th>Fecha de Ingreso</th>
                                                 <td id="cf-fecha-ingreso">—</td>
@@ -10802,11 +10809,22 @@ FF
                                                         <option value="Baja">Baja</option>
                                                     </select>
                                                 </div>
-                                                <div class="col-12 col-md-8">
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label fw-semibold small">Fecha de baja</label>
+                                                    <input type="date" class="form-control form-control-sm" id="ce-fecha-baja" data-field="fecha_baja">
+                                                </div>
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label fw-semibold small">Motivo de baja</label>
+                                                    <input type="text" class="form-control form-control-sm" id="ce-motivo-baja" data-field="motivo_baja"
+                                                           placeholder="Renuncia, término de contrato…">
+                                                </div>
+                                                <div class="col-12">
                                                     <div class="colab-status-note">
                                                         <i class="fas fa-info-circle me-1 text-primary"></i>
                                                         Cambiar a <strong>Baja</strong> conserva el registro completo: nombre, número de empleado,
                                                         puesto, plaza, documentos, cursos, vacaciones, comentarios y amonestaciones.
+                                                        Con la <strong>fecha de baja</strong> capturada, la persona deja de contar en el
+                                                        Resumen del Directorio a partir de ese día.
                                                     </div>
                                                 </div>
                                             </div>
@@ -11653,7 +11671,7 @@ FF
                     </div>
 
                     <!-- -- JAVASCRIPT DE LA SECCIÓN -- -->
-                    <script src="js/colaboradores-directory-policy.js?v=20260804"></script>
+                    <script src="js/colaboradores-directory-policy.js?v=20260831"></script>
                     <script src="js/employee-photo-upload.js?v=20260804"></script>
                     <script src="js/employee-document-upload.js?v=20260804"></script>
                     <!-- Visor de fotos e identificaciones: previa al pasar el mouse,
@@ -11726,6 +11744,7 @@ FF
                                 gerencia:        find('gerencia.*org', 'gerencia'),
                                 coordinacion:    find('coordinac.*org', 'coordinaci'),
                                 fecha_baja:      find('^fecha\\s+de\\s+baja$', 'fecha.*baja', 'baja.*fecha'),
+                                motivo_baja:     find('^motivos?\\s+de\\s+baja$', 'motivo.*baja', 'causa.*baja'),
                                 amonestaciones:  find('amonest'),
                                 comentarios:     find('comentar'),
                                 c1_nombre:       find('contacto.*1.*nom', 'emergencia.*1.*nom', 'contacto_?1'),
@@ -11772,6 +11791,54 @@ FF
                             });
                             return colabDirectoryUniverse;
                         }
+
+                        /* Auditoría del sexo, bajo demanda desde la consola.
+                           Sirve para ver de dónde sale cada clasificación cuando un
+                           conteo no cuadra: qué valores trae la columna, cómo se
+                           clasifica cada uno y quiénes tienen el texto peleado con
+                           su CURP (que es el dato que no admite dos lecturas). */
+                        window.colabAuditarSexos = function() {
+                            const policy = window.ColaboradoresDirectoryPolicy;
+                            const universe = colabObtenerUniversoDirectorio();
+                            const valores = {};
+                            const discrepancias = [];
+
+                            universe.included.forEach(record => {
+                                const escrito = String(gc(record, 'sexo') ?? '');
+                                const porTexto = policy.normalizeGender(escrito);
+                                const porCurp  = policy.genderFromCurp(gc(record, 'curp'));
+                                const final    = policy.resolveGender(record, gc);
+                                const llave = `${JSON.stringify(escrito)} → ${final}`;
+                                valores[llave] = (valores[llave] || 0) + 1;
+                                if (porTexto !== '?' && porCurp !== '?' && porTexto !== porCurp) {
+                                    discrepancias.push({
+                                        numeroEmpleado: gc(record, 'num') || '',
+                                        nombre: gc(record, 'nombre') || '',
+                                        sexoCapturado: escrito,
+                                        sexoSegunCurp: porCurp === 'H' ? 'Masculino' : 'Femenino',
+                                    });
+                                }
+                            });
+
+                            const resultado = {
+                                total: universe.summary.total,
+                                hombres: universe.summary.men,
+                                mujeres: universe.summary.women,
+                                sinDefinir: universe.summary.genderOther,
+                                valoresDeLaColumna: valores,
+                                textoPeleadoConElCurp: discrepancias,
+                                duplicadosDescartados: universe.excluded
+                                    .filter(item => item.reason === policy.REASONS.DUPLICATE)
+                                    .map(item => ({
+                                        numeroEmpleado: gc(item.record, 'num') || '',
+                                        nombre: gc(item.record, 'nombre') || '',
+                                        detalle: item.detail,
+                                    })),
+                            };
+                            console.table(resultado.valoresDeLaColumna);
+                            if (discrepancias.length) console.table(discrepancias);
+                            return resultado;
+                        };
 
                         // Auditoría bajo demanda; no imprime datos personales automáticamente en consola.
                         window.colabAuditarResumenDirectorio = function() {
@@ -11911,11 +11978,34 @@ FF
                             return 'Activo';
                         }
 
-                        function colabEstatusChipHtml(status) {
+                        /* Una fecha suelta se lee mejor en día/mes/año; lo que no sea una fecha
+                           reconocible se muestra tal cual se capturó. */
+                        /* Al revés: lo que se muestre en un campo de fecha del navegador tiene
+                           que ir en AAAA-MM-DD. */
+                        function colabFechaISO(valor) {
+                            const texto = String(valor == null ? '' : valor).trim();
+                            if (!texto) return '';
+                            if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+                            const dmy = texto.match(/^([0-3]?\d)[\/-]([01]?\d)[\/-](\d{4})$/);
+                            if (!dmy) return '';
+                            return `${dmy[3]}-${String(dmy[2]).padStart(2, '0')}-${String(dmy[1]).padStart(2, '0')}`;
+                        }
+
+                        function colabFechaCorta(valor) {
+                            const texto = String(valor == null ? '' : valor).trim();
+                            if (!texto) return '';
+                            const iso = texto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                            return iso ? `${iso[3]}/${iso[2]}/${iso[1]}` : texto;
+                        }
+                        
+                        function colabEstatusChipHtml(status, record) {
                             const est = colabNormalizarEstatus(status);
                             const cls = est === 'Baja' ? 'status-baja' : 'status-activo';
                             const icon = est === 'Baja' ? 'fa-user-slash' : 'fa-user-check';
-                            return `<span class="colab-chip ${cls}"><i class="fas ${icon}" aria-hidden="true"></i>${est}</span>`;
+                            // Una baja sin fecha no dice desde cuándo dejó de contar.
+                            const fecha = est === 'Baja' && record ? colabFechaCorta(gc(record, 'fecha_baja')) : '';
+                            const detalle = fecha ? ` · ${fecha}` : '';
+                            return `<span class="colab-chip ${cls}"><i class="fas ${icon}" aria-hidden="true"></i>${est}${detalle}</span>`;
                         }
 
                         /* -- Rellenar campo -- */
@@ -12158,7 +12248,15 @@ FF
                             const nomEl = document.getElementById('colab-h-nombre');
                             if (nomEl) nomEl.textContent = val(gc(c, 'nombre')) || '—';
                             const estatusEl = document.getElementById('colab-h-estatus');
-                            if (estatusEl) estatusEl.innerHTML = colabEstatusChipHtml(gc(c, 'estatus'));
+                            if (estatusEl) estatusEl.innerHTML = colabEstatusChipHtml(gc(c, 'estatus'), c);
+                            // Fila de baja: solo se muestra cuando hay algo que mostrar.
+                            const esBaja = colabNormalizarEstatus(gc(c, 'estatus')) === 'Baja';
+                            const fechaBaja = colabFechaCorta(gc(c, 'fecha_baja'));
+                            const motivoBaja = val(gc(c, 'motivo_baja'));
+                            const filaBaja = document.getElementById('cf-row-baja');
+                            if (filaBaja) filaBaja.style.display = (esBaja || fechaBaja || motivoBaja) ? '' : 'none';
+                            fillField('cf-fecha-baja',  fechaBaja);
+                            fillField('cf-motivo-baja', motivoBaja);
                             const puesEl = document.getElementById('colab-h-puesto');
                             if (puesEl) puesEl.textContent = val(gc(c, 'puesto')) || '—';
                             const semEl = document.getElementById('colab-h-semaforo');
@@ -12527,9 +12625,11 @@ FF
                                gerencias) listan las categorías con su gente para entrar a una.
                                Se arma aquí porque el universo del resumen ya está resuelto: lo que
                                se abre coincide exactamente con el número que muestra la tarjeta. */
+                            // El mismo resolutor que usa el conteo: lo capturado manda y el
+                            // CURP decide cuando el dato viene ambiguo (una "M" suelta) o vacío.
                             const _policy = window.ColaboradoresDirectoryPolicy;
-                            const _sexoDe = r => (_policy && typeof _policy.normalizeGender === 'function')
-                                ? _policy.normalizeGender(gc(r, 'sexo'))
+                            const _sexoDe = r => (_policy && typeof _policy.resolveGender === 'function')
+                                ? _policy.resolveGender(r, gc)
                                 : '?';
                             
                             window.colabKpiFiltro = function(tipo) {
@@ -13622,7 +13722,7 @@ FF
                             'ce-c1-nombre':'c1_nombre','ce-c1-parentesco':'c1_parentesco','ce-c1-tel':'c1_tel',
                             'ce-c2-nombre':'c2_nombre','ce-c2-parentesco':'c2_parentesco','ce-c2-tel':'c2_tel',
                             'ce-sangre':'sangre','ce-alerg-med':'alerg_med','ce-alerg-ali':'alerg_ali','ce-nss':'nss',
-                            'ce-estatus':'estatus',
+                            'ce-estatus':'estatus','ce-fecha-baja':'fecha_baja','ce-motivo-baja':'motivo_baja',
                         };
 
                         const COLAB_DOCUMENT_IMAGE_UI = Object.freeze({
@@ -14632,7 +14732,11 @@ FF
                                     ? colabNormalizarEstatus(gc(c, colKey))
                                     : colKey === 'onomastico'
                                         ? colabFormatBirthDateDisplay(gc(c, colKey))
-                                        : String(gc(c, colKey) ?? '').trim();
+                                        // Un <input type="date"> solo acepta AAAA-MM-DD: una fecha
+                                        // guardada como 15/03/2026 dejaba el campo en blanco.
+                                        : colKey === 'fecha_baja'
+                                            ? colabFechaISO(gc(c, colKey))
+                                            : String(gc(c, colKey) ?? '').trim();
                             });
 
                             // El sexo guardado puede venir con una variante ("M", "Hombre"...) que no
