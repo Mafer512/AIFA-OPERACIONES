@@ -9251,11 +9251,56 @@ FF
                         .punc-info-btn:hover { background: #eef0ff; border-color: #4f46e5; color: #4f46e5; }
 
                         /* --- MODAL NUEVO COLABORADOR --- */
-                        #colabNuevoModal .modal-header { background: linear-gradient(135deg,#1b5e20,#388e3c); }
-                        #colabNuevoModal .modal-body { background: #f8faff; }
-                        #colabNuevoModal .nav-tabs .nav-link { font-size: .82rem; }
+                        #colabNuevoModal .modal-content { border: none; border-radius: 16px; overflow: hidden; box-shadow: 0 24px 60px rgba(8,32,20,.3); }
+                        #colabNuevoModal .modal-header {
+                            background: radial-gradient(520px 190px at 88% -70%, rgba(255,255,255,.2), transparent 70%),
+                                        linear-gradient(135deg, #14532d 0%, #1b7f3b 62%, #24a35a 100%);
+                            border-bottom: none; padding: .85rem 1.1rem;
+                        }
+                        #colabNuevoModal .modal-title { font-weight: 800; letter-spacing: .01em; }
+                        #colabNuevoModal .modal-aifa-mark img { height: 26px; }
+                        #colabNuevoModal .modal-body { background: #f4f7fc; }
+                        #colabNuevoModal .nav-tabs { gap: .2rem; border-bottom: 1px solid #e3eaf5; }
+                        #colabNuevoModal .nav-tabs .nav-link {
+                            font-size: .82rem; font-weight: 700; color: #64748b; padding: .6rem .5rem;
+                            border: none; border-bottom: 3px solid transparent; border-radius: 10px 10px 0 0;
+                        }
+                        #colabNuevoModal .nav-tabs .nav-link i { opacity: .7; }
+                        #colabNuevoModal .nav-tabs .nav-link:hover { color: #15803d; background: #f1faf4; }
+                        #colabNuevoModal .nav-tabs .nav-link.active { color: #14532d; background: #eaf7ef; border-bottom-color: #24a35a; }
+                        #colabNuevoModal .nav-tabs .nav-link.active i { opacity: 1; }
                         #colabNuevoModal .tab-content { min-height: 240px; }
-                        .cn-req-qr { color: #0277bd; font-size: .72rem; margin-left: 3px; vertical-align: middle; cursor: help; }
+                        /* Cada pestaña vive en una hoja blanca sobre el fondo del modal. */
+                        #colabNuevoModal .cn-sheet {
+                            background: #fff; border: 1px solid #e5ecf6; border-radius: 14px;
+                            padding: 1.05rem 1.15rem 1.2rem; box-shadow: 0 1px 2px rgba(16,35,63,.05);
+                        }
+                        #colabNuevoModal .form-label { font-size: .75rem; font-weight: 700; color: #4b5f7a; margin-bottom: .25rem; }
+                        #colabNuevoModal .form-control, #colabNuevoModal .form-select {
+                            min-height: 38px; border-radius: 9px; border-color: #d9e2ee; background: #fbfdff;
+                        }
+                        #colabNuevoModal .form-control:focus, #colabNuevoModal .form-select:focus {
+                            background: #fff; border-color: #24a35a; box-shadow: 0 0 0 .2rem rgba(36,163,90,.15);
+                        }
+                        #colabNuevoModal .cn-legend {
+                            display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .9rem;
+                            background: #fff; border: 1px solid #e5ecf6; border-left: 3px solid #24a35a;
+                            border-radius: 12px; padding: .6rem .85rem; font-size: .8rem; color: #4b5f7a;
+                        }
+                        #colabNuevoModal .cn-legend b { color: #14532d; font-weight: 700; }
+                        #colabNuevoModal .cn-group-title {
+                            display: flex; align-items: center; gap: .4rem; margin: 0;
+                            font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #64748b;
+                        }
+                        #colabNuevoModal .modal-footer { background: #fff; border-top: 1px solid #e9eef6; padding: .75rem 1.1rem; }
+                        .cn-req-obl { color: #d92d20; font-weight: 800; }
+                        /* Distintivo de los campos que el QR necesita porque el colaborador
+                           ya no los captura desde el portal. */
+                        .cn-req-qr {
+                            display: inline-flex; align-items: center; gap: 3px; vertical-align: middle; cursor: help;
+                            font-size: .6rem; font-weight: 800; letter-spacing: .04em; color: #0b57c9;
+                            background: #e8f0fe; border: 1px solid #cfe0f6; border-radius: 999px; padding: 0 6px; margin-left: 3px;
+                        }
 
                         /* Se abre encima del alta. Sin backdrop propio —lo dibuja el
                            propio .modal— porque dos backdrops de Bootstrap apilados
@@ -11029,104 +11074,116 @@ FF
                         <div class="modal-dialog modal-xl modal-dialog-scrollable">
                             <div class="modal-content">
                                 <div class="modal-header py-2">
-                                    <div>
-                                        <h5 class="modal-title text-white mb-0" id="colabNuevoModalLabel"><i class="fas fa-user-plus me-2"></i>Nuevo Colaborador</h5>
-                                        <small class="text-white opacity-75">Completa los campos y guarda para registrar al nuevo colaborador</small>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <span class="modal-aifa-mark"><img src="images/aifa-logo.png" alt="AIFA"></span>
+                                        <div>
+                                            <h5 class="modal-title text-white mb-0" id="colabNuevoModalLabel"><i class="fas fa-user-plus me-2"></i>Nuevo Colaborador</h5>
+                                            <small class="text-white opacity-75">Completa los campos y guarda para registrar al nuevo colaborador</small>
+                                        </div>
                                     </div>
                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                                 </div>
                                 <div class="modal-body p-0">
-                                    <ul class="nav nav-tabs nav-fill px-3 pt-2 bg-light border-bottom" id="colabNuevoTabs" role="tablist">
-                                        <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#cnuevo-gen" type="button">Generales</button></li>
-                                        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-clas" type="button">Clasificación</button></li>
-                                        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-org" type="button">Organización</button></li>
-                                        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-docs" type="button">Documentos</button></li>
-                                        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-emerg" type="button">Emergencias</button></li>
+                                    <ul class="nav nav-tabs nav-fill px-3 pt-2 bg-white border-bottom" id="colabNuevoTabs" role="tablist">
+                                        <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#cnuevo-gen" type="button"><i class="fas fa-id-card me-1"></i>Generales</button></li>
+                                        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-clas" type="button"><i class="fas fa-layer-group me-1"></i>Clasificación</button></li>
+                                        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-org" type="button"><i class="fas fa-sitemap me-1"></i>Organización</button></li>
+                                        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-docs" type="button"><i class="fas fa-folder-open me-1"></i>Documentos</button></li>
+                                        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-emerg" type="button"><i class="fas fa-kit-medical me-1"></i>Emergencias</button></li>
                                     </ul>
                                     <div class="tab-content p-3" id="colabNuevoContent">
 
                                         <!-- TAB: Generales -->
                                         <div class="tab-pane fade show active" id="cnuevo-gen" role="tabpanel">
-                                            <div class="alert alert-info py-2 small mb-3">
-                                                <i class="fas fa-info-circle me-1"></i>
-                                                Los campos marcados con <strong>*</strong> son obligatorios.
-                                                Los que llevan <i class="fas fa-qrcode text-primary"></i> hacen falta además para generar el QR de onboarding, porque el colaborador ya no los captura.
+                                            <div class="cn-legend mb-3">
+                                                <span><b class="cn-req-obl">*</b> Obligatorio para registrar</span>
+                                                <span><span class="cn-req-qr"><i class="fas fa-qrcode"></i>QR</span> Hace falta además para generar el QR: el colaborador ya no captura ese dato desde el portal.</span>
                                             </div>
-                                            <div class="row g-3">
-                                                <div class="col-12 col-md-3"><label class="form-label fw-semibold small">No. Empleado <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="cn-num" placeholder="Ej: 1234" required></div>
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Nombre completo <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="cn-nombre" placeholder="Apellido Apellido Nombre" required></div>
-                                                <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Profesión</label><input type="text" class="form-control form-control-sm" id="cn-profesion" placeholder="Ing. Industrial…"></div>
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Puesto <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-puesto" placeholder="Analista de Operaciones…"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Sexo</label><select class="form-select form-select-sm" id="cn-sexo"><option value="">-- Seleccionar --</option><option>Femenino</option><option>Masculino</option></select></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Militar / Civil</label><input type="text" class="form-control form-control-sm" id="cn-militar" placeholder="Civil"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Turno</label><input type="text" class="form-control form-control-sm" id="cn-turno" placeholder="Matutino"></div>
-                                                <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Fecha de Ingreso</label><input type="text" class="form-control form-control-sm" id="cn-fecha-ingreso" placeholder="DD/MM/YYYY"></div>
-                                                <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Fecha Nacimiento / Onomástico</label><input type="text" class="form-control form-control-sm" id="cn-onomastico" placeholder="DD/MM/YYYY"></div>
-                                                <div class="col-12 col-md-4"><label class="form-label fw-semibold small">No. Celular</label><input type="text" class="form-control form-control-sm" id="cn-celular" placeholder="55 xxxx xxxx"></div>
-                                                <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Ext.</label><input type="text" class="form-control form-control-sm" id="cn-extension"></div>
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Correo Institucional</label><input type="email" class="form-control form-control-sm" id="cn-correo" placeholder="nombre@aifa.com.mx"></div>
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Correo Personal <span class="badge bg-primary" style="font-size:.65rem;vertical-align:middle">Cumpleaños</span></label><input type="email" class="form-control form-control-sm" id="cn-correo-personal" placeholder="nombre@gmail.com"></div>
+                                            <div class="cn-sheet">
+                                                <div class="row g-3">
+                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">No. Empleado <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="cn-num" placeholder="Ej: 1234" required></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Nombre completo <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="cn-nombre" placeholder="Apellido Apellido Nombre" required></div>
+                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Profesión</label><input type="text" class="form-control form-control-sm" id="cn-profesion" placeholder="Ing. Industrial…"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Puesto <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-puesto" placeholder="Analista de Operaciones…"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Sexo</label><select class="form-select form-select-sm" id="cn-sexo"><option value="">-- Seleccionar --</option><option>Femenino</option><option>Masculino</option></select></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Militar / Civil</label><input type="text" class="form-control form-control-sm" id="cn-militar" placeholder="Civil"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Turno</label><input type="text" class="form-control form-control-sm" id="cn-turno" placeholder="Matutino"></div>
+                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Fecha de Ingreso</label><input type="text" class="form-control form-control-sm" id="cn-fecha-ingreso" placeholder="DD/MM/YYYY"></div>
+                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Fecha Nacimiento / Onomástico</label><input type="text" class="form-control form-control-sm" id="cn-onomastico" placeholder="DD/MM/YYYY"></div>
+                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small">No. Celular</label><input type="text" class="form-control form-control-sm" id="cn-celular" placeholder="55 xxxx xxxx"></div>
+                                                    <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Ext.</label><input type="text" class="form-control form-control-sm" id="cn-extension"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Correo Institucional</label><input type="email" class="form-control form-control-sm" id="cn-correo" placeholder="nombre@aifa.com.mx"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Correo Personal <span class="badge bg-primary" style="font-size:.65rem;vertical-align:middle">Cumpleaños</span></label><input type="email" class="form-control form-control-sm" id="cn-correo-personal" placeholder="nombre@gmail.com"></div>
+                                                </div>
                                             </div>
                                         </div>
 
                                         <!-- TAB: Clasificación -->
                                         <div class="tab-pane fade" id="cnuevo-clas" role="tabpanel">
-                                            <div class="row g-3">
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Nivel <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-nivel"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Plaza <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-plaza"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">RyR</label><input type="text" class="form-control form-control-sm" id="cn-ryr"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Grado</label><input type="text" class="form-control form-control-sm" id="cn-grado"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Matrícula</label><input type="text" class="form-control form-control-sm" id="cn-matricula"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Grado Académico</label><input type="text" class="form-control form-control-sm" id="cn-grado-academico"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Cédula Profesional</label><input type="text" class="form-control form-control-sm" id="cn-cedula"></div>
+                                            <div class="cn-sheet">
+                                                <div class="row g-3">
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Nivel <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-nivel"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Plaza <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-plaza"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">RyR</label><input type="text" class="form-control form-control-sm" id="cn-ryr"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Grado</label><input type="text" class="form-control form-control-sm" id="cn-grado"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Matrícula</label><input type="text" class="form-control form-control-sm" id="cn-matricula"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Grado Académico</label><input type="text" class="form-control form-control-sm" id="cn-grado-academico"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Cédula Profesional</label><input type="text" class="form-control form-control-sm" id="cn-cedula"></div>
+                                                </div>
                                             </div>
                                         </div>
 
                                         <!-- TAB: Organización -->
                                         <div class="tab-pane fade" id="cnuevo-org" role="tabpanel">
-                                            <div class="row g-3">
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Personal Comisionado</label><input type="text" class="form-control form-control-sm" id="cn-comisionado"></div>
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Dirección <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-direccion"></div>
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Subdireccion <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-subdireccion"></div>
-                                                <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Gerencia <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-gerencia"></div>
-                                                <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Coordinación <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-coordinacion"></div>
+                                            <div class="cn-sheet">
+                                                <div class="row g-3">
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Personal Comisionado</label><input type="text" class="form-control form-control-sm" id="cn-comisionado"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Dirección <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-direccion"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Subdireccion <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-subdireccion"></div>
+                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Gerencia <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-gerencia"></div>
+                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Coordinación <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-coordinacion"></div>
+                                                </div>
                                             </div>
                                         </div>
 
                                         <!-- TAB: Documentos -->
                                         <div class="tab-pane fade" id="cnuevo-docs" role="tabpanel">
-                                            <div class="row g-3">
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">RFC</label><input type="text" class="form-control form-control-sm" id="cn-rfc" style="text-transform:uppercase" placeholder="AAAA000000AAA"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">CURP</label><input type="text" class="form-control form-control-sm" id="cn-curp" style="text-transform:uppercase"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Licencia</label><input type="text" class="form-control form-control-sm" id="cn-licencia"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Tipo Licencia</label><input type="text" class="form-control form-control-sm" id="cn-licencia-tipo"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia Licencia</label><input type="text" class="form-control form-control-sm" id="cn-vig-licencia"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia Credencial</label><input type="text" class="form-control form-control-sm" id="cn-vig-credencial"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia INE</label><input type="text" class="form-control form-control-sm" id="cn-vig-ine"></div>
-                                                <div class="col-12"><label class="form-label fw-semibold small">Domicilio</label><input type="text" class="form-control form-control-sm" id="cn-domicilio"></div>
-                                                <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Estado Civil</label><select class="form-select form-select-sm" id="cn-estado-civil"><option value="">-- Seleccionar --</option><option>Soltero(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viudo(a)</option><option>Unión libre</option></select></div>
-                                                <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Dependientes</label><input type="number" min="0" class="form-control form-control-sm" id="cn-dependientes"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Rúbrica</label><input type="text" class="form-control form-control-sm" id="cn-rubrica"></div>
-                                                <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Doc. Ingreso</label><input type="text" class="form-control form-control-sm" id="cn-doc-ingreso"></div>
+                                            <div class="cn-sheet">
+                                                <div class="row g-3">
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">RFC</label><input type="text" class="form-control form-control-sm" id="cn-rfc" style="text-transform:uppercase" placeholder="AAAA000000AAA"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">CURP</label><input type="text" class="form-control form-control-sm" id="cn-curp" style="text-transform:uppercase"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Licencia</label><input type="text" class="form-control form-control-sm" id="cn-licencia"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Tipo Licencia</label><input type="text" class="form-control form-control-sm" id="cn-licencia-tipo"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia Licencia</label><input type="text" class="form-control form-control-sm" id="cn-vig-licencia"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia Credencial</label><input type="text" class="form-control form-control-sm" id="cn-vig-credencial"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia INE</label><input type="text" class="form-control form-control-sm" id="cn-vig-ine"></div>
+                                                    <div class="col-12"><label class="form-label fw-semibold small">Domicilio</label><input type="text" class="form-control form-control-sm" id="cn-domicilio"></div>
+                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Estado Civil</label><select class="form-select form-select-sm" id="cn-estado-civil"><option value="">-- Seleccionar --</option><option>Soltero(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viudo(a)</option><option>Unión libre</option></select></div>
+                                                    <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Dependientes</label><input type="number" min="0" class="form-control form-control-sm" id="cn-dependientes"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Rúbrica</label><input type="text" class="form-control form-control-sm" id="cn-rubrica"></div>
+                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Doc. Ingreso</label><input type="text" class="form-control form-control-sm" id="cn-doc-ingreso"></div>
+                                                </div>
                                             </div>
                                         </div>
 
                                         <!-- TAB: Emergencias -->
                                         <div class="tab-pane fade" id="cnuevo-emerg" role="tabpanel">
-                                            <div class="row g-3">
-                                                <div class="col-12"><h6 class="text-muted fw-semibold small mb-0">Contacto de Emergencia 1</h6><hr class="mt-1 mb-2"></div>
-                                                <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Nombre</label><input type="text" class="form-control form-control-sm" id="cn-c1-nombre"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Parentesco</label><input type="text" class="form-control form-control-sm" id="cn-c1-parentesco"></div>
-                                                <div class="col-6 col-md-4"><label class="form-label fw-semibold small">Teléfono</label><input type="text" class="form-control form-control-sm" id="cn-c1-tel"></div>
-                                                <div class="col-12"><h6 class="text-muted fw-semibold small mb-0">Contacto de Emergencia 2</h6><hr class="mt-1 mb-2"></div>
-                                                <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Nombre</label><input type="text" class="form-control form-control-sm" id="cn-c2-nombre"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Parentesco</label><input type="text" class="form-control form-control-sm" id="cn-c2-parentesco"></div>
-                                                <div class="col-6 col-md-4"><label class="form-label fw-semibold small">Teléfono</label><input type="text" class="form-control form-control-sm" id="cn-c2-tel"></div>
-                                                <div class="col-12"><h6 class="text-muted fw-semibold small mb-0">Datos Médicos</h6><hr class="mt-1 mb-2"></div>
-                                                <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Tipo de Sangre</label><input type="text" class="form-control form-control-sm" id="cn-sangre" placeholder="A+"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Alergia Medicamento</label><input type="text" class="form-control form-control-sm" id="cn-alerg-med"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Alergia Alimento</label><input type="text" class="form-control form-control-sm" id="cn-alerg-ali"></div>
-                                                <div class="col-6 col-md-4"><label class="form-label fw-semibold small">NSS</label><input type="text" class="form-control form-control-sm" id="cn-nss"></div>
+                                            <div class="cn-sheet">
+                                                <div class="row g-3">
+                                                    <div class="col-12"><h6 class="cn-group-title">Contacto de Emergencia 1</h6><hr class="mt-1 mb-2"></div>
+                                                    <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Nombre</label><input type="text" class="form-control form-control-sm" id="cn-c1-nombre"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Parentesco</label><input type="text" class="form-control form-control-sm" id="cn-c1-parentesco"></div>
+                                                    <div class="col-6 col-md-4"><label class="form-label fw-semibold small">Teléfono</label><input type="text" class="form-control form-control-sm" id="cn-c1-tel"></div>
+                                                    <div class="col-12"><h6 class="cn-group-title">Contacto de Emergencia 2</h6><hr class="mt-1 mb-2"></div>
+                                                    <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Nombre</label><input type="text" class="form-control form-control-sm" id="cn-c2-nombre"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Parentesco</label><input type="text" class="form-control form-control-sm" id="cn-c2-parentesco"></div>
+                                                    <div class="col-6 col-md-4"><label class="form-label fw-semibold small">Teléfono</label><input type="text" class="form-control form-control-sm" id="cn-c2-tel"></div>
+                                                    <div class="col-12"><h6 class="cn-group-title">Datos Médicos</h6><hr class="mt-1 mb-2"></div>
+                                                    <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Tipo de Sangre</label><input type="text" class="form-control form-control-sm" id="cn-sangre" placeholder="A+"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Alergia Medicamento</label><input type="text" class="form-control form-control-sm" id="cn-alerg-med"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Alergia Alimento</label><input type="text" class="form-control form-control-sm" id="cn-alerg-ali"></div>
+                                                    <div class="col-6 col-md-4"><label class="form-label fw-semibold small">NSS</label><input type="text" class="form-control form-control-sm" id="cn-nss"></div>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -11179,14 +11236,14 @@ FF
                                         </div>
                                     </div>
                                 </div>
-                                <div class="modal-footer justify-content-between">
+                                <div class="modal-footer justify-content-between flex-wrap gap-2">
                                     <small class="text-danger fw-semibold" id="colab-nuevo-error" style="display:none"></small>
-                                    <div>
-                                        <button type="button" class="btn btn-secondary btn-sm me-2" data-bs-dismiss="modal">Cancelar</button>
-                                        <button type="button" class="colab-btn-onboarding btn-sm me-2" id="btn-colab-nuevo-onboarding" onclick="colabGenerarNuevoOnboardingQr()">
+                                    <div class="d-flex flex-wrap gap-2 ms-auto">
+                                        <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="button" class="colab-btn-onboarding" id="btn-colab-nuevo-onboarding" onclick="colabGenerarNuevoOnboardingQr()">
                                             <i class="fas fa-qrcode me-1"></i>Generar QR onboarding
                                         </button>
-                                        <button type="button" class="btn btn-success btn-sm" id="btn-colab-nuevo-save" onclick="colabGuardarNuevo()">
+                                        <button type="button" class="btn btn-success px-3" id="btn-colab-nuevo-save" onclick="colabGuardarNuevo()">
                                             <i class="fas fa-save me-1"></i>Registrar Colaborador
                                         </button>
                                     </div>
