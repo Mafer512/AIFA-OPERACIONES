@@ -48,6 +48,20 @@ describe('el editor del colaborador', () => {
         expect(document.getElementById('ce-estatus')).not.toBeNull();
     });
 
+    test('avisa si la columna todavía no existe en la base, en vez de tragarse el dato', () => {
+        document.body.innerHTML = trozo('<!-- TAB: Estatus -->', '<!-- TAB: Foto -->');
+        const aviso = document.getElementById('cedit-baja-sin-columna');
+        expect(aviso).not.toBeNull();
+        expect(aviso.className).toContain('d-none');
+        expect(aviso.textContent).toContain('agregar_fecha_baja.sql');
+        // Y el editor lo enciende al abrirse cuando falta la columna.
+        expect(app).toContain("const hayColumna = Boolean(colabCols && colabCols.fecha_baja);");
+    });
+
+    test('la pestaña dice lo que trae dentro', () => {
+        expect(app).toMatch(/id="cedit-tab-estatus"[^>]*>[\s\S]{0,120}Estatus y baja/);
+    });
+
     test('los guarda con el resto de la ficha', () => {
         const mapa = trozo('const COLAB_EDIT_FIELD_MAP = {', '};');
         expect(mapa).toContain("'ce-fecha-baja':'fecha_baja'");

@@ -10559,7 +10559,7 @@ FF
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-semaforo" data-bs-toggle="tab" data-bs-target="#cedit-semaforo" type="button" onclick="colabSemaforoEditorRefresh()"><i class="fas fa-traffic-light me-1"></i>Semáforo</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-amonest" data-bs-toggle="tab" data-bs-target="#cedit-amonest" type="button"><i class="fas fa-exclamation-triangle me-1 text-warning"></i>Amonest.</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-coment" data-bs-toggle="tab" data-bs-target="#cedit-coment" type="button"><i class="fas fa-comment-alt me-1 text-info"></i>Coment.</button></li>
-                                        <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-estatus" data-bs-toggle="tab" data-bs-target="#cedit-estatus" type="button"><i class="fas fa-user-check me-1 text-success"></i>Estatus</button></li>
+                                        <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-estatus" data-bs-toggle="tab" data-bs-target="#cedit-estatus" type="button"><i class="fas fa-user-check me-1 text-success"></i>Estatus y baja</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-foto" data-bs-toggle="tab" data-bs-target="#cedit-foto" type="button"><i class="fas fa-camera me-1"></i>Foto</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-cv" data-bs-toggle="tab" data-bs-target="#cedit-cv" type="button"><i class="fas fa-file-pdf me-1 text-danger"></i>CV</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-cursos" data-bs-toggle="tab" data-bs-target="#cedit-cursos" type="button" onclick="colabCursosCargarEdit()"><i class="fas fa-graduation-cap me-1" style="color:#1565c0"></i>Cursos</button></li>
@@ -10817,6 +10817,13 @@ FF
                                                     <label class="form-label fw-semibold small">Motivo de baja</label>
                                                     <input type="text" class="form-control form-control-sm" id="ce-motivo-baja" data-field="motivo_baja"
                                                            placeholder="Renuncia, término de contrato…">
+                                                </div>
+                                                <div class="col-12 d-none" id="cedit-baja-sin-columna">
+                                                    <div class="colab-status-note" style="background:#fff6ed;border-color:#fbd3ab;color:#7c3306">
+                                                        <i class="fas fa-triangle-exclamation me-1"></i>
+                                                        La base todavía no tiene la columna de baja, así que estos dos campos no se guardarían.
+                                                        Hay que correr <strong>db/agregar_fecha_baja.sql</strong> en Supabase una sola vez.
+                                                    </div>
                                                 </div>
                                                 <div class="col-12">
                                                     <div class="colab-status-note">
@@ -14750,6 +14757,18 @@ FF
                                     }
                                 };
                             }
+
+                            /* Si la columna de baja no está creada en la base, capturar aquí no
+                               guardaría nada: mejor decirlo que perder el dato en silencio. */
+                            (() => {
+                                const hayColumna = Boolean(colabCols && colabCols.fecha_baja);
+                                const aviso = document.getElementById('cedit-baja-sin-columna');
+                                if (aviso) aviso.classList.toggle('d-none', hayColumna);
+                                ['ce-fecha-baja', 'ce-motivo-baja'].forEach(id => {
+                                    const el = document.getElementById(id);
+                                    if (el) el.disabled = !hayColumna;
+                                });
+                            })();
 
                             // Rellenar todos los campos del formulario
                             Object.entries(COLAB_EDIT_FIELD_MAP).forEach(([formId, colKey]) => {
