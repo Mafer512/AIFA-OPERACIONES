@@ -17460,8 +17460,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const btnConciRefresh = document.getElementById('btn-conci-refresh');
-    const btnConciImport = document.getElementById('btn-conci-import-file');
-    const inputConciImport = document.getElementById('input-conci-import-file');
     const btnConciAdd = document.getElementById('btn-conci-add-row');
     const btnConciAirlineColors = document.getElementById('btn-conci-airline-colors');
     const btnConciMatriculaCatalog = document.getElementById('btn-conci-matricula-catalog');
@@ -17470,24 +17468,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnConciRewriteAll = document.getElementById('btn-conci-rewrite-all');
     const btnConciClearFilters = document.getElementById('btn-conci-clear-filters');
     if (btnConciRefresh) btnConciRefresh.addEventListener('click', () => loadConciliacionManifiestos({ forceRefresh: true }));
-    if (btnConciImport) btnConciImport.addEventListener('click', () => {
-        if (!_conciCanCurrentUserManage()) {
-            alert('Solo usuarios editor o admin pueden importar manifiestos.');
-            return;
-        }
-        if (inputConciImport) {
-            inputConciImport.value = '';
-            inputConciImport.click();
-        }
-    });
-    if (inputConciImport) inputConciImport.addEventListener('change', async () => {
-        const file = inputConciImport.files && inputConciImport.files[0];
-        try {
-            if (file) await _conciImportManifiestosFile(file);
-        } finally {
-            inputConciImport.value = '';
-        }
-    });
     if (btnConciAdd) btnConciAdd.addEventListener('click', _conciAddBlankRow);
     // El autoguardado por celda dispara un insert/update a Supabase sin esperar
     // (ver _conciAutoSaveRow) para que capturar se sienta como Excel. Si el
@@ -18734,7 +18714,6 @@ function _conciRefreshEditToolbar() {
     const btnAirlineColors = document.getElementById('btn-conci-airline-colors');
     const btnMatriculaCatalog = document.getElementById('btn-conci-matricula-catalog');
     const btnRefresh = document.getElementById('btn-conci-refresh');
-    const btnImport = document.getElementById('btn-conci-import-file');
     const yearSel = document.getElementById('filter-conci-manifiestos-year');
     const monthSel = document.getElementById('filter-conci-manifiestos-month');
     const daySel = document.getElementById('filter-conci-manifiestos-day');
@@ -18760,11 +18739,6 @@ function _conciRefreshEditToolbar() {
     if (btnMatriculaCatalog) {
         btnMatriculaCatalog.classList.toggle('d-none', !canManage);
         btnMatriculaCatalog.disabled = !canManage;
-    }
-
-    if (btnImport) {
-        btnImport.classList.toggle('d-none', !canManage);
-        btnImport.disabled = !canManage;
     }
 
     const controlsLocked = _conciEditMode;
@@ -22041,6 +22015,9 @@ async function _conciImportWriteRecords(client, records, existingBySignature) {
     return { updated: updates.length, inserted: inserts.length, removed: idsToDelete.length };
 }
 
+// Sin botón en la barra de Conciliación: los manifiestos ya no se importan
+// desde aquí, solo desde la pestaña de Itinerario de Vuelos. Se conserva como
+// utilidad interna por si hace falta invocarla a mano.
 async function _conciImportManifiestosFile(file) {
     if (!_conciCanCurrentUserManage()) {
         alert('Solo usuarios editor o admin pueden importar manifiestos.');
