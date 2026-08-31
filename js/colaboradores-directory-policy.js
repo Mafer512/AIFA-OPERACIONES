@@ -207,6 +207,32 @@
         return String(value == null ? '' : value).replace(/[-/]\d{1,2}$/, '');
     }
 
+    /* Número de renovación: el 1344-2 es el segundo contrato del 1344. */
+    function renewalRank(value) {
+        const match = String(value == null ? '' : value).match(/[-/](\d{1,2})$/);
+        return match ? Number(match[1]) : 1;
+    }
+
+    /* Qué tan capturada está una fila, para desempatar entre dos renovaciones
+       con el mismo número: la que trae los datos gana. */
+    const COMPLETENESS_FIELDS = [
+        SEMANTIC_FIELDS.gender, SEMANTIC_FIELDS.curp, SEMANTIC_FIELDS.rfc,
+        SEMANTIC_FIELDS.name, SEMANTIC_FIELDS.status,
+    ];
+
+    function completeness(record, get) {
+        return COMPLETENESS_FIELDS.reduce(
+            (total, field) => total + (normalize(get(record, field)) ? 1 : 0), 0);
+    }
+
+    /** De dos filas de la misma persona, cuál debe quedarse en el directorio. */
+    function preferRecord(candidate, current, get) {
+        const rankCandidate = renewalRank(get(candidate, SEMANTIC_FIELDS.employeeNumber));
+        const rankCurrent = renewalRank(get(current, SEMANTIC_FIELDS.employeeNumber));
+        if (rankCandidate !== rankCurrent) return rankCandidate > rankCurrent ? candidate : current;
+        return completeness(candidate, get) > completeness(current, get) ? candidate : current;
+    }
+
     function strongIdentityKey(record, get) {
         const employeeNumber = normalize(get(record, SEMANTIC_FIELDS.employeeNumber))
             .replace(/[‐‑‒–—−]/g, '-')
@@ -267,7 +293,7 @@
         const today = settings.today || new Date();
         const included = [];
         const excluded = [];
-        const seen = new Set();
+        const seen = new Map(); // identidad -> posición dentro de included
 
         source.forEach(record => {
             const result = classifyRecord(record, { get, today });
@@ -278,11 +304,19 @@
 
             const identityKey = strongIdentityKey(record, get);
             if (identityKey && seen.has(identityKey)) {
-                excluded.push({ record, reason: REASONS.DUPLICATE, detail: `identidad repetida: ${identityKey}` });
+                // Entre dos filas de la misma persona no puede ganar la que
+                // llegó primero por casualidad: se queda la del contrato
+                // vigente, y en un empate la que trae más datos capturados.
+                const position = seen.get(identityKey);
+                const previous = included[position];
+                const loser = preferRecord(record, previous, get) === record ? previous : record;
+                const winner = loser === record ? previous : record;
+                included[position] = winner;
+                excluded.push({ record: loser, reason: REASONS.DUPLICATE, detail: `identidad repetida: ${identityKey}` });
                 return;
             }
 
-            if (identityKey) seen.add(identityKey);
+            if (identityKey) seen.set(identityKey, included.length);
             included.push(record);
         });
 
@@ -324,6 +358,8 @@
         normalize,
         parseDate,
         normalizeGender,
+        renewalRank,
+        preferRecord,
         genderFromCurp,
         resolveGender,
         baseEmployeeNumber,

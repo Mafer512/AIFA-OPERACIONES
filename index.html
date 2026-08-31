@@ -11671,7 +11671,7 @@ FF
                     </div>
 
                     <!-- -- JAVASCRIPT DE LA SECCIÓN -- -->
-                    <script src="js/colaboradores-directory-policy.js?v=20260831"></script>
+                    <script src="js/colaboradores-directory-policy.js?v=20260831b"></script>
                     <script src="js/employee-photo-upload.js?v=20260804"></script>
                     <script src="js/employee-document-upload.js?v=20260804"></script>
                     <!-- Visor de fotos e identificaciones: previa al pasar el mouse,
@@ -11797,9 +11797,32 @@ FF
                            conteo no cuadra: qué valores trae la columna, cómo se
                            clasifica cada uno y quiénes tienen el texto peleado con
                            su CURP (que es el dato que no admite dos lecturas). */
-                        window.colabAuditarSexos = function() {
+                        window.colabAuditarSexos = function(numeroEmpleado) {
                             const policy = window.ColaboradoresDirectoryPolicy;
                             const universe = colabObtenerUniversoDirectorio();
+
+                            /* Con un número se revisa a una sola persona: salen TODAS sus
+                               filas —incluidas las de renovaciones anteriores— con lo que
+                               dice cada una y cuál se quedó en el directorio. */
+                            if (numeroEmpleado != null && String(numeroEmpleado).trim() !== '') {
+                                const base = policy.baseEmployeeNumber(String(numeroEmpleado).trim());
+                                const descartes = new Map(universe.excluded.map(item => [item.record, item]));
+                                const filas = (colabCache || [])
+                                    .filter(r => policy.baseEmployeeNumber(String(gc(r, 'num') ?? '').trim()) === base)
+                                    .map(r => ({
+                                        numeroEmpleado: gc(r, 'num') || '',
+                                        nombre: gc(r, 'nombre') || '',
+                                        estatus: gc(r, 'estatus') || '',
+                                        sexoCapturado: String(gc(r, 'sexo') ?? ''),
+                                        sexoSegunCurp: policy.genderFromCurp(gc(r, 'curp')),
+                                        cuentaComo: policy.resolveGender(r, gc),
+                                        enElDirectorio: !descartes.has(r),
+                                        motivoDelDescarte: descartes.get(r) ? descartes.get(r).detail : '',
+                                    }));
+                                console.table(filas);
+                                return filas;
+                            }
+
                             const valores = {};
                             const discrepancias = [];
 
@@ -12633,21 +12656,25 @@ FF
                                 : '?';
                             
                             window.colabKpiFiltro = function(tipo) {
+                                // Se recalcula al abrir, no al pintar el resumen: si alguien
+                                // acaba de corregir un sexo en la ficha, la lista lo refleja
+                                // sin esperar a que el dashboard se vuelva a dibujar.
+                                const gente = colabObtenerUniversoDirectorio().included;
                                 switch (tipo) {
                                     case 'total':
-                                        _abrirGrupoModalPersonas('Total de colaboradores', 'fas fa-users', data);
+                                        _abrirGrupoModalPersonas('Total de colaboradores', 'fas fa-users', gente);
                                         break;
                                     case 'hombres':
                                         _abrirGrupoModalPersonas('Hombres', 'fas fa-mars',
-                                            data.filter(r => _sexoDe(r) === 'H'));
+                                            gente.filter(r => _sexoDe(r) === 'H'));
                                         break;
                                     case 'mujeres':
                                         _abrirGrupoModalPersonas('Mujeres', 'fas fa-venus',
-                                            data.filter(r => _sexoDe(r) === 'M'));
+                                            gente.filter(r => _sexoDe(r) === 'M'));
                                         break;
                                     case 'sin-sexo':
                                         _abrirGrupoModalPersonas('Sin sexo capturado', 'fas fa-circle-question',
-                                            data.filter(r => _sexoDe(r) === '?'));
+                                            gente.filter(r => _sexoDe(r) === '?'));
                                         break;
                                     case 'direccion':
                                         window.colabAbrirCategoriasModal('direccion', 'Direcciones', 'fas fa-building', 'dirección');
@@ -13168,7 +13195,7 @@ FF
                             
                             /** Abre el modal con las categorías de un campo y cuánta gente tiene cada una. */
                             window.colabAbrirCategoriasModal = function(colKey, titulo, iconClass, singular) {
-                                const universo = (colabDirectoryUniverse || colabObtenerUniversoDirectorio()).included;
+                                const universo = colabObtenerUniversoDirectorio().included;
                                 const conteo = {};
                                 let sinDato = 0;
                                 universo.forEach(r => {
@@ -13198,7 +13225,7 @@ FF
                             window.colabAbrirGrupoModal = function(colKey, groupValue, opts) {
                                 const todos = opts && opts.allRecords
                                     ? (colabCache || [])
-                                    : (colabDirectoryUniverse || colabObtenerUniversoDirectorio()).included;
+                                    : colabObtenerUniversoDirectorio().included;
                                 const extraFilter = opts && opts.filter;
                                 const registros = todos.filter(r => {
                                     const v = (gc(r, colKey) || '').toString().trim();
@@ -13262,7 +13289,7 @@ FF
                                             window.colabAbrirGrupoModal(info.colKey, valor, { volver });
                                             return;
                                         }
-                                        const universo = (colabDirectoryUniverse || colabObtenerUniversoDirectorio()).included;
+                                        const universo = colabObtenerUniversoDirectorio().included;
                                         const sin = universo.filter(r => !(gc(r, info.colKey) || '').toString().trim());
                                         _abrirGrupoModalPersonas(`Sin ${info.singular} registrada`,
                                             'fas fa-circle-question', sin, { volver });

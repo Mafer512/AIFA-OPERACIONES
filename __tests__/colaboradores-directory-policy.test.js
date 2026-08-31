@@ -164,14 +164,34 @@ describe('política del Resumen del Directorio', () => {
             expect(policy.baseEmployeeNumber('15512')).toBe('15512');
         });
 
-        test('no entra dos veces al directorio, aunque los datos difieran', () => {
+        test('no entra dos veces al directorio, y se queda el contrato vigente', () => {
+            // La fila vieja traía el sexo mal capturado; la del contrato en curso
+            // es la que la ficha muestra, y es la que debe contar.
             const result = policy.buildUniverse([
-                active({ num: '1551', nombre: 'Ruíz García Valeria', sexo: 'Femenino' }),
-                active({ num: '1551-2', nombre: 'Ruíz García Valeria', sexo: '' }),
+                active({ num: '1344', nombre: 'Ortiz Castañeda Erika', sexo: 'Masculino' }),
+                active({ num: '1344-2', nombre: 'Ortiz Castañeda Erika', sexo: 'Femenino' }),
             ], { today: TODAY });
             expect(result.summary.total).toBe(1);
             expect(result.summary.excluded.duplicate).toBe(1);
-            expect(result.summary.women).toBe(1);
+            expect(result.included[0].num).toBe('1344-2');
+            expect(result.summary).toMatchObject({ men: 0, women: 1 });
+        });
+
+        test('da igual en qué orden lleguen las filas', () => {
+            const result = policy.buildUniverse([
+                active({ num: '1344-2', nombre: 'Ortiz Castañeda Erika', sexo: 'Femenino' }),
+                active({ num: '1344', nombre: 'Ortiz Castañeda Erika', sexo: 'Masculino' }),
+            ], { today: TODAY });
+            expect(result.included[0].num).toBe('1344-2');
+            expect(result.summary).toMatchObject({ men: 0, women: 1 });
+        });
+
+        test('con el mismo número gana la fila que trae los datos', () => {
+            const result = policy.buildUniverse([
+                active({ num: '1344-2', nombre: 'Ortiz Castañeda Erika', sexo: '', curp: '' }),
+                active({ num: '1344-2', nombre: 'Ortiz Castañeda Erika', sexo: 'Femenino', curp: 'OICE970918MDFRSR03' }),
+            ], { today: TODAY });
+            expect(result.summary).toMatchObject({ total: 1, women: 1, genderOther: 0 });
         });
     });
 
@@ -189,7 +209,7 @@ describe('política del Resumen del Directorio', () => {
 
     test('la integración del dashboard utiliza la política central y conserva el histórico completo', () => {
         const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-        expect(html).toContain('js/colaboradores-directory-policy.js?v=20260831');
+        expect(html).toContain('js/colaboradores-directory-policy.js?v=20260831b');
         expect(html).toContain('const universe = colabObtenerUniversoDirectorio();');
         expect(html).toContain('const data = universe.included;');
         expect(html).toContain('var masc = universe.summary.men;');

@@ -108,6 +108,25 @@ describe('las tarjetas del resumen abren lo que cuentan', () => {
         expect(filas()[0].textContent).toContain('Elsa Mora');
     });
 
+    test('la lista se recalcula al abrirla, no al pintar el resumen', () => {
+        // Si alguien corrige el sexo en la ficha, la tarjeta no puede seguir
+        // mostrando a esa persona en la lista de antes.
+        const ctx = montar();
+        ctx.colabKpiFiltro('hombres');
+        expect(titulo()).toBe('Hombres (2)');
+
+        const original = DIRECTORIO[1].sexo;
+        try {
+            DIRECTORIO[1].sexo = 'Femenino';
+            ctx.colabKpiFiltro('hombres');
+            expect(titulo()).toBe('Hombres (1)');
+            ctx.colabKpiFiltro('mujeres');
+            expect(titulo()).toBe('Mujeres (3)');
+        } finally {
+            DIRECTORIO[1].sexo = original;
+        }
+    });
+
     test('la lista sale ordenada por nombre', () => {
         const ctx = montar();
         ctx.colabKpiFiltro('total');
