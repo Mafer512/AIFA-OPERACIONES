@@ -74,6 +74,22 @@ describe('el editor del colaborador', () => {
         expect(app).toContain('columnasDeLaTablaQueHablanDeBaja');
     });
 
+    test('comprueba en la base que la baja quedó escrita, no confía en el update', () => {
+        const guardar = trozo('// Actualizar registro en agenda_2026', 'for (const oldDocument');
+        expect(guardar).toContain("const colsBaja = ['fecha_baja', 'motivo_baja']");
+        expect(guardar).toMatch(/select\('\*'\)\.eq\(safeNumCol, numEmpl\)/);
+        expect(guardar).toContain('no tiene la columna');
+        expect(guardar).toContain('La base no aceptó el valor');
+    });
+
+    test('una fecha con hora pegada (columna date o timestamp) también se lee', () => {
+        const ctx = {};
+        vm.createContext(ctx);
+        vm.runInContext(trozo('function colabFechaISO(valor)', 'function colabEstatusChipHtml'), ctx);
+        expect(ctx.colabFechaISO('2026-03-15T00:00:00+00:00')).toBe('2026-03-15');
+        expect(ctx.colabFechaLarga('2026-03-15T06:00:00Z')).toBe('15 de marzo de 2026');
+    });
+
     test('los guarda con el resto de la ficha', () => {
         const mapa = trozo('const COLAB_EDIT_FIELD_MAP = {', '};');
         expect(mapa).toContain("'ce-fecha-baja':'fecha_baja'");
@@ -131,9 +147,13 @@ describe('la ficha', () => {
         expect(ctx.colabFechaLarga('01/12/2025')).toBe('1 de diciembre de 2025');
         expect(ctx.colabFechaLarga('Pendiente')).toBe('');
 
+        // Con la hora local, no en UTC: la función compara contra la medianoche
+        // local, y de tarde en México toISOString() ya devuelve el día siguiente.
         const haceDias = dias => {
-            const d = new Date(Date.now() - dias * 86400000);
-            return d.toISOString().slice(0, 10);
+            const d = new Date();
+            d.setDate(d.getDate() - dias);
+            const dosDigitos = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${dosDigitos(d.getMonth() + 1)}-${dosDigitos(d.getDate())}`;
         };
         expect(ctx.colabHaceCuanto(haceDias(0))).toBe('hoy');
         expect(ctx.colabHaceCuanto(haceDias(1))).toBe('ayer');

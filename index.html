@@ -12103,7 +12103,9 @@ FF
                         function colabFechaISO(valor) {
                             const texto = String(valor == null ? '' : valor).trim();
                             if (!texto) return '';
-                            if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+                            // Si la columna es date/timestamp, PostgREST devuelve la hora pegada
+                            // (2026-03-15T00:00:00+00:00). Al campo solo le sirve el día.
+                            if (/^\d{4}-\d{2}-\d{2}/.test(texto)) return texto.slice(0, 10);
                             const dmy = texto.match(/^([0-3]?\d)[\/-]([01]?\d)[\/-](\d{4})$/);
                             if (!dmy) return '';
                             return `${dmy[3]}-${String(dmy[2]).padStart(2, '0')}-${String(dmy[1]).padStart(2, '0')}`;
@@ -15344,6 +15346,29 @@ FF
                                     }
                                     if (dbErr) throw dbErr;
                                     employeeRowUpdated = true;
+
+                                    /* La baja es el dato que más se ha resistido a quedarse guardado, y un
+                                       update sin error no siempre significa que se haya escrito. Se relee la
+                                       fila y se compara: si no quedó, se dice por qué en vez de dar el
+                                       guardado por bueno. */
+                                    const colsBaja = ['fecha_baja', 'motivo_baja']
+                                        .map(clave => colabCols?.[clave])
+                                        .filter(col => col && Object.prototype.hasOwnProperty.call(updatePayload, col));
+                                    if (colsBaja.length) {
+                                        const { data: relectura } = await sb.from('agenda_2026').select('*').eq(safeNumCol, numEmpl).limit(1);
+                                        const filaGuardada = relectura && relectura[0];
+                                        if (filaGuardada) {
+                                            const sinColumna = colsBaja.find(col => !(col in filaGuardada));
+                                            if (sinColumna) {
+                                                throw new Error(`La tabla agenda_2026 no tiene la columna "${sinColumna}": corre db/agregar_fecha_baja.sql en Supabase y recarga la página.`);
+                                            }
+                                            const noQuedo = colsBaja.find(col =>
+                                                String(filaGuardada[col] ?? '').slice(0, 10) !== String(updatePayload[col] ?? '').slice(0, 10));
+                                            if (noQuedo) {
+                                                throw new Error(`La base no aceptó el valor de "${noQuedo}". Revisa que esa columna sea de texto o fecha y que tu usuario tenga permiso de escritura.`);
+                                            }
+                                        }
+                                    }
                                 }
 
                                 for (const oldDocument of previousDocumentRefs) {
