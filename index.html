@@ -15365,7 +15365,10 @@ FF
                                             const noQuedo = colsBaja.find(col =>
                                                 String(filaGuardada[col] ?? '').slice(0, 10) !== String(updatePayload[col] ?? '').slice(0, 10));
                                             if (noQuedo) {
-                                                throw new Error(`La base no aceptó el valor de "${noQuedo}". Revisa que esa columna sea de texto o fecha y que tu usuario tenga permiso de escritura.`);
+                                                /* Un UPDATE que no pasa la política de RLS no falla: afecta
+                                                   cero filas y responde como si todo hubiera ido bien. */
+                                                throw new Error(`La base no guardó "${noQuedo}". Casi siempre es permiso: tu rol no pasa la política de escritura de agenda_2026. `
+                                                    + 'Corre db/fix_rls_colaboradores_edicion.sql en Supabase (SQL Editor) y vuelve a intentarlo.');
                                             }
                                         }
                                     }

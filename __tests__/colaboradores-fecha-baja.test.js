@@ -79,7 +79,8 @@ describe('el editor del colaborador', () => {
         expect(guardar).toContain("const colsBaja = ['fecha_baja', 'motivo_baja']");
         expect(guardar).toMatch(/select\('\*'\)\.eq\(safeNumCol, numEmpl\)/);
         expect(guardar).toContain('no tiene la columna');
-        expect(guardar).toContain('La base no aceptó el valor');
+        expect(guardar).toContain('La base no guardó');
+        expect(guardar).toContain('fix_rls_colaboradores_edicion.sql');
     });
 
     test('una fecha con hora pegada (columna date o timestamp) también se lee', () => {
