@@ -54,6 +54,25 @@ describe('el editor de colaborador', () => {
         }
     });
 
+    test('el estatus se ve del color de lo que dice', () => {
+        const sel = document.getElementById('ce-estatus');
+        expect(sel.className).toContain('ce-estatus');
+        expect([...sel.options].map(o => o.value)).toEqual(['Activo', 'Baja']);
+        // Verde para activo y rojo para baja, en el desplegable y en el campo.
+        expect(app).toContain('.ce-estatus option[value="Activo"] { color: #15803d;');
+        expect(app).toContain('.ce-estatus option[value="Baja"]   { color: #b91c1c;');
+        expect(app).toContain('#colabEditModal .ce-estatus.es-activo {');
+        expect(app).toContain('#colabEditModal .ce-estatus.es-baja {');
+        // Y se repinta al elegir otra opción, no solo al abrir.
+        expect(app).toContain("selEstatus.addEventListener('change', colabPintarEstatus);");
+    });
+
+    test('el semáforo queda al final, después de Vacaciones', () => {
+        const ids = [...document.querySelectorAll('#colabEditTabs .nav-link')].map(b => b.id);
+        expect(ids[ids.length - 1]).toBe('cedit-tab-semaforo');
+        expect(ids[ids.length - 2]).toBe('cedit-tab-vac');
+    });
+
     test('el pie no pone a competir borrar con guardar', () => {
         const borrar = document.getElementById('btn-colab-delete-from-modal');
         const guardar = document.getElementById('btn-colab-save');

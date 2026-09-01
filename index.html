@@ -8821,6 +8821,18 @@ FF
                             border-radius: 12px; padding: .6rem .85rem; font-size: .8rem; color: #4b5f7a;
                         }
                         #colabEditModal .ce-legend strong { color: #0b1d40; }
+                        /* El estatus se lee de un vistazo: verde si sigue activo, rojo si causó
+                           baja, tanto en el desplegable como en el campo ya elegido. */
+                        #colabEditModal .ce-estatus option[value="Activo"] { color: #15803d; font-weight: 700; }
+                        #colabEditModal .ce-estatus option[value="Baja"]   { color: #b91c1c; font-weight: 700; }
+                        #colabEditModal .ce-estatus.es-activo {
+                            color: #15803d; font-weight: 700; background: #f0fdf4; border-color: #86efac;
+                        }
+                        #colabEditModal .ce-estatus.es-activo:focus { box-shadow: 0 0 0 .2rem rgba(22,163,74,.18); border-color: #16a34a; }
+                        #colabEditModal .ce-estatus.es-baja {
+                            color: #b91c1c; font-weight: 700; background: #fef2f2; border-color: #fca5a5;
+                        }
+                        #colabEditModal .ce-estatus.es-baja:focus { box-shadow: 0 0 0 .2rem rgba(220,38,38,.18); border-color: #dc2626; }
                         #colabEditModal .ce-group-title {
                             display: flex; align-items: center; gap: .4rem; margin: 0;
                             font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #64748b;
@@ -10734,7 +10746,6 @@ FF
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-org" data-bs-toggle="tab" data-bs-target="#cedit-org" type="button"><i class="fas fa-sitemap me-1"></i>Organización</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-docs" data-bs-toggle="tab" data-bs-target="#cedit-docs" type="button"><i class="fas fa-folder-open me-1"></i>Documentos</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-emerg" data-bs-toggle="tab" data-bs-target="#cedit-emerg" type="button"><i class="fas fa-kit-medical me-1"></i>Emergencias</button></li>
-                                        <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-semaforo" data-bs-toggle="tab" data-bs-target="#cedit-semaforo" type="button" onclick="colabSemaforoEditorRefresh()"><i class="fas fa-traffic-light me-1"></i>Semáforo</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-amonest" data-bs-toggle="tab" data-bs-target="#cedit-amonest" type="button"><i class="fas fa-exclamation-triangle me-1 text-warning"></i>Amonest.</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-coment" data-bs-toggle="tab" data-bs-target="#cedit-coment" type="button"><i class="fas fa-comment-alt me-1 text-info"></i>Coment.</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-estatus" data-bs-toggle="tab" data-bs-target="#cedit-estatus" type="button"><i class="fas fa-user-check me-1 text-success"></i>Estatus y baja</button></li>
@@ -10742,6 +10753,7 @@ FF
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-cv" data-bs-toggle="tab" data-bs-target="#cedit-cv" type="button"><i class="fas fa-file-pdf me-1 text-danger"></i>CV</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-cursos" data-bs-toggle="tab" data-bs-target="#cedit-cursos" type="button" onclick="colabCursosCargarEdit()"><i class="fas fa-graduation-cap me-1" style="color:#1565c0"></i>Cursos</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-vac" data-bs-toggle="tab" data-bs-target="#cedit-vac" type="button" onclick="vacEditInit()"><i class="fas fa-umbrella-beach me-1" style="color:#0288d1"></i>Vacaciones</button></li>
+                                        <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-semaforo" data-bs-toggle="tab" data-bs-target="#cedit-semaforo" type="button" onclick="colabSemaforoEditorRefresh()"><i class="fas fa-traffic-light me-1"></i>Semáforo</button></li>
                                     </ul>
                                     <div class="tab-content p-3" id="colabEditContent">
 
@@ -10990,7 +11002,7 @@ FF
                                             <div class="row g-3 align-items-end">
                                                 <div class="col-12 col-md-4">
                                                     <label class="form-label fw-semibold small">Estatus del colaborador</label>
-                                                    <select class="form-select form-select-sm" id="ce-estatus" data-field="estatus">
+                                                    <select class="form-select form-select-sm ce-estatus" id="ce-estatus" data-field="estatus">
                                                         <option value="Activo">Activo</option>
                                                         <option value="Baja">Baja</option>
                                                     </select>
@@ -12270,6 +12282,16 @@ FF
                             const fecha = est === 'Baja' && record ? colabFechaCorta(gc(record, 'fecha_baja')) : '';
                             const detalle = fecha ? ` · ${fecha}` : '';
                             return `<span class="colab-chip ${cls}"><i class="fas ${icon}" aria-hidden="true"></i>${est}${detalle}</span>`;
+                        }
+
+                        /* El estatus se pinta del color de lo que dice: verde activo, rojo baja.
+                           Se aplica al abrir la ficha y cada vez que se cambia la opción. */
+                        function colabPintarEstatus() {
+                            const sel = document.getElementById('ce-estatus');
+                            if (!sel) return;
+                            const esBaja = colabNormalizarEstatus(sel.value) === 'Baja';
+                            sel.classList.toggle('es-baja', esBaja);
+                            sel.classList.toggle('es-activo', !esBaja);
                         }
 
                         /* -- Rellenar campo -- */
@@ -15041,6 +15063,13 @@ FF
                                             ? colabFechaISO(gc(c, colKey))
                                             : String(gc(c, colKey) ?? '').trim();
                             });
+
+                            const selEstatus = document.getElementById('ce-estatus');
+                            if (selEstatus && !selEstatus.dataset.colorWired) {
+                                selEstatus.dataset.colorWired = '1';
+                                selEstatus.addEventListener('change', colabPintarEstatus);
+                            }
+                            colabPintarEstatus();
 
                             // El sexo guardado puede venir con una variante ("M", "Hombre"...) que no
                             // está en el catálogo; se conserva como opción para no borrarla al guardar.
