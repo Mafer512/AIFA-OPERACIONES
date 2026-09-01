@@ -111,6 +111,9 @@ ORDER BY cmd, policyname;
 
 -- (d) Nadie debe tener políticas RESTRICTIVE aquí: una sola bloquea todo lo
 --     demás. Si esta consulta devuelve filas, hay que revisarlas.
-SELECT policyname, cmd
+--     (pg_policies.permissive es texto: 'PERMISSIVE' o 'RESTRICTIVE'.)
+SELECT policyname, cmd, permissive
 FROM pg_policies
-WHERE schemaname = 'public' AND tablename = 'agenda_2026' AND NOT permissive;
+WHERE schemaname = 'public'
+  AND tablename  = 'agenda_2026'
+  AND upper(permissive) <> 'PERMISSIVE';

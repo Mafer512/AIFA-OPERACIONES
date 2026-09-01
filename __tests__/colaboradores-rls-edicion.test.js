@@ -58,7 +58,10 @@ describe('el script que corrige el permiso de edición', () => {
         expect(sql).toContain('SELECT public.is_colab_editor()');
         expect(sql).toMatch(/FROM pg_policies/);
         // Y avisa de las políticas RESTRICTIVE, que bloquean todo lo demás.
-        expect(sql).toContain('NOT permissive');
+        // pg_policies.permissive es texto ('PERMISSIVE'/'RESTRICTIVE'): tratarlo
+        // como booleano reventaba el script entero en el editor de Supabase.
+        expect(sql).toContain("upper(permissive) <> 'PERMISSIVE'");
+        expect(sql).not.toMatch(/\bNOT permissive\b/);
     });
 });
 
