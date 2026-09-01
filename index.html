@@ -161,6 +161,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous"></script>
 
     <script src="js/supabase-client.js"></script>
+    <!-- Deja rastro en change_history de toda escritura, la haga el modulo que la haga. -->
+    <script src="js/audit-supabase.js?v=20260901"></script>
     <script src="js/realtime.js?v=20260731-conci-live-collab"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -1584,6 +1586,29 @@ FF
             overflow: hidden;
             text-overflow: ellipsis;
         }
+        /* --- ESTILOS HISTORIAL DE CAMBIOS --- */
+        .hist-toolbar {
+            display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
+            background: #fff; border: 1px solid #e5ecf6; border-radius: 12px;
+            padding: .6rem .75rem; margin-bottom: 1rem;
+            box-shadow: 0 1px 2px rgba(16,35,63,.05);
+        }
+        .hist-toolbar .form-select { width: auto; min-width: 9.5rem; border-radius: 9px; border-color: #d9e2ee; }
+        .hist-buscar { position: relative; flex: 1 1 18rem; min-width: 12rem; }
+        .hist-buscar i { position: absolute; left: .7rem; top: 50%; transform: translateY(-50%); color: #9fb0c6; font-size: .8rem; }
+        .hist-buscar input { padding-left: 2rem; border-radius: 9px; border-color: #d9e2ee; }
+        .hist-conteo { margin-left: auto; font-size: .78rem; font-weight: 600; color: #64748b; white-space: nowrap; }
+        #history-table > tbody > tr { border-left: 3px solid transparent; }
+        #history-table > tbody > tr.hist-alta    { border-left-color: #16a34a; }
+        #history-table > tbody > tr.hist-edicion { border-left-color: #d97706; }
+        #history-table > tbody > tr.hist-baja    { border-left-color: #dc2626; }
+        .hist-mas {
+            background: none; border: none; padding: 0; margin-top: .2rem;
+            font-size: .76rem; font-weight: 700; color: #1558d6; cursor: pointer;
+        }
+        .hist-mas:hover { text-decoration: underline; }
+        .hist-auto { font-size: .68rem; font-weight: 700; color: #64748b; background: #eef2f7;
+                     border: 1px solid #e2e8f0; border-radius: 999px; padding: 0 .45rem; margin-left: .35rem; }
     </style>
 </head>
 
@@ -6798,7 +6823,7 @@ FF
                 <div id="fids-section" class="content-section"></div>
 
                 <div id="historia-section" class="content-section">
-                    <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                         <h2 class="section-heading mb-0"><i class="fas fa-history me-2"></i>Historial de Cambios
                         </h2>
                         <div>
@@ -6808,6 +6833,37 @@ FF
                             <button class="btn btn-outline-primary btn-sm" onclick="loadHistory()" aria-label="Actualizar historial de cambios"><i
                                     class="fas fa-sync-alt me-1" aria-hidden="true"></i>Actualizar</button>
                         </div>
+                    </div>
+
+                    <!-- Un rastro sin filtros no se puede leer: cien renglones seguidos no
+                         responden "quién tocó esto" ni "qué se borró ayer". -->
+                    <div class="hist-toolbar" id="hist-toolbar">
+                        <div class="hist-buscar">
+                            <i class="fas fa-search" aria-hidden="true"></i>
+                            <input type="search" id="hist-buscar" class="form-control form-control-sm"
+                                   placeholder="Buscar por usuario, módulo, registro o dato…" autocomplete="off">
+                        </div>
+                        <select id="hist-accion" class="form-select form-select-sm" aria-label="Filtrar por acción">
+                            <option value="">Toda acción</option>
+                            <option value="alta">Altas</option>
+                            <option value="edicion">Ediciones</option>
+                            <option value="baja">Eliminaciones</option>
+                        </select>
+                        <select id="hist-entidad" class="form-select form-select-sm" aria-label="Filtrar por módulo">
+                            <option value="">Todos los módulos</option>
+                        </select>
+                        <select id="hist-usuario" class="form-select form-select-sm" aria-label="Filtrar por usuario">
+                            <option value="">Todos los usuarios</option>
+                        </select>
+                        <select id="hist-limite" class="form-select form-select-sm" aria-label="Cuántos movimientos traer">
+                            <option value="100">Últimos 100</option>
+                            <option value="300">Últimos 300</option>
+                            <option value="1000">Últimos 1000</option>
+                        </select>
+                        <button type="button" class="btn btn-sm btn-light border" id="hist-limpiar">
+                            <i class="fas fa-eraser me-1"></i>Limpiar
+                        </button>
+                        <span class="hist-conteo" id="hist-conteo"></span>
                     </div>
                     <div class="card">
                         <div class="card-body">

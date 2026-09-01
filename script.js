@@ -15503,6 +15503,25 @@ async function loadHistory() {
 
     const SKIP_KEYS = new Set(['id', 'created_at', 'updated_at', 'mode', 'changes', 'summary']);
 
+    /* Un alta de fauna trae diecisiete campos y se comía la pantalla: se
+       muestran los primeros y el resto queda a un clic. */
+    const CAMPOS_A_LA_VISTA = 6;
+    let _histPlegableId = 0;
+
+    function plegarLista(filas) {
+        if (!filas.length) return '';
+        const visibles = filas.slice(0, CAMPOS_A_LA_VISTA).join('');
+        if (filas.length <= CAMPOS_A_LA_VISTA) return `<div class="vstack gap-1 mt-1">${visibles}</div>`;
+        const id = `hist-mas-${++_histPlegableId}`;
+        const ocultos = filas.slice(CAMPOS_A_LA_VISTA).join('');
+        const faltan = filas.length - CAMPOS_A_LA_VISTA;
+        return `<div class="vstack gap-1 mt-1">${visibles}
+            <div id="${id}" class="vstack gap-1 d-none">${ocultos}</div>
+            <button type="button" class="hist-mas" data-hist-mas="${id}">
+                <i class="fas fa-chevron-down me-1"></i>Ver ${faltan} campo(s) más</button>
+        </div>`;
+    }
+
     function buildDetailsHtml(details, actionType) {
         if (!details) return '';
 
@@ -15515,39 +15534,39 @@ async function loadHistory() {
 
         // Summary line (shown for both diff and create)
         if (details.summary) {
+            // El rastro automático se distingue del que escribe un módulo a mano.
+            const auto = details.origen === 'automatico'
+                ? '<span class="hist-auto" title="Registrado por el rastro automático del sistema">AUTO</span>'
+                : '';
             html += `<div class="text-dark fw-semibold mb-1" style="font-size:.85rem">
-                       <i class="fas fa-info-circle me-1 text-muted"></i>${details.summary}
+                       <i class="fas fa-info-circle me-1 text-muted"></i>${details.summary}${auto}
                      </div>`;
         }
 
         // DIFF mode (edits)
         if (details.mode === 'diff' && Array.isArray(details.changes) && details.changes.length) {
-            html += '<div class="vstack gap-1 mt-1">';
-            details.changes.forEach(c => {
-                html += `<div class="small d-flex align-items-center flex-wrap gap-1">
+            const filas = details.changes.map(c => `<div class="small d-flex align-items-center flex-wrap gap-1">
                     <span class="text-secondary" style="min-width:100px">${renderFieldLabel(c.field)}</span>
                     ${renderValue(c.old, true)}
                     <i class="fas fa-arrow-right text-muted" style="font-size:.7em"></i>
                     ${renderValue(c.new, false)}
-                </div>`;
-            });
-            html += '</div>';
+                </div>`);
+            html += plegarLista(filas);
             return html;
         }
 
         // CREATE payload — show key-value pairs
         const keys = Object.keys(details).filter(k => !SKIP_KEYS.has(k));
         if (keys.length) {
-            html += '<div class="vstack gap-1 mt-1">';
-            keys.forEach(k => {
+            const filas = keys.map(k => {
                 const formatted = formatVal(details[k]);
-                if (!formatted) return;
-                html += `<div class="small d-flex align-items-baseline gap-2">
+                if (!formatted) return '';
+                return `<div class="small d-flex align-items-baseline gap-2">
                     <span class="text-secondary" style="min-width:120px;font-size:.82em">${renderFieldLabel(k)}</span>
                     <span class="text-success fw-semibold">${formatted}</span>
                 </div>`;
-            });
-            html += '</div>';
+            }).filter(Boolean);
+            html += plegarLista(filas);
         }
 
         return html || '';
@@ -15572,11 +15591,12 @@ async function loadHistory() {
 
     // ── Fetch ─────────────────────────────────────────────────────────────
     try {
+        const limite = Number(document.getElementById('hist-limite')?.value) || 100;
         const { data, error } = await window.supabaseClient
             .from('change_history')
             .select('*')
             .order('created_at', { ascending: false })
-            .limit(100);
+            .limit(limite);
 
         if (error) throw error;
 
@@ -15585,8 +15605,7 @@ async function loadHistory() {
             return;
         }
 
-        tableBody.innerHTML = '';
-        data.forEach(log => {
+        const pintarFila = (log) => {
             const dObj = new Date(log.created_at);
             const dateStr = dObj.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
             const timeStr = dObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
@@ -15618,9 +15637,10 @@ async function loadHistory() {
 
             // Details
             const detailsHtml = buildDetailsHtml(log.details, log.action_type);
+            const claseFila = clasifica(log.action_type);
 
             const row = `
-                <tr style="vertical-align:top">
+                <tr class="hist-${claseFila}" style="vertical-align:top">
                     <td class="text-nowrap pe-3" style="padding-top:14px">
                         <div class="fw-semibold text-dark" style="font-size:.9rem">${dateStr}</div>
                         <div class="text-muted" style="font-size:.8rem">${timeStr}</div>
@@ -15647,7 +15667,88 @@ async function loadHistory() {
                     </td>
                 </tr>`;
             tableBody.insertAdjacentHTML('beforeend', row);
-        });
+        };
+
+        /* Filtros: el rastro se lee buscando, no leyendo cien renglones. */
+        const clasifica = (accion) => {
+            if (['CREAR', 'AGREGAR', 'IMPORTAR'].includes(accion)) return 'alta';
+            if (['ELIMINAR', 'BORRAR'].includes(accion)) return 'baja';
+            return 'edicion';
+        };
+
+        const opciones = (id, valores, etiqueta) => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const previo = sel.value;
+            sel.innerHTML = `<option value="">${etiqueta}</option>` +
+                [...valores].sort((a, b) => a.localeCompare(b, 'es'))
+                    .map(v => `<option value="${v.replace(/"/g, '&quot;')}">${v}</option>`).join('');
+            if (previo) sel.value = previo;
+        };
+
+        window._histPintar = function () {
+            const texto = (document.getElementById('hist-buscar')?.value || '').toLowerCase().trim();
+            const accion = document.getElementById('hist-accion')?.value || '';
+            const entidad = document.getElementById('hist-entidad')?.value || '';
+            const usuario = document.getElementById('hist-usuario')?.value || '';
+
+            const visibles = data.filter(log => {
+                if (accion && clasifica(log.action_type) !== accion) return false;
+                const nombreEntidad = entityMap[log.entity_type] || log.entity_type || '';
+                if (entidad && nombreEntidad !== entidad) return false;
+                if (usuario && (log.user_email || '') !== usuario) return false;
+                if (!texto) return true;
+                const paja = [log.user_email, log.action_type, nombreEntidad, log.record_id,
+                    JSON.stringify(log.details || '')].join(' ').toLowerCase();
+                return paja.includes(texto);
+            });
+
+            tableBody.innerHTML = '';
+            if (!visibles.length) {
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Ningún movimiento coincide con el filtro.</td></tr>';
+            } else {
+                visibles.forEach(pintarFila);
+            }
+
+            const conteo = document.getElementById('hist-conteo');
+            if (conteo) {
+                const hoy = new Date().toDateString();
+                const deHoy = visibles.filter(l => new Date(l.created_at).toDateString() === hoy).length;
+                conteo.textContent = visibles.length === data.length
+                    ? `${data.length} movimientos · ${deHoy} hoy`
+                    : `${visibles.length} de ${data.length} movimientos · ${deHoy} hoy`;
+            }
+        };
+
+        // Catálogos de los desplegables, con lo que trae el propio historial.
+        opciones('hist-entidad', new Set(data.map(l => entityMap[l.entity_type] || l.entity_type).filter(Boolean)), 'Todos los módulos');
+        opciones('hist-usuario', new Set(data.map(l => l.user_email).filter(Boolean)), 'Todos los usuarios');
+
+        const barra = document.getElementById('hist-toolbar');
+        if (barra && !barra.dataset.wired) {
+            barra.dataset.wired = '1';
+            ['hist-buscar', 'hist-accion', 'hist-entidad', 'hist-usuario'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('input', () => window._histPintar());
+            });
+            document.getElementById('hist-limite')?.addEventListener('change', () => loadHistory());
+            document.getElementById('hist-limpiar')?.addEventListener('click', () => {
+                ['hist-buscar', 'hist-accion', 'hist-entidad', 'hist-usuario'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
+                window._histPintar();
+            });
+            tableBody.addEventListener('click', ev => {
+                const boton = ev.target.closest('[data-hist-mas]');
+                if (!boton) return;
+                const bloque = document.getElementById(boton.dataset.histMas);
+                if (bloque) bloque.classList.remove('d-none');
+                boton.remove();
+            });
+        }
+
+        window._histPintar();
 
     } catch (err) {
         console.error('Error loading history:', err);
