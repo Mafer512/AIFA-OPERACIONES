@@ -8717,10 +8717,59 @@ FF
                         .colab-hist-meta { color: var(--col-muted); font-size: .78rem; margin-top: .15rem; }
 
                         /* --- MODAL EDITOR --- */
-                        #colabEditModal .modal-header { background: linear-gradient(135deg,#0d2152,#1565c0); }
-                        #colabEditModal .modal-body { background: #f8faff; }
-                        #colabEditModal .nav-tabs .nav-link { font-size: .82rem; }
+                        #colabEditModal .modal-content { border: none; border-radius: 16px; overflow: hidden; box-shadow: 0 24px 60px rgba(9,24,63,.32); }
+                        #colabEditModal .modal-header {
+                            background: radial-gradient(520px 190px at 88% -70%, rgba(255,255,255,.2), transparent 70%),
+                                        linear-gradient(135deg, #0b1d40 0%, #14417d 60%, #1565c0 100%);
+                            border-bottom: none; padding: .85rem 1.1rem;
+                        }
+                        #colabEditModal .modal-title { font-weight: 800; letter-spacing: .01em; }
+                        #colabEditModal .modal-aifa-mark img { height: 26px; }
+                        #colabEditModal .modal-body { background: #f4f7fc; }
+                        /* Trece pestañas no caben en una fila repartida: se deslizan en una sola
+                           línea en vez de quebrarse en dos renglones desiguales. */
+                        #colabEditModal .nav-tabs {
+                            flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden;
+                            gap: .2rem; border-bottom: 1px solid #e3eaf5;
+                            scrollbar-width: thin;
+                        }
+                        #colabEditModal .nav-tabs::-webkit-scrollbar { height: 6px; }
+                        #colabEditModal .nav-tabs::-webkit-scrollbar-thumb { background: #cfd9e8; border-radius: 999px; }
+                        #colabEditModal .nav-tabs .nav-item { flex: 0 0 auto; }
+                        #colabEditModal .nav-tabs .nav-link {
+                            white-space: nowrap;
+                            font-size: .82rem; font-weight: 700; color: #64748b; padding: .6rem .8rem;
+                            border: none; border-bottom: 3px solid transparent; border-radius: 10px 10px 0 0;
+                        }
+                        #colabEditModal .nav-tabs .nav-link i { opacity: .7; }
+                        #colabEditModal .nav-tabs .nav-link:hover { color: #14417d; background: #eef4fd; }
+                        #colabEditModal .nav-tabs .nav-link.active { color: #0b1d40; background: #e8f0fe; border-bottom-color: #1565c0; }
+                        #colabEditModal .nav-tabs .nav-link.active i { opacity: 1; }
                         #colabEditModal .tab-content { min-height: 280px; }
+                        /* Cada pestaña sobre una hoja blanca, como en el alta. */
+                        #colabEditModal .ce-sheet {
+                            background: #fff; border: 1px solid #e5ecf6; border-radius: 14px;
+                            padding: 1.05rem 1.15rem 1.2rem; box-shadow: 0 1px 2px rgba(16,35,63,.05);
+                        }
+                        #colabEditModal .form-label { font-size: .75rem; font-weight: 700; color: #4b5f7a; margin-bottom: .25rem; }
+                        #colabEditModal .form-control, #colabEditModal .form-select {
+                            min-height: 38px; border-radius: 9px; border-color: #d9e2ee; background: #fbfdff;
+                        }
+                        #colabEditModal .form-control:focus, #colabEditModal .form-select:focus {
+                            background: #fff; border-color: #1565c0; box-shadow: 0 0 0 .2rem rgba(21,101,192,.15);
+                        }
+                        #colabEditModal .form-control:disabled, #colabEditModal .form-select:disabled { background: #eef1f6; }
+                        #colabEditModal .ce-legend {
+                            display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .9rem;
+                            background: #fff; border: 1px solid #e5ecf6; border-left: 3px solid #1565c0;
+                            border-radius: 12px; padding: .6rem .85rem; font-size: .8rem; color: #4b5f7a;
+                        }
+                        #colabEditModal .ce-legend strong { color: #0b1d40; }
+                        #colabEditModal .ce-group-title {
+                            display: flex; align-items: center; gap: .4rem; margin: 0;
+                            font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #64748b;
+                        }
+                        #colabEditModal .modal-footer { background: #fff; border-top: 1px solid #e9eef6; padding: .75rem 1.1rem; }
                         #cedit-foto-preview { transition: border-color .2s; }
                         #cedit-foto-preview:hover { border-color: #1565c0; }
                         .cedit-doc-upload-grid {
@@ -10613,19 +10662,22 @@ FF
                         <div class="modal-dialog modal-xl modal-dialog-scrollable">
                             <div class="modal-content">
                                 <div class="modal-header py-2">
-                                    <div>
-                                        <h5 class="modal-title text-white mb-0" id="colabEditModalLabel"><i class="fas fa-pen me-2"></i>Editar Colaborador</h5>
-                                        <small class="text-white opacity-75" id="colab-edit-num-label">—</small>
+                                    <div class="d-flex align-items-center gap-3">
+                                        <span class="modal-aifa-mark"><img src="images/aifa-logo.png" alt="AIFA"></span>
+                                        <div>
+                                            <h5 class="modal-title text-white mb-0" id="colabEditModalLabel"><i class="fas fa-pen me-2"></i>Editar Colaborador</h5>
+                                            <small class="text-white opacity-75" id="colab-edit-num-label">—</small>
+                                        </div>
                                     </div>
                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                                 </div>
                                 <div class="modal-body p-0">
-                                    <ul class="nav nav-tabs nav-fill px-3 pt-2 bg-light border-bottom" id="colabEditTabs" role="tablist">
-                                        <li class="nav-item" role="presentation"><button class="nav-link active" id="cedit-tab-gen" data-bs-toggle="tab" data-bs-target="#cedit-gen" type="button">Generales</button></li>
-                                        <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-clas" data-bs-toggle="tab" data-bs-target="#cedit-clas" type="button">Clasificación</button></li>
-                                        <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-org" data-bs-toggle="tab" data-bs-target="#cedit-org" type="button">Organización</button></li>
-                                        <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-docs" data-bs-toggle="tab" data-bs-target="#cedit-docs" type="button">Documentos</button></li>
-                                        <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-emerg" data-bs-toggle="tab" data-bs-target="#cedit-emerg" type="button">Emergencias</button></li>
+                                    <ul class="nav nav-tabs px-3 pt-2 bg-white border-bottom" id="colabEditTabs" role="tablist">
+                                        <li class="nav-item" role="presentation"><button class="nav-link active" id="cedit-tab-gen" data-bs-toggle="tab" data-bs-target="#cedit-gen" type="button"><i class="fas fa-id-card me-1"></i>Generales</button></li>
+                                        <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-clas" data-bs-toggle="tab" data-bs-target="#cedit-clas" type="button"><i class="fas fa-layer-group me-1"></i>Clasificación</button></li>
+                                        <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-org" data-bs-toggle="tab" data-bs-target="#cedit-org" type="button"><i class="fas fa-sitemap me-1"></i>Organización</button></li>
+                                        <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-docs" data-bs-toggle="tab" data-bs-target="#cedit-docs" type="button"><i class="fas fa-folder-open me-1"></i>Documentos</button></li>
+                                        <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-emerg" data-bs-toggle="tab" data-bs-target="#cedit-emerg" type="button"><i class="fas fa-kit-medical me-1"></i>Emergencias</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-semaforo" data-bs-toggle="tab" data-bs-target="#cedit-semaforo" type="button" onclick="colabSemaforoEditorRefresh()"><i class="fas fa-traffic-light me-1"></i>Semáforo</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-amonest" data-bs-toggle="tab" data-bs-target="#cedit-amonest" type="button"><i class="fas fa-exclamation-triangle me-1 text-warning"></i>Amonest.</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" id="cedit-tab-coment" data-bs-toggle="tab" data-bs-target="#cedit-coment" type="button"><i class="fas fa-comment-alt me-1 text-info"></i>Coment.</button></li>
@@ -10639,44 +10691,50 @@ FF
 
                                         <!-- TAB: Generales -->
                                         <div class="tab-pane fade show active" id="cedit-gen" role="tabpanel">
-                                            <div class="row g-3">
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Nombre</label><input type="text" class="form-control form-control-sm" id="ce-nombre" data-field="nombre"></div>
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Puesto</label><input type="text" class="form-control form-control-sm" id="ce-puesto" data-field="puesto"></div>
-                                                <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Fecha de Ingreso</label><input type="text" class="form-control form-control-sm" id="ce-fecha-ingreso" data-field="fecha_ingreso" placeholder="DD/MM/YYYY"></div>
-                                                <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Fecha Nacimiento / Onomástico</label><input type="text" class="form-control form-control-sm" id="ce-onomastico" data-field="onomastico" placeholder="DD/MM/YYYY"></div>
-                                                <div class="col-12 col-md-4"><label class="form-label fw-semibold small">No. Celular</label><input type="text" class="form-control form-control-sm" id="ce-celular" data-field="celular"></div>
-                                                <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Ext.</label><input type="text" class="form-control form-control-sm" id="ce-extension" data-field="extension"></div>
-                                                <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Correo Institucional</label><input type="email" class="form-control form-control-sm" id="ce-correo" data-field="correo"></div>
-                                                <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Correo Personal <span class="badge bg-primary" style="font-size:.65rem;vertical-align:middle">Cumpleaños</span></label><input type="email" class="form-control form-control-sm" id="ce-correo-personal" data-field="Correo Personal" placeholder="nombre@gmail.com"></div>
-                                                <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Profesión</label><input type="text" class="form-control form-control-sm" id="ce-profesion" data-field="profesion"></div>
-                                                <div class="col-12 col-md-2"><label class="form-label fw-semibold small">Militar / Civil</label><input type="text" class="form-control form-control-sm" id="ce-militar" data-field="militar"></div>
-                                                <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Sexo</label><select class="form-select form-select-sm" id="ce-sexo" data-field="sexo"><option value="">-- Seleccionar --</option><option>Femenino</option><option>Masculino</option></select></div>
-                                                <div class="col-12"><p class="text-muted small mb-0"><i class="fas fa-info-circle me-1"></i>Para editar amonestaciones y adjuntar PDFs usa la pestaña <strong>Amonest.</strong> &nbsp;·&nbsp; Para comentarios usa <strong>Coment.</strong></p></div>
+                                            <div class="ce-sheet">
+                                                <div class="row g-3">
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Nombre</label><input type="text" class="form-control form-control-sm" id="ce-nombre" data-field="nombre"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Puesto</label><input type="text" class="form-control form-control-sm" id="ce-puesto" data-field="puesto"></div>
+                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Fecha de Ingreso</label><input type="text" class="form-control form-control-sm" id="ce-fecha-ingreso" data-field="fecha_ingreso" placeholder="DD/MM/YYYY"></div>
+                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Fecha Nacimiento / Onomástico</label><input type="text" class="form-control form-control-sm" id="ce-onomastico" data-field="onomastico" placeholder="DD/MM/YYYY"></div>
+                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small">No. Celular</label><input type="text" class="form-control form-control-sm" id="ce-celular" data-field="celular"></div>
+                                                    <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Ext.</label><input type="text" class="form-control form-control-sm" id="ce-extension" data-field="extension"></div>
+                                                    <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Correo Institucional</label><input type="email" class="form-control form-control-sm" id="ce-correo" data-field="correo"></div>
+                                                    <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Correo Personal <span class="badge bg-primary" style="font-size:.65rem;vertical-align:middle">Cumpleaños</span></label><input type="email" class="form-control form-control-sm" id="ce-correo-personal" data-field="Correo Personal" placeholder="nombre@gmail.com"></div>
+                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Profesión</label><input type="text" class="form-control form-control-sm" id="ce-profesion" data-field="profesion"></div>
+                                                    <div class="col-12 col-md-2"><label class="form-label fw-semibold small">Militar / Civil</label><input type="text" class="form-control form-control-sm" id="ce-militar" data-field="militar"></div>
+                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Sexo</label><select class="form-select form-select-sm" id="ce-sexo" data-field="sexo"><option value="">-- Seleccionar --</option><option>Femenino</option><option>Masculino</option></select></div>
+                                                    <div class="col-12"><div class="ce-legend"><span><i class="fas fa-circle-info me-1"></i>Las amonestaciones y sus PDFs se editan en la pestaña <strong>Amonest.</strong></span><span>Los comentarios, en <strong>Coment.</strong></span></div></div>
+                                                </div>
                                             </div>
                                         </div>
 
                                         <!-- TAB: Clasificación -->
                                         <div class="tab-pane fade" id="cedit-clas" role="tabpanel">
-                                            <div class="row g-3">
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Nivel</label><input type="text" class="form-control form-control-sm" id="ce-nivel" data-field="nivel"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Plaza</label><input type="text" class="form-control form-control-sm" id="ce-plaza" data-field="plaza"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Turno</label><input type="text" class="form-control form-control-sm" id="ce-turno" data-field="turno"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">RyR</label><input type="text" class="form-control form-control-sm" id="ce-ryr" data-field="ryr"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Grado</label><input type="text" class="form-control form-control-sm" id="ce-grado" data-field="grado"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Matrícula</label><input type="text" class="form-control form-control-sm" id="ce-matricula" data-field="matricula"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Grado Académico</label><input type="text" class="form-control form-control-sm" id="ce-grado-academico" data-field="grado_academico"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Cédula Profesional</label><input type="text" class="form-control form-control-sm" id="ce-cedula" data-field="cedula"></div>
+                                            <div class="ce-sheet">
+                                                <div class="row g-3">
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Nivel</label><input type="text" class="form-control form-control-sm" id="ce-nivel" data-field="nivel"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Plaza</label><input type="text" class="form-control form-control-sm" id="ce-plaza" data-field="plaza"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Turno</label><input type="text" class="form-control form-control-sm" id="ce-turno" data-field="turno"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">RyR</label><input type="text" class="form-control form-control-sm" id="ce-ryr" data-field="ryr"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Grado</label><input type="text" class="form-control form-control-sm" id="ce-grado" data-field="grado"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Matrícula</label><input type="text" class="form-control form-control-sm" id="ce-matricula" data-field="matricula"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Grado Académico</label><input type="text" class="form-control form-control-sm" id="ce-grado-academico" data-field="grado_academico"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Cédula Profesional</label><input type="text" class="form-control form-control-sm" id="ce-cedula" data-field="cedula"></div>
+                                                </div>
                                             </div>
                                         </div>
 
                                         <!-- TAB: Organización -->
                                         <div class="tab-pane fade" id="cedit-org" role="tabpanel">
-                                            <div class="row g-3">
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Personal Comisionado</label><input type="text" class="form-control form-control-sm" id="ce-comisionado" data-field="comisionado"></div>
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Dirección</label><input type="text" class="form-control form-control-sm" id="ce-direccion" data-field="direccion"></div>
-                                                <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Subdireccion</label><input type="text" class="form-control form-control-sm" id="ce-subdireccion" data-field="subdireccion"></div>
-                                                <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Gerencia</label><input type="text" class="form-control form-control-sm" id="ce-gerencia" data-field="gerencia"></div>
-                                                <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Coordinación</label><input type="text" class="form-control form-control-sm" id="ce-coordinacion" data-field="coordinacion"></div>
+                                            <div class="ce-sheet">
+                                                <div class="row g-3">
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Personal Comisionado</label><input type="text" class="form-control form-control-sm" id="ce-comisionado" data-field="comisionado"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Dirección</label><input type="text" class="form-control form-control-sm" id="ce-direccion" data-field="direccion"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Subdireccion</label><input type="text" class="form-control form-control-sm" id="ce-subdireccion" data-field="subdireccion"></div>
+                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Gerencia</label><input type="text" class="form-control form-control-sm" id="ce-gerencia" data-field="gerencia"></div>
+                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Coordinación</label><input type="text" class="form-control form-control-sm" id="ce-coordinacion" data-field="coordinacion"></div>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -10754,20 +10812,22 @@ FF
 
                                         <!-- TAB: Emergencias -->
                                         <div class="tab-pane fade" id="cedit-emerg" role="tabpanel">
-                                            <div class="row g-3">
-                                                <div class="col-12"><h6 class="text-muted fw-semibold small mb-0">Contacto de Emergencia 1</h6><hr class="mt-1 mb-2"></div>
-                                                <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Nombre</label><input type="text" class="form-control form-control-sm" id="ce-c1-nombre" data-field="c1_nombre"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Parentesco</label><input type="text" class="form-control form-control-sm" id="ce-c1-parentesco" data-field="c1_parentesco"></div>
-                                                <div class="col-6 col-md-4"><label class="form-label fw-semibold small">Teléfono</label><input type="text" class="form-control form-control-sm" id="ce-c1-tel" data-field="c1_tel"></div>
-                                                <div class="col-12"><h6 class="text-muted fw-semibold small mb-0">Contacto de Emergencia 2</h6><hr class="mt-1 mb-2"></div>
-                                                <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Nombre</label><input type="text" class="form-control form-control-sm" id="ce-c2-nombre" data-field="c2_nombre"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Parentesco</label><input type="text" class="form-control form-control-sm" id="ce-c2-parentesco" data-field="c2_parentesco"></div>
-                                                <div class="col-6 col-md-4"><label class="form-label fw-semibold small">Teléfono</label><input type="text" class="form-control form-control-sm" id="ce-c2-tel" data-field="c2_tel"></div>
-                                                <div class="col-12"><h6 class="text-muted fw-semibold small mb-0">Datos Médicos</h6><hr class="mt-1 mb-2"></div>
-                                                <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Tipo de Sangre</label><input type="text" class="form-control form-control-sm" id="ce-sangre" data-field="sangre" placeholder="A+"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Alergia Medicamento</label><input type="text" class="form-control form-control-sm" id="ce-alerg-med" data-field="alerg_med"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Alergia Alimento</label><input type="text" class="form-control form-control-sm" id="ce-alerg-ali" data-field="alerg_ali"></div>
-                                                <div class="col-6 col-md-4"><label class="form-label fw-semibold small">NSS</label><input type="text" class="form-control form-control-sm" id="ce-nss" data-field="nss"></div>
+                                            <div class="ce-sheet">
+                                                <div class="row g-3">
+                                                    <div class="col-12"><h6 class="ce-group-title">Contacto de Emergencia 1</h6><hr class="mt-1 mb-2"></div>
+                                                    <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Nombre</label><input type="text" class="form-control form-control-sm" id="ce-c1-nombre" data-field="c1_nombre"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Parentesco</label><input type="text" class="form-control form-control-sm" id="ce-c1-parentesco" data-field="c1_parentesco"></div>
+                                                    <div class="col-6 col-md-4"><label class="form-label fw-semibold small">Teléfono</label><input type="text" class="form-control form-control-sm" id="ce-c1-tel" data-field="c1_tel"></div>
+                                                    <div class="col-12"><h6 class="ce-group-title">Contacto de Emergencia 2</h6><hr class="mt-1 mb-2"></div>
+                                                    <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Nombre</label><input type="text" class="form-control form-control-sm" id="ce-c2-nombre" data-field="c2_nombre"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Parentesco</label><input type="text" class="form-control form-control-sm" id="ce-c2-parentesco" data-field="c2_parentesco"></div>
+                                                    <div class="col-6 col-md-4"><label class="form-label fw-semibold small">Teléfono</label><input type="text" class="form-control form-control-sm" id="ce-c2-tel" data-field="c2_tel"></div>
+                                                    <div class="col-12"><h6 class="ce-group-title">Datos Médicos</h6><hr class="mt-1 mb-2"></div>
+                                                    <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Tipo de Sangre</label><input type="text" class="form-control form-control-sm" id="ce-sangre" data-field="sangre" placeholder="A+"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Alergia Medicamento</label><input type="text" class="form-control form-control-sm" id="ce-alerg-med" data-field="alerg_med"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Alergia Alimento</label><input type="text" class="form-control form-control-sm" id="ce-alerg-ali" data-field="alerg_ali"></div>
+                                                    <div class="col-6 col-md-4"><label class="form-label fw-semibold small">NSS</label><input type="text" class="form-control form-control-sm" id="ce-nss" data-field="nss"></div>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -11060,16 +11120,16 @@ FF
 
                                     </div><!-- /tab-content -->
                                 </div><!-- /modal-body -->
-                                <div class="modal-footer justify-content-between">
+                                <div class="modal-footer justify-content-between flex-wrap gap-2">
                                     <div class="d-flex align-items-center gap-2">
                                         <small class="text-muted" id="colab-edit-last-save">—</small>
-                                        <button type="button" class="btn btn-danger btn-sm d-none" id="btn-colab-delete-from-modal" onclick="colabEliminarColaborador()">
+                                        <button type="button" class="btn btn-outline-danger btn-sm d-none" id="btn-colab-delete-from-modal" onclick="colabEliminarColaborador()">
                                             <i class="fas fa-trash-alt me-1"></i>Eliminar colaborador
                                         </button>
                                     </div>
-                                    <div>
-                                        <button type="button" class="btn btn-secondary btn-sm me-2" data-bs-dismiss="modal">Cancelar</button>
-                                        <button type="button" class="btn btn-primary btn-sm" id="btn-colab-save" onclick="colabGuardarCambios()">
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancelar</button>
+                                        <button type="button" class="btn btn-primary px-3" id="btn-colab-save" onclick="colabGuardarCambios()">
                                             <i class="fas fa-save me-1"></i>Guardar Cambios
                                         </button>
                                     </div>
