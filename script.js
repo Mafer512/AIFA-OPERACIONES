@@ -3158,6 +3158,11 @@ function getAirlineLogoCandidates(airline) {
     const key = normalizeAirlineName(airline);
     const files = airlineLogoFileMap[key];
     const candidates = [];
+    // El catálogo de aerolíneas manda: reconoce alias ("viva" es VIVA Aerobus)
+    // y trae el logo que el área subió desde Gestión de Datos.
+    const catalogo = window.AifaAerolineas;
+    const catLogo = (catalogo && typeof catalogo.logo === 'function') ? catalogo.logo(airline) : null;
+    if (catLogo) candidates.push(catLogo);
     // Priorizar logo_url desde la DB de Supabase si existe
     const dbUrl = window.airlineLogoDbMap && window.airlineLogoDbMap.get(key);
     if (dbUrl) candidates.push(dbUrl);

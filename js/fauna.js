@@ -382,6 +382,29 @@
     return str.replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[s]));
   }
 
+  /* Una misma aerolínea se captura de varias formas: "VIVA", "viva",
+     "Viva Aerobus". El catálogo (Gestión de Datos → Aerolíneas) dice cuál
+     es su nombre bueno, y con él se cuenta, se filtra y se busca su logo.
+     Si no está catalogada, se respeta el nombre tal como se capturó. */
+  function aerolineaCanonica(valor) {
+      const bruto = String(valor == null ? '' : valor).trim();
+      if (!bruto) return '';
+      const cat = window.AifaAerolineas;
+      if (cat && typeof cat.canonico === 'function') return cat.canonico(bruto) || bruto;
+      return bruto;
+  }
+
+  /* Iniciales sobre el color de la marca, para las que aún no tienen logo. */
+  function distintivoAerolinea(nombre, claseExtra) {
+      const cat = window.AifaAerolineas;
+      const iniciales = (cat && typeof cat.iniciales === 'function')
+          ? cat.iniciales(nombre)
+          : String(nombre || '').slice(0, 3).toUpperCase();
+      const color = (cat && typeof cat.color === 'function' && cat.color(nombre)) || '#64748b';
+      return `<span class="al-inicial ${claseExtra || ''}" style="--al-color:${color}" 
+          title="${escapeHtml(nombre)}">${escapeHtml(iniciales)}</span>`;
+  }
+
   function applyFilters(){
     const year  = (document.getElementById('fauna-year')?.value  || 'all');
     const month = (document.getElementById('fauna-month')?.value || 'all');
@@ -414,7 +437,7 @@
         if (String(r['Fase de la operación']||'').trim() !== phase) return false;
       }
       if (airline !== 'all') {
-        if (String(r['Aerolínea']||'').trim() !== airline) return false;
+        if (aerolineaCanonica(r['Aerolínea']) !== airline) return false;
       }
 
       // Column Filters (Text Search)
@@ -791,7 +814,7 @@
     const species = uniqueSorted(state.raw.map(r => r['Especie']));
     const sizes = uniqueSorted(state.raw.map(r => r['Tamaño']));
     const phases = uniqueSorted(state.raw.map(r => r['Fase de la operación']));
-    const airlines = uniqueSorted(state.raw.map(r => r['Aerolínea']));
+    const airlines = uniqueSorted(state.raw.map(r => aerolineaCanonica(r['Aerolínea'])));
     if (speciesSel){ speciesSel.innerHTML = '<option value="all" selected>Todas</option>' + species.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join(''); }
     if (sizeSel){ sizeSel.innerHTML = '<option value="all" selected>Todos</option>' + sizes.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join(''); }
     if (phaseSel){ phaseSel.innerHTML = '<option value="all" selected>Todas</option>' + phases.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join(''); }
@@ -884,6 +907,12 @@
         renderCharts();
         renderAirlineSummary(state.filtered);
         bindEvents();
+        /* El catálogo de aerolíneas llega por red. Cuando termina de cargar,
+           se vuelve a pintar con los nombres ya homologados y sus logos, sin
+           que nadie tenga que recargar la página. */
+        window.addEventListener('aifa:catalogo-aerolineas', () => {
+            try { populateFilters(); applyFilters(); } catch (_) {}
+        }, { once: true });
     } catch(err) {
       console.warn('fauna load error:', err);
       const c = document.getElementById('fauna-table-container');
@@ -929,7 +958,7 @@
       : '';
     const counts = new Map();
     rows.forEach(r => {
-      const a = String(r['Aerolínea']||'').trim() || 'Sin aerolínea';
+      const a = aerolineaCanonica(r['Aerolínea']) || 'Sin aerolínea';
       counts.set(a, (counts.get(a)||0)+1);
     });
     const items = Array.from(counts.entries()).sort((a,b)=> b[1]-a[1]);
@@ -954,7 +983,9 @@
       const logoPath = cands && cands.length ? cands[0] : '';
       const dataCands = (cands||[]).join('|');
       const sizeClass = (window.getLogoSizeClass ? window.getLogoSizeClass(airline,'summary') : 'lg');
-      const logoHtml = logoPath ? `<img class="airline-logo ${sizeClass} me-2" src="${logoPath}" alt="Logo ${escapeHtml(airline)}" data-cands="${escapeHtml(dataCands)}" data-cand-idx="0" onerror="handleLogoError(this)" onload="logoLoaded(this)">` : '';
+      const logoHtml = logoPath
+          ? `<img class="airline-logo ${sizeClass} me-2" src="${logoPath}" alt="Logo ${escapeHtml(airline)}" data-cands="${escapeHtml(dataCands)}" data-cand-idx="0" onerror="handleLogoError(this)" onload="logoLoaded(this)">`
+          : distintivoAerolinea(airline) + ' ';
       html += `
       <div class="col-12 col-sm-6 col-md-4 col-lg-3">
         <div class="card h-100">
