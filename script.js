@@ -23336,6 +23336,171 @@ function _conciEnsureEditStyles() {
         #table-conci-manifiestos td[data-col].conci-cell-invalid-code {
             box-shadow: inset 0 0 0 2px #dc3545;
         }
+
+        /* Reparto de minutos entre los códigos de demora. Se pinta entre el
+           recuadro y la lista de sugerencias: se ve al mismo tiempo cuánta demora
+           trae el vuelo y cuánta lleva repartida. */
+        .conci-demora-min {
+            position: fixed;
+            z-index: 3001;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 12px 26px rgba(15, 23, 42, 0.14);
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .conci-demora-min.d-none { display: none; }
+        .conci-demora-min-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .conci-demora-min-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 999px;
+            padding: 2px 8px 2px 3px;
+        }
+        .conci-demora-min-letra {
+            width: 24px;
+            height: 22px;
+            border-radius: 6px;
+            border: 1px dashed #cbd5e1;
+            background: #ffffff;
+            color: #7c3aed;
+            font-size: 0.72rem;
+            font-weight: 800;
+            line-height: 1;
+            text-align: center;
+            text-transform: uppercase;
+            padding: 0;
+        }
+        .conci-demora-min-letra:focus { outline: 2px solid #7c3aed; outline-offset: 0; }
+        .conci-demora-min-letra::placeholder { color: #cbd5e1; font-weight: 600; }
+        .conci-demora-min-code { font-size: 0.74rem; font-weight: 800; color: #0f172a; letter-spacing: 0.02em; }
+        .conci-demora-min-input {
+            width: 54px;
+            border: 1px solid #cbd5e1;
+            border-radius: 7px;
+            padding: 1px 5px;
+            font-size: 0.74rem;
+            font-weight: 700;
+            text-align: right;
+            color: #0f172a;
+            background: #ffffff;
+        }
+        .conci-demora-min-input:focus { outline: 2px solid #0d6efd; outline-offset: 0; }
+        .conci-demora-min-ok { font-size: 0.72rem; font-weight: 700; color: #15803d; }
+        .conci-demora-min-falta { font-size: 0.72rem; font-weight: 700; color: #b45309; }
+        .conci-demora-min-sobra { font-size: 0.72rem; font-weight: 700; color: #b91c1c; }
+        .conci-demora-min-nota { font-size: 0.72rem; color: #94a3b8; }
+
+        /* Avisos de la captura. La pila cuelga de la pestaña de manifiestos:
+           al cambiar de pestaña o de módulo se esconde junto con ella. */
+        .conci-aviso-pila {
+            position: fixed;
+            /* A la izquierda del botón flotante del asistente, para no taparlo
+               cuando se juntan varios avisos. */
+            right: 96px;
+            bottom: 22px;
+            z-index: 3050;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        }
+        .conci-aviso {
+            pointer-events: auto;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            width: 342px;
+            max-width: calc(100vw - 120px);
+            padding: 12px 34px 13px 13px;
+            background: #ffffff;
+            border: 1px solid #e7ebf0;
+            border-left: 4px solid #f59e0b;
+            border-radius: 12px;
+            box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+            animation: conci-aviso-entra 0.22s ease-out;
+        }
+        .conci-aviso-saliendo { animation: conci-aviso-sale 0.2s ease-in forwards; }
+        @keyframes conci-aviso-entra {
+            from { opacity: 0; transform: translateY(12px) scale(0.98); }
+            to { opacity: 1; transform: none; }
+        }
+        @keyframes conci-aviso-sale {
+            to { opacity: 0; transform: translateY(8px); }
+        }
+        .conci-aviso-icono {
+            flex: 0 0 auto;
+            width: 30px;
+            height: 30px;
+            border-radius: 9px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #fef3c7;
+            color: #b45309;
+            font-size: 0.86rem;
+        }
+        .conci-aviso-cuerpo { min-width: 0; }
+        .conci-aviso-titulo {
+            font-size: 0.82rem;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -0.01em;
+        }
+        .conci-aviso-texto {
+            margin-top: 2px;
+            font-size: 0.775rem;
+            line-height: 1.35;
+            color: #475569;
+        }
+        .conci-aviso-cerrar {
+            position: absolute;
+            top: 7px;
+            right: 8px;
+            width: 20px;
+            height: 20px;
+            border: 0;
+            border-radius: 6px;
+            background: transparent;
+            color: #b6c0cd;
+            font-size: 0.72rem;
+            line-height: 1;
+            padding: 0;
+            cursor: pointer;
+        }
+        .conci-aviso-cerrar:hover { background: #f1f5f9; color: #64748b; }
+        .conci-aviso-tiempo {
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            height: 3px;
+            width: 100%;
+            background: #f59e0b;
+            opacity: 0.55;
+            transform-origin: left center;
+            animation-name: conci-aviso-tiempo;
+            animation-timing-function: linear;
+            animation-fill-mode: forwards;
+        }
+        @keyframes conci-aviso-tiempo { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+        .conci-aviso-error { border-left-color: #dc2626; }
+        .conci-aviso-error .conci-aviso-icono { background: #fee2e2; color: #b91c1c; }
+        .conci-aviso-error .conci-aviso-tiempo { background: #dc2626; }
+        .conci-aviso-ok { border-left-color: #16a34a; }
+        .conci-aviso-ok .conci-aviso-icono { background: #dcfce7; color: #15803d; }
+        .conci-aviso-ok .conci-aviso-tiempo { background: #16a34a; }
+        @media (max-width: 575.98px) {
+            .conci-aviso-pila { left: 12px; right: 12px; bottom: 12px; }
+            .conci-aviso { width: auto; max-width: none; }
+        }
     `;
     document.head.appendChild(style);
 }
@@ -24271,6 +24436,158 @@ function _conciDemoraOptionDescription(option) {
 
 const _CONCI_DEMORA_MAX_CODES = 5;
 
+/* Un código de demora capturado puede llevar, además del código del
+   catálogo, dos cosas más:
+
+     ROF          como siempre: la causa, sin repartir minutos
+     ROF-40       de la demora del vuelo, 40 minutos son por ROF
+     R-ROF-40     la letra al frente dice de qué se trató: la R de
+                  repercusión de una causa anterior es la de siempre,
+                  pero se acepta cualquier letra (el catálogo ya tiene
+                  un código "R" que se antepone; aquí va separada para
+                  poder leerla)
+
+   Lo de siempre sigue valiendo: un código suelto se lee igual que antes,
+   y las variantes pegadas del catálogo (RCTB, RAAM) tampoco se tocan. */
+const _CONCI_DEMORA_TOKEN_RE = /^(?:([A-Z])[-\s]+)?([A-Z0-9]{1,8})(?:[-\s]+(\d{1,4}))?$/;
+
+function _conciParseDemoraToken(raw) {
+    const texto = String(raw == null ? '' : raw).trim().toUpperCase().replace(/\s+/g, ' ');
+    if (!texto) return null;
+    const m = texto.match(_CONCI_DEMORA_TOKEN_RE);
+    if (!m) return { prefijo: '', codigo: texto, minutos: null };
+    const minutos = m[3] === undefined ? null : Number(m[3]);
+    // "A-10" no es la letra A delante del código 10: es el código A con diez
+    // minutos. Solo hay letra al frente cuando lo que sigue es un código de
+    // verdad, no un número.
+    if (m[1] && m[3] === undefined && /^\d+$/.test(m[2])) {
+        return { prefijo: '', codigo: m[1], minutos: Number(m[2]) };
+    }
+    return {
+        prefijo: m[1] || '',
+        codigo: m[2],
+        minutos: Number.isFinite(minutos) ? minutos : null,
+    };
+}
+
+/** Vuelve a armar el texto guardado: R-ROF-40, ROF-40, ROF. */
+function _conciFormatDemoraToken(token) {
+    if (!token || !token.codigo) return '';
+    const partes = [];
+    if (token.prefijo) partes.push(token.prefijo);
+    partes.push(token.codigo);
+    if (Number.isFinite(token.minutos) && token.minutos > 0) partes.push(String(token.minutos));
+    return partes.join('-');
+}
+
+/** Los tokens de una celda, sin repetir código y respetando el tope. */
+function _conciParseDemoraTokens(raw) {
+    const vistos = new Set();
+    return String(raw || '')
+        .split(/[,;|\n]+/)
+        .map(_conciParseDemoraToken)
+        .filter(token => token && token.codigo && !vistos.has(token.codigo) && vistos.add(token.codigo))
+        .slice(0, _CONCI_DEMORA_MAX_CODES);
+}
+
+/* Minutos de demora del vuelo de esa fila, para repartirlos entre códigos.
+
+   La columna DEMORA +- 15 MIN. es HR. DE OPERACIÓN menos el slot, con signo:
+   negativa si el vuelo se adelantó y positiva si se retrasó. Las dos cuentan
+   como demora —salirse del slot por arriba o por abajo es lo mismo— así que
+   lo que se reparte es la distancia, sin el signo. */
+function _conciDemoraTotalMinutos(td) {
+    const tr = td && td.closest && td.closest('tr');
+    if (!tr) return null;
+    const celda = Array.from(tr.querySelectorAll('td[data-col]'))
+        .find(cell => /^demora/.test(_conciNormalizedColumnName(cell.dataset.col)));
+    if (!celda) return null;
+    const crudo = String(celda.dataset.raw ?? celda.textContent ?? '').replace(/[+\s]/g, '');
+    if (!crudo) return null;
+    const valor = Number(crudo);
+    if (!Number.isFinite(valor)) return null;
+    return Math.abs(valor);
+}
+
+/* Avisos de la captura de manifiestos.
+
+   Van colgados de la propia pestaña, no del body: si el capturista se
+   cambia de pestaña o de módulo, el aviso se esconde con la vista en vez
+   de quedarse flotando encima de una pantalla que ya no tiene nada que
+   ver con la captura. */
+function _conciAviso({ titulo, texto = '', tipo = 'aviso', icono = 'fa-triangle-exclamation', duracion = 7000 }) {
+    const pane = document.getElementById('pane-conci-comercial');
+    if (!pane) return null;
+    _conciEnsureEditStyles();
+
+    let pila = pane.querySelector('.conci-aviso-pila');
+    if (!pila) {
+        pila = document.createElement('div');
+        pila.className = 'conci-aviso-pila';
+        pane.appendChild(pila);
+    }
+    // Tres a la vez bastan; los viejos se van para no tapar la tabla.
+    while (pila.children.length >= 3) pila.removeChild(pila.firstElementChild);
+
+    const aviso = document.createElement('div');
+    aviso.className = `conci-aviso conci-aviso-${tipo}`;
+    aviso.setAttribute('role', 'status');
+
+    const marca = document.createElement('span');
+    marca.className = 'conci-aviso-icono';
+    marca.innerHTML = `<i class="fas ${/^fa-[a-z0-9-]+$/.test(icono) ? icono : 'fa-triangle-exclamation'}"></i>`;
+
+    const cuerpo = document.createElement('div');
+    cuerpo.className = 'conci-aviso-cuerpo';
+    const encabezado = document.createElement('div');
+    encabezado.className = 'conci-aviso-titulo';
+    encabezado.textContent = titulo || '';
+    cuerpo.appendChild(encabezado);
+    if (texto) {
+        const detalle = document.createElement('div');
+        detalle.className = 'conci-aviso-texto';
+        detalle.textContent = texto;
+        cuerpo.appendChild(detalle);
+    }
+
+    const cerrar = document.createElement('button');
+    cerrar.type = 'button';
+    cerrar.className = 'conci-aviso-cerrar';
+    cerrar.setAttribute('aria-label', 'Cerrar aviso');
+    cerrar.innerHTML = '<i class="fas fa-xmark"></i>';
+
+    const tiempo = document.createElement('span');
+    tiempo.className = 'conci-aviso-tiempo';
+    tiempo.style.animationDuration = `${Math.max(duracion, 1200)}ms`;
+
+    aviso.append(marca, cuerpo, cerrar, tiempo);
+    pila.appendChild(aviso);
+
+    const quitar = () => {
+        if (!aviso.isConnected) return;
+        aviso.classList.add('conci-aviso-saliendo');
+        setTimeout(() => aviso.remove(), 220);
+    };
+    cerrar.addEventListener('click', quitar);
+    setTimeout(quitar, Math.max(duracion, 1200));
+    return aviso;
+}
+
+/** El renglón que dice cuánta demora falta por repartir entre los códigos. */
+function _conciDemoraResumenReparto(total, asignados) {
+    if (!Number.isFinite(total) || total <= 0) {
+        return { clase: 'conci-demora-min-nota', html: 'Esta fila no trae minutos de demora que repartir' };
+    }
+    const restante = total - asignados;
+    if (restante === 0) {
+        return { clase: 'conci-demora-min-ok', html: `<i class="fas fa-check me-1"></i>Los ${total} min repartidos` };
+    }
+    if (restante > 0) {
+        return { clase: 'conci-demora-min-falta', html: `Faltan ${restante} de ${total} min por asignar a un código` };
+    }
+    return { clase: 'conci-demora-min-sobra', html: `Sobran ${Math.abs(restante)} min sobre los ${total} de la demora` };
+}
+
 function _conciParseDemoraCodes(raw) {
     const seen = new Set();
     return String(raw || '')
@@ -24283,8 +24600,11 @@ function _conciDemoraDescriptionsForCodes(codes, options) {
     const optionByCode = new Map((options || []).map(option => [String(option.codigo || '').toUpperCase(), option]));
     return (codes || [])
         .map(code => {
-            const normalized = String(code || '').toUpperCase();
-            let option = optionByCode.get(normalized);
+            // El código puede venir con su letra y sus minutos (R-ROF-40):
+            // la causa se busca por el código pelón.
+            const token = _conciParseDemoraToken(code) || { codigo: String(code || '').toUpperCase(), prefijo: '' };
+            const normalized = token.prefijo ? `${token.prefijo}${token.codigo}` : token.codigo;
+            let option = optionByCode.get(normalized) || optionByCode.get(token.codigo);
             if (!option && normalized.startsWith(_CONCI_DEMORA_PREFIX_CODE)) {
                 option = _conciDemoraPrefixVariants(options || [], normalized)
                     .find(candidate => candidate.codigo === normalized);
@@ -24728,14 +25048,42 @@ function _conciDemoraFilterOptions(options, query) {
     return options.filter(option => option.search.includes(q)).slice(0, 60);
 }
 
+/* Tira de reparto de minutos. Va aparte del panel de sugerencias porque
+   ese se vuelve a pintar con cada tecla y aquí hay campos que se están
+   escribiendo: si compartieran nodo, el cursor se perdería a media cifra. */
+function _conciDemoraMinutosEl() {
+    /* Nodo nuevo por captura: los escuchas de la captura anterior se van
+       con el nodo viejo y no se acumulan de celda en celda. */
+    const previo = document.getElementById('conci-demora-minutos');
+    if (previo) previo.remove();
+    const el = document.createElement('div');
+    el.id = 'conci-demora-minutos';
+    el.className = 'conci-demora-min d-none';
+    document.body.appendChild(el);
+    return el;
+}
+
 // Editor multiselección de CÓDIGO DEMORA: admite hasta cinco códigos del
 // catálogo y mantiene OBSERVACIONES sincronizada con sus descripciones.
 function _conciActivateDemoraCodeEditor(td, currentRaw) {
     const options = _conciDemoraAllOptions();
-    const originalCodes = _conciParseDemoraCodes(currentRaw);
-    let selectedCodes = originalCodes.slice(0, _CONCI_DEMORA_MAX_CODES);
-    const code = selectedCodes.join(', ');
+    const originalTokens = _conciParseDemoraTokens(currentRaw);
+    let selectedCodes = originalTokens.map(token => token.codigo);
+    /* Lo que cada código lleva encima del propio código: la letra que se
+       le anteponga —R de repercusión es la más común, pero puede ser
+       cualquiera— y los minutos que le tocan de la demora del vuelo. El
+       recuadro de texto sigue mostrando solo los códigos, como siempre. */
+    const extras = new Map(originalTokens.map(token => [token.codigo, {
+        prefijo: token.prefijo,
+        minutos: token.minutos,
+    }]));
+    const code = originalTokens.map(_conciFormatDemoraToken).join(', ');
     const optionByCode = new Map(options.map(option => [option.codigo, option]));
+
+    /** El texto que se guarda en la celda: código, letra y minutos. */
+    const rawSeleccion = () => selectedCodes
+        .map(codigo => _conciFormatDemoraToken({ codigo, ...(extras.get(codigo) || {}) }))
+        .join(', ');
 
     const input = document.createElement('input');
     input.type = 'text';
@@ -24743,7 +25091,7 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
     input.autocomplete = 'off';
     input.spellcheck = false;
     input.placeholder = 'Hasta 5 códigos…';
-    input.value = code;
+    input.value = selectedCodes.join(', ');
 
     td.classList.add('conci-cell-active');
     td._conciEditorStartRaw = code;
@@ -24751,14 +25099,163 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
     td.appendChild(input);
 
     const suggest = _conciDemoraSuggestEl();
+    const minutosEl = _conciDemoraMinutosEl();
     let activeIndex = -1;
     let currentMatches = [];
 
+    /* Reparto de minutos. La demora del vuelo ya está calculada en su
+       columna; aquí solo se dice cuántos de esos minutos son por cada
+       código, y con qué letra al frente si hace falta. */
+    const minutosAsignados = () => selectedCodes.reduce((suma, codigo) => {
+        const minutos = (extras.get(codigo) || {}).minutos;
+        return suma + (Number.isFinite(minutos) ? minutos : 0);
+    }, 0);
+
+    const campoDe = (codigo, esLetra) => Array.from(minutosEl
+        .querySelectorAll(esLetra ? '.conci-demora-min-letra' : '.conci-demora-min-input'))
+        .find(campo => campo.dataset.code === codigo) || null;
+
+    // Repintar la tira quita del DOM el campo que tuviera el foco; ese
+    // focusout no significa que se haya terminado la captura.
+    let repintandoMinutos = false;
+    const renderMinutos = () => {
+        const activo = document.activeElement;
+        const foco = activo && minutosEl.contains(activo)
+            ? { codigo: activo.dataset.code, letra: activo.classList.contains('conci-demora-min-letra') }
+            : null;
+        repintandoMinutos = true;
+        if (!selectedCodes.length) {
+            minutosEl.classList.add('d-none');
+            minutosEl.innerHTML = '';
+            repintandoMinutos = false;
+            return;
+        }
+        const chips = selectedCodes.map(codigo => {
+            const extra = extras.get(codigo) || {};
+            const esc = _conciCatalogEsc(codigo);
+            const minutos = Number.isFinite(extra.minutos) ? extra.minutos : '';
+            return `<span class="conci-demora-min-chip">
+                <input class="conci-demora-min-letra" type="text" maxlength="1" data-code="${esc}"
+                    value="${_conciCatalogEsc(extra.prefijo || '')}" placeholder="–"
+                    title="Letra al frente del código, si aplica (opcional). Por ejemplo R de repercusión."
+                    aria-label="Letra del código ${esc}">
+                <span class="conci-demora-min-code">${esc}</span>
+                <input class="conci-demora-min-input" type="text" inputmode="numeric" maxlength="4"
+                    data-code="${esc}" value="${minutos}" placeholder="min"
+                    aria-label="Minutos de demora del código ${esc}">
+            </span>`;
+        }).join('');
+        const resumen = _conciDemoraResumenReparto(_conciDemoraTotalMinutos(td), minutosAsignados());
+        minutosEl.innerHTML = `<div class="conci-demora-min-chips">${chips}</div>`
+            + `<span class="${resumen.clase}">${resumen.html}</span>`;
+        repintandoMinutos = false;
+        minutosEl.classList.remove('d-none');
+        // El foco vuelve al mismo campo en el que se estaba escribiendo.
+        if (foco) {
+            const campo = campoDe(foco.codigo, foco.letra);
+            if (campo) campo.focus();
+        }
+        positionSuggest();
+    };
+
+    /* Elegir un código deja el cursor en su letra, y de ahí se pasa a los
+       minutos: la captura entera se hace con el teclado, sin el mouse. */
+    const enfocarCampo = (campo) => {
+        if (!campo) return false;
+        campo.focus();
+        try { campo.setSelectionRange(0, campo.value.length); } catch (_) { /* sin soporte */ }
+        return true;
+    };
+
+    const enfocarChip = (codigo) => {
+        if (!enfocarCampo(campoDe(codigo, true))) enfocarCampo(campoDe(codigo, false));
+    };
+
+    /* La tira queda arriba del recuadro, así que desde ahí se sube a ella:
+       se entra por lo último capturado, que es lo que se acaba de teclear. */
+    const enfocarTira = () => {
+        const ultimo = selectedCodes[selectedCodes.length - 1];
+        if (!ultimo) return false;
+        return enfocarCampo(campoDe(ultimo, false)) || enfocarCampo(campoDe(ultimo, true));
+    };
+
+    /* El recuadro manda sobre lo elegido: si de ahí se borra un código, deja
+       de estar marcado y se van con él su letra y sus minutos. Si no, el
+       catálogo seguiría creyéndolo puesto y el Enter siguiente lo quitaría
+       en vez de volverlo a poner. */
+    const sincronizarSeleccionConTexto = () => {
+        const escritos = new Map(_conciParseDemoraTokens(input.value).map(token => [token.codigo, token]));
+        const previos = selectedCodes;
+        selectedCodes = previos.filter(codigo => escritos.has(codigo));
+        previos.forEach(codigo => { if (!escritos.has(codigo)) extras.delete(codigo); });
+        // Y lo que se escriba completo a mano —"AAA-40"— se ve en la tira.
+        selectedCodes.forEach(codigo => {
+            const token = escritos.get(codigo);
+            if (!token.prefijo && !Number.isFinite(token.minutos)) return;
+            const extra = extras.get(codigo) || {};
+            extras.set(codigo, {
+                prefijo: token.prefijo || extra.prefijo || '',
+                minutos: Number.isFinite(token.minutos) ? token.minutos
+                    : (Number.isFinite(extra.minutos) ? extra.minutos : null),
+            });
+        });
+        renderMinutos();
+        sincronizarBorrador();
+    };
+
+    minutosEl.addEventListener('input', event => {
+        const letra = event.target.closest('.conci-demora-min-letra');
+        const campo = letra || event.target.closest('.conci-demora-min-input');
+        if (!campo) return;
+        const codigo = campo.dataset.code;
+        const extra = extras.get(codigo) || {};
+        if (letra) {
+            // Cualquier letra vale: la R de repercusión es solo la más usada.
+            const limpio = campo.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 1);
+            if (limpio !== campo.value) campo.value = limpio;
+            extras.set(codigo, { ...extra, prefijo: limpio });
+            // Escrita la letra ya no hay más que hacer ahí: siguen los minutos.
+            if (limpio) enfocarCampo(campoDe(codigo, false));
+        } else {
+            const limpio = campo.value.replace(/\D/g, '').slice(0, 4);
+            if (limpio !== campo.value) campo.value = limpio;
+            const valor = parseInt(limpio, 10);
+            extras.set(codigo, { ...extra, minutos: Number.isFinite(valor) && valor > 0 ? valor : null });
+        }
+        // Solo se refresca el resumen: volver a pintar los campos aquí
+        // dejaría el cursor fuera del que se está escribiendo.
+        actualizarResumenMinutos();
+        sincronizarBorrador();
+    });
+
+    const actualizarResumenMinutos = () => {
+        const nodo = minutosEl.querySelector('.conci-demora-min-ok, .conci-demora-min-falta, .conci-demora-min-sobra, .conci-demora-min-nota');
+        if (!nodo) return;
+        const resumen = _conciDemoraResumenReparto(_conciDemoraTotalMinutos(td), minutosAsignados());
+        nodo.className = resumen.clase;
+        nodo.innerHTML = resumen.html;
+    };
+
+    const sincronizarBorrador = () => {
+        const raw = rawSeleccion();
+        _conciStageCellDraft(td, raw);
+        _conciBroadcastCellInput(td, raw);
+    };
+
     const positionSuggest = () => {
         const r = input.getBoundingClientRect();
+        const ancho = `${Math.max(Math.round(r.width), 300)}px`;
+        let arranque = r.bottom + 4;
+        const tira = document.getElementById('conci-demora-minutos');
+        if (tira && !tira.classList.contains('d-none')) {
+            tira.style.left = `${Math.round(r.left)}px`;
+            tira.style.top = `${Math.round(arranque)}px`;
+            tira.style.width = ancho;
+            arranque = tira.getBoundingClientRect().bottom + 4;
+        }
         suggest.style.left = `${Math.round(r.left)}px`;
-        suggest.style.top = `${Math.round(r.bottom + 4)}px`;
-        suggest.style.width = `${Math.max(Math.round(r.width), 300)}px`;
+        suggest.style.top = `${Math.round(arranque)}px`;
+        suggest.style.width = ancho;
     };
 
     const closeSuggest = () => {
@@ -24809,21 +25306,28 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
 
     const pickMatch = (option) => {
         const existing = selectedCodes.indexOf(option.codigo);
+        const agregado = existing < 0;
         if (existing >= 0) {
             selectedCodes.splice(existing, 1);
+            // Al quitar el código se van con él su letra y sus minutos.
+            extras.delete(option.codigo);
         } else if (selectedCodes.length < _CONCI_DEMORA_MAX_CODES) {
             selectedCodes.push(option.codigo);
         } else {
-            if (typeof showNotification === 'function') {
-                showNotification(`Sólo se permiten ${_CONCI_DEMORA_MAX_CODES} códigos de demora por registro.`, 'warning');
-            }
+            _conciAviso({
+                titulo: 'Máximo de códigos alcanzado',
+                texto: `Un registro admite hasta ${_CONCI_DEMORA_MAX_CODES} códigos de demora. Quita alguno para poder agregar otro.`,
+                icono: 'fa-layer-group',
+            });
             return;
         }
         input.value = selectedCodes.join(', ');
-        _conciStageCellDraft(td, input.value);
         _conciSyncDemoraObservaciones(td, selectedCodes, options);
-        _conciBroadcastCellInput(td, input.value);
+        renderMinutos();
+        sincronizarBorrador();
         renderSuggest('');
+        // Recién marcado, lo siguiente es su letra —opcional— y sus minutos.
+        if (agregado) enfocarChip(option.codigo);
     };
 
     function onSuggestMouseDown(event) {
@@ -24839,15 +25343,22 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
     const resolveInput = (raw) => {
         const text = String(raw || '').trim();
         if (!text) return { codigo: '', option: null, ok: true };
-        const upper = text.toUpperCase();
-        if (optionByCode.has(upper)) return { codigo: upper, option: optionByCode.get(upper), ok: true };
+        /* Se acepta escribirlo completo: "R-ROF-40". La letra y los minutos
+           se apartan y el código se resuelve como toda la vida. */
+        const token = _conciParseDemoraToken(text);
+        const traeExtras = Boolean(token && (token.prefijo || Number.isFinite(token.minutos)));
+        const extra = traeExtras
+            ? { prefijo: token.prefijo, minutos: token.minutos }
+            : {};
+        const upper = (traeExtras ? token.codigo : text).toUpperCase();
+        if (optionByCode.has(upper)) return { codigo: upper, option: optionByCode.get(upper), ok: true, ...extra };
         const head = upper.split(/[—–-]/)[0].trim();
-        if (optionByCode.has(head)) return { codigo: head, option: optionByCode.get(head), ok: true };
+        if (optionByCode.has(head)) return { codigo: head, option: optionByCode.get(head), ok: true, ...extra };
         // Combinación "R" + código (repercusión), válida aunque no sea fila del catálogo.
         const variant = _conciDemoraPrefixVariants(options, upper).find(v => v.codigo === upper);
-        if (variant) return { codigo: upper, option: variant, ok: true };
-        const matches = _conciDemoraFilterOptions(options, text);
-        if (matches.length === 1) return { codigo: matches[0].codigo, option: matches[0], ok: true };
+        if (variant) return { codigo: upper, option: variant, ok: true, ...extra };
+        const matches = _conciDemoraFilterOptions(options, upper);
+        if (matches.length === 1) return { codigo: matches[0].codigo, option: matches[0], ok: true, ...extra };
         return { codigo: '', option: null, ok: false };
     };
 
@@ -24857,6 +25368,8 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
         closed = true;
         td._conciCloseEditor = null;
         closeSuggest();
+        minutosEl.classList.add('d-none');
+        minutosEl.innerHTML = '';
 
         if (!accept) {
             _conciCommitCellRaw(td, code, move, code);
@@ -24875,9 +25388,12 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
             _conciCommitCellRaw(td, code, move, code);
             td.classList.add('conci-cell-invalid-code');
             setTimeout(() => td.classList.remove('conci-cell-invalid-code'), 1500);
-            if (typeof showNotification === 'function') {
-                showNotification(`"${String(input.value).trim()}" no existe en el catálogo de códigos de demora.`, 'warning');
-            }
+            _conciAviso({
+                titulo: 'Código de demora no encontrado',
+                texto: `"${String(input.value).trim()}" no está en el catálogo, así que la celda se quedó como estaba.`,
+                tipo: 'error',
+                icono: 'fa-circle-xmark',
+            });
             return;
         }
         // Autocompleta OBSERVACIONES con la causa del código elegido, sin pisar
@@ -24887,7 +25403,44 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
         // Enter), su editor se abre ya con este texto en vez de perderlo por
         // el blur forzado que dispararía pisarlo después de abierto.
         selectedCodes = Array.from(new Set(resolvedParts.map(resolved => resolved.codigo).filter(Boolean)));
-        const joinedCodes = selectedCodes.join(', ');
+        // Lo que se escribió a mano manda sobre lo que quedó en la tira.
+        resolvedParts.forEach(resolved => {
+            if (!resolved.codigo) return;
+            const previo = extras.get(resolved.codigo) || {};
+            extras.set(resolved.codigo, {
+                prefijo: resolved.prefijo || previo.prefijo || '',
+                minutos: Number.isFinite(resolved.minutos) ? resolved.minutos
+                    : (Number.isFinite(previo.minutos) ? previo.minutos : null),
+            });
+        });
+        // Y se olvidan los extras de códigos que ya no están seleccionados.
+        [...extras.keys()].forEach(codigo => {
+            if (!selectedCodes.includes(codigo)) extras.delete(codigo);
+        });
+        const joinedCodes = rawSeleccion();
+        /* Si el vuelo trae demora y lo repartido no llega (o se pasa), se
+           avisa: la captura se guarda igual, pero queda claro que falta
+           asignarle minutos a algún código. */
+        const totalFila = _conciDemoraTotalMinutos(td);
+        const repartidos = minutosAsignados();
+        // Solo si de verdad se capturó algo aquí: pasar de largo por la celda
+        // con Tab no tiene por qué sacar un aviso en cada renglón.
+        if (joinedCodes !== code && Number.isFinite(totalFila) && totalFila > 0
+            && selectedCodes.length && repartidos !== totalFila) {
+            const restante = totalFila - repartidos;
+            _conciAviso(restante > 0
+                ? {
+                    titulo: 'Faltan minutos por asignar',
+                    texto: `De los ${totalFila} min de demora del vuelo, ${restante} siguen sin asignarse a un código.`,
+                    icono: 'fa-stopwatch',
+                }
+                : {
+                    titulo: 'Minutos asignados de más',
+                    texto: `Se repartieron ${repartidos} min entre los códigos y la demora del vuelo es de ${totalFila}.`,
+                    tipo: 'error',
+                    icono: 'fa-scale-unbalanced',
+                });
+        }
         _conciSyncDemoraObservaciones(td, selectedCodes, options);
         _conciCommitCellRaw(td, joinedCodes, move, joinedCodes);
         td.title = selectedCodes.map(selected => optionByCode.get(selected)?.label || selected).join('\n');
@@ -24896,7 +25449,10 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
 
     // No se fuerza mayúsculas al teclear (movería el cursor al final): el filtrado
     // es insensible a mayúsculas y el valor se normaliza al confirmar.
-    input.addEventListener('input', () => renderSuggest(input.value.includes(',') ? input.value.split(',').pop() : input.value));
+    input.addEventListener('input', () => {
+        sincronizarSeleccionConTexto();
+        renderSuggest(input.value.includes(',') ? input.value.split(',').pop() : input.value);
+    });
     input.addEventListener('focus', () => {
         renderSuggest('');
         try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) { /* sin soporte */ }
@@ -24915,15 +25471,41 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
             return;
         }
         if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-            // Igual que en el editor de AERONAVE: las flechas sólo navegan
-            // entre celdas y nunca confirman una sugerencia.
+            /* Con la lista abierta las flechas recorren las sugerencias, que
+               es lo que se espera de un combo. Si se cierra con Escape,
+               vuelven a mover entre celdas como en el resto de la tabla. */
             event.preventDefault();
+            const listaAbierta = !suggest.classList.contains('d-none') && currentMatches.length > 0;
+            if (listaAbierta) {
+                // Antes de la primera sugerencia está la tira: subiendo se llega a
+                // corregir la letra o los minutos de lo ya capturado.
+                if (event.key === 'ArrowUp' && activeIndex <= 0 && enfocarTira()) return;
+                const paso = event.key === 'ArrowDown' ? 1 : -1;
+                const total = currentMatches.length;
+                const siguiente = activeIndex < 0
+                    ? (paso > 0 ? 0 : total - 1)
+                    : (activeIndex + paso + total) % total;
+                setActive(siguiente);
+                return;
+            }
             closeEditor(true, event.key === 'ArrowUp' ? 'up' : 'down');
         } else if (event.key === 'Enter') {
             event.preventDefault();
+            // Sobre una sugerencia resaltada, Enter la marca o la desmarca y
+            // deja seguir capturando; sin resaltado, cierra como siempre.
+            if (activeIndex >= 0 && currentMatches[activeIndex]) {
+                pickMatch(currentMatches[activeIndex]);
+                return;
+            }
             closeEditor(true, 'next');
         } else if (event.key === 'Escape') {
             event.preventDefault();
+            // El primer Escape cierra la lista y devuelve las flechas a su
+            // papel de siempre; el segundo cancela la edición.
+            if (!suggest.classList.contains('d-none')) {
+                closeSuggest();
+                return;
+            }
             closeEditor(false, false);
         } else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             // →/← se comportan igual que Tab/Shift+Tab, como en el editor de
@@ -24933,8 +25515,76 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
             closeEditor(true, goingBack ? 'prev' : 'next');
         }
     });
-    input.addEventListener('blur', () => closeEditor(true, false));
+    input.addEventListener('blur', event => {
+        // Ir a escribir los minutos saca el foco del recuadro: eso no puede
+        // dar por terminada la captura.
+        const destino = event.relatedTarget;
+        if (destino && (minutosEl.contains(destino) || suggest.contains(destino))) return;
+        closeEditor(true, false);
+    });
 
+    minutosEl.addEventListener('focusout', event => {
+        if (repintandoMinutos) return;
+        const destino = event.relatedTarget;
+        if (destino && (destino === input || minutosEl.contains(destino) || suggest.contains(destino))) return;
+        closeEditor(true, false);
+    });
+
+    minutosEl.addEventListener('keydown', event => {
+        const campo = event.target.closest('.conci-demora-min-letra, .conci-demora-min-input');
+        if (!campo) return;
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closeEditor(false, false);
+            return;
+        }
+        const esLetra = campo.classList.contains('conci-demora-min-letra');
+        // La letra no es obligatoria: con Enter o → se pasa a los minutos.
+        if (esLetra && (event.key === 'Enter' || event.key === 'ArrowRight')) {
+            event.preventDefault();
+            if (!enfocarCampo(campoDe(campo.dataset.code, false))) input.focus();
+            return;
+        }
+        /* ← y → saltan de campo sólo cuando el cursor ya está en la orilla,
+           para no estorbar mientras se corrige una cifra. */
+        const campos = Array.from(minutosEl.querySelectorAll('.conci-demora-min-letra, .conci-demora-min-input'));
+        const posicion = campos.indexOf(campo);
+        const alPrincipio = campo.selectionStart === 0 && campo.selectionEnd === 0;
+        const alFinal = campo.selectionStart === campo.value.length && campo.selectionEnd === campo.value.length;
+        if (event.key === 'ArrowLeft' && alPrincipio && campos[posicion - 1]) {
+            event.preventDefault();
+            enfocarCampo(campos[posicion - 1]);
+            return;
+        }
+        if (event.key === 'ArrowRight' && alFinal && campos[posicion + 1]) {
+            event.preventDefault();
+            enfocarCampo(campos[posicion + 1]);
+            return;
+        }
+        if (event.key === 'Enter' || event.key === 'ArrowUp') {
+            // Arriba de la tira está el recuadro, donde se marca el
+            // siguiente código.
+            event.preventDefault();
+            input.focus();
+            return;
+        }
+        if (event.key === 'ArrowDown') {
+            // Y abajo, el catálogo: se baja directo a la primera sugerencia.
+            event.preventDefault();
+            input.focus();
+            if (currentMatches.length) setActive(0);
+            return;
+        }
+        if (event.key !== 'Tab') return;
+        // Tab recorre letra → minutos → letra del siguiente código, y al
+        // salir de la tira regresa al recuadro en vez de irse de la tabla.
+        event.preventDefault();
+        const destino = campos[posicion + (event.shiftKey ? -1 : 1)];
+        if (destino) destino.focus();
+        else input.focus();
+    });
+
+    renderMinutos();
     input.focus();
     try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) { /* sin soporte */ }
 }
