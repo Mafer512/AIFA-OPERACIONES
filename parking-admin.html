@@ -404,17 +404,23 @@ function cardHTML(e){
 /* ════════════════════════════════════
    RENDERIZAR LISTA LATERAL
    ════════════════════════════════════ */
+/* Aviso de lista vacía. Vive dentro de #col-list, así que cada
+   repintado se lo lleva: se vuelve a crear cuando toca. */
+function listaVaciaHTML(){
+  return '<div class="text-center text-muted py-4 small" id="col-empty">'+
+    '<i class="fas fa-inbox d-block mb-2" style="font-size:1.8rem"></i>'+
+    'A&#xFA;n no hay columnas. Agrega una arriba.'+
+    '</div>';
+}
+
 function renderList(){
   var count = columns.length;
   document.getElementById('col-count').textContent = count;
   var list  = document.getElementById('col-list');
-  var empty = document.getElementById('col-empty');
   if(count===0){
-    list.innerHTML = '';
-    empty.style.display = '';
+    list.innerHTML = listaVaciaHTML();
     return;
   }
-  empty.style.display = 'none';
   list.innerHTML = columns.map(function(e){
     var c = gc(e.color);
     var gps = (e.lat && e.lng)
@@ -440,7 +446,7 @@ function renderAll(){
   var grid  = document.getElementById('qr-grid');
   var count = columns.length;
   if(count===0){
-    grid.innerHTML = '<div class="col-12 text-center text-muted py-5">'+
+    grid.innerHTML = '<div class="col-12 text-center text-muted py-5" id="qr-empty">'+
       '<i class="fas fa-qrcode d-block mb-2" style="font-size:3rem;opacity:.25"></i>'+
       '<p>Los QR aparecer&#xE1;n aqu&#xED; cuando agregues columnas</p></div>';
     return;
@@ -484,7 +490,7 @@ function addColumn(){
 
   // Agregar a la lista lateral sin reconstruir
   var empty = document.getElementById('col-empty');
-  empty.style.display = 'none';
+  if(empty && empty.parentNode) empty.parentNode.removeChild(empty);
   var c   = gc(entry.color);
   var gps = (entry.lat && entry.lng)
     ? entry.lat.toFixed(4)+', '+entry.lng.toFixed(4)
@@ -503,9 +509,9 @@ function addColumn(){
 
   // Agregar tarjeta QR al grid sin reconstruir
   var grid = document.getElementById('qr-grid');
-  // Quitar el placeholder vacío si existe
-  var emptyCard = grid.querySelector('.text-muted.py-5');
-  if(emptyCard) emptyCard.parentNode && (emptyCard.parentNode.outerHTML = '');
+  // Quitar el aviso de "sin QR todavía" —sólo ese, no la cuadrícula
+  var emptyCard = grid.querySelector('#qr-empty');
+  if(emptyCard) grid.removeChild(emptyCard);
 
   var wrap = document.createElement('div');
   wrap.innerHTML = cardHTML(entry);
@@ -523,11 +529,11 @@ function addColumn(){
    GENERACIÓN EN LOTE — no congela
    ════════════════════════════════════ */
 function bulkGenerate(){
-  var sec = prompt('&#xBF;Qu&#xE9; secci&#xF3;n generar?\nEjemplo: B', 'B');
+  var sec = prompt('¿Qué sección generar?\nEjemplo: B', 'B');
   if(!sec) return;
   sec = sec.trim().toUpperCase();
-  var from = parseInt(prompt('Desde n&#xFA;mero:', '1'), 10) || 1;
-  var to   = parseInt(prompt('Hasta n&#xFA;mero:', '50'), 10) || 50;
+  var from = parseInt(prompt('Desde número:', '1'), 10) || 1;
+  var to   = parseInt(prompt('Hasta número:', '50'), 10) || 50;
   if(to - from > 200){
     showToast('M&#xE1;ximo 200 columnas por lote.','warning');
     to = from + 200;
@@ -557,7 +563,7 @@ function bulkGenerate(){
    ELIMINAR COLUMNA
    ════════════════════════════════════ */
 function removeColumn(id){
-  if(!confirm('&#xBF;Eliminar esta columna?')) return;
+  if(!confirm('¿Eliminar esta columna?')) return;
   columns = columns.filter(function(c){ return c.id !== id; });
   save();
   renderAll();
@@ -588,7 +594,7 @@ function rerenderQRs(){
 function printQRs(){ window.print(); }
 
 function clearAll(){
-  if(!confirm('&#xBF;Borrar TODAS las columnas? Esta acci&#xF3;n no se puede deshacer.')) return;
+  if(!confirm('¿Borrar TODAS las columnas? Esta acción no se puede deshacer.')) return;
   columns = [];
   save();
   renderAll();
