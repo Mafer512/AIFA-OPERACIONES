@@ -22461,6 +22461,84 @@ document.addEventListener('keydown', event => {
     event.stopPropagation();
     _conciGuardarTodoAhora();
 }, true);
+
+// Ctrl+J rellena hacia abajo: copia el valor de la celda que se está
+// capturando SOLO en la fila visible justo debajo, en esa misma columna —
+// el "rellenar hacia abajo" de una hoja de cálculo, un renglón a la vez
+// (repetible). Reutiliza el mismo camino de guardado que una edición
+// manual (_conciCommitCellRaw), así que la celda rellenada queda marcada
+// como dirty, entra al historial de deshacer y se autoguarda igual que si
+// el usuario la hubiera tecleado. No toca columnas de solo lectura.
+document.addEventListener('keydown', event => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+    if (String(event.key || '').toLowerCase() !== 'j') return;
+    const section = document.getElementById('conciliacion-section');
+    if (!section?.classList.contains('active')) return;
+    if (!document.getElementById('pane-conci-comercial')?.classList.contains('active')) return;
+    if (!document.getElementById('table-conci-manifiestos')) return;
+    if (!_conciEditMode || !_conciCanCurrentUserEdit()) return;
+
+    const activeTd = document.querySelector('#table-conci-manifiestos td.conci-cell-active');
+    if (!activeTd || activeTd.dataset.conciReadonly === '1') return;
+    const startRow = activeTd.closest('tr');
+    const filas = _conciVisibleBodyRows();
+    const idx = startRow ? filas.indexOf(startRow) : -1;
+    if (idx === -1 || idx >= filas.length - 1) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const col = activeTd.dataset.col;
+    const liveInput = activeTd.querySelector('input, textarea, select');
+    const fallbackRaw = _conciIsRoutingColumn(col)
+        ? (activeTd.dataset.routeRaw ?? activeTd.dataset.raw ?? activeTd.textContent)
+        : (activeTd.dataset.raw ?? activeTd.textContent);
+    const value = _conciNormalizeEditableCellText(
+        liveInput ? liveInput.value : (activeTd.dataset.pendingRaw ?? fallbackRaw)
+    );
+
+    const celda = _conciGetCellInRow(filas[idx + 1], col);
+    if (!celda || celda === activeTd || celda.dataset.conciReadonly === '1') return;
+    _conciCommitCellRaw(celda, value, false, value);
+}, true);
+
+// Ctrl+; inserta la fecha de hoy, fija (no fórmula), en la celda que se está
+// capturando — el atajo estándar de Excel para "Insertar fecha actual".
+// Reutiliza el mismo camino de guardado que las demás celdas
+// (_conciCommitCellRaw): la celda queda marcada como dirty, entra al
+// historial de deshacer y se autoguarda igual que si el usuario la hubiera
+// tecleado a mano.
+//
+// No se descarta por Shift, y se acepta por dos vías porque en teclado en
+// español (Latinoamérica) hay dos formas físicas de llegar a esto:
+//   1) Shift+, (coma) — así se escribe el carácter ";" en este layout;
+//      event.key ya trae ese carácter resultante.
+//   2) La tecla Ñ sola, sin Shift — es la misma POSICIÓN física que el
+//      punto y coma en teclado en inglés (event.code === 'Semicolon',
+//      que identifica la tecla por posición, no por lo que imprime), y es
+//      justo la tecla que Excel de verdad intercepta para este atajo
+//      (Excel usa el código de tecla física, no el carácter), así que en
+//      Excel real en este teclado el atajo ya es "Ctrl + Ñ" sin Shift.
+document.addEventListener('keydown', event => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+    if (event.key !== ';' && event.code !== 'Semicolon') return;
+    const section = document.getElementById('conciliacion-section');
+    if (!section?.classList.contains('active')) return;
+    if (!document.getElementById('pane-conci-comercial')?.classList.contains('active')) return;
+    if (!document.getElementById('table-conci-manifiestos')) return;
+    if (!_conciEditMode || !_conciCanCurrentUserEdit()) return;
+
+    const activeTd = document.querySelector('#table-conci-manifiestos td.conci-cell-active');
+    if (!activeTd || activeTd.dataset.conciReadonly === '1') return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const hoy = new Date();
+    const fechaHoy = `${_conciPad2(hoy.getDate())}/${_conciPad2(hoy.getMonth() + 1)}/${hoy.getFullYear()}`;
+    _conciCommitCellRaw(activeTd, fechaHoy, false, fechaHoy);
+}, true);
+
 window.addEventListener('resize', () => {
     clearTimeout(_conciScrollResizeTimer);
     _conciScrollResizeTimer = setTimeout(() => {
