@@ -5591,7 +5591,10 @@ document.addEventListener('DOMContentLoaded', () => { setTimeout(() => window.da
     window.alApplyFilters = function () {
         const q = (document.getElementById('al-search')?.value || '').toLowerCase().trim();
         alFiltered = alAll.filter(a => {
-            if (alFilter !== 'all' && !(a.types || []).includes(alFilter)) return false;
+            // "Sin logo" es la lista de trabajo: a quiénes falta subirles el suyo.
+            if (alFilter === 'sin-logo') {
+                if (a.logo_url) return false;
+            } else if (alFilter !== 'all' && !(a.types || []).includes(alFilter)) return false;
             if (q) {
                 const hay = [a.name, a.iata, a.icao, ...(a.aliases || [])].join(' ').toLowerCase();
                 if (!hay.includes(q)) return false;

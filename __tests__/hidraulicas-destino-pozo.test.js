@@ -157,13 +157,18 @@ describe('Hidráulicas · destino del agua por pozo', () => {
         }
     });
 
-    test('si el mes en curso sí tiene datos, no se mueve ni avisa', () => {
-        // El reloj del entorno cae en agosto, que sí tiene captura: el tablero
-        // debe respetar el mes de hoy en lugar de saltar a otro.
-        const hoy = new Date();
-        expect([mod.state.selectedYear, mod.state.selectedMonth])
-            .toEqual([hoy.getFullYear(), hoy.getMonth() + 1]);
-        expect(document.getElementById('hidra-auto-period').classList.contains('d-none')).toBe(true);
+    test('si el mes en curso sí tiene datos, no se mueve ni avisa', async () => {
+        // El reloj se fija en agosto, que sí tiene captura: el tablero debe
+        // respetar el mes de hoy en lugar de saltar a otro. Iba contra el reloj
+        // real y la prueba se rompía sola al cambiar de mes.
+        jest.useFakeTimers().setSystemTime(new Date(2026, 7, 15));
+        try {
+            const enAgosto = await arrancar([], []);
+            expect([enAgosto.state.selectedYear, enAgosto.state.selectedMonth]).toEqual([2026, 8]);
+            expect(document.getElementById('hidra-auto-period').classList.contains('d-none')).toBe(true);
+        } finally {
+            jest.useRealTimers();
+        }
     });
 
     test('la asignación de un mes sigue vigente en los meses siguientes', () => {

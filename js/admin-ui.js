@@ -12,7 +12,14 @@ class AdminUI {
         // Create modal HTML
         const modalHtml = `
             <div id="admin-modal" class="modal fade" tabindex="-1">
-                <div class="modal-dialog modal-lg modal-dialog-centered">
+                <!-- modal-dialog-scrollable: sin él, un formulario largo (el de impactos
+                     de fauna tiene dieciocho campos) crece más que la pantalla y, al ir
+                     centrado, se sale por arriba y por abajo a partes iguales. Lo que
+                     queda por encima del borde no hay forma de alcanzarlo: se bajaba a
+                     capturar y ya no se podía volver a los primeros campos. Con el
+                     cuerpo desplazable, el encabezado y los botones quedan fijos y el
+                     formulario se recorre entero. -->
+                <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
                     <div class="modal-content shadow-sm border-0">
                         <div class="modal-header bg-primary text-white">
                             <h5 class="modal-title d-flex align-items-center gap-2"><i class="fas fa-edit"></i><span id="admin-modal-title">Editar Datos</span></h5>
@@ -20,7 +27,9 @@ class AdminUI {
                         </div>
                         <div class="modal-body">
                             <p class="small text-muted mb-3" id="admin-modal-help">Selecciona el tipo de registro y completa los campos. Los campos obligatorios están marcados.</p>
-                            <form id="admin-form" class="row g-3"></form>
+                            <div class="admin-form-sheet">
+                                <form id="admin-form" class="row g-3"></form>
+                            </div>
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>

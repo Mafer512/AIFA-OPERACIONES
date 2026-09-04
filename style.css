@@ -20922,3 +20922,456 @@ body.conci-manifest-workspace #navdeck-back {
   color: #664d03 !important;
   border-color: #f0ad4e !important;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PASADA MÓVIL — TELÉFONOS
+   Las medidas de tableta (≥ 576 px) ya estaban resueltas y no se tocan: todo
+   lo de aquí abajo entra solo en pantallas de teléfono, salvo el bloque de
+   capas, que corrige un encimamiento real que también se daba en tableta.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Capas: con el menú abierto nada se le pinta encima ───────────────────
+   La barra HOY/MAÑANA lleva z-index 1310 para ganarle al header (1300). El
+   menú lateral iba en 1050 y el botón del asistente en 1055, así que al abrir
+   el menú en el teléfono la barra de agenda quedaba flotando ENCIMA del panel:
+   uno desplazaba las tarjetas y la barra seguía ahí tapándolas. El menú pasa a
+   ser la capa más alta de la aplicación (por debajo de los modales, 1650). */
+@media (max-width: 991.98px) {
+   .sidebar,
+   body.navdeck-mode .sidebar.nav-deck {
+      z-index: 1360 !important;
+   }
+
+   .sidebar-overlay {
+      z-index: 1340;
+   }
+
+   body.sidebar-open .ag-today-bar {
+      z-index: 0 !important;
+   }
+
+   /* Los botones flotantes tampoco tienen nada que hacer sobre el menú. */
+   body.sidebar-open #_aga-fab,
+   body.sidebar-open #_aga-panel,
+   body.sidebar-open #fb-fab-wrap {
+      display: none !important;
+   }
+}
+
+/* ── 1 bis. En el teléfono el menú de tarjetas ES la pantalla de inicio ──────
+   Las reglas que hacen del deck la portada (esconder .main-content mientras no
+   hay módulo abierto, y esconder el deck cuando sí lo hay) vivían dentro de
+   @media (min-width: 992px). En el teléfono no aplicaba ninguna: el deck se
+   quedaba escondido como hoja desplegable y, al entrar, uno se topaba con el
+   área de contenido vacía. Además, esa hoja se abría a 92 % del alto y dejaba
+   una franja muerta abajo. Aquí el teléfono usa el mismo modelo que el
+   escritorio: el deck se ve completo al entrar y las tres líneas del header
+   salen del módulo y devuelven el inicio (ver toggleSidebar en script.js). */
+@media (max-width: 991.98px) {
+   body.navdeck-mode:not(.navdeck-active) .sidebar.nav-deck {
+      position: static !important;
+      transform: none !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      max-height: none !important;
+      overflow: visible !important;
+      box-shadow: none !important;
+      z-index: auto !important;
+   }
+
+   body.navdeck-mode:not(.navdeck-active) .main-content,
+   body.navdeck-mode:not(.navdeck-active) .content-section {
+      display: none !important;
+   }
+
+   body.navdeck-mode.navdeck-active .sidebar.nav-deck {
+      display: none !important;
+   }
+
+   /* Sin hoja desplegable no hay nada que velar. */
+   body.navdeck-mode .sidebar-overlay {
+      display: none !important;
+   }
+}
+
+@media (max-width: 575.98px) {
+   /* ── 2. La pantalla de inicio ────────────────────────────────────────────
+      El deck ya no es un panel deslizante (ver el apartado 1 bis): ocupa la
+      pantalla como cualquier contenido. Aquí solo se ajusta su respiro. */
+   body.navdeck-mode:not(.navdeck-active) .sidebar.nav-deck {
+      padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+   }
+
+   .sidebar {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+   }
+
+   .si-brand {
+      padding: .7rem .85rem .6rem;
+   }
+
+   .si-brand-logo { width: 32px; height: 32px; border-radius: 8px; }
+   .si-brand-name { font-size: .88rem; }
+   .si-brand-sub { font-size: .58rem; letter-spacing: .1em; }
+
+   body.navdeck-mode .si-nav {
+      padding: 8px 8px 10px !important;
+      gap: 8px;
+   }
+
+   /* ── 3. Banner de periodo (hero) ─────────────────────────────────────────
+      Era una fila: icono | texto | selector de vista. En un teléfono el
+      selector se queda con casi todo el ancho y el título terminaba partido
+      letra por letra, encimado con las pestañas. Ahora el selector baja a su
+      propio renglón y el título recupera el ancho completo. */
+   .ndw-hero {
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 9px;
+      padding: 12px 12px 11px;
+      min-height: 0;
+      border-radius: 14px;
+      margin-bottom: 9px;
+   }
+
+   .ndw-hero-icon {
+      width: 34px;
+      height: 34px;
+      font-size: .95rem;
+      border-radius: 10px;
+   }
+
+   .ndw-hero-text {
+      flex: 1 1 0;
+      min-width: 0;
+   }
+
+   .ndw-hero-kicker { font-size: .52rem; letter-spacing: .12em; }
+
+   .ndw-hero-title {
+      font-size: 1rem;
+      line-height: 1.18;
+      overflow-wrap: anywhere;
+   }
+
+   .ndw-view-toggle {
+      order: 3;
+      flex: 1 0 100%;
+      width: 100%;
+      margin-left: 0;
+      align-self: stretch;
+      justify-content: space-between;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      /* El desenfoque de fondo sobre una imagen animada es de lo más caro que
+         puede pintar un teléfono; sin él el panel se desplaza suave. */
+      -webkit-backdrop-filter: none !important;
+      backdrop-filter: none !important;
+   }
+
+   .ndw-view-toggle::-webkit-scrollbar { display: none; }
+
+   .ndw-view-btn {
+      flex: 1 0 auto;
+      justify-content: center;
+      padding: 8px 10px;
+      font-size: .58rem;
+      letter-spacing: .04em;
+   }
+
+   /* Ken Burns: 26 s de animación infinita sobre una imagen a pantalla
+      completa es justo lo que hace que el menú se sienta trabado al bajar. */
+   .ndw-hero-media {
+      animation: none;
+      transform: scale(1.04);
+   }
+
+   .ndw-prelim-banner-note,
+   .ndw-prelim-last-date { font-size: .66rem; line-height: 1.3; }
+   .ndw-tap-hint { font-size: .62rem; }
+   .ndw-period-picker { padding: 8px 0 2px; }
+
+   /* ── 4. Tarjetas de cifras del banner ───────────────────────────────── */
+   .ndw-card {
+      min-height: 104px;
+      padding: 10px 11px 11px;
+      border-radius: 13px;
+   }
+
+   .ndw-card-icon { width: 25px; height: 25px; font-size: .72rem; border-radius: 8px; top: 8px; right: 8px; }
+   .ndw-card-tag { font-size: .55rem; letter-spacing: .07em; }
+   .ndw-card-value { font-size: clamp(1.05rem, 6.2vw, 1.4rem); }
+   .ndw-card-sub { font-size: .55rem; letter-spacing: .02em; }
+
+   /* ── 5. Barra HOY / MAÑANA ───────────────────────────────────────────────
+      Ocupaba tres renglones fijos arriba de cada módulo. Se queda en uno solo
+      que se desliza de lado. */
+   .ag-today-bar {
+      padding: .3rem .6rem;
+      min-height: 0;
+      gap: .35rem;
+   }
+
+   .ag-tb-inner {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      gap: 8px;
+   }
+
+   .ag-tb-inner::-webkit-scrollbar { display: none; }
+   .ag-tb-day-block { flex: 0 0 auto; flex-basis: auto; }
+   .ag-tb-hint { display: none; }
+   .ag-tb-icon { width: 26px; height: 26px; font-size: .8rem; }
+   .ag-tb-date { font-size: .68rem; }
+   .ag-tb-chip { font-size: .64rem; padding: 1px 6px; }
+
+   /* ── 6. Contenido de los módulos ────────────────────────────────────── */
+
+   /* Pestañas: un solo renglón deslizable en lugar de una torre de botones
+      que empuja la tabla fuera de la pantalla. */
+   .nav-tabs,
+   .nav-pills {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      -webkit-overflow-scrolling: touch;
+   }
+
+   .nav-tabs::-webkit-scrollbar,
+   .nav-pills::-webkit-scrollbar { display: none; }
+
+   .nav-tabs > .nav-item,
+   .nav-pills > .nav-item,
+   .nav-tabs > .nav-link,
+   .nav-pills > .nav-link { flex: 0 0 auto; }
+
+   .nav-tabs .nav-link,
+   .nav-pills .nav-link {
+      white-space: nowrap;
+      padding: .45rem .7rem;
+      font-size: .82rem;
+   }
+
+   /* Encabezados con acciones a la derecha: que bajen de renglón. */
+   .card-header {
+      flex-wrap: wrap;
+      row-gap: .4rem;
+      padding: .6rem .8rem;
+   }
+
+   .card-header > .btn,
+   .card-header .btn-group { flex-shrink: 0; }
+
+   /* Cifras grandes de los módulos (todas usan la misma forma: -kpi-val,
+      -kpi-label, -stat-value…). En dos columnas de teléfono el número se
+      salía de su tarjeta; el !important gana también a los font-size que
+      vienen escritos en el atributo style. */
+   [class*="kpi-val"],
+   [class*="kpi-value"],
+   [class*="stat-value"],
+   [class*="stat-num"] {
+      font-size: clamp(1.05rem, 6.5vw, 1.45rem) !important;
+      line-height: 1.08;
+      overflow-wrap: anywhere;
+   }
+
+   [class*="kpi-lbl"],
+   [class*="kpi-label"],
+   [class*="kpi-sub"],
+   [class*="stat-label"],
+   [class*="stat-lbl"] {
+      font-size: .68rem;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+   }
+
+   /* Tablas de datos: menos aire por celda para que quepan más columnas antes
+      de tener que deslizar. Las hojas tipo Excel de Conciliación e Itinerario
+      traen su propia métrica y se quedan como están. */
+   .table:not(#table-conci-manifiestos):not(#table-ops-flights-csv) {
+      font-size: .8rem;
+   }
+
+   .table:not(#table-conci-manifiestos):not(#table-ops-flights-csv) > :not(caption) > * > * {
+      padding: .4rem .45rem;
+   }
+
+   /* Controles de filtro: que se estiren en vez de apretarse unos con otros. */
+   .form-select,
+   .form-control { min-width: 0; }
+
+   /* Gráficas: nunca más anchas que la pantalla ni más altas que ella. */
+   .card canvas,
+   .chart-container canvas,
+   [class*="chart-wrap"] canvas { max-width: 100% !important; }
+
+   /* Los espacios de trabajo de Conciliación miden 100vh, y en el teléfono esa
+      medida incluye la barra del navegador: la última fila y el pie de la hoja
+      quedaban cortados. dvh mide lo que de verdad se ve. */
+   body.conci-manifest-workspace,
+   body.conci-manifest-workspace > #main-app,
+   body.conci-manifest-workspace .app-body,
+   body.conci-manifest-workspace .main-content {
+      height: 100dvh;
+   }
+
+   /* Avisos fijos del sistema: pegados al ancho del teléfono. */
+   #public-alerts-container {
+      top: 76px !important;
+      left: 0 !important;
+      right: 0;
+      width: auto !important;
+      padding-inline: .5rem;
+   }
+
+   /* Botones flotantes: más chicos y respetando la barra de gestos. */
+   #_aga-fab {
+      width: 46px !important;
+      height: 46px !important;
+      font-size: 1.05rem !important;
+      right: 14px !important;
+      bottom: calc(14px + env(safe-area-inset-bottom, 0px)) !important;
+   }
+
+   #fb-fab-wrap {
+      right: 12px;
+      bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+   }
+
+   .fb-fab { font-size: .78rem; padding: .6rem .8rem; }
+}
+
+/* ── 7. Teléfonos angostos (≤ 360 px) ─────────────────────────────────────
+   A este ancho dos columnas dejan cada tarjeta en ~150 px: el número y su
+   etiqueta ya no caben juntos, así que se pasa a una sola columna. */
+@media (max-width: 360px) {
+   .ndw-cards { grid-template-columns: 1fr !important; }
+   .ndw-card { min-height: 92px; }
+   .ndw-card-value { font-size: 1.5rem; }
+   .ndw-hero-title { font-size: .95rem; }
+   .ndw-view-btn { font-size: .55rem; padding: 8px 7px; }
+   .main-content { padding: .5rem !important; }
+   .card-body { padding: .75rem; }
+}
+
+/* ── 8. Ajustes por módulo en teléfono ───────────────────────────────────────
+   Las reglas de cada módulo viven en su propio <style> dentro de index.html,
+   que en la cascada va DESPUÉS de esta hoja: por eso aquí se usa un selector
+   más específico (o !important cuando el estilo lo inyecta JavaScript). */
+@media (max-width: 575.98px) {
+   /* Ficha de Colaboradores: las tablas de datos llegan a tener seis columnas
+      (etiqueta·valor·etiqueta·valor…). En un teléfono se apilan, cada dato
+      debajo de su etiqueta, en vez de quedar en columnas de dos centímetros. */
+   .colab-ficha .colab-tabla,
+   .colab-ficha .colab-tabla tbody,
+   .colab-ficha .colab-tabla tr,
+   .colab-ficha .colab-tabla th,
+   .colab-ficha .colab-tabla td {
+      display: block;
+      width: auto;
+   }
+
+   .colab-ficha .colab-tabla th {
+      white-space: normal;
+      border-bottom: none;
+      padding: .3rem .6rem .1rem;
+   }
+
+   .colab-ficha .colab-tabla td {
+      border-top: none;
+      padding: .1rem .6rem .35rem;
+   }
+
+   .colab-ficha .colab-tabla tr { margin-bottom: .25rem; }
+
+   /* Editor de colaborador: las tres tarjetas de documentos pasan a dos. */
+   #colabEditModal .cedit-doc-upload-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+   /* Carga masiva de cursos/PDF: el renglón de seis columnas se apila y su
+      cabecera de columnas (que ya no corresponde a nada) se retira. */
+   #colabMasivaCursosModal .cmm-file-row,
+   #colabBatchCursosModal .cbm-file-row { grid-template-columns: minmax(0, 1fr); }
+   #colabMasivaCursosModal [style*="1.4fr 1.2fr 1.4fr"],
+   #colabBatchCursosModal [style*="grid-template-columns:1fr 1fr auto"] { display: none !important; }
+
+   /* Calendario de la Agenda: el mes sigue desplazándose de lado (siete días
+      no caben de otro modo), pero con celdas de 165 px de alto el mes medía
+      más de tres pantallas. */
+   .ag-cal-cell {
+      min-height: 108px !important;
+      padding: 7px 6px 6px !important;
+   }
+
+   .ag-chip { font-size: .66rem; padding: 3px 5px 3px 5px; }
+
+   /* Capacitación / mantenimiento: renglones de capturas en dos columnas fijas
+      de 110 px que no caben junto al nombre. */
+   #gtrans-preventivos-section .gp-cap-row,
+   #gtrans-preventivos-section .gp-cap-hd { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   FORMULARIO DE CAPTURA (modal compartido de Datos: fauna, médicas, rutas…)
+   ══════════════════════════════════════════════════════════════════════════ */
+#admin-modal .modal-content {
+   border: none;
+   border-radius: 16px;
+   overflow: hidden;
+   box-shadow: 0 24px 60px rgba(9, 24, 63, .3);
+}
+
+#admin-modal .modal-header {
+   background:
+      radial-gradient(520px 190px at 88% -70%, rgba(255, 255, 255, .2), transparent 70%),
+      linear-gradient(135deg, #0b1d40 0%, #14417d 60%, #1565c0 100%);
+   border-bottom: none;
+   padding: .85rem 1.1rem;
+}
+
+#admin-modal .modal-title { font-weight: 800; letter-spacing: .01em; }
+#admin-modal .modal-body { background: #f4f7fc; }
+
+/* El formulario vive en su propia hoja, como el alta de colaboradores. */
+.admin-form-sheet {
+   background: #fff;
+   border: 1px solid #e5ecf6;
+   border-radius: 14px;
+   padding: 1.05rem 1.15rem 1.2rem;
+   box-shadow: 0 1px 2px rgba(16, 35, 63, .05);
+}
+
+#admin-modal .form-label {
+   font-size: .75rem;
+   font-weight: 700;
+   color: #4b5f7a;
+   margin-bottom: .25rem;
+}
+
+#admin-modal .form-control,
+#admin-modal .form-select {
+   min-height: 38px;
+   border-radius: 9px;
+   border-color: #d9e2ee;
+   background: #fbfdff;
+}
+
+#admin-modal .form-control:focus,
+#admin-modal .form-select:focus {
+   background: #fff;
+   border-color: #1565c0;
+   box-shadow: 0 0 0 .2rem rgba(21, 101, 192, .15);
+}
+
+#admin-modal textarea.form-control { min-height: 84px; }
+
+#admin-modal .modal-footer {
+   background: #fff;
+   border-top: 1px solid #e9eef6;
+   padding: .75rem 1.1rem;
+}

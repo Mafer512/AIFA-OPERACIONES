@@ -3158,6 +3158,11 @@ function getAirlineLogoCandidates(airline) {
     const key = normalizeAirlineName(airline);
     const files = airlineLogoFileMap[key];
     const candidates = [];
+    // El catálogo de aerolíneas manda: reconoce alias ("viva" es VIVA Aerobus)
+    // y trae el logo que el área subió desde Gestión de Datos.
+    const catalogo = window.AifaAerolineas;
+    const catLogo = (catalogo && typeof catalogo.logo === 'function') ? catalogo.logo(airline) : null;
+    if (catLogo) candidates.push(catLogo);
     // Priorizar logo_url desde la DB de Supabase si existe
     const dbUrl = window.airlineLogoDbMap && window.airlineLogoDbMap.get(key);
     if (dbUrl) candidates.push(dbUrl);
@@ -4560,6 +4565,24 @@ function toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('sidebar-overlay');
         if (!sidebar || !overlay) return;
+        // En modo deck el menú no es un cajón lateral: el lanzador de tarjetas
+        // ES la pantalla de inicio (igual que en escritorio). Las tres líneas
+        // salen del módulo y devuelven ese inicio completo, en vez de deslizar
+        // una hoja que solo cubría parte de la pantalla.
+        if (document.body.classList.contains('navdeck-mode')) {
+            sidebar.classList.remove('visible');
+            overlay.classList.remove('active');
+            document.body.classList.remove('sidebar-open', 'sidebar-collapsed');
+            if (document.body.classList.contains('navdeck-active')) {
+                if (typeof window._navdeckShowMenu === 'function') window._navdeckShowMenu();
+                else {
+                    document.body.classList.remove('navdeck-active');
+                    if (typeof window.exitSectionToMenu === 'function') window.exitSectionToMenu();
+                }
+            }
+            try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { window.scrollTo(0, 0); }
+            return;
+        }
         const willShow = !sidebar.classList.contains('visible');
         if (willShow) {
             document.body.classList.remove('sidebar-collapsed');
@@ -15485,6 +15508,25 @@ async function loadHistory() {
 
     const SKIP_KEYS = new Set(['id', 'created_at', 'updated_at', 'mode', 'changes', 'summary']);
 
+    /* Un alta de fauna trae diecisiete campos y se comía la pantalla: se
+       muestran los primeros y el resto queda a un clic. */
+    const CAMPOS_A_LA_VISTA = 6;
+    let _histPlegableId = 0;
+
+    function plegarLista(filas) {
+        if (!filas.length) return '';
+        const visibles = filas.slice(0, CAMPOS_A_LA_VISTA).join('');
+        if (filas.length <= CAMPOS_A_LA_VISTA) return `<div class="vstack gap-1 mt-1">${visibles}</div>`;
+        const id = `hist-mas-${++_histPlegableId}`;
+        const ocultos = filas.slice(CAMPOS_A_LA_VISTA).join('');
+        const faltan = filas.length - CAMPOS_A_LA_VISTA;
+        return `<div class="vstack gap-1 mt-1">${visibles}
+            <div id="${id}" class="vstack gap-1 d-none">${ocultos}</div>
+            <button type="button" class="hist-mas" data-hist-mas="${id}">
+                <i class="fas fa-chevron-down me-1"></i>Ver ${faltan} campo(s) más</button>
+        </div>`;
+    }
+
     function buildDetailsHtml(details, actionType) {
         if (!details) return '';
 
@@ -15497,39 +15539,39 @@ async function loadHistory() {
 
         // Summary line (shown for both diff and create)
         if (details.summary) {
+            // El rastro automático se distingue del que escribe un módulo a mano.
+            const auto = details.origen === 'automatico'
+                ? '<span class="hist-auto" title="Registrado por el rastro automático del sistema">AUTO</span>'
+                : '';
             html += `<div class="text-dark fw-semibold mb-1" style="font-size:.85rem">
-                       <i class="fas fa-info-circle me-1 text-muted"></i>${details.summary}
+                       <i class="fas fa-info-circle me-1 text-muted"></i>${details.summary}${auto}
                      </div>`;
         }
 
         // DIFF mode (edits)
         if (details.mode === 'diff' && Array.isArray(details.changes) && details.changes.length) {
-            html += '<div class="vstack gap-1 mt-1">';
-            details.changes.forEach(c => {
-                html += `<div class="small d-flex align-items-center flex-wrap gap-1">
+            const filas = details.changes.map(c => `<div class="small d-flex align-items-center flex-wrap gap-1">
                     <span class="text-secondary" style="min-width:100px">${renderFieldLabel(c.field)}</span>
                     ${renderValue(c.old, true)}
                     <i class="fas fa-arrow-right text-muted" style="font-size:.7em"></i>
                     ${renderValue(c.new, false)}
-                </div>`;
-            });
-            html += '</div>';
+                </div>`);
+            html += plegarLista(filas);
             return html;
         }
 
         // CREATE payload — show key-value pairs
         const keys = Object.keys(details).filter(k => !SKIP_KEYS.has(k));
         if (keys.length) {
-            html += '<div class="vstack gap-1 mt-1">';
-            keys.forEach(k => {
+            const filas = keys.map(k => {
                 const formatted = formatVal(details[k]);
-                if (!formatted) return;
-                html += `<div class="small d-flex align-items-baseline gap-2">
+                if (!formatted) return '';
+                return `<div class="small d-flex align-items-baseline gap-2">
                     <span class="text-secondary" style="min-width:120px;font-size:.82em">${renderFieldLabel(k)}</span>
                     <span class="text-success fw-semibold">${formatted}</span>
                 </div>`;
-            });
-            html += '</div>';
+            }).filter(Boolean);
+            html += plegarLista(filas);
         }
 
         return html || '';
@@ -15554,11 +15596,12 @@ async function loadHistory() {
 
     // ── Fetch ─────────────────────────────────────────────────────────────
     try {
+        const limite = Number(document.getElementById('hist-limite')?.value) || 100;
         const { data, error } = await window.supabaseClient
             .from('change_history')
             .select('*')
             .order('created_at', { ascending: false })
-            .limit(100);
+            .limit(limite);
 
         if (error) throw error;
 
@@ -15567,8 +15610,7 @@ async function loadHistory() {
             return;
         }
 
-        tableBody.innerHTML = '';
-        data.forEach(log => {
+        const pintarFila = (log) => {
             const dObj = new Date(log.created_at);
             const dateStr = dObj.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
             const timeStr = dObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
@@ -15600,9 +15642,10 @@ async function loadHistory() {
 
             // Details
             const detailsHtml = buildDetailsHtml(log.details, log.action_type);
+            const claseFila = clasifica(log.action_type);
 
             const row = `
-                <tr style="vertical-align:top">
+                <tr class="hist-${claseFila}" style="vertical-align:top">
                     <td class="text-nowrap pe-3" style="padding-top:14px">
                         <div class="fw-semibold text-dark" style="font-size:.9rem">${dateStr}</div>
                         <div class="text-muted" style="font-size:.8rem">${timeStr}</div>
@@ -15629,7 +15672,88 @@ async function loadHistory() {
                     </td>
                 </tr>`;
             tableBody.insertAdjacentHTML('beforeend', row);
-        });
+        };
+
+        /* Filtros: el rastro se lee buscando, no leyendo cien renglones. */
+        const clasifica = (accion) => {
+            if (['CREAR', 'AGREGAR', 'IMPORTAR'].includes(accion)) return 'alta';
+            if (['ELIMINAR', 'BORRAR'].includes(accion)) return 'baja';
+            return 'edicion';
+        };
+
+        const opciones = (id, valores, etiqueta) => {
+            const sel = document.getElementById(id);
+            if (!sel) return;
+            const previo = sel.value;
+            sel.innerHTML = `<option value="">${etiqueta}</option>` +
+                [...valores].sort((a, b) => a.localeCompare(b, 'es'))
+                    .map(v => `<option value="${v.replace(/"/g, '&quot;')}">${v}</option>`).join('');
+            if (previo) sel.value = previo;
+        };
+
+        window._histPintar = function () {
+            const texto = (document.getElementById('hist-buscar')?.value || '').toLowerCase().trim();
+            const accion = document.getElementById('hist-accion')?.value || '';
+            const entidad = document.getElementById('hist-entidad')?.value || '';
+            const usuario = document.getElementById('hist-usuario')?.value || '';
+
+            const visibles = data.filter(log => {
+                if (accion && clasifica(log.action_type) !== accion) return false;
+                const nombreEntidad = entityMap[log.entity_type] || log.entity_type || '';
+                if (entidad && nombreEntidad !== entidad) return false;
+                if (usuario && (log.user_email || '') !== usuario) return false;
+                if (!texto) return true;
+                const paja = [log.user_email, log.action_type, nombreEntidad, log.record_id,
+                    JSON.stringify(log.details || '')].join(' ').toLowerCase();
+                return paja.includes(texto);
+            });
+
+            tableBody.innerHTML = '';
+            if (!visibles.length) {
+                tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Ningún movimiento coincide con el filtro.</td></tr>';
+            } else {
+                visibles.forEach(pintarFila);
+            }
+
+            const conteo = document.getElementById('hist-conteo');
+            if (conteo) {
+                const hoy = new Date().toDateString();
+                const deHoy = visibles.filter(l => new Date(l.created_at).toDateString() === hoy).length;
+                conteo.textContent = visibles.length === data.length
+                    ? `${data.length} movimientos · ${deHoy} hoy`
+                    : `${visibles.length} de ${data.length} movimientos · ${deHoy} hoy`;
+            }
+        };
+
+        // Catálogos de los desplegables, con lo que trae el propio historial.
+        opciones('hist-entidad', new Set(data.map(l => entityMap[l.entity_type] || l.entity_type).filter(Boolean)), 'Todos los módulos');
+        opciones('hist-usuario', new Set(data.map(l => l.user_email).filter(Boolean)), 'Todos los usuarios');
+
+        const barra = document.getElementById('hist-toolbar');
+        if (barra && !barra.dataset.wired) {
+            barra.dataset.wired = '1';
+            ['hist-buscar', 'hist-accion', 'hist-entidad', 'hist-usuario'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('input', () => window._histPintar());
+            });
+            document.getElementById('hist-limite')?.addEventListener('change', () => loadHistory());
+            document.getElementById('hist-limpiar')?.addEventListener('click', () => {
+                ['hist-buscar', 'hist-accion', 'hist-entidad', 'hist-usuario'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
+                window._histPintar();
+            });
+            tableBody.addEventListener('click', ev => {
+                const boton = ev.target.closest('[data-hist-mas]');
+                if (!boton) return;
+                const bloque = document.getElementById(boton.dataset.histMas);
+                if (bloque) bloque.classList.remove('d-none');
+                boton.remove();
+            });
+        }
+
+        window._histPintar();
 
     } catch (err) {
         console.error('Error loading history:', err);
@@ -17460,8 +17584,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const btnConciRefresh = document.getElementById('btn-conci-refresh');
-    const btnConciImport = document.getElementById('btn-conci-import-file');
-    const inputConciImport = document.getElementById('input-conci-import-file');
     const btnConciAdd = document.getElementById('btn-conci-add-row');
     const btnConciAirlineColors = document.getElementById('btn-conci-airline-colors');
     const btnConciMatriculaCatalog = document.getElementById('btn-conci-matricula-catalog');
@@ -17470,24 +17592,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnConciRewriteAll = document.getElementById('btn-conci-rewrite-all');
     const btnConciClearFilters = document.getElementById('btn-conci-clear-filters');
     if (btnConciRefresh) btnConciRefresh.addEventListener('click', () => loadConciliacionManifiestos({ forceRefresh: true }));
-    if (btnConciImport) btnConciImport.addEventListener('click', () => {
-        if (!_conciCanCurrentUserManage()) {
-            alert('Solo usuarios editor o admin pueden importar manifiestos.');
-            return;
-        }
-        if (inputConciImport) {
-            inputConciImport.value = '';
-            inputConciImport.click();
-        }
-    });
-    if (inputConciImport) inputConciImport.addEventListener('change', async () => {
-        const file = inputConciImport.files && inputConciImport.files[0];
-        try {
-            if (file) await _conciImportManifiestosFile(file);
-        } finally {
-            inputConciImport.value = '';
-        }
-    });
     if (btnConciAdd) btnConciAdd.addEventListener('click', _conciAddBlankRow);
     // El autoguardado por celda dispara un insert/update a Supabase sin esperar
     // (ver _conciAutoSaveRow) para que capturar se sienta como Excel. Si el
@@ -18734,7 +18838,6 @@ function _conciRefreshEditToolbar() {
     const btnAirlineColors = document.getElementById('btn-conci-airline-colors');
     const btnMatriculaCatalog = document.getElementById('btn-conci-matricula-catalog');
     const btnRefresh = document.getElementById('btn-conci-refresh');
-    const btnImport = document.getElementById('btn-conci-import-file');
     const yearSel = document.getElementById('filter-conci-manifiestos-year');
     const monthSel = document.getElementById('filter-conci-manifiestos-month');
     const daySel = document.getElementById('filter-conci-manifiestos-day');
@@ -18760,11 +18863,6 @@ function _conciRefreshEditToolbar() {
     if (btnMatriculaCatalog) {
         btnMatriculaCatalog.classList.toggle('d-none', !canManage);
         btnMatriculaCatalog.disabled = !canManage;
-    }
-
-    if (btnImport) {
-        btnImport.classList.toggle('d-none', !canManage);
-        btnImport.disabled = !canManage;
     }
 
     const controlsLocked = _conciEditMode;
@@ -20011,8 +20109,12 @@ function _conciRowIsCargo(row, optypeCol, airlineCol) {
     return false;
 }
 
-// Build a synthetic manifest row from a vuelos row, given 'LLEGADA' or 'SALIDA'
-function _conciVueloToRow(vRow, tipo, outputCols, colm, hasManifestSchema) {
+// Convierte un movimiento del itinerario en una fila de la tabla, escrita
+// siempre en las columnas reales de "Conciliación Manifiestos". Antes había un
+// segundo juego de columnas sintéticas para el caso "sin esquema", pero esos
+// nombres no coincidían con los encabezados y la fila salía en blanco; el
+// esquema hoy nunca falta (ver _conciBuildEnriched).
+function _conciVueloToRow(vRow, tipo, outputCols, colm) {
     const isArr = tipo === 'LLEGADA';
     const overrideKey = `${vRow.id}|${tipo}`;
     const overriddenAirline = _conciAirlineOverrides.get(overrideKey);
@@ -20020,72 +20122,41 @@ function _conciVueloToRow(vRow, tipo, outputCols, colm, hasManifestSchema) {
     const airlineValue = overriddenAirline || sourceAirline || '';
     const assignedSlot = _conciGetAssignedSlot(vRow, isArr);
     const operationHour = _conciGetOperationHour(vRow, isArr);
-    if (hasManifestSchema) {
-        const row = {};
-        outputCols.forEach(c => { row[c] = ''; });
-        if (colm.tipo)      row[colm.tipo]      = tipo;
-        if (colm.vuelo)     row[colm.vuelo]      = isArr ? vRow['[Arr] Flight Designator'] : vRow['[Dep] Flight Designator'];
-        if (colm.aerolinea) row[colm.aerolinea]  = airlineValue;
-        if (colm.optype)    row[colm.optype]     = isArr ? vRow['[Arr] Service Type']      : vRow['[Dep] Service Type'];
-        if (colm.aeronave)  row[colm.aeronave]   = vRow['Aircraft type'] || '';
-        if (colm.matricula) row[colm.matricula]  = vRow['Registration']  || '';
-        if (colm.routing)   row[colm.routing]    = vRow['Routing']       || '';
-        if (Object.prototype.hasOwnProperty.call(row, 'RUTA')) row['RUTA'] = vRow['Routing'] || '';
-        if (colm.stand)     row[colm.stand]      = isArr ? vRow['[Arr] Stand']  : vRow['[Dep] Stand'];
-        if (colm.puerta)    row[colm.puerta]     = isArr ? vRow['[Arr] Gates']  : vRow['[Dep] Gates'];
-        if (colm.pax)       row[colm.pax]        = isArr ? vRow['[Arr] Boarded']: vRow['[Dep] Boarded'];
-        if (colm.slotAsignado) row[colm.slotAsignado] = assignedSlot;
-        if (colm.hrOperacion) row[colm.hrOperacion] = operationHour;
-        if (colm.status)    row[colm.status]     = vRow['Status'] || '';
-        const _dp2 = _conciExtractVueloDateParts(vRow, isArr);
-        if (colm.mes)       row[colm.mes]        = _dp2 ? String(_dp2.month) : '';
-        if (colm.fecha)     row[colm.fecha]      = _dp2 ? `${_dp2.day}/${String(_dp2.month).padStart(2,'0')}` : '';
-        if (isArr) {
-            if (colm.cinta) row[colm.cinta]      = vRow['[Arr] Baggage Belts'] || '';
-            if (colm.sibt)  row[colm.sibt]       = vRow['[Arr] SIBT'] || '';
-            if (colm.aibt)  row[colm.aibt]       = vRow['[Arr] AIBT'] || '';
-            if (colm.aldt)  row[colm.aldt]       = vRow['[Arr] ALDT'] || '';
-        } else {
-            if (colm.sobt)  row[colm.sobt]       = vRow['[Dep] SOBT'] || '';
-            if (colm.aobt)  row[colm.aobt]       = vRow['[Dep] AOBT'] || '';
-            if (colm.atot)  row[colm.atot]       = vRow['[Dep] ATOT'] || '';
-        }
-        row['_validado_itinerario'] = vRow.validado === true;
-        row['_validado_por_itinerario'] = vRow.validado_por || '';
-        row['_fuente'] = 'Solo Vuelos';
-        row['_conci_vuelo_id'] = vRow.id;
-        row['_conci_vuelo_direccion'] = tipo;
-        return row;
+    const row = {};
+    outputCols.forEach(c => { row[c] = ''; });
+    if (colm.tipo)      row[colm.tipo]      = tipo;
+    if (colm.vuelo)     row[colm.vuelo]      = isArr ? vRow['[Arr] Flight Designator'] : vRow['[Dep] Flight Designator'];
+    if (colm.aerolinea) row[colm.aerolinea]  = airlineValue;
+    if (colm.optype)    row[colm.optype]     = isArr ? vRow['[Arr] Service Type']      : vRow['[Dep] Service Type'];
+    if (colm.aeronave)  row[colm.aeronave]   = vRow['Aircraft type'] || '';
+    if (colm.matricula) row[colm.matricula]  = vRow['Registration']  || '';
+    if (colm.routing)   row[colm.routing]    = vRow['Routing']       || '';
+    if (Object.prototype.hasOwnProperty.call(row, 'RUTA')) row['RUTA'] = vRow['Routing'] || '';
+    if (colm.stand)     row[colm.stand]      = isArr ? vRow['[Arr] Stand']  : vRow['[Dep] Stand'];
+    if (colm.puerta)    row[colm.puerta]     = isArr ? vRow['[Arr] Gates']  : vRow['[Dep] Gates'];
+    if (colm.pax)       row[colm.pax]        = isArr ? vRow['[Arr] Boarded']: vRow['[Dep] Boarded'];
+    if (colm.slotAsignado) row[colm.slotAsignado] = assignedSlot;
+    if (colm.hrOperacion) row[colm.hrOperacion] = operationHour;
+    if (colm.status)    row[colm.status]     = vRow['Status'] || '';
+    const _dp2 = _conciExtractVueloDateParts(vRow, isArr);
+    if (colm.mes)       row[colm.mes]        = _dp2 ? String(_dp2.month) : '';
+    if (colm.fecha)     row[colm.fecha]      = _dp2 ? `${_dp2.day}/${String(_dp2.month).padStart(2,'0')}` : '';
+    if (isArr) {
+        if (colm.cinta) row[colm.cinta]      = vRow['[Arr] Baggage Belts'] || '';
+        if (colm.sibt)  row[colm.sibt]       = vRow['[Arr] SIBT'] || '';
+        if (colm.aibt)  row[colm.aibt]       = vRow['[Arr] AIBT'] || '';
+        if (colm.aldt)  row[colm.aldt]       = vRow['[Arr] ALDT'] || '';
+    } else {
+        if (colm.sobt)  row[colm.sobt]       = vRow['[Dep] SOBT'] || '';
+        if (colm.aobt)  row[colm.aobt]       = vRow['[Dep] AOBT'] || '';
+        if (colm.atot)  row[colm.atot]       = vRow['[Dep] ATOT'] || '';
     }
-    // No manifest schema — use synthetic columns
-    const synthetic = {
-        'Tipo de Manifiesto': tipo,
-        '# de Vuelo':         isArr ? (vRow['[Arr] Flight Designator'] || '') : (vRow['[Dep] Flight Designator'] || ''),
-        'Aerolínea':          isArr ? (vRow['[Arr] Airline code']      || '') : (vRow['[Dep] Airline code']      || ''),
-        'Tipo de Operación':  isArr ? (vRow['[Arr] Service Type']      || '') : (vRow['[Dep] Service Type']      || ''),
-        'Aeronave':           vRow['Aircraft type']         || '',
-        'Matrícula':          vRow['Registration']          || '',
-        'Routing':            vRow['Routing']               || '',
-        'Slot asignado':      assignedSlot,
-        'HR. DE OPERACIÓN':   operationHour,
-        'Stand':              isArr ? (vRow['[Arr] Stand']  || '') : (vRow['[Dep] Stand']  || ''),
-        'Puerta':             isArr ? (vRow['[Arr] Gates']  || '') : (vRow['[Dep] Gates']  || ''),
-        'Pax / Embarcados':   isArr ? (vRow['[Arr] Boarded']|| '') : (vRow['[Dep] Boarded']|| ''),
-        'Cinta':              isArr ? (vRow['[Arr] Baggage Belts'] || '') : '',
-        'Hora Prog.':         isArr ? (vRow['[Arr] SIBT']   || '') : (vRow['[Dep] SOBT']   || ''),
-        'Hora Real':          isArr ? (vRow['[Arr] AIBT']   || '') : (vRow['[Dep] AOBT']   || ''),
-        'ALDT / ATOT':        isArr ? (vRow['[Arr] ALDT']   || '') : (vRow['[Dep] ATOT']   || ''),
-        'ATTT':               isArr ? '' : (vRow['[Dep] ATTT'] || ''),
-        'Status':             vRow['Status'] || '',
-        '_validado_itinerario': vRow.validado === true,
-        '_validado_por_itinerario': vRow.validado_por || '',
-        '_fuente':            'Solo Vuelos',
-    };
-    const syntheticAirlineKey = Object.keys(synthetic).find(k => /aerol/i.test(k));
-    if (syntheticAirlineKey) synthetic[syntheticAirlineKey] = airlineValue;
-    synthetic._conci_vuelo_id = vRow.id;
-    synthetic._conci_vuelo_direccion = tipo;
-    return synthetic;
+    row['_validado_itinerario'] = vRow.validado === true;
+    row['_validado_por_itinerario'] = vRow.validado_por || '';
+    row['_fuente'] = 'Solo Vuelos';
+    row['_conci_vuelo_id'] = vRow.id;
+    row['_conci_vuelo_direccion'] = tipo;
+    return row;
 }
 
 // Build enriched rows merging manifest + vuelos data
@@ -20120,10 +20191,18 @@ const _CONCI_OUTPUT_COLUMNS = [
 function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
     const _schemaSource = (schemaRows && schemaRows.length > 0) ? schemaRows : manifestRows;
     const _sysCols = new Set(['id', 'created_at', 'updated_at']);
+    // Cuando NO existe ni una fila de manifiesto —tabla recién vaciada, o un
+    // día que todavía nadie captura— no hay de dónde leer el esquema. Antes
+    // eso dejaba `colm` sin una sola columna detectada, y cada vuelo se
+    // pintaba en llaves inventadas ("# de Vuelo", "Aerolínea") que la tabla
+    // nunca consulta: salían los encabezados correctos con TODAS las celdas
+    // vacías, y los contadores de llegadas/salidas en cero.
+    // La lista canónica es el esquema —sus nombres son los mismos de la base,
+    // por eso se captura contra ella—, así que sirve de fuente igual de buena
+    // y el cruce con vuelos funciona haya manifiestos o no.
     const manifestKeys = _schemaSource.length > 0
         ? Object.keys(_schemaSource[0]).filter(k => !_sysCols.has(k))
-        : [];
-    const hasManifest  = _schemaSource.length > 0;
+        : _CONCI_OUTPUT_COLUMNS.filter(k => !_sysCols.has(k));
 
     // Detect semantic columns in manifest schema
     const colm = {};
@@ -20351,10 +20430,10 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
         const depFlight = (vRow['[Dep] Flight Designator'] || '').trim().toUpperCase();
 
         if (arrFlight && !usedVuelo.has(`${idx}|arr`)) {
-            enrichedRows.push(_conciVueloToRow(vRow, 'LLEGADA', outputCols, colm, hasManifest));
+            enrichedRows.push(_conciVueloToRow(vRow, 'LLEGADA', outputCols, colm));
         }
         if (depFlight && !usedVuelo.has(`${idx}|dep`)) {
-            enrichedRows.push(_conciVueloToRow(vRow, 'SALIDA', outputCols, colm, hasManifest));
+            enrichedRows.push(_conciVueloToRow(vRow, 'SALIDA', outputCols, colm));
         }
     }
 
@@ -20554,6 +20633,14 @@ async function loadConciliacionManifiestos(options = {}) {
         let client = window.supabaseClient;
         if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
         if (!client) throw new Error('No se pudo inicializar el cliente de Supabase.');
+
+        // El botón de refrescar tiene que servir también cuando lo que cambió
+        // es la FORMA de los datos, no solo su contenido: manifiestos que se
+        // vaciaron o que volvieron a existir, o columnas nuevas. Ese esquema se
+        // resuelve una vez por sesión, así que sin soltarlo aquí había que
+        // recargar la página para que la tabla volviera a cruzar bien los
+        // vuelos.
+        if (config.forceRefresh) _conciManifestColInfo = null;
 
         let manifestRows;
         let vuelosRows;
@@ -22052,6 +22139,9 @@ async function _conciImportWriteRecords(client, records, existingBySignature) {
     return { updated: updates.length, inserted: inserts.length, removed: idsToDelete.length };
 }
 
+// Sin botón en la barra de Conciliación: los manifiestos ya no se importan
+// desde aquí, solo desde la pestaña de Itinerario de Vuelos. Se conserva como
+// utilidad interna por si hace falta invocarla a mano.
 async function _conciImportManifiestosFile(file) {
     if (!_conciCanCurrentUserManage()) {
         alert('Solo usuarios editor o admin pueden importar manifiestos.');

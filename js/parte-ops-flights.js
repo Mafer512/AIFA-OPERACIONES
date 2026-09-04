@@ -475,6 +475,151 @@
         }
     }
 
+    // ---------------------------------------------------------------------
+    // Diálogo de resumen de importación
+    // El confirm() del navegador aplastaba el resumen en un bloque de texto
+    // plano que además se corta cuando hay varias notas (rotaciones
+    // reasignadas, turnarounds partidos, enlaces obsoletos). Aquí el mismo
+    // contenido se muestra como tarjetas de conteo más una lista de notas.
+    // ---------------------------------------------------------------------
+    const IMPORT_DIALOG_STYLES = `
+.ops-imp-overlay{position:fixed;inset:0;z-index:20000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(15,23,42,.55);backdrop-filter:blur(3px);animation:ops-imp-fade .16s ease-out}
+.ops-imp-card{width:min(580px,100%);max-height:calc(100vh - 48px);display:flex;flex-direction:column;background:#fff;color:#1f2937;border-radius:16px;box-shadow:0 24px 60px rgba(15,23,42,.32);overflow:hidden;animation:ops-imp-rise .22s cubic-bezier(.21,1.02,.73,1)}
+.ops-imp-head{display:flex;align-items:center;gap:14px;padding:18px 22px;color:#fff;background:linear-gradient(135deg,#1565c0,#42a5f5)}
+.ops-imp-success .ops-imp-head{background:linear-gradient(135deg,#1b7f4d,#43b97a)}
+.ops-imp-warning .ops-imp-head{background:linear-gradient(135deg,#a15c00,#e0a02a)}
+.ops-imp-danger .ops-imp-head{background:linear-gradient(135deg,#b3261e,#e0655a)}
+.ops-imp-head-icon{flex:0 0 auto;width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.15rem;background:rgba(255,255,255,.18)}
+.ops-imp-head h3{margin:0;font-size:1.06rem;font-weight:700;letter-spacing:.01em}
+.ops-imp-head p{margin:2px 0 0;font-size:.8rem;opacity:.9}
+.ops-imp-body{padding:20px 22px;overflow-y:auto;display:flex;flex-direction:column;gap:16px}
+.ops-imp-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:10px}
+.ops-imp-stat{border:1px solid #e5e9f0;border-left:4px solid #94a3b8;border-radius:12px;padding:11px 13px;background:#f8fafc}
+.ops-imp-stat-value{display:block;font-size:1.55rem;font-weight:700;line-height:1.05;color:#0f172a;font-variant-numeric:tabular-nums}
+.ops-imp-stat-label{display:block;margin-top:2px;font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b}
+.ops-imp-stat.tone-new{border-left-color:#16a34a}.ops-imp-stat.tone-new .ops-imp-stat-value{color:#15803d}
+.ops-imp-stat.tone-upd{border-left-color:#2563eb}.ops-imp-stat.tone-upd .ops-imp-stat-value{color:#1d4ed8}
+.ops-imp-stat.tone-skip{border-left-color:#94a3b8}.ops-imp-stat.tone-skip .ops-imp-stat-value{color:#475569}
+.ops-imp-notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.ops-imp-notes li{display:flex;gap:10px;align-items:flex-start;font-size:.82rem;line-height:1.4;color:#334155;background:#f8fafc;border:1px solid #eef1f6;border-radius:10px;padding:9px 11px}
+.ops-imp-notes li i{flex:0 0 auto;margin-top:2px;color:#64748b;width:15px;text-align:center}
+.ops-imp-notes li strong{font-weight:700;color:#0f172a}
+.ops-imp-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 22px;border-top:1px solid #eceff4;background:#f8fafc}
+.ops-imp-foot-note{font-size:.78rem;color:#64748b}
+.ops-imp-actions{display:flex;gap:8px;margin-left:auto}
+.ops-imp-btn{border:0;border-radius:9px;padding:8px 16px;font-size:.85rem;font-weight:600;cursor:pointer;transition:filter .15s ease,background .15s ease}
+.ops-imp-btn-ghost{background:#fff;color:#475569;border:1px solid #d7dde6}
+.ops-imp-btn-ghost:hover{background:#eef1f6}
+.ops-imp-btn-primary{background:#1565c0;color:#fff}
+.ops-imp-success .ops-imp-btn-primary{background:#1b7f4d}
+.ops-imp-warning .ops-imp-btn-primary{background:#a15c00}
+.ops-imp-danger .ops-imp-btn-primary{background:#b3261e}
+.ops-imp-btn-primary:hover{filter:brightness(1.08)}
+.ops-imp-btn:focus-visible{outline:2px solid #1565c0;outline-offset:2px}
+@keyframes ops-imp-fade{from{opacity:0}to{opacity:1}}
+@keyframes ops-imp-rise{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+body.dark-mode .ops-imp-card{background:#1e2739;color:#e8eaed}
+body.dark-mode .ops-imp-stat,body.dark-mode .ops-imp-notes li,body.dark-mode .ops-imp-foot{background:#182131;border-color:rgba(255,255,255,.08)}
+body.dark-mode .ops-imp-stat-value{color:#e8eaed}
+body.dark-mode .ops-imp-notes li,body.dark-mode .ops-imp-foot-note{color:#c2c8d0}
+body.dark-mode .ops-imp-notes li strong{color:#f1f3f5}
+body.dark-mode .ops-imp-btn-ghost{background:#1e2739;color:#c2c8d0;border-color:rgba(255,255,255,.14)}
+body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
+@media (max-width:520px){.ops-imp-head{padding:15px 16px}.ops-imp-body,.ops-imp-foot{padding-left:16px;padding-right:16px}.ops-imp-actions{width:100%}.ops-imp-actions .ops-imp-btn{flex:1}}
+@media (prefers-reduced-motion:reduce){.ops-imp-overlay,.ops-imp-card{animation:none}}
+`;
+
+    function ensureImportDialogStyles() {
+        if (document.getElementById('ops-import-dialog-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'ops-import-dialog-styles';
+        style.textContent = IMPORT_DIALOG_STYLES;
+        document.head.appendChild(style);
+    }
+
+    // Muestra el resumen y resuelve true solo si el usuario confirma.
+    // Con cancelText en null queda como aviso de un solo botón (resultado
+    // final o error), que siempre resuelve true al cerrarse.
+    function showImportDialog(options) {
+        const opts = options || {};
+        const tone = opts.tone || 'info';
+        const stats = opts.stats || [];
+        const notes = opts.notes || [];
+        const cancelText = opts.cancelText === undefined ? 'Cancelar' : opts.cancelText;
+        ensureImportDialogStyles();
+
+        return new Promise(resolve => {
+            const statsHtml = stats.length ? `<div class="ops-imp-stats">${stats.map(s => `
+                    <div class="ops-imp-stat tone-${escapeHtml(s.tone || 'skip')}">
+                        <span class="ops-imp-stat-value">${escapeHtml(String(s.value))}</span>
+                        <span class="ops-imp-stat-label">${escapeHtml(s.label)}</span>
+                    </div>`).join('')}</div>` : '';
+            const notesHtml = notes.length ? `<ul class="ops-imp-notes">${notes.map(n => `
+                    <li><i class="fas ${escapeHtml(n.icon || 'fa-circle-info')}"></i><span><strong>${escapeHtml(String(n.count))}</strong> ${escapeHtml(n.text)}</span></li>`).join('')}</ul>` : '';
+
+            const overlay = document.createElement('div');
+            overlay.className = `ops-imp-overlay ops-imp-${tone}`;
+            overlay.innerHTML = `
+                <div class="ops-imp-card" role="dialog" aria-modal="true" aria-labelledby="ops-imp-title">
+                    <div class="ops-imp-head">
+                        <span class="ops-imp-head-icon"><i class="fas ${escapeHtml(opts.icon || 'fa-file-csv')}"></i></span>
+                        <div>
+                            <h3 id="ops-imp-title">${escapeHtml(opts.title || '')}</h3>
+                            ${opts.subtitle ? `<p>${escapeHtml(opts.subtitle)}</p>` : ''}
+                        </div>
+                    </div>
+                    <div class="ops-imp-body">${statsHtml}${notesHtml}</div>
+                    <div class="ops-imp-foot">
+                        <span class="ops-imp-foot-note">${escapeHtml(opts.footNote || '')}</span>
+                        <div class="ops-imp-actions">
+                            ${cancelText ? `<button type="button" class="ops-imp-btn ops-imp-btn-ghost" data-imp="cancel">${escapeHtml(cancelText)}</button>` : ''}
+                            <button type="button" class="ops-imp-btn ops-imp-btn-primary" data-imp="confirm">${escapeHtml(opts.confirmText || 'Continuar')}</button>
+                        </div>
+                    </div>
+                </div>`;
+
+            const previousFocus = document.activeElement;
+            let settled = false;
+            const close = result => {
+                if (settled) return;
+                settled = true;
+                document.removeEventListener('keydown', onKeyDown, true);
+                overlay.remove();
+                if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus();
+                resolve(result);
+            };
+            const onKeyDown = ev => {
+                if (ev.key === 'Escape') { ev.preventDefault(); close(!cancelText); }
+                else if (ev.key === 'Enter') { ev.preventDefault(); close(true); }
+            };
+
+            overlay.addEventListener('click', ev => {
+                const btn = ev.target.closest('[data-imp]');
+                if (btn) { close(btn.dataset.imp === 'confirm'); return; }
+                if (ev.target === overlay) close(!cancelText); // clic fuera = cerrar
+            });
+            document.addEventListener('keydown', onKeyDown, true);
+            document.body.appendChild(overlay);
+            overlay.querySelector('[data-imp="confirm"]').focus();
+        });
+    }
+
+    function formatDateLabel(date) {
+        const [year, month, day] = toLocalDateKey(date).split('-');
+        return `${day}/${month}/${year}`;
+    }
+
+    // Bootstrap atrapa el foco dentro de su modal, así que el modal de carga
+    // se cierra antes de mostrar cualquier diálogo del resumen; si no, le
+    // robaría el foco a los botones del diálogo.
+    function hideUploadCsvModal() {
+        if (typeof bootstrap === 'undefined') return;
+        const modalEl = document.getElementById('uploadOpsCsvModal');
+        if (!modalEl) return;
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+    }
+
     async function importCsvFromFile(file) {
         try {
             const content = await file.text();
@@ -772,35 +917,62 @@
             const duplicatesCount = duplicatesInFile + exactDuplicates;
 
             if (insertRows.length === 0 && updateRows.length === 0) {
-                alert(`Todos los ${mapped.length} registros del CSV ya existen en la base de datos. No se importará nada.`);
+                hideUploadCsvModal();
+                await showImportDialog({
+                    tone: 'warning',
+                    icon: 'fa-circle-check',
+                    title: 'No hay nada nuevo que importar',
+                    subtitle: `Los ${mapped.length} registros del archivo ya están guardados en la base de datos.`,
+                    cancelText: null,
+                    confirmText: 'Entendido'
+                });
                 return;
             }
 
-            const parts = [
-                `Se encontraron ${mapped.length} registros en el archivo.`,
-                `Fecha de referencia: ${toLocalDateKey(referenceDate)}.`
-            ];
-            if (insertRows.length) parts.push(`- ${insertRows.length} son vuelos nuevos.`);
-            if (updateRows.length) parts.push(`- ${updateRows.length} son vuelos existentes con datos actualizados (se actualizarán).`);
-            if (duplicatesCount) parts.push(`- ${duplicatesCount} son duplicados exactos (se omiten).`);
-            if (resolvedCancelledInFile) {
-                parts.push(`- ${resolvedCancelledInFile} vuelo(s) tenían un registro cancelado/no-operando duplicado en el archivo (se omitió el cancelado, se conservó el vigente).`);
-            }
-            if (resolvedCancelledInDb) {
-                parts.push(`- ${resolvedCancelledInDb} vuelo(s) coincidían con un registro cancelado/no-operando ya guardado en la base (se ignoró ese registro y se actualizó el vigente).`);
-            }
-            if (resolvedTurnaroundReassignInDb) {
-                parts.push(`- ${resolvedTurnaroundReassignInDb} vuelo(s) tenían su rotación reasignada a otra salida en la base (se actualizó el registro de la llegada).`);
-            }
-            if (splitTurnaroundReassignments) {
-                parts.push(`- ${splitTurnaroundReassignments} vuelo(s) formaban parte de un turnaround que se dividió en dos movimientos distintos (se actualizó el registro por su llegada y se creó un vuelo nuevo para la otra mitad).`);
-            }
-            if (staleKeyClears.size) {
-                parts.push(`- ${staleKeyClears.size} registro(s) en la base tenían una llegada/salida que quedó obsoleta por una reasignación de rotación; se liberará ese enlace (no se borra el registro, solo esa mitad del turnaround).`);
-            }
-            const confirmMsg = parts.join('\n') + `\n\n¿Deseas continuar con la importación?`;
+            const notes = [];
+            if (duplicatesCount) notes.push({
+                icon: 'fa-clone', count: duplicatesCount,
+                text: 'registro(s) duplicados exactos: se omiten porque ya están idénticos en la base.'
+            });
+            if (resolvedCancelledInFile) notes.push({
+                icon: 'fa-ban', count: resolvedCancelledInFile,
+                text: 'vuelo(s) tenían un registro cancelado/no-operando duplicado en el archivo: se omitió el cancelado y se conservó el vigente.'
+            });
+            if (resolvedCancelledInDb) notes.push({
+                icon: 'fa-ban', count: resolvedCancelledInDb,
+                text: 'vuelo(s) coincidían con un registro cancelado/no-operando ya guardado: se ignoró ese registro y se actualizó el vigente.'
+            });
+            if (resolvedTurnaroundReassignInDb) notes.push({
+                icon: 'fa-rotate', count: resolvedTurnaroundReassignInDb,
+                text: 'vuelo(s) tenían su rotación reasignada a otra salida en la base: se actualiza el registro de la llegada.'
+            });
+            if (splitTurnaroundReassignments) notes.push({
+                icon: 'fa-code-branch', count: splitTurnaroundReassignments,
+                text: 'vuelo(s) formaban parte de un turnaround que se dividió en dos movimientos: se actualiza el registro por su llegada y se crea un vuelo nuevo para la otra mitad.'
+            });
+            if (staleKeyClears.size) notes.push({
+                icon: 'fa-link-slash', count: staleKeyClears.size,
+                text: 'registro(s) tenían una llegada/salida que quedó obsoleta por una reasignación de rotación: se libera ese enlace (no se borra el registro, solo esa mitad del turnaround).'
+            });
 
-            if (!confirm(confirmMsg)) return;
+            const stats = [
+                { value: insertRows.length, label: 'Vuelos nuevos', tone: 'new' },
+                { value: updateRows.length, label: 'Actualizados', tone: 'upd' }
+            ];
+            if (duplicatesCount) stats.push({ value: duplicatesCount, label: 'Sin cambios', tone: 'skip' });
+
+            hideUploadCsvModal();
+            const confirmed = await showImportDialog({
+                tone: 'info',
+                icon: 'fa-file-csv',
+                title: 'Resumen de la importación',
+                subtitle: `${mapped.length} registros leídos · fecha de referencia ${formatDateLabel(referenceDate)}`,
+                stats,
+                notes,
+                footNote: `Se guardarán ${insertRows.length + updateRows.length} vuelo(s).`,
+                confirmText: 'Importar'
+            });
+            if (!confirmed) return;
 
             // Libera llaves obsoletas ANTES de escribir los datos nuevos,
             // para que no choquen con la restricción de unicidad.
@@ -832,22 +1004,33 @@
             await updateExistingFlights(updateRows);
             await saveToDatabase(insertRows, true);
 
-            const modalEl = document.getElementById('uploadOpsCsvModal');
-            if (modalEl) {
-                const modal = bootstrap.Modal.getInstance(modalEl);
-                if (modal) modal.hide();
-            }
 
             _flightProbeCache = null; // new/updated rows — invalidate probe cache
             await loadFlights();
 
-            const resultParts = [];
-            if (insertRows.length) resultParts.push(`${insertRows.length} vuelo(s) nuevo(s) agregado(s)`);
-            if (updateRows.length) resultParts.push(`${updateRows.length} vuelo(s) existente(s) actualizado(s)`);
-            alert(`CSV importado correctamente: ${resultParts.join(', ') || 'sin cambios'}.`);
+            const resultStats = [];
+            if (insertRows.length) resultStats.push({ value: insertRows.length, label: 'Vuelos nuevos', tone: 'new' });
+            if (updateRows.length) resultStats.push({ value: updateRows.length, label: 'Actualizados', tone: 'upd' });
+            await showImportDialog({
+                tone: 'success',
+                icon: 'fa-circle-check',
+                title: 'Importación completada',
+                subtitle: 'El itinerario ya quedó al día con el archivo.',
+                stats: resultStats,
+                cancelText: null,
+                confirmText: 'Listo'
+            });
         } catch (err) {
             console.error(err);
-            alert(`Error al importar CSV: ${err.message}`);
+            hideUploadCsvModal();
+            await showImportDialog({
+                tone: 'danger',
+                icon: 'fa-triangle-exclamation',
+                title: 'No se pudo importar el CSV',
+                subtitle: err.message,
+                cancelText: null,
+                confirmText: 'Cerrar'
+            });
         }
     }
 

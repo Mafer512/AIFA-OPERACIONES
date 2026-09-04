@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Registro de Colaborador</title>
+  <title>Registro de Colaborador | AIFA</title>
+  <link rel="icon" href="favicon.ico">
+  <meta name="theme-color" content="#0b2545">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -12,72 +14,416 @@
   <script src="./js/supabase-client.js"></script>
   <style>
     :root {
-      --bg: #f4f8ff;
-      --card: #ffffff;
-      --ink: #17233b;
-      --muted: #5e6d84;
-      --accent: #0057c2;
-      --ok: #0f9f61;
-      --warn: #d68b00;
+      --ink: #10233f;
+      --ink-soft: #3d5470;
+      --muted: #6b7d95;
+      --line: #e2eaf5;
+      --line-soft: #eef3fa;
+      --surface: #ffffff;
+      --bg: #eef3fa;
+      --navy: #0b2545;
+      --navy-2: #14417d;
+      --accent: #1a73e8;
+      --accent-dark: #0b57c9;
+      --ok: #0f8a53;
+      --warn: #b76a00;
+      --radius: 16px;
+      --shadow-sm: 0 1px 2px rgba(16, 35, 63, .05), 0 2px 8px rgba(16, 35, 63, .05);
+      --shadow-md: 0 10px 30px rgba(11, 37, 69, .10);
     }
-    body { margin: 0; font-family: 'Barlow', system-ui, sans-serif; background: radial-gradient(circle at top right, #d9ebff, var(--bg) 45%); color: var(--ink); }
-    .page { max-width: 980px; margin: 24px auto; padding: 0 16px 32px; }
-    .hero { background: linear-gradient(125deg, #0f2e63, #1750a2); color: #fff; border-radius: 16px; padding: 18px 18px 14px; box-shadow: 0 10px 28px rgba(10,36,76,.2); }
-    .hero h1 { margin: 0; font-size: 1.6rem; font-weight: 800; }
-    .hero p { margin: 8px 0 0; opacity: .95; }
-    .panel { background: var(--card); border: 1px solid #dbe7f7; border-radius: 14px; box-shadow: 0 6px 14px rgba(14,41,87,.08); padding: 14px; margin-top: 14px; }
-    .sec-title { font-size: 1.06rem; font-weight: 700; margin: 0 0 10px; color: #153464; }
-    .badge-lite { display: inline-block; border-radius: 999px; border: 1px solid #c8dbf4; color: #214d8b; padding: 2px 10px; font-size: .8rem; }
-    .dropzone { border: 1.5px dashed #8fb4e7; border-radius: 12px; background: #f5f9ff; padding: 10px; text-align: center; }
-    .preview { margin-top: 8px; min-height: 38px; }
-    .preview img { max-height: 140px; max-width: 100%; border-radius: 8px; border: 1px solid #cadbf2; }
-    .status { font-size: .9rem; color: var(--muted); }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1100px 460px at 50% -160px, #dbe8fb, transparent 70%),
+        var(--bg);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Barra institucional ─────────────────────────────────────────────── */
+    .appbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+      box-shadow: var(--shadow-sm);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    .appbar-inner {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .appbar-logo { height: 40px; width: auto; display: block; }
+    .appbar-sep { width: 1px; height: 30px; background: var(--line); flex-shrink: 0; }
+    .appbar-text { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+    .appbar-text strong { font-size: .92rem; font-weight: 700; color: var(--navy); }
+    .appbar-text span {
+      font-size: .68rem;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .page { max-width: 1000px; margin: 0 auto; padding: 22px 18px 132px; }
+
+    /* ── Portada ─────────────────────────────────────────────────────────── */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 20px;
+      padding: 30px 26px;
+      color: #fff;
+      background:
+        radial-gradient(700px 240px at 88% -40%, rgba(96, 165, 250, .45), transparent 65%),
+        linear-gradient(125deg, var(--navy) 0%, var(--navy-2) 100%);
+      box-shadow: var(--shadow-md);
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -70px;
+      bottom: -110px;
+      width: 260px;
+      height: 260px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .05);
+    }
+    .hero-kicker {
+      display: inline-block;
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: #a9c8f5;
+      margin-bottom: 6px;
+    }
+    .hero h1 { margin: 0; font-size: clamp(1.5rem, 4.4vw, 2.05rem); font-weight: 800; letter-spacing: -.01em; }
+    .hero p { margin: 10px 0 0; max-width: 60ch; font-size: .96rem; color: #d7e5fa; }
+    .hero-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 7px 15px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .12);
+      border: 1px solid rgba(255, 255, 255, .22);
+      font-size: .85rem;
+      font-weight: 600;
+      color: #eaf2ff;
+    }
+    .hero-chip .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #7dd3a0;
+      box-shadow: 0 0 0 4px rgba(125, 211, 160, .22);
+      flex-shrink: 0;
+    }
+
+    /* ── Tarjetas ────────────────────────────────────────────────────────── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      padding: 20px 22px 22px;
+      margin-top: 16px;
+    }
+    .sec-title {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      margin: 0 0 18px;
+      padding-bottom: 13px;
+      border-bottom: 1px solid var(--line-soft);
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--navy);
+    }
+    .sec-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, #e8f0fe, #d7e6fd);
+      color: var(--accent-dark);
+      font-size: .85rem;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    /* ── Campos ──────────────────────────────────────────────────────────── */
+    .form-label {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 6px;
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--ink-soft);
+    }
+    .form-control, .form-select {
+      min-height: 46px;
+      border-radius: 11px;
+      border: 1px solid #d6e1f0;
+      background: #fbfdff;
+      color: var(--ink);
+      font-size: .95rem;
+      padding: .5rem .8rem;
+      transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    }
+    .form-control::placeholder { color: #9fb0c6; }
+    .form-control:focus, .form-select:focus {
+      background: #fff;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(26, 115, 232, .14);
+    }
+    .form-control[type="file"] { min-height: 0; }
+
+    .locked-field {
+      background: #f1f5fb !important;
+      border-color: #dbe4f0 !important;
+      color: #46597a;
+      font-weight: 600;
+      cursor: not-allowed;
+    }
+    .locked-field:focus { box-shadow: none; border-color: #dbe4f0 !important; }
+    .lock-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .02em;
+      color: #52678a;
+      background: #eef3fb;
+      border: 1px solid #dbe4f0;
+      border-radius: 999px;
+      padding: 1px 8px;
+      white-space: nowrap;
+    }
+    /* Obligatorio para cerrar el registro / se puede subir después. */
+    .req-tag, .opt-tag {
+      font-size: .66rem;
+      font-weight: 700;
+      letter-spacing: .02em;
+      border-radius: 999px;
+      padding: 1px 8px;
+      white-space: nowrap;
+    }
+    .req-tag { color: #9a4b00; background: #fff4e2; border: 1px solid #f3d9ae; }
+    .opt-tag { color: #5d6f88; background: #f2f5fa; border: 1px solid #e0e7f2; }
+
+    .lock-hint {
+      display: flex;
+      gap: 10px;
+      font-size: .86rem;
+      line-height: 1.45;
+      color: var(--ink-soft);
+      background: #f4f8ff;
+      border: 1px solid #dfe9f8;
+      border-left: 3px solid #9fc0ee;
+      border-radius: 12px;
+      padding: 11px 14px;
+    }
+    .lock-hint.warn {
+      color: #7a4f00;
+      background: #fff8ea;
+      border-color: #f0dcae;
+      border-left-color: #e3a53a;
+    }
+
+    /* ── Documentos ──────────────────────────────────────────────────────── */
+    .dropzone {
+      border: 1.5px dashed #b9cfec;
+      border-radius: 13px;
+      background: #f7fbff;
+      padding: 13px;
+      text-align: center;
+      transition: border-color .15s ease, background .15s ease;
+    }
+    .dropzone:hover { border-color: var(--accent); background: #f1f7ff; }
+    .dropzone .form-control { background: #fff; }
+    .preview { margin-top: 10px; min-height: 34px; }
+    .preview img { max-height: 132px; max-width: 100%; border-radius: 10px; border: 1px solid var(--line); }
+    /* Etiqueta de "ya está cargado" y enlace al archivo guardado. */
+    .badge-lite {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      border: 1px solid #cfe0f6;
+      background: #eef5ff;
+      color: var(--navy-2);
+      padding: 4px 12px;
+      font-size: .8rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    a.badge-lite:hover { background: #dfebfd; color: var(--accent-dark); }
+
+    /* ── Estados ─────────────────────────────────────────────────────────── */
+    .status { font-size: .88rem; color: var(--muted); margin: 0; }
     .status.ok { color: var(--ok); font-weight: 600; }
     .status.warn { color: var(--warn); font-weight: 600; }
-    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-    @media (max-width: 768px) {
-      .hero h1 { font-size: 1.3rem; }
-      .panel { padding: 12px; }
+
+    /* ── Puerta de acceso (carga / enlace inválido) ──────────────────────── */
+    .gate { text-align: center; padding: 34px 24px; }
+    .gate-icon {
+      width: 56px;
+      height: 56px;
+      margin: 0 auto 14px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      background: #e8f0fe;
+      color: var(--accent-dark);
+    }
+    .gate.is-error .gate-icon { background: #fdecec; color: #c0392b; }
+    .gate-title { margin: 0 0 6px; font-size: 1.12rem; font-weight: 700; color: var(--navy); }
+    .gate .status { max-width: 46ch; margin: 0 auto; }
+    .gate .btn { margin-top: 16px; }
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid rgba(26, 115, 232, .25);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+    /* ── Barra de acciones fija ──────────────────────────────────────────── */
+    .actionbar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 30;
+      background: rgba(255, 255, 255, .94);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
+      border-top: 1px solid var(--line);
+      box-shadow: 0 -6px 24px rgba(11, 37, 69, .08);
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .actionbar-inner {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .actionbar .status { flex: 1 1 200px; min-width: 0; }
+    .actions { display: flex; gap: 10px; margin-left: auto; }
+
+    .btn {
+      border-radius: 11px;
+      font-weight: 700;
+      font-size: .92rem;
+      padding: .62rem 1.25rem;
+      border: 1px solid transparent;
+      transition: transform .12s ease, box-shadow .15s ease, background .15s ease;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      box-shadow: 0 4px 14px rgba(26, 115, 232, .28);
+    }
+    .btn-primary:hover, .btn-primary:focus { background: var(--accent-dark); border-color: var(--accent-dark); }
+    .btn-outline-primary { color: var(--accent-dark); border-color: #bed6f7; background: #fff; }
+    .btn-outline-primary:hover { background: #eaf2ff; color: var(--accent-dark); border-color: var(--accent); }
+    .btn-success {
+      background: linear-gradient(135deg, #0f8a53, #12a463);
+      border-color: transparent;
+      box-shadow: 0 4px 14px rgba(15, 138, 83, .28);
+    }
+    .btn-success:hover, .btn-success:focus { background: linear-gradient(135deg, #0c7546, #0f8a53); }
+
+    @media (max-width: 767.98px) {
+      .appbar-inner { padding: 9px 14px; gap: 10px; }
+      .appbar-logo { height: 32px; }
+      .appbar-text strong { font-size: .82rem; }
+      .appbar-text span { font-size: .6rem; }
+      .page { padding: 14px 12px 148px; }
+      .hero { padding: 22px 18px; border-radius: 16px; }
+      .hero p { font-size: .9rem; }
+      .panel { padding: 16px 15px 18px; border-radius: 14px; }
+      .sec-title { font-size: .98rem; margin-bottom: 15px; }
+      .actionbar-inner { padding: 10px 12px; gap: 8px; }
+      .actions { width: 100%; }
+      .actions .btn { flex: 1; padding-inline: .5rem; }
+      .actionbar .status { flex-basis: 100%; text-align: center; }
     }
   </style>
 </head>
 <body>
+  <header class="appbar">
+    <div class="appbar-inner">
+      <img src="images/aifa-logo.png" alt="Aeropuerto Internacional Felipe Ángeles" class="appbar-logo">
+      <span class="appbar-sep" aria-hidden="true"></span>
+      <div class="appbar-text">
+        <strong>Dirección de Operación</strong>
+        <span>Alta de colaboradores</span>
+      </div>
+    </div>
+  </header>
+
   <div class="page">
     <section class="hero">
+      <span class="hero-kicker">Bienvenido</span>
       <h1>Registro de Colaborador</h1>
-      <p>Completa tus datos. Puedes guardar avances y regresar despues con el mismo QR.</p>
-      <div class="mt-2"><span class="badge-lite" id="token-state">Token: pendiente</span></div>
+      <p>Completa tus datos y sube tus documentos. Puedes guardar tu avance cuando quieras y volver después escaneando el mismo código QR.</p>
+      <div class="hero-chip" id="hero-chip" hidden><span class="dot" aria-hidden="true"></span><span id="hero-chip-text"></span></div>
     </section>
 
-    <section class="panel">
-      <h2 class="sec-title">Acceso por QR</h2>
-      <div class="row g-2 align-items-end">
-        <div class="col-md-9">
-          <label class="form-label mb-1">Token</label>
-          <input id="token-input" class="form-control" placeholder="Pega el token del QR si no viene en la URL">
-        </div>
-        <div class="col-md-3 d-grid">
-          <button id="btn-load" class="btn btn-primary">Cargar</button>
-        </div>
-      </div>
-      <div class="status mt-2" id="load-status">Escanea el QR o pega el token para continuar.</div>
+    <!-- Pantalla de apertura: solo se ve mientras carga o si el enlace ya no sirve.
+         El código del enlace viaja oculto: al colaborador no le dice nada. -->
+    <section class="panel gate" id="gate">
+      <div class="gate-icon" id="gate-icon"><span class="spinner" role="status" aria-label="Cargando"></span></div>
+      <h2 class="gate-title" id="gate-title">Abriendo tu registro</h2>
+      <p class="status" id="load-status">Un momento, estamos cargando tus datos.</p>
+      <button id="btn-load" class="btn btn-primary d-none" type="button">Intentar de nuevo</button>
+      <input id="token-input" type="hidden">
     </section>
 
     <form id="onboarding-form" class="d-none">
       <section class="panel">
-        <h2 class="sec-title">Identificación básica</h2>
+        <h2 class="sec-title"><span class="sec-num">1</span>Identificación básica</h2>
         <div class="row g-3">
           <div class="col-md-3">
-            <label class="form-label">No. Empleado</label>
-            <input id="f-num" class="form-control" readonly>
+            <label class="form-label">No. Empleado <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-num" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-9">
-            <label class="form-label">Nombre completo</label>
-            <input id="f-nombre" class="form-control" required>
+            <label class="form-label">Nombre completo <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-nombre" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
+          </div>
+          <div class="col-12">
+            <div class="lock-hint" id="lock-hint">&#128274; Los campos marcados como <strong>Fijo</strong> los asigna el área de personal y no se editan desde aquí.</div>
           </div>
           <div class="col-md-4">
-            <label class="form-label">Puesto</label>
-            <input id="f-puesto" class="form-control">
+            <label class="form-label">Puesto <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-puesto" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-4">
             <label class="form-label">Profesión</label>
@@ -103,15 +449,16 @@
       </section>
 
       <section class="panel">
-        <h2 class="sec-title">Datos laborales</h2>
+        <h2 class="sec-title"><span class="sec-num">2</span>Datos laborales</h2>
+        <div class="lock-hint mb-3">&#128274; Tu adscripción la registra el área de personal. Aquí solo capturas turno, si eres militar o civil, y si estás comisionado.</div>
         <div class="row g-3">
           <div class="col-md-3">
-            <label class="form-label">Nivel</label>
-            <input id="f-nivel" class="form-control">
+            <label class="form-label">Nivel <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-nivel" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-3">
-            <label class="form-label">Plaza</label>
-            <input id="f-plaza" class="form-control">
+            <label class="form-label">Plaza <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-plaza" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-3">
             <label class="form-label">Turno</label>
@@ -126,26 +473,26 @@
             <input id="f-comisionado" class="form-control">
           </div>
           <div class="col-md-4">
-            <label class="form-label">Dirección</label>
-            <input id="f-direccion" class="form-control">
+            <label class="form-label">Dirección <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-direccion" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-4">
-            <label class="form-label">Subdirección</label>
-            <input id="f-subdireccion" class="form-control">
+            <label class="form-label">Subdirección <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-subdireccion" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-6">
-            <label class="form-label">Gerencia</label>
-            <input id="f-gerencia" class="form-control">
+            <label class="form-label">Gerencia <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-gerencia" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-6">
-            <label class="form-label">Coordinación</label>
-            <input id="f-coordinacion" class="form-control">
+            <label class="form-label">Coordinación <span class="lock-tag">&#128274; Fijo</span></label>
+            <input id="f-coordinacion" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
         </div>
       </section>
 
       <section class="panel">
-        <h2 class="sec-title">Datos personales y fiscales</h2>
+        <h2 class="sec-title"><span class="sec-num">3</span>Datos personales y fiscales</h2>
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label">CURP</label>
@@ -195,7 +542,7 @@
       </section>
 
       <section class="panel">
-        <h2 class="sec-title">Contacto y vigencias</h2>
+        <h2 class="sec-title"><span class="sec-num">4</span>Contacto y vigencias</h2>
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label">Celular</label>
@@ -245,7 +592,7 @@
       </section>
 
       <section class="panel">
-        <h2 class="sec-title">Contactos de emergencia</h2>
+        <h2 class="sec-title"><span class="sec-num">5</span>Contactos de emergencia</h2>
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label">Contacto 1 nombre</label>
@@ -275,47 +622,50 @@
       </section>
 
       <section class="panel">
-        <h2 class="sec-title">Documentos</h2>
+        <h2 class="sec-title"><span class="sec-num">6</span>Documentos</h2>
+        <div class="lock-hint mb-3">Para finalizar tu registro solo necesitas tu <strong>CV</strong> y tu <strong>INE</strong> por los dos lados. La TIA la subes después, cuando te la entreguen.</div>
         <div class="row g-3">
           <div class="col-md-4">
-            <label class="form-label">CV</label>
+            <label class="form-label">CV <span class="req-tag">Obligatorio</span></label>
             <div class="dropzone">
               <input id="doc-cv" class="form-control form-control-sm" type="file" accept="application/pdf,.pdf">
               <div id="prev-cv" class="preview"></div>
             </div>
           </div>
           <div class="col-md-4">
-            <label class="form-label">INE frente</label>
+            <label class="form-label">INE frente <span class="req-tag">Obligatorio</span></label>
             <div class="dropzone">
               <input id="doc-ine" class="form-control form-control-sm" type="file" accept="image/*">
               <div id="prev-ine" class="preview"></div>
             </div>
           </div>
           <div class="col-md-4">
-            <label class="form-label">INE reverso</label>
+            <label class="form-label">INE reverso <span class="req-tag">Obligatorio</span></label>
             <div class="dropzone">
               <input id="doc-ine-rev" class="form-control form-control-sm" type="file" accept="image/*">
               <div id="prev-ine-rev" class="preview"></div>
             </div>
           </div>
           <div class="col-md-4">
-            <label class="form-label">TIA / Credencial</label>
+            <label class="form-label">TIA / Credencial <span class="opt-tag">Opcional</span></label>
             <div class="dropzone">
               <input id="doc-tia" class="form-control form-control-sm" type="file" accept="image/*">
               <div id="prev-tia" class="preview"></div>
             </div>
           </div>
         </div>
-        <div id="docs-state" class="status mt-2">Aun faltan documentos por cargar.</div>
+        <div id="docs-state" class="status mt-2">Te falta subir: CV, INE frente, INE reverso.</div>
       </section>
 
-      <section class="panel">
-        <div class="actions">
-          <button type="button" id="btn-save-draft" class="btn btn-outline-primary">Guardar avance</button>
-          <button type="submit" id="btn-save-all" class="btn btn-success">Guardar y finalizar</button>
+      <div class="actionbar">
+        <div class="actionbar-inner">
+          <p id="save-status" class="status">Tus cambios no se guardan solos: usa los botones al terminar.</p>
+          <div class="actions">
+            <button type="button" id="btn-save-draft" class="btn btn-outline-primary">Guardar avance</button>
+            <button type="submit" id="btn-save-all" class="btn btn-success">Guardar y finalizar</button>
+          </div>
         </div>
-        <div id="save-status" class="status mt-2"></div>
-      </section>
+      </div>
     </form>
   </div>
 
@@ -324,23 +674,16 @@
       'use strict';
 
       let token = '';
+      // Los campos de LOCKED_SPECS quedan fuera: los resuelve el backend.
       const FIELD_SPECS = [
-        ['f-nombre', 'nombre'],
-        ['f-puesto', 'puesto'],
         ['f-profesion', 'profesion'],
         ['f-grado-academico', 'grado_academico'],
         ['f-matricula', 'matricula'],
         ['f-cedula', 'cedula'],
         ['f-ryr', 'ryr'],
-        ['f-nivel', 'nivel'],
-        ['f-plaza', 'plaza'],
         ['f-turno', 'turno'],
         ['f-militar', 'militar'],
         ['f-comisionado', 'comisionado'],
-        ['f-direccion', 'direccion'],
-        ['f-subdireccion', 'subdireccion'],
-        ['f-gerencia', 'gerencia'],
-        ['f-coordinacion', 'coordinacion'],
         ['f-curp', 'curp'],
         ['f-rfc', 'rfc'],
         ['f-sangre', 'sangre'],
@@ -371,13 +714,42 @@
         ['f-c2-tel', 'c2_tel']
       ];
 
-      const REQUIRED_FINAL_KEYS = [
-        'nombre', 'puesto', 'profesion', 'grado_academico', 'matricula', 'cedula', 'ryr', 'nivel', 'plaza', 'turno', 'militar', 'comisionado', 'direccion', 'subdireccion', 'gerencia', 'coordinacion',
-        'curp', 'rfc', 'sangre', 'estado_civil', 'dependientes', 'domicilio', 'nss', 'alerg_med', 'alerg_ali', 'rubrica', 'doc_ingreso',
-        'celular', 'extension', 'correo', 'correo_personal', 'fecha_ingreso', 'onomastico', 'vig_licencia', 'vig_credencial', 'vig_ine', 'licencia', 'licencia_tipo',
-        'c1_nombre', 'c1_parentesco', 'c1_tel', 'c2_nombre', 'c2_parentesco', 'c2_tel',
-        'cv_url', 'foto_ine', 'foto_ine_rev', 'foto_cred'
+      // Los captura el área de personal al generar el QR; el portal solo los muestra.
+      const LOCKED_SPECS = [
+        ['f-num', 'num_empleado', 'No. Empleado'],
+        ['f-nombre', 'nombre', 'Nombre completo'],
+        ['f-puesto', 'puesto', 'Puesto'],
+        ['f-nivel', 'nivel', 'Nivel'],
+        ['f-plaza', 'plaza', 'Plaza'],
+        ['f-direccion', 'direccion', 'Dirección'],
+        ['f-subdireccion', 'subdireccion', 'Subdirección'],
+        ['f-gerencia', 'gerencia', 'Gerencia'],
+        ['f-coordinacion', 'coordinacion', 'Coordinación']
       ];
+
+      const FIELD_LABELS = {
+        nombre: 'Nombre completo', puesto: 'Puesto', profesion: 'Profesión',
+        grado_academico: 'Grado académico', matricula: 'Matrícula', cedula: 'Cédula', ryr: 'RYR',
+        nivel: 'Nivel', plaza: 'Plaza', turno: 'Turno', militar: 'Militar / civil',
+        comisionado: 'Comisionado', direccion: 'Dirección', subdireccion: 'Subdirección',
+        gerencia: 'Gerencia', coordinacion: 'Coordinación', curp: 'CURP', rfc: 'RFC',
+        sangre: 'Tipo de sangre', estado_civil: 'Estado civil', dependientes: 'Dependientes',
+        domicilio: 'Domicilio', nss: 'NSS', alerg_med: 'Alergia a medicamento',
+        alerg_ali: 'Alergia a alimento', rubrica: 'Rubrica', doc_ingreso: 'Documento de ingreso',
+        celular: 'Celular', extension: 'Extensión', correo: 'Correo institucional',
+        correo_personal: 'Correo personal', fecha_ingreso: 'Fecha de ingreso',
+        onomastico: 'Onomástico', licencia: 'Licencia', licencia_tipo: 'Tipo de licencia',
+        vig_licencia: 'Vigencia licencia', vig_credencial: 'Vigencia credencial',
+        vig_ine: 'Vigencia INE', c1_nombre: 'Contacto 1 nombre',
+        c1_parentesco: 'Contacto 1 parentesco', c1_tel: 'Contacto 1 teléfono',
+        c2_nombre: 'Contacto 2 nombre', c2_parentesco: 'Contacto 2 parentesco',
+        c2_tel: 'Contacto 2 teléfono', cv_url: 'CV', foto_ine: 'INE frente',
+        foto_ine_rev: 'INE reverso', foto_cred: 'TIA / Credencial'
+      };
+
+      function etiquetar(keys) {
+        return (keys || []).map(function (k) { return FIELD_LABELS[k] || k; }).join(', ');
+      }
 
       let currentData = {
         cv_url: '',
@@ -449,6 +821,28 @@
         el.innerHTML = '<a class="badge-lite" href="' + escapeHtml(dataUrl) + '" target="_blank" rel="noopener">Abrir archivo</a>';
       }
 
+      function pintarCamposFijos(locked) {
+        const faltan = [];
+        LOCKED_SPECS.forEach(function (spec) {
+          const input = $(spec[0]);
+          if (!input) return;
+          const valor = locked && locked[spec[1]] != null ? String(locked[spec[1]]).trim() : '';
+          input.value = valor;
+          if (!valor) faltan.push(spec[2]);
+        });
+
+        const hint = $('lock-hint');
+        if (!hint) return;
+        if (faltan.length) {
+          hint.className = 'lock-hint warn';
+          hint.innerHTML = '&#9888;&#65039; Tu enlace no trae ' + escapeHtml(faltan.join(', ')) +
+            '. Puedes guardar avances, pero para finalizar pide al área de personal que genere de nuevo tu QR.';
+        } else {
+          hint.className = 'lock-hint';
+          hint.innerHTML = '&#128274; Los campos marcados como <strong>Fijo</strong> los asigna el área de personal y no se editan desde aquí. Si alguno tiene un error, avísales antes de finalizar.';
+        }
+      }
+
       function setInputValue(key, value) {
         const spec = FIELD_SPECS.find(function (item) { return item[1] === key; });
         if (!spec) return;
@@ -475,21 +869,25 @@
         });
       }
 
+      // La TIA se la entregan al colaborador despues de darse de alta, asi que
+      // no puede ser requisito para cerrar su registro. Obligatorios: el CV y
+      // las dos caras de la INE; lo demas se sube cuando lo tenga.
       function refreshDocsState() {
         const okIne = !!currentData.foto_ine;
         const okIneRev = !!currentData.foto_ine_rev;
         const okTia = !!currentData.foto_cred;
         const okCv = !!currentData.cv_url;
-        if (okCv && okIne && okIneRev && okTia) {
-          setStatus('docs-state', 'Documentacion completa.', 'ok');
-        } else {
-          const missing = [];
-          if (!okCv) missing.push('CV');
-          if (!okIne) missing.push('INE frente');
-          if (!okIneRev) missing.push('INE reverso');
-          if (!okTia) missing.push('TIA');
-          setStatus('docs-state', 'Falta: ' + missing.join(', '), 'warn');
+        const missing = [];
+        if (!okCv) missing.push('CV');
+        if (!okIne) missing.push('INE frente');
+        if (!okIneRev) missing.push('INE reverso');
+        if (missing.length) {
+          setStatus('docs-state', 'Te falta subir: ' + missing.join(', ') + '.', 'warn');
+          return;
         }
+        setStatus('docs-state', okTia
+          ? 'Documentación completa.'
+          : 'Ya tienes lo obligatorio. La TIA la puedes subir después.', 'ok');
       }
 
       function collectPayload() {
@@ -535,44 +933,70 @@
         refreshDocsState();
       }
 
-      function missingFinalFields(payload) {
-        return REQUIRED_FINAL_KEYS.filter(function (key) {
-          return !String(payload[key] || '').trim();
-        });
+      // La pantalla de apertura habla del QR, nunca del código que lleva
+      // dentro: ese dato no significa nada para quien llena el formulario.
+      function cargandoAcceso() {
+        const gate = $('gate');
+        if (gate) gate.classList.remove('d-none', 'is-error');
+        $('gate-icon').innerHTML = '<span class="spinner" role="status" aria-label="Cargando"></span>';
+        $('gate-title').textContent = 'Abriendo tu registro';
+        $('btn-load').classList.add('d-none');
+        setStatus('load-status', 'Un momento, estamos cargando tus datos.', '');
+      }
+
+      function fallaDeAcceso(mensaje) {
+        const gate = $('gate');
+        if (gate) gate.classList.add('is-error');
+        if (gate) gate.classList.remove('d-none');
+        $('onboarding-form').classList.add('d-none');
+        $('gate-icon').textContent = '\u26A0';
+        $('gate-title').textContent = 'No pudimos abrir tu registro';
+        $('btn-load').classList.toggle('d-none', !$('token-input').value.trim());
+        setStatus('load-status', mensaje, 'warn');
+      }
+
+      function saludar(nombre) {
+        const chip = $('hero-chip');
+        if (!chip) return;
+        const limpio = String(nombre || '').trim();
+        $('hero-chip-text').textContent = limpio
+          ? 'Registro abierto para ' + limpio
+          : 'Registro abierto. Puedes guardar tu avance y volver después.';
+        chip.hidden = false;
       }
 
       async function loadByToken() {
         const sb = window.supabaseClient || (window.ensureSupabaseClient ? window.ensureSupabaseClient() : null);
         if (!sb) {
-          setStatus('load-status', 'Supabase no disponible en esta pagina.', 'warn');
+          fallaDeAcceso('No pudimos conectar con el sistema. Intenta de nuevo en un momento.');
           return;
         }
 
         const qToken = $('token-input').value.trim();
         if (!qToken) {
-          setStatus('load-status', 'Ingresa token valido.', 'warn');
+          fallaDeAcceso('Abre el enlace del código QR que te compartió el área de personal.');
           return;
         }
         token = qToken;
-        setStatus('load-status', 'Cargando datos...', '');
+        cargandoAcceso();
 
         const { data, error } = await sb.rpc('get_colab_onboarding', { p_token: token });
         if (error) {
-          setStatus('load-status', 'Error de carga: ' + error.message, 'warn');
+          fallaDeAcceso('No pudimos abrir tu registro. Revisa tu conexión e intenta de nuevo.');
           return;
         }
         if (!data || data.ok !== true) {
-          setStatus('load-status', (data && data.error) ? data.error : 'Token no valido.', 'warn');
+          fallaDeAcceso('Este acceso ya no está disponible. Pide al área de personal que te genere uno nuevo.');
           return;
         }
 
         const d = data.data || {};
-        $('f-num').value = data.num_empleado || '';
+        pintarCamposFijos(data.locked || { num_empleado: data.num_empleado, nombre: data.nombre });
         populateForm(d);
 
+        $('gate').classList.add('d-none');
         $('onboarding-form').classList.remove('d-none');
-        $('token-state').textContent = 'Token activo: ' + token.slice(0, 8) + '...';
-        setStatus('load-status', 'Listo. Puedes editar, guardar y volver despues con el mismo QR.', 'ok');
+        saludar(data.locked && data.locked.nombre ? data.locked.nombre : (data.nombre || ''));
       }
 
       async function saveOnboarding(finalMode) {
@@ -582,21 +1006,14 @@
           return;
         }
         if (!token) {
-          setStatus('save-status', 'Primero carga el token.', 'warn');
+          setStatus('save-status', 'Tu registro aún no está abierto. Vuelve a escanear tu código QR.', 'warn');
           return;
         }
 
         const payload = collectPayload();
-        if (finalMode) {
-          const missing = missingFinalFields(payload);
-          if (missing.length) {
-            setStatus('save-status', 'Para finalizar faltan campos personales obligatorios: ' + missing.join(', '), 'warn');
-            return;
-          }
-          if (!payload.cv_url || !payload.foto_ine || !payload.foto_ine_rev || !payload.foto_cred) {
-            setStatus('save-status', 'Para finalizar debes cargar CV, INE frente, INE reverso y TIA.', 'warn');
-            return;
-          }
+        if (finalMode && (!payload.cv_url || !payload.foto_ine || !payload.foto_ine_rev)) {
+          setStatus('save-status', 'Para finalizar necesitas tu CV y tu INE por los dos lados. La TIA la puedes subir después.', 'warn');
+          return;
         }
 
         setStatus('save-status', finalMode ? 'Guardando registro final...' : 'Guardando avance...', '');
@@ -612,10 +1029,20 @@
           return;
         }
         if (!data || data.ok !== true) {
+          if (data && data.locked_missing && data.locked_missing.length) {
+            setStatus('save-status', 'Tu enlace no trae ' + etiquetar(data.locked_missing) +
+              '. Pide al área de personal que te genere de nuevo tu código QR.', 'warn');
+            return;
+          }
+          if (data && data.missing_fields && data.missing_fields.length) {
+            setStatus('save-status', 'Para finalizar faltan estos datos: ' + etiquetar(data.missing_fields) + '.', 'warn');
+            return;
+          }
           setStatus('save-status', (data && data.error) ? data.error : 'No se pudo guardar.', 'warn');
           return;
         }
 
+        if (data.locked) pintarCamposFijos(data.locked);
         setStatus('save-status', finalMode ? 'Registro final guardado correctamente.' : 'Avance guardado correctamente.', 'ok');
       }
 
@@ -624,6 +1051,8 @@
         const tokenFromUrl = params.get('token') || '';
         if (tokenFromUrl) {
           $('token-input').value = tokenFromUrl;
+        } else {
+          fallaDeAcceso('Abre el enlace del código QR que te compartió el área de personal.');
         }
 
         $('btn-load').addEventListener('click', function () {
