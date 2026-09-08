@@ -21228,6 +21228,11 @@ function _conciInitQuickFlightSearch() {
 function _conciAttachDateMask(input) {
     if (!input || input.dataset.conciDateMask === '1') return;
     const isoValue = input.value;
+    // Autocompletar con cero a la izquierda (ver más abajo) solo aplica cuando
+    // la celda arranca realmente vacía. Una fecha que ya trae un valor
+    // precargado (por ejemplo FECHA) mantiene su comportamiento de captura
+    // exactamente igual que antes, sin importar qué se toque después.
+    const empezoVacio = !isoValue;
     input.type = 'text';
     input.dataset.conciDateMask = '1';
     input.inputMode = 'numeric';
@@ -21236,6 +21241,41 @@ function _conciAttachDateMask(input) {
     input.placeholder = 'dd/mm/aaaa';
 
     const onlyDigits = value => String(value || '').replace(/\D/g, '');
+
+    // Dado lo ya tecleado (dígitos crudos) y la tecla numérica recién
+    // presionada, regresa el string completo de dígitos que debe quedar en
+    // el campo. Solo se usa en celdas que arrancaron vacías (empezoVacio).
+    //
+    //  - 1er dígito de DÍA o MES: si por sí solo no podría ser el inicio de
+    //    un valor de dos dígitos válido (día 01-31, mes 01-12), se completa
+    //    con "0" y avanza a la siguiente sección con ese mismo dígito.
+    //  - 2do dígito de DÍA o MES: si el primer dígito SÍ era ambiguo (0-3 en
+    //    día, 0-1 en mes) se espera este segundo dígito y se valida el
+    //    número completo. Si la combinación es inválida (ej. mes "1"+"5" =
+    //    15), el primer dígito se completa solo con "0" y este dígito se
+    //    reinterpreta como el primero de la SIGUIENTE sección (aplicando la
+    //    misma regla ahí, por si también hace falta completarlo).
+    //  - Año y demás posiciones: sin reglas especiales, se anexa tal cual.
+    const appendMaskDigit = (base, key) => {
+        if (base.length === 0) {
+            return /^[0-3]$/.test(key) ? base + key : `0${key}`;
+        }
+        if (base.length === 1) {
+            const dia = parseInt(base + key, 10);
+            if (dia >= 1 && dia <= 31) return base + key;
+            return appendMaskDigit(`0${base}`, key);
+        }
+        if (base.length === 2) {
+            return /^[0-1]$/.test(key) ? base + key : `${base}0${key}`;
+        }
+        if (base.length === 3) {
+            const mesDigitoPendiente = base.slice(2);
+            const mes = parseInt(mesDigitoPendiente + key, 10);
+            if (mes >= 1 && mes <= 12) return base + key;
+            return appendMaskDigit(`${base.slice(0, 2)}0${mesDigitoPendiente}`, key);
+        }
+        return base + key;
+    };
 
     // Se guardan aparte los dígitos que realmente tecleó el usuario: en pantalla
     // "10/10/2026" puede venir de 6 teclas ("101026", con el siglo completado)
@@ -21268,7 +21308,11 @@ function _conciAttachDateMask(input) {
         if (/^\d$/.test(ev.key)) {
             ev.preventDefault();
             // Teclear sobre el texto seleccionado reemplaza la fecha completa.
-            render((hasSelection ? '' : raw) + ev.key, true);
+            const base = hasSelection ? '' : raw;
+            // Solo en celdas que arrancaron vacías: una fecha ya precargada
+            // no cambia su comportamiento de captura.
+            const nuevo = empezoVacio ? appendMaskDigit(base, ev.key) : base + ev.key;
+            render(nuevo, true);
         } else if (ev.key === 'Backspace') {
             ev.preventDefault();
             render(hasSelection ? '' : raw.slice(0, -1), true);
@@ -21288,6 +21332,17 @@ function _conciAttachDateMask(input) {
     // editor de la celda ya tiene su propio ciclo de confirmación y este blur
     // corre antes que él.
     input.addEventListener('blur', () => {
+        // Si se deja el DÍA o el MES a medias con un solo dígito ambiguo
+        // (ej. "3" sin segundo dígito) al salir del campo, se completa con
+        // cero a la izquierda igual que si el dígito no hubiera sido
+        // ambiguo. Solo en celdas que arrancaron vacías.
+        if (empezoVacio) {
+            const digitos = input.dataset.conciDateDigits || '';
+            let completos = digitos;
+            if (digitos.length === 1) completos = `0${digitos}`;
+            else if (digitos.length === 3) completos = `${digitos.slice(0, 2)}0${digitos.slice(2)}`;
+            if (completos !== digitos) render(completos, true);
+        }
         const expanded = _conciExpandDateMaskYear(input.value);
         if (expanded !== input.value) input.value = expanded;
     });
