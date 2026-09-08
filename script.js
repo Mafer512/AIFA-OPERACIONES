@@ -24540,7 +24540,7 @@ function _conciActivateRoutingEditor(td, currentRaw) {
     select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
-        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
+        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, 'stay'); }
         else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
             closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
@@ -24741,7 +24741,7 @@ function _conciActivateAeronaveEditor(td, currentRaw) {
             closeEditor(true, 'next');
         } else if (event.key === 'Escape') {
             event.preventDefault();
-            closeEditor(false, false);
+            closeEditor(false, 'stay');
         } else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             // →/← se comportan igual que Tab/Shift+Tab: pasan de campo sin
             // confirmar ninguna sugerencia.
@@ -25002,7 +25002,7 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
             closeEditor(true, 'next');
         } else if (event.key === 'Escape') {
             event.preventDefault();
-            closeEditor(false, false);
+            closeEditor(false, 'stay');
         } else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             // →/← se comportan igual que Tab/Shift+Tab, como en el editor de
             // AERONAVE: pasan de campo sin confirmar ninguna sugerencia.
@@ -25126,7 +25126,7 @@ function _conciActivateManifestTypeEditor(td, currentRaw) {
     select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
-        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
+        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, 'stay'); }
         else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
             closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
@@ -25195,7 +25195,7 @@ function _conciActivateMatriculaStatusEditor(td, currentRaw) {
     select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
-        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
+        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, 'stay'); }
         // Mismo criterio que los combos de TIPO DE MANIFIESTO y TIPO DE
         // OPERACIÓN. Este editor se había quedado solo con Enter y Escape, y
         // _conciHandleGridArrowNavigation ignora a propósito lo que ocurre
@@ -25279,7 +25279,7 @@ function _conciActivateOperationTypeEditor(td, currentRaw) {
             closeEditor(true, 'next');
         } else if (event.key === 'Escape') {
             event.preventDefault();
-            closeEditor(false, false);
+            closeEditor(false, 'stay');
         } else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
             closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
@@ -28450,7 +28450,7 @@ function _conciActivateCellEditor(td) {
             closeEditor(true, 'next');
         } else if (e.key === 'Escape') {
             e.preventDefault();
-            closeEditor(false, false);
+            closeEditor(false, 'stay');
         } else if (e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
             // →/← se comportan igual que Tab/Shift+Tab: pasan de campo siempre,
             // sin importar en qué posición esté el cursor dentro del texto.
@@ -28577,6 +28577,14 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
         _conciFocusFilterOrAbove(td);
     } else if (move === 'down') {
         _conciFocusBelow(td);
+    } else if (move === 'stay') {
+        // Esc: el editor se cierra y el valor vuelve al que tenía (nextRaw ya
+        // llegó como fallbackRaw desde cada closeEditor), pero a diferencia de
+        // 'next'/'prev'/'up'/'down' aquí no se activa ninguna otra celda — así
+        // que sin esto la celda se queda sin la marca de "aquí estabas" y el
+        // usuario pierde de vista dónde se quedó capturando.
+        td.classList.add('conci-cell-active');
+        try { td.focus({ preventScroll: true }); } catch (_) { td.focus(); }
     }
     // Aplica un refresco remoto en espera SOLO después de intentar abrir la
     // siguiente celda: si la navegación deja una celda activa, este chequeo
@@ -28731,7 +28739,7 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
             closeEditor(true, 'next');
         } else if (e.key === 'Escape') {
             e.preventDefault();
-            closeEditor(false, false);
+            closeEditor(false, 'stay');
         } else if (e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
             const goingBack = e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey);
             if (goingBack) {
