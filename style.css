@@ -184,6 +184,17 @@ body.dark-mode ::-webkit-scrollbar-thumb:hover {
 }
 /* ------------------------------------------- */
 
+/* Scrollbar más gruesa (opt-in): agregar la clase .thick-scrollbar al
+   contenedor con overflow. Solo cambia el grosor; color, track y hover
+   se heredan de las reglas ::-webkit-scrollbar-* de arriba. */
+.thick-scrollbar {
+   scrollbar-width: auto;
+}
+.thick-scrollbar::-webkit-scrollbar {
+   width: 15px;
+   height: 15px;
+}
+
 body.dark-mode {
    --primary-color: #4dabf7;
    --primary-color-dark: #1e88e5;

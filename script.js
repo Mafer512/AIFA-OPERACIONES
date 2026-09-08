@@ -28361,7 +28361,17 @@ function _conciActivateCellEditor(td) {
     const isDateCol = _conciColIsDate(col);
     const isDateTimeCol = !isDateCol && _conciColIsDateTime(col);
     if (isDateCol || isDateTimeCol) {
-        const parts = currentRaw ? _conciParseDateTimeParts(currentRaw, _conciEditFallbackYear) : null;
+        let parts = currentRaw ? _conciParseDateTimeParts(currentRaw, _conciEditFallbackYear) : null;
+        // HR. DE RECEPCIÓN vacía: se propone la fecha de hoy real (hora local),
+        // en vez de dejarla en blanco. No depende del filtro de fecha activo en
+        // la tabla (que puede estar mostrando otro día) ni de _conciEditFallbackYear;
+        // solo aplica a esta columna — el resto de las columnas de fecha siguen
+        // abriendo vacías como antes. Como no se marca "touched" solo por
+        // proponerla, si el usuario no toca nada la celda sigue sin guardarse.
+        if (!parts && _conciIsReceptionColumn(col)) {
+            const hoy = new Date();
+            parts = { year: hoy.getFullYear(), month: hoy.getMonth() + 1, day: hoy.getDate() };
+        }
         _conciActivateDateTimeEditor(td, { withTime: isDateTimeCol, parts, currentRaw });
         return;
     }
