@@ -22684,6 +22684,51 @@ document.addEventListener('keydown', event => {
     _conciCommitCellRaw(activeTd, fechaHoy, false, fechaHoy);
 }, true);
 
+// Ctrl+Home regresa el foco a la primera celda editable de la MISMA fila en
+// la que se está capturando — con tantas columnas, evita tener que hacer
+// scroll horizontal a mano o ir saltando celda por celda para volver al
+// inicio de la fila. No cambia de fila.
+//
+// Si había un editor abierto en la celda actual, se confirma con el mismo
+// camino que Tab/flechas (closeEditor(true, 'row-start') → _conciCommitCellRaw),
+// así lo tecleado se guarda igual que al moverse con cualquier otra tecla de
+// navegación, en vez de perderse de forma distinta a las demás.
+//
+// Se usa captura (como Ctrl+;) para adelantarse a los editores nativos de
+// fecha/hora, y preventDefault siempre que hay una celda activa, para que el
+// navegador no haga scroll al inicio de toda la página (su Ctrl+Home nativo).
+document.addEventListener('keydown', event => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+    if (event.key !== 'Home') return;
+    const section = document.getElementById('conciliacion-section');
+    if (!section?.classList.contains('active')) return;
+    if (!document.getElementById('pane-conci-comercial')?.classList.contains('active')) return;
+    if (!document.getElementById('table-conci-manifiestos')) return;
+    if (!_conciEditMode) return;
+
+    const activeTd = document.querySelector('#table-conci-manifiestos td.conci-cell-active');
+    if (!activeTd) return;
+    // Solo si el foco realmente sigue dentro de esa celda (o de su editor):
+    // evita que el atajo dispare si el usuario ya se movió a otra parte de
+    // la página (buscador, filtros, botones) y quedó una clase "activa"
+    // rezagada de una celda anterior.
+    const focoActual = document.activeElement;
+    if (focoActual !== activeTd && !activeTd.contains(focoActual)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (typeof activeTd._conciCloseEditor === 'function') {
+        activeTd._conciCloseEditor(true, 'row-start');
+    } else {
+        const firstCell = _conciFirstEditableCellInRow(activeTd);
+        if (firstCell) {
+            _conciAsegurarCeldaVisible(firstCell, 'ambos');
+            _conciActivateCellEditor(firstCell);
+        }
+    }
+}, true);
+
 window.addEventListener('resize', () => {
     clearTimeout(_conciScrollResizeTimer);
     _conciScrollResizeTimer = setTimeout(() => {
@@ -23755,6 +23800,13 @@ function _conciGetPrevEditableCell(td) {
         row = row.previousElementSibling;
     }
     return null;
+}
+
+// Primera celda editable de la MISMA fila que td (Ctrl+Home: "ir al inicio
+// de esta fila", sin cambiar de fila).
+function _conciFirstEditableCellInRow(td) {
+    const tr = td && td.closest('tr');
+    return tr ? tr.querySelector(_CONCI_SEL_CELDA_EDITABLE) : null;
 }
 
 // ── Navegación vertical (↑/↓) y desde la fila de filtros ──────────────────
@@ -28640,6 +28692,14 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
         // usuario pierde de vista dónde se quedó capturando.
         td.classList.add('conci-cell-active');
         try { td.focus({ preventScroll: true }); } catch (_) { td.focus(); }
+    } else if (move === 'row-start') {
+        // Ctrl+Home: misma fila, primera columna editable — igual que
+        // 'next'/'prev', solo cambia a qué celda se salta.
+        const firstCell = _conciFirstEditableCellInRow(td);
+        if (firstCell) {
+            _conciAsegurarCeldaVisible(firstCell, 'ambos');
+            _conciActivateCellEditor(firstCell);
+        }
     }
     // Aplica un refresco remoto en espera SOLO después de intentar abrir la
     // siguiente celda: si la navegación deja una celda activa, este chequeo
