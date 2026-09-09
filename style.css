@@ -21388,48 +21388,28 @@ body.conci-manifest-workspace #navdeck-back {
 }
 
 /* ==========================================================================
-   Conciliacion > Manifiestos > Reportes (Carga / Pasajeros)
-   La vista de reportes es hermana de la tabla de Manifiestos, asi que debe
-   ocupar el mismo hueco flexible cuando el espacio de trabajo a pantalla
-   completa esta activo.
+   Reportes (Carga / Pasajeros)
+   Pagina propia, hermana de Conciliacion. Hereda el marco de la aplicacion,
+   asi que solo necesita alinear su encabezado y sus pestanas con el resto de
+   los modulos.
    ========================================================================== */
-body.conci-manifest-workspace .conci-reportes-view {
-   display: flex;
-   flex: 1 1 auto;
-   flex-direction: column;
-   min-height: 0;
+.conci-reportes-shell {
+   border: 0;
 }
 
-body.conci-manifest-workspace .conci-reportes-toolbar {
-   flex: 0 0 auto;
-   padding: .35rem .55rem !important;
-   gap: .35rem !important;
+.conci-reportes-heading .section-title {
+   line-height: 1.2;
 }
 
-body.conci-manifest-workspace .conci-reportes-toolbar .btn {
-   min-height: 28px;
-   padding-top: .2rem;
-   padding-bottom: .2rem;
-   font-size: .75rem;
+#conci-reportes-tabs .nav-link {
+   color: #5a6a85;
 }
 
-body.conci-manifest-workspace #conci-reportes-tabs {
-   flex: 0 0 auto;
-   gap: .25rem;
-   padding: .25rem .75rem 0 !important;
+#conci-reportes-tabs .nav-link.active {
+   color: #1565c0;
+   font-weight: 600;
 }
 
-body.conci-manifest-workspace #conci-reportes-tabs .nav-link {
-   padding: .35rem .75rem;
-   font-size: .8rem;
-}
-
-/* El contenido de cada apartado es el unico que scrollea. */
 .conci-reportes-tab-content {
-   min-height: 0;
-}
-
-body.conci-manifest-workspace .conci-reportes-tab-content {
-   flex: 1 1 auto;
-   overflow: auto;
+   min-height: 60vh;
 }

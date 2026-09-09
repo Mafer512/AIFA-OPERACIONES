@@ -1,12 +1,12 @@
 /**
  * @jest-environment jsdom
  *
- * Manifiestos > Reportes: el botón, la vista y sus dos apartados.
+ * Reportes (Carga / Pasajeros): el botón, la página y sus dos apartados.
  *
- * El botón "Reportes" vive en la barra de Conciliación Manifiestos, a la
- * izquierda del selector de periodo, y abre una vista dividida en dos
- * apartados por pestañas: Carga y Pasajeros. La tabla no se destruye, solo se
- * oculta, de modo que la captura en curso sobrevive al ir y volver.
+ * Reportes es una PÁGINA propia, no una vista dentro de Conciliación. Esa es
+ * la parte que importa: su marcado tiene que ser una .content-section hermana
+ * de #conciliacion-section, porque si vive dentro siguen viéndose las pestañas
+ * de Conciliación (Itinerario / Manifiestos / Estadística) por encima.
  */
 
 const fs = require('fs');
@@ -16,7 +16,7 @@ const raiz = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(raiz, 'index.html'), 'utf8').replace(/\r\n/g, '\n');
 const moduloReportes = fs.readFileSync(path.join(raiz, 'js', 'conci-reportes.js'), 'utf8');
 
-/** Recorta el marcado de la pestaña Manifiestos, que es donde vive todo esto. */
+/** Recorta el marcado de la pestaña Manifiestos, donde vive el botón. */
 function paneManifiestos() {
   const inicio = html.indexOf('id="pane-conci-comercial"');
   const fin = html.indexOf('/pane-conci-comercial', inicio);
@@ -25,31 +25,68 @@ function paneManifiestos() {
   return html.slice(inicio, fin);
 }
 
-describe('marcado de index.html', () => {
+/** Recorta el marcado de la página de Reportes. */
+function seccionReportes() {
+  const inicio = html.indexOf('id="conci-reportes-section"');
+  const fin = html.indexOf('/conci-reportes-section', inicio);
+  expect(inicio).toBeGreaterThan(-1);
+  expect(fin).toBeGreaterThan(inicio);
+  return html.slice(inicio, fin);
+}
+
+describe('el botón en Manifiestos', () => {
   const pane = paneManifiestos();
 
-  test('el botón Reportes está en la barra de Manifiestos', () => {
+  test('está en la barra de Conciliación Manifiestos', () => {
     expect(pane).toContain('id="btn-conci-reportes"');
     expect(pane).toMatch(/id="btn-conci-reportes"[\s\S]*?>\s*Reportes\s*</);
   });
 
-  test('el botón queda a la izquierda del primer campo de fecha', () => {
+  test('queda a la izquierda del primer campo de fecha', () => {
     const posBoton = pane.indexOf('id="btn-conci-reportes"');
     const posFecha = pane.indexOf('data-conci-fecha-para="filter-conci-fecha-desde"');
     expect(posBoton).toBeGreaterThan(-1);
     expect(posFecha).toBeGreaterThan(-1);
     expect(posBoton).toBeLessThan(posFecha);
   });
+});
 
-  test('la vista de reportes nace oculta y hermana de la tabla', () => {
-    expect(pane).toContain('id="conci-manifiestos-tabla-view"');
-    expect(pane).toMatch(/id="conci-reportes-view"/);
-    const vista = pane.slice(pane.indexOf('id="conci-reportes-view"') - 200, pane.indexOf('id="conci-reportes-view"') + 40);
-    expect(vista).toContain('d-none');
+describe('Reportes es una página propia', () => {
+  test('es una .content-section, no un bloque dentro de Conciliación', () => {
+    expect(html).toMatch(/<div id="conci-reportes-section" class="content-section">/);
   });
 
-  test('los dos apartados son Carga y Pasajeros, en ese orden', () => {
-    const tabs = pane.slice(pane.indexOf('id="conci-reportes-tabs"'), pane.indexOf('conci-reportes-tab-content'));
+  test('vive FUERA de #conciliacion-section', () => {
+    const finConciliacion = html.indexOf('/conciliacion-section');
+    const inicioReportes = html.indexOf('id="conci-reportes-section"');
+    expect(finConciliacion).toBeGreaterThan(-1);
+    expect(inicioReportes).toBeGreaterThan(finConciliacion);
+  });
+
+  test('las pestañas de Conciliación no forman parte de la página', () => {
+    const seccion = seccionReportes();
+    expect(seccion).not.toContain('tab-conci-itinerario');
+    expect(seccion).not.toContain('tab-conci-comercial');
+    expect(seccion).not.toContain('tab-conci-estadistica');
+  });
+
+  test('nace inactiva: no se muestra hasta que se pulsa Reportes', () => {
+    const apertura = html.slice(html.indexOf('<div id="conci-reportes-section"'), html.indexOf('<div id="conci-reportes-section"') + 90);
+    expect(apertura).not.toContain('active');
+  });
+
+  test('tiene su propio botón de regreso y de menú', () => {
+    const seccion = seccionReportes();
+    expect(seccion).toContain('id="btn-conci-reportes-volver"');
+    expect(seccion).toContain('id="btn-conci-reportes-menu"');
+  });
+});
+
+describe('los dos apartados', () => {
+  const seccion = seccionReportes();
+
+  test('son Carga y Pasajeros, en ese orden', () => {
+    const tabs = seccion.slice(seccion.indexOf('id="conci-reportes-tabs"'), seccion.indexOf('conci-reportes-tab-content'));
     expect(tabs).toContain('id="tab-conci-rep-carga"');
     expect(tabs).toContain('id="tab-conci-rep-pasajeros"');
     expect(tabs.indexOf('tab-conci-rep-carga')).toBeLessThan(tabs.indexOf('tab-conci-rep-pasajeros'));
@@ -57,9 +94,9 @@ describe('marcado de index.html', () => {
     expect(tabs).toMatch(/>\s*Pasajeros\s*</);
   });
 
-  test('cada apartado tiene su panel', () => {
-    expect(pane).toContain('id="pane-conci-rep-carga"');
-    expect(pane).toContain('id="pane-conci-rep-pasajeros"');
+  test('cada uno tiene su panel', () => {
+    expect(seccion).toContain('id="pane-conci-rep-carga"');
+    expect(seccion).toContain('id="pane-conci-rep-pasajeros"');
   });
 
   test('index.html carga el módulo de reportes', () => {
@@ -67,76 +104,118 @@ describe('marcado de index.html', () => {
   });
 });
 
-describe('comportamiento de la vista', () => {
-  let tabla;
-  let vista;
+describe('navegación entre páginas', () => {
+  let conciliacion;
+  let reportes;
   let boton;
 
   beforeEach(() => {
     document.body.className = '';
     document.body.innerHTML = `
-      <div id="conci-manifiestos-tabla-view">
+      <div id="conciliacion-section" class="content-section active">
         <button id="btn-conci-reportes" type="button">Reportes</button>
       </div>
-      <div id="conci-reportes-view" class="d-none">
+      <div id="conci-reportes-section" class="content-section">
         <button id="btn-conci-reportes-volver" type="button">Regresar a Manifiestos</button>
+        <button id="btn-conci-reportes-menu" type="button">Menú</button>
+        <button id="tab-conci-rep-carga" type="button">Carga</button>
       </div>
-      <button id="tab-conci-itinerario"></button>
-      <button id="tab-conci-estadistica"></button>
+      <div id="otra-section" class="content-section"></div>
+      <a class="menu-item" data-section="otra"></a>
     `;
+    document.body.classList.add('conci-manifest-workspace');
 
-    jest.isolateModules(() => {
-      // El módulo se engancha en DOMContentLoaded; en jsdom se dispara a mano.
-      new Function(moduloReportes)();
-      document.dispatchEvent(new Event('DOMContentLoaded'));
-    });
+    // El módulo se engancha en DOMContentLoaded. Disparar el evento de verdad
+    // ejecutaría también los enganches de las evaluaciones anteriores —jsdom
+    // reutiliza el mismo document en todo el archivo— y el botón acabaría con
+    // un listener por test: un número par de alternancias lo dejaría cerrado.
+    // Se intercepta el registro para quedarse solo con el de esta evaluación.
+    let arrancar;
+    const registrar = document.addEventListener.bind(document);
+    const espia = jest.spyOn(document, 'addEventListener')
+      .mockImplementation((tipo, fn, opciones) => {
+        if (tipo === 'DOMContentLoaded') { arrancar = fn; return; }
+        registrar(tipo, fn, opciones);
+      });
+    new Function(moduloReportes)();
+    espia.mockRestore();
+    arrancar();
 
-    tabla = document.getElementById('conci-manifiestos-tabla-view');
-    vista = document.getElementById('conci-reportes-view');
+    conciliacion = document.getElementById('conciliacion-section');
+    reportes = document.getElementById('conci-reportes-section');
     boton = document.getElementById('btn-conci-reportes');
   });
 
-  test('el clic en Reportes intercambia tabla por reportes', () => {
+  test('el clic en Reportes apaga Conciliación y enciende Reportes', () => {
     boton.click();
-    expect(vista.classList.contains('d-none')).toBe(false);
-    expect(tabla.classList.contains('d-none')).toBe(true);
+    expect(reportes.classList.contains('active')).toBe(true);
+    expect(conciliacion.classList.contains('active')).toBe(false);
     expect(document.body.classList.contains('conci-reportes-abierto')).toBe(true);
   });
 
-  test('Regresar a Manifiestos deja la tabla como estaba', () => {
+  test('sale del modo pantalla completa de Manifiestos', () => {
+    boton.click();
+    expect(document.body.classList.contains('conci-manifest-workspace')).toBe(false);
+  });
+
+  test('Regresar a Manifiestos devuelve la sección de Conciliación', () => {
     boton.click();
     document.getElementById('btn-conci-reportes-volver').click();
-    expect(vista.classList.contains('d-none')).toBe(true);
-    expect(tabla.classList.contains('d-none')).toBe(false);
+    expect(conciliacion.classList.contains('active')).toBe(true);
+    expect(reportes.classList.contains('active')).toBe(false);
     expect(document.body.classList.contains('conci-reportes-abierto')).toBe(false);
   });
 
-  test('la tabla se oculta, no se destruye: el botón sigue en el DOM', () => {
+  test('al regresar se restaura el modo pantalla completa', () => {
+    const restaurar = jest.fn(() => document.body.classList.add('conci-manifest-workspace'));
+    window._conciUpdateWorkspaceMode = restaurar;
+    boton.click();
+    document.getElementById('btn-conci-reportes-volver').click();
+    expect(restaurar).toHaveBeenCalled();
+    expect(document.body.classList.contains('conci-manifest-workspace')).toBe(true);
+    delete window._conciUpdateWorkspaceMode;
+  });
+
+  test('Conciliación no se destruye: su contenido sigue en el DOM', () => {
     boton.click();
     expect(document.getElementById('btn-conci-reportes')).not.toBeNull();
   });
 
-  test('Esc cierra los reportes solo cuando están abiertos', () => {
-    // Cerrados: Esc es de la captura por celda, aquí no debe hacer nada.
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    expect(tabla.classList.contains('d-none')).toBe(false);
-
+  test('el botón Menú sale del módulo, no regresa a Manifiestos', () => {
+    const salir = jest.fn();
+    window._navdeckShowMenu = salir;
     boton.click();
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    expect(vista.classList.contains('d-none')).toBe(true);
-    expect(tabla.classList.contains('d-none')).toBe(false);
+    document.getElementById('btn-conci-reportes-menu').click();
+    expect(salir).toHaveBeenCalled();
+    expect(reportes.classList.contains('active')).toBe(false);
+    expect(conciliacion.classList.contains('active')).toBe(false);
+    delete window._navdeckShowMenu;
   });
 
-  test('cambiar de pestaña en Conciliación cierra los reportes', () => {
+  test('Esc regresa a Manifiestos solo desde Reportes', () => {
+    // Con Reportes cerrado, Esc es de la captura por celda: no debe navegar.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(conciliacion.classList.contains('active')).toBe(true);
+
     boton.click();
-    document.getElementById('tab-conci-estadistica').dispatchEvent(new Event('shown.bs.tab'));
-    expect(vista.classList.contains('d-none')).toBe(true);
-    expect(tabla.classList.contains('d-none')).toBe(false);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(reportes.classList.contains('active')).toBe(false);
+    expect(conciliacion.classList.contains('active')).toBe(true);
+  });
+
+  test('irse por el menú lateral limpia la marca del body', async () => {
+    boton.click();
+    // showSection es quien apaga las secciones; aquí se simula su efecto.
+    reportes.classList.remove('active');
+    document.querySelector('.menu-item').click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(document.body.classList.contains('conci-reportes-abierto')).toBe(false);
   });
 
   test('window.conciReportes expone la API', () => {
     expect(typeof window.conciReportes.abrir).toBe('function');
     expect(typeof window.conciReportes.cerrar).toBe('function');
     expect(typeof window.conciReportes.alternar).toBe('function');
+    expect(typeof window.conciReportes.abiertos).toBe('function');
   });
 });

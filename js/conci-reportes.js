@@ -1,80 +1,108 @@
 /* ==========================================================================
-   Conciliación > Manifiestos > Reportes
+   Reportes (Carga / Pasajeros)
    --------------------------------------------------------------------------
-   El botón "Reportes" de la barra de Manifiestos intercambia la tabla por la
-   vista de reportes, que se divide en dos apartados por pestañas: Carga y
-   Pasajeros. Es el mismo mecanismo que usa conciliacion-board.js en la
-   pestaña de Itinerario: dos vistas hermanas y una que se oculta con d-none,
-   así el estado de la tabla (captura en curso, filtros, scroll) sobrevive
-   intacto al ir y volver.
+   Reportes es una PÁGINA propia, no una vista dentro de Conciliación: su
+   marcado es una .content-section hermana de #conciliacion-section, así que
+   al abrirla las pestañas de Conciliación (Itinerario / Manifiestos /
+   Estadística) desaparecen junto con el resto de esa sección y queda solo la
+   barra de Reportes con sus dos apartados.
+
+   La navegación se hace aquí y no con showSection() porque showSection filtra
+   por la lista blanca de módulos del usuario (isSectionAllowed) y Reportes no
+   es un módulo del menú: se entra desde Manifiestos, que ya validó el acceso.
+   Pasar por showSection rebotaría al operador a su módulo por omisión.
    ========================================================================== */
 (function () {
     'use strict';
 
-    const ID_TABLA = 'conci-manifiestos-tabla-view';
-    const ID_REPORTES = 'conci-reportes-view';
+    const ID_REPORTES = 'conci-reportes-section';
+    const ID_ORIGEN = 'conciliacion-section';
 
-    function vistas() {
-        return {
-            tabla: document.getElementById(ID_TABLA),
-            reportes: document.getElementById(ID_REPORTES),
-            btn: document.getElementById('btn-conci-reportes')
-        };
+    /* Clases del espacio de trabajo a pantalla completa de Manifiestos. En
+       Reportes estorban: esconden el encabezado y la barra lateral y fijan
+       #conciliacion-section sobre todo lo demás. */
+    const CLASES_WORKSPACE = ['conci-manifest-workspace', 'conci-itinerary-workspace'];
+
+    function seccion(id) { return document.getElementById(id); }
+
+    function reportesAbiertos() {
+        return !!seccion(ID_REPORTES)?.classList.contains('active');
     }
 
-    /** Muestra la vista de reportes y oculta la tabla de manifiestos. */
+    /** Abre Reportes como página completa, apagando la sección de Conciliación. */
     function abrirReportes() {
-        const { tabla, reportes, btn } = vistas();
-        if (!tabla || !reportes) return;
-        tabla.classList.add('d-none');
-        reportes.classList.remove('d-none');
-        if (btn) { btn.classList.add('active'); btn.setAttribute('aria-pressed', 'true'); }
+        const destino = seccion(ID_REPORTES);
+        if (!destino) return;
+
+        document.body.classList.remove(...CLASES_WORKSPACE);
+        document.querySelectorAll('.content-section.active')
+            .forEach(sec => sec.classList.remove('active'));
+        destino.classList.add('active');
         document.body.classList.add('conci-reportes-abierto');
-        // Devolver el foco a un control de la vista nueva para que quien navega
-        // por teclado no quede anclado en un botón que acaba de ocultarse.
-        document.getElementById('btn-conci-reportes-volver')?.focus();
+
+        try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { window.scrollTo(0, 0); }
+        seccion(ID_REPORTES)?.querySelector('#tab-conci-rep-carga')?.focus();
     }
 
-    /** Regresa a la tabla de Conciliación Manifiestos. */
+    /**
+     * Regresa a Conciliación tal como estaba. No se toca la pestaña activa:
+     * Manifiestos sigue siendo la suya porque nunca se desmontó, con su
+     * captura, sus filtros y su scroll intactos.
+     */
     function cerrarReportes() {
-        const { tabla, reportes, btn } = vistas();
-        if (!tabla || !reportes) return;
-        reportes.classList.add('d-none');
-        tabla.classList.remove('d-none');
-        if (btn) { btn.classList.remove('active'); btn.setAttribute('aria-pressed', 'false'); }
+        const origen = seccion(ID_ORIGEN);
+        seccion(ID_REPORTES)?.classList.remove('active');
         document.body.classList.remove('conci-reportes-abierto');
-        btn?.focus();
+        if (!origen) return;
+
+        origen.classList.add('active');
+        // Devuelve el modo pantalla completa si la pestaña activa lo pide.
+        if (typeof window._conciUpdateWorkspaceMode === 'function') {
+            window._conciUpdateWorkspaceMode();
+        }
+        document.getElementById('btn-conci-reportes')?.focus();
     }
 
     function alternarReportes() {
-        const { reportes } = vistas();
-        if (!reportes) return;
-        if (reportes.classList.contains('d-none')) abrirReportes();
-        else cerrarReportes();
+        if (reportesAbiertos()) cerrarReportes();
+        else abrirReportes();
+    }
+
+    /** El botón Menú sale del módulo por completo, no regresa a Manifiestos. */
+    function irAlMenu() {
+        seccion(ID_REPORTES)?.classList.remove('active');
+        document.body.classList.remove('conci-reportes-abierto', ...CLASES_WORKSPACE);
+        if (typeof window._navdeckShowMenu === 'function') window._navdeckShowMenu();
+        else if (typeof window.exitSectionToMenu === 'function') window.exitSectionToMenu();
     }
 
     document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('btn-conci-reportes')?.addEventListener('click', alternarReportes);
         document.getElementById('btn-conci-reportes-volver')?.addEventListener('click', cerrarReportes);
+        document.getElementById('btn-conci-reportes-menu')?.addEventListener('click', irAlMenu);
 
-        // Esc cierra los reportes solo cuando están abiertos, para no robarle la
-        // tecla a la captura por celda de la tabla de Manifiestos.
+        // Esc regresa a Manifiestos solo desde Reportes, para no robarle la
+        // tecla a la captura por celda de la tabla.
         document.addEventListener('keydown', event => {
-            if (event.key !== 'Escape') return;
-            const reportes = document.getElementById(ID_REPORTES);
-            if (!reportes || reportes.classList.contains('d-none')) return;
+            if (event.key !== 'Escape' || !reportesAbiertos()) return;
             cerrarReportes();
         });
-    });
 
-    // Al cambiar de pestaña dentro de Conciliación, la vista de reportes vuelve
-    // a su estado cerrado: pertenece a Manifiestos y no debe seguir montada
-    // cuando el operador se va a Itinerario o Estadística.
-    document.addEventListener('DOMContentLoaded', () => {
-        ['tab-conci-itinerario', 'tab-conci-estadistica'].forEach(id => {
-            document.getElementById(id)?.addEventListener('shown.bs.tab', cerrarReportes);
+        // Si el operador se va por el menú lateral, showSection ya apagó esta
+        // sección; solo queda limpiar la marca del body.
+        document.querySelectorAll('.menu-item[data-section]').forEach(link => {
+            link.addEventListener('click', () => {
+                setTimeout(() => {
+                    if (!reportesAbiertos()) document.body.classList.remove('conci-reportes-abierto');
+                }, 0);
+            });
         });
     });
 
-    window.conciReportes = { abrir: abrirReportes, cerrar: cerrarReportes, alternar: alternarReportes };
+    window.conciReportes = {
+        abrir: abrirReportes,
+        cerrar: cerrarReportes,
+        alternar: alternarReportes,
+        abiertos: reportesAbiertos
+    };
 })();

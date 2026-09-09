@@ -23103,68 +23103,6 @@ FF
                                                     </div>
                                                 </div>
                                             </div>
-
-                                            <!-- ═══ Vista Reportes (Carga / Pasajeros) ═══
-                                                 Convive con la tabla de Manifiestos dentro de la misma pestaña:
-                                                 el botón "Reportes" oculta la tabla y muestra esta vista, igual
-                                                 que hace conciliacion-board-view en la pestaña de Itinerario. -->
-                                            <div class="card border-0 shadow-sm conci-reportes-view d-none" id="conci-reportes-view" role="region" aria-label="Reportes de Conciliación">
-                                                <div class="card-header bg-white border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2 conci-reportes-toolbar">
-                                                    <div class="d-flex align-items-center gap-2 flex-wrap">
-                                                        <button class="btn btn-sm btn-outline-secondary" id="btn-conci-reportes-volver" type="button"
-                                                            title="Regresar a Conciliación Manifiestos" aria-label="Regresar a Conciliación Manifiestos">
-                                                            <i class="fas fa-arrow-left me-1"></i>Regresar a Manifiestos
-                                                        </button>
-                                                        <h6 class="mb-0 fw-semibold"><i class="fas fa-chart-pie me-2 text-primary"></i>Reportes</h6>
-                                                    </div>
-                                                    <span class="text-muted" style="font-size:.78rem">
-                                                        <i class="fas fa-circle-info me-1"></i>Los reportes de cada apartado se irán agregando.
-                                                    </span>
-                                                </div>
-
-                                                <!-- Pestañas Carga / Pasajeros (mismo lenguaje visual que las pestañas de Conciliación) -->
-                                                <ul class="nav nav-tabs px-4 pt-3 border-bottom bg-white" id="conci-reportes-tabs" role="tablist">
-                                                    <li class="nav-item" role="presentation">
-                                                        <button class="nav-link active fw-semibold" id="tab-conci-rep-carga" data-bs-toggle="tab"
-                                                            data-bs-target="#pane-conci-rep-carga" type="button" role="tab"
-                                                            aria-controls="pane-conci-rep-carga" aria-selected="true">
-                                                            <i class="fas fa-box-open me-2 text-warning"></i>Carga
-                                                        </button>
-                                                    </li>
-                                                    <li class="nav-item" role="presentation">
-                                                        <button class="nav-link fw-semibold" id="tab-conci-rep-pasajeros" data-bs-toggle="tab"
-                                                            data-bs-target="#pane-conci-rep-pasajeros" type="button" role="tab"
-                                                            aria-controls="pane-conci-rep-pasajeros" aria-selected="false">
-                                                            <i class="fas fa-users me-2 text-purple" style="color:#5e35b1"></i>Pasajeros
-                                                        </button>
-                                                    </li>
-                                                </ul>
-
-                                                <div class="tab-content conci-reportes-tab-content">
-                                                    <!--  Reportes: Carga  -->
-                                                    <div class="tab-pane fade show active p-4" id="pane-conci-rep-carga" role="tabpanel" aria-labelledby="tab-conci-rep-carga">
-                                                        <div class="conci-reportes-lista" id="conci-reportes-lista-carga">
-                                                            <div class="text-center text-muted py-5" id="conci-reportes-vacio-carga">
-                                                                <i class="fas fa-box-open mb-3" style="font-size:2rem;opacity:.35"></i>
-                                                                <p class="mb-1 fw-semibold">Sin reportes de Carga todavía</p>
-                                                                <p class="small mb-0">Aquí se listarán los reportes de Carga conforme se definan.</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <!--  Reportes: Pasajeros  -->
-                                                    <div class="tab-pane fade p-4" id="pane-conci-rep-pasajeros" role="tabpanel" aria-labelledby="tab-conci-rep-pasajeros">
-                                                        <div class="conci-reportes-lista" id="conci-reportes-lista-pasajeros">
-                                                            <div class="text-center text-muted py-5" id="conci-reportes-vacio-pasajeros">
-                                                                <i class="fas fa-users mb-3" style="font-size:2rem;opacity:.35"></i>
-                                                                <p class="mb-1 fw-semibold">Sin reportes de Pasajeros todavía</p>
-                                                                <p class="small mb-0">Aquí se listarán los reportes de Pasajeros conforme se definan.</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div><!-- /conci-reportes-view -->
-
                                         </div>
                                     </div><!-- /pane-conci-comercial -->
 
@@ -23256,6 +23194,79 @@ FF
                         </div><!-- /conciliacion-content card-body -->
                     </div><!-- /card -->
                 </div><!-- /conciliacion-section -->
+
+                <!-- ═══ Reportes (Carga / Pasajeros) ═══
+                     Página propia, hermana de Conciliación y no una vista dentro de
+                     ella: al abrirla desaparecen las pestañas de Conciliación
+                     (Itinerario / Manifiestos / Estadística) y queda únicamente la
+                     barra de Reportes con sus dos apartados. -->
+                <div id="conci-reportes-section" class="content-section">
+                    <div class="card shadow-sm conci-reportes-shell">
+                        <div class="card-header border-bottom bg-white d-flex align-items-center justify-content-between flex-wrap gap-2 py-3 conci-reportes-heading">
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <button class="btn btn-sm btn-outline-secondary" id="btn-conci-reportes-volver" type="button"
+                                    title="Regresar a Conciliación Manifiestos" aria-label="Regresar a Conciliación Manifiestos">
+                                    <i class="fas fa-arrow-left me-1"></i>Regresar a Manifiestos
+                                </button>
+                                <h2 class="section-title mb-0 fs-4 fw-bold text-primary"><i class="fas fa-chart-pie me-2"></i>Reportes</h2>
+                            </div>
+                            <button class="btn btn-sm btn-primary" id="btn-conci-reportes-menu" type="button"
+                                title="Volver al menú principal" aria-label="Volver al menú principal">
+                                <i class="fas fa-grip me-1"></i>Menú
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+
+                            <!-- Apartados: Carga / Pasajeros -->
+                            <ul class="nav nav-tabs px-4 pt-3 border-bottom bg-white" id="conci-reportes-tabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active fw-semibold" id="tab-conci-rep-carga" data-bs-toggle="tab"
+                                        data-bs-target="#pane-conci-rep-carga" type="button" role="tab"
+                                        aria-controls="pane-conci-rep-carga" aria-selected="true">
+                                        <i class="fas fa-box-open me-2 text-warning"></i>Carga
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link fw-semibold" id="tab-conci-rep-pasajeros" data-bs-toggle="tab"
+                                        data-bs-target="#pane-conci-rep-pasajeros" type="button" role="tab"
+                                        aria-controls="pane-conci-rep-pasajeros" aria-selected="false">
+                                        <i class="fas fa-users me-2" style="color:#5e35b1"></i>Pasajeros
+                                    </button>
+                                </li>
+                                <li class="nav-item ms-auto d-flex align-items-center" role="presentation">
+                                    <span class="text-muted" style="font-size:.78rem">
+                                        <i class="fas fa-circle-info me-1"></i>Los reportes de cada apartado se irán agregando.
+                                    </span>
+                                </li>
+                            </ul>
+
+                            <div class="tab-content conci-reportes-tab-content">
+                                <!--  Reportes: Carga  -->
+                                <div class="tab-pane fade show active p-4" id="pane-conci-rep-carga" role="tabpanel" aria-labelledby="tab-conci-rep-carga">
+                                    <div class="conci-reportes-lista" id="conci-reportes-lista-carga">
+                                        <div class="text-center text-muted py-5" id="conci-reportes-vacio-carga">
+                                            <i class="fas fa-box-open mb-3" style="font-size:2rem;opacity:.35"></i>
+                                            <p class="mb-1 fw-semibold">Sin reportes de Carga todavía</p>
+                                            <p class="small mb-0">Aquí se listarán los reportes de Carga conforme se definan.</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!--  Reportes: Pasajeros  -->
+                                <div class="tab-pane fade p-4" id="pane-conci-rep-pasajeros" role="tabpanel" aria-labelledby="tab-conci-rep-pasajeros">
+                                    <div class="conci-reportes-lista" id="conci-reportes-lista-pasajeros">
+                                        <div class="text-center text-muted py-5" id="conci-reportes-vacio-pasajeros">
+                                            <i class="fas fa-users mb-3" style="font-size:2rem;opacity:.35"></i>
+                                            <p class="mb-1 fw-semibold">Sin reportes de Pasajeros todavía</p>
+                                            <p class="small mb-0">Aquí se listarán los reportes de Pasajeros conforme se definan.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div><!-- /conci-reportes-section -->
 
                 <!-- GSO Section (Impactos de Ave + Fauna Rescatada) -->
                 <div id="fauna-section" class="content-section">
