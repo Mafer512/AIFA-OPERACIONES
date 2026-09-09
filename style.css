@@ -20934,6 +20934,477 @@ body.conci-manifest-workspace #navdeck-back {
   border-color: #f0ad4e !important;
 }
 
+
+/* ==========================================================================
+   Reportes (Carga / Pasajeros)
+   Pagina propia, hermana de Conciliacion, con el mismo espacio de trabajo a
+   pantalla completa que Manifiestos: sin encabezado, sin barra de agenda y
+   sin barra lateral, para que arriba quede solo su barra con el boton Menu.
+   Lo enciende y lo apaga js/conci-reportes.js.
+   ========================================================================== */
+.conci-reportes-shell {
+   border: 0;
+}
+
+#conci-reportes-tabs .nav-link {
+   color: #5a6a85;
+}
+
+#conci-reportes-tabs .nav-link.active {
+   color: #1565c0;
+   font-weight: 600;
+}
+
+.conci-reportes-tab-content {
+   min-height: 60vh;
+}
+
+body.conci-reportes-workspace {
+   height: 100vh;
+   overflow: hidden !important;
+}
+
+body.conci-reportes-workspace > #main-app,
+body.conci-reportes-workspace .app-body {
+   height: 100vh;
+   min-height: 0;
+   overflow: hidden;
+}
+
+/* Siguen en el DOM y reaparecen al salir de Reportes. */
+body.conci-reportes-workspace .header,
+body.conci-reportes-workspace #ag-today-bar,
+body.conci-reportes-workspace .sidebar,
+body.conci-reportes-workspace #sidebar-overlay,
+body.conci-reportes-workspace #navdeck-back {
+   display: none !important;
+}
+
+body.conci-reportes-workspace .main-content {
+   display: flex;
+   flex-direction: column;
+   width: 100% !important;
+   height: 100vh;
+   min-height: 0;
+   margin-left: 0 !important;
+   padding: .4rem !important;
+   overflow: hidden !important;
+}
+
+body.conci-reportes-workspace #conci-reportes-section.active,
+body.conci-reportes-workspace .conci-reportes-shell,
+body.conci-reportes-workspace .conci-reportes-shell > .card-body {
+   display: flex;
+   flex: 1 1 auto;
+   flex-direction: column;
+   min-height: 0;
+}
+
+body.conci-reportes-workspace #conci-reportes-section.active {
+   position: fixed;
+   inset: 0;
+   z-index: 1500;
+   width: 100%;
+   height: 100%;
+   overflow: hidden;
+   background: var(--body-bg, #f4f7fb);
+}
+
+body.conci-reportes-workspace .conci-reportes-shell {
+   width: 100%;
+   height: 100%;
+   overflow: hidden;
+}
+
+body.conci-reportes-workspace .conci-reportes-heading {
+   flex: 0 0 auto;
+   padding: .4rem .75rem !important;
+}
+
+body.conci-reportes-workspace .conci-reportes-heading .section-title {
+   font-size: 1.1rem;
+}
+
+body.conci-reportes-workspace #conci-reportes-tabs {
+   flex: 0 0 auto;
+   gap: .25rem;
+   padding: .25rem .75rem 0 !important;
+}
+
+body.conci-reportes-workspace #conci-reportes-tabs .nav-link {
+   padding: .35rem .75rem;
+   font-size: .8rem;
+}
+
+/* El contenido del apartado es lo unico que scrollea. */
+body.conci-reportes-workspace .conci-reportes-tab-content {
+   flex: 1 1 auto;
+   min-height: 0;
+   overflow: auto;
+}
+
+/* ==========================================================================
+   Reportes > Pasajeros
+   Los tres reportes se imprimen tal cual, asi que la hoja imita la plantilla
+   del libro que sustituye. Los colores salen de xl/styles.xml del propio
+   libro, no de una aproximacion a ojo:
+
+     #255C4F  verde institucional  encabezados de tabla y fila PROMEDIO
+     #D9D9D9  gris                 fila TOTAL, con texto #0A202D
+     #A42145  vino                 titulo y etiquetas de maximos
+     Noto Sans 13pt                cuerpo de las plantillas
+
+   La hoja es un bloque blanco de ancho fijo: en pantalla se ve como se va a
+   imprimir, sin sorpresas al mandar a la impresora.
+   ========================================================================== */
+.conci-rep-pax-toolbar {
+   position: sticky;
+   top: 0;
+   z-index: 5;
+   background: var(--card-bg, #fff);
+   padding: .35rem 0;
+}
+
+.conci-rep-hoja {
+   --rep-verde: #255C4F;
+   --rep-gris: #D9D9D9;
+   --rep-gris-texto: #0A202D;
+   --rep-vino: #A42145;
+   font-family: "Noto Sans", "Segoe UI", system-ui, sans-serif;
+   color: #000;
+   background: #fff;
+   width: 100%;
+   max-width: 820px;
+   margin: 0 auto;
+   padding: 2.2rem 2.4rem 1.6rem;
+   border: 1px solid #e3e8ef;
+   border-radius: 6px;
+   box-shadow: 0 2px 10px rgba(15, 23, 42, .06);
+}
+
+/* Subsecretaria y Plantilla 2 son apaisadas: no caben en el ancho carta. */
+.conci-rep-hoja.conci-rep-hoja-ancha {
+   max-width: 1180px;
+}
+
+.conci-rep-logo {
+   text-align: center;
+   margin-bottom: 1.1rem;
+}
+
+.conci-rep-logo img {
+   height: 52px;
+   width: auto;
+}
+
+.conci-rep-h1 {
+   text-align: center;
+   font-size: .82rem;
+   font-weight: 700;
+   letter-spacing: .02em;
+   color: var(--rep-vino);
+   margin: 0 0 1rem;
+}
+
+.conci-rep-actualizacion {
+   text-align: center;
+   font-size: .78rem;
+   margin: 0 0 1.1rem;
+   color: #000;
+}
+
+.conci-rep-nota {
+   font-size: .66rem;
+   font-style: italic;
+   line-height: 1.55;
+   color: #000;
+   margin: 1.4rem 0 0;
+   text-align: justify;
+}
+
+.conci-rep-nota strong {
+   font-style: italic;
+}
+
+/* ── tablas de plantilla ───────────────────────────────────────────────── */
+
+.conci-rep-plantilla {
+   width: 100%;
+   border-collapse: collapse;
+   font-size: .72rem;
+   margin: 0 auto;
+}
+
+.conci-rep-plantilla th,
+.conci-rep-plantilla td {
+   border: 1px solid #9fb3ab;
+   padding: .22rem .5rem;
+   line-height: 1.35;
+   white-space: nowrap;
+}
+
+.conci-rep-plantilla thead th {
+   background: var(--rep-verde);
+   color: #fff;
+   font-weight: 700;
+   text-align: center;
+   letter-spacing: .01em;
+}
+
+.conci-rep-plantilla .num {
+   text-align: center;
+   font-variant-numeric: tabular-nums;
+}
+
+.conci-rep-plantilla .conci-rep-vacia {
+   text-align: center;
+   padding: .9rem;
+   color: #6b7a90;
+   font-style: italic;
+   white-space: normal;
+}
+
+.conci-rep-fila-total td {
+   background: var(--rep-gris);
+   color: var(--rep-gris-texto);
+   font-weight: 700;
+   text-align: center;
+}
+
+.conci-rep-fila-promedio td {
+   background: var(--rep-verde);
+   color: #fff;
+   font-weight: 700;
+   text-align: center;
+}
+
+/* Plantilla 1: el nombre de la aerolinea se pinta con su color de catalogo,
+   igual que en la tabla de Manifiestos. */
+.conci-rep-p1 .conci-rep-aero {
+   font-weight: 600;
+   text-align: left;
+}
+
+.conci-rep-acumuladas {
+   text-align: center;
+   font-size: .76rem;
+   margin: 1.3rem 0 .55rem;
+}
+
+/* ── Plantilla 2: pasajeros y operaciones, lado a lado ─────────────────── */
+
+.conci-rep-p2-rejilla {
+   display: grid;
+   grid-template-columns: 1fr 1fr;
+   gap: 1.6rem;
+   align-items: start;
+}
+
+.conci-rep-banda {
+   font-size: .8rem;
+   letter-spacing: .06em;
+}
+
+.conci-rep-p2 .conci-rep-subcabecera th {
+   background: var(--rep-vino);
+   font-size: .7rem;
+}
+
+.conci-rep-p2 .conci-rep-dia {
+   text-align: center;
+   font-variant-numeric: tabular-nums;
+}
+
+.conci-rep-p2-pie {
+   display: flex;
+   gap: 2.4rem;
+   flex-wrap: wrap;
+   margin-top: 1.1rem;
+}
+
+.conci-rep-maximos {
+   border-collapse: collapse;
+   font-size: .72rem;
+}
+
+.conci-rep-maximos td,
+.conci-rep-maximos th {
+   border: 1px solid #9fb3ab;
+   padding: .22rem .6rem;
+   white-space: nowrap;
+}
+
+.conci-rep-maximos .num {
+   text-align: center;
+   min-width: 76px;
+   font-variant-numeric: tabular-nums;
+}
+
+.conci-rep-etiqueta-vino {
+   background: var(--rep-vino);
+   color: #fff;
+   font-weight: 700;
+}
+
+.conci-rep-th-simple {
+   text-align: center;
+   font-weight: 700;
+   background: #fff;
+}
+
+.conci-rep-hueco {
+   border: 0 !important;
+}
+
+/* ── Subsecretaria: dinamicas a la izquierda, oficio a la derecha ──────── */
+
+.conci-rep-sub-rejilla {
+   display: grid;
+   grid-template-columns: minmax(330px, 420px) 1fr;
+   gap: 2.4rem;
+   align-items: start;
+}
+
+.conci-rep-filtro {
+   font-size: .7rem;
+   border: 1px solid #9fb3ab;
+   background: #eef3f7;
+   padding: .18rem .5rem;
+   margin: 0 0 .7rem;
+   display: inline-block;
+}
+
+.conci-rep-pivote {
+   width: 100%;
+   border-collapse: collapse;
+   font-size: .7rem;
+   margin-bottom: 1.4rem;
+}
+
+.conci-rep-pivote th,
+.conci-rep-pivote td {
+   border: 1px solid #b8c6d6;
+   padding: .18rem .45rem;
+   white-space: nowrap;
+}
+
+.conci-rep-pivote thead th {
+   background: #dbe5f1;
+   color: #1f3864;
+   font-weight: 700;
+   text-align: center;
+}
+
+.conci-rep-pivote .conci-rep-pivote-titulo {
+   text-align: left;
+   background: #eef3f7;
+}
+
+.conci-rep-pivote .num {
+   text-align: right;
+   font-variant-numeric: tabular-nums;
+}
+
+.conci-rep-pivote-total td {
+   font-weight: 700;
+   border-top: 2px solid #1f3864;
+}
+
+.conci-rep-sub-intro {
+   font-size: .76rem;
+   margin: 0 0 1rem;
+}
+
+.conci-rep-sub-apartado {
+   font-size: .74rem;
+   font-weight: 700;
+   margin: 1.1rem 0 .35rem;
+}
+
+.conci-rep-oficio {
+   border-collapse: collapse;
+   font-size: .7rem;
+   width: 100%;
+}
+
+.conci-rep-oficio th,
+.conci-rep-oficio td {
+   border: 1px solid #7f8c9b;
+   padding: .2rem .55rem;
+   white-space: nowrap;
+}
+
+.conci-rep-oficio thead th {
+   font-weight: 700;
+   text-align: center;
+   background: #fff;
+}
+
+.conci-rep-oficio .conci-rep-oficio-fecha {
+   color: #c00000;
+   letter-spacing: .02em;
+}
+
+.conci-rep-oficio .rot {
+   text-align: left;
+   font-weight: 600;
+}
+
+.conci-rep-oficio .num {
+   text-align: center;
+   min-width: 92px;
+   font-variant-numeric: tabular-nums;
+}
+
+/* El bloque del dia va resaltado, como en la hoja que se envia. */
+.conci-rep-oficio-hoy tbody td {
+   background: #e2efda;
+   font-weight: 600;
+}
+
+/* ── impresion ─────────────────────────────────────────────────────────── */
+
+@media print {
+   body.conci-rep-imprimiendo * {
+      visibility: hidden;
+   }
+
+   body.conci-rep-imprimiendo .conci-rep-hoja,
+   body.conci-rep-imprimiendo .conci-rep-hoja * {
+      visibility: visible;
+   }
+
+   body.conci-rep-imprimiendo .conci-rep-hoja {
+      position: absolute;
+      inset: 0 auto auto 0;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      box-shadow: none;
+   }
+
+   /* Sin esto el navegador tira los fondos y la hoja sale en blanco y negro. */
+   body.conci-rep-imprimiendo .conci-rep-hoja * {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+   }
+
+   /* Que no parta una tabla a media pagina. */
+   body.conci-rep-imprimiendo .conci-rep-plantilla,
+   body.conci-rep-imprimiendo .conci-rep-pivote,
+   body.conci-rep-imprimiendo .conci-rep-oficio {
+      page-break-inside: avoid;
+   }
+}
+
+/* La hoja es un documento en papel: no se repinta en modo oscuro. */
+body.dark-mode .conci-rep-hoja {
+   background: #fff;
+   color: #000;
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    PASADA MÓVIL — TELÉFONOS
    Las medidas de tableta (≥ 576 px) ya estaban resueltas y no se tocan: todo

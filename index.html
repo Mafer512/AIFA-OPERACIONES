@@ -22872,10 +22872,15 @@ FF
                                         <div class="p-4 conci-manifest-pane-body">
 
                                             <!-- Conciliación Manifiestos Table -->
-                                            <div class="card border-0 shadow-sm conci-manifest-card">
+                                            <div class="card border-0 shadow-sm conci-manifest-card" id="conci-manifiestos-tabla-view">
                                                 <div class="card-header bg-white border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2 conci-manifest-toolbar">
                                                     <div class="d-flex align-items-center gap-2 flex-nowrap"><h6 class="mb-0 fw-semibold"><i class="fas fa-file-alt me-2 text-success"></i>Conciliación Manifiestos</h6><span id="conci-presencia" class="conci-presencia conci-presencia-vacia" aria-label="Personas trabajando en esta tabla ahora"></span></div>
                                                     <div class="d-flex gap-2 align-items-center flex-wrap">
+                                                        <!-- Reportes: abre la vista de reportes (Carga / Pasajeros) -->
+                                                        <button class="btn btn-sm btn-outline-primary" id="btn-conci-reportes" type="button"
+                                                            title="Abrir reportes de Carga y Pasajeros" aria-label="Abrir reportes de Carga y Pasajeros">
+                                                            <i class="fas fa-chart-pie me-1"></i>Reportes
+                                                        </button>
                                                         <!-- Selector de periodo de fechas -->
                                                         <div class="input-group input-group-sm" style="width:auto">
                                                             <span class="input-group-text text-muted" title="Periodo de fechas"><i class="fas fa-calendar-week"></i></span>
@@ -23101,7 +23106,6 @@ FF
                                                     </div>
                                                 </div>
                                             </div>
-
                                         </div>
                                     </div><!-- /pane-conci-comercial -->
 
@@ -23668,6 +23672,124 @@ FF
                         </div><!-- /conciliacion-content card-body -->
                     </div><!-- /card -->
                 </div><!-- /conciliacion-section -->
+
+                <!-- ═══ Reportes (Carga / Pasajeros) ═══
+                     Página propia, hermana de Conciliación y no una vista dentro de
+                     ella: al abrirla desaparecen las pestañas de Conciliación
+                     (Itinerario / Manifiestos / Estadística) y queda únicamente la
+                     barra de Reportes con sus dos apartados. -->
+                <div id="conci-reportes-section" class="content-section">
+                    <div class="card shadow-sm conci-reportes-shell">
+                        <div class="card-header border-bottom bg-white d-flex align-items-center justify-content-between flex-wrap gap-2 py-3 conci-reportes-heading">
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <button class="btn btn-sm btn-outline-secondary" id="btn-conci-reportes-volver" type="button"
+                                    title="Regresar a Conciliación Manifiestos" aria-label="Regresar a Conciliación Manifiestos">
+                                    <i class="fas fa-arrow-left me-1"></i>Regresar a Manifiestos
+                                </button>
+                                <h2 class="section-title mb-0 fs-4 fw-bold text-primary"><i class="fas fa-chart-pie me-2"></i>Reportes</h2>
+                            </div>
+                            <button class="btn btn-sm btn-primary conci-toolbar-menu-btn" id="btn-conci-reportes-menu" type="button"
+                                title="Volver al menú principal" aria-label="Volver al menú principal">
+                                <i class="fas fa-grip me-1"></i>Menú
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+
+                            <!-- Apartados: Carga / Pasajeros -->
+                            <ul class="nav nav-tabs px-4 pt-3 border-bottom bg-white" id="conci-reportes-tabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active fw-semibold" id="tab-conci-rep-carga" data-bs-toggle="tab"
+                                        data-bs-target="#pane-conci-rep-carga" type="button" role="tab"
+                                        aria-controls="pane-conci-rep-carga" aria-selected="true">
+                                        <i class="fas fa-box-open me-2 text-warning"></i>Carga
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link fw-semibold" id="tab-conci-rep-pasajeros" data-bs-toggle="tab"
+                                        data-bs-target="#pane-conci-rep-pasajeros" type="button" role="tab"
+                                        aria-controls="pane-conci-rep-pasajeros" aria-selected="false">
+                                        <i class="fas fa-users me-2" style="color:#5e35b1"></i>Pasajeros
+                                    </button>
+                                </li>
+                                <li class="nav-item ms-auto d-flex align-items-center" role="presentation">
+                                    <span class="text-muted" style="font-size:.78rem">
+                                        <i class="fas fa-circle-info me-1"></i>Los reportes de cada apartado se irán agregando.
+                                    </span>
+                                </li>
+                            </ul>
+
+                            <div class="tab-content conci-reportes-tab-content">
+                                <!--  Reportes: Carga  -->
+                                <div class="tab-pane fade show active p-4" id="pane-conci-rep-carga" role="tabpanel" aria-labelledby="tab-conci-rep-carga">
+                                    <div class="conci-reportes-lista" id="conci-reportes-lista-carga">
+                                        <div class="text-center text-muted py-5" id="conci-reportes-vacio-carga">
+                                            <i class="fas fa-box-open mb-3" style="font-size:2rem;opacity:.35"></i>
+                                            <p class="mb-1 fw-semibold">Sin reportes de Carga todavía</p>
+                                            <p class="small mb-0">Aquí se listarán los reportes de Carga conforme se definan.</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!--  Reportes: Pasajeros  -->
+                                <div class="tab-pane fade p-4" id="pane-conci-rep-pasajeros" role="tabpanel" aria-labelledby="tab-conci-rep-pasajeros">
+                                    <div class="conci-reportes-lista" id="conci-reportes-lista-pasajeros">
+
+                                        <!-- Barra: que reporte, para que fecha, y de donde salen los numeros -->
+                                        <div class="d-flex align-items-center gap-2 flex-wrap mb-3 conci-rep-pax-toolbar">
+                                            <div class="btn-group btn-group-sm shadow-sm" role="group" aria-label="Elegir reporte de Pasajeros">
+                                                <button type="button" class="btn btn-outline-primary active" data-conci-rep-pax="subsecretaria">
+                                                    <i class="fas fa-file-signature me-1"></i>Subsecretaría
+                                                </button>
+                                                <button type="button" class="btn btn-outline-primary" data-conci-rep-pax="plantilla1">
+                                                    <i class="fas fa-plane-up me-1"></i>Plantilla 1 · Por aerolínea
+                                                </button>
+                                                <button type="button" class="btn btn-outline-primary" data-conci-rep-pax="plantilla2">
+                                                    <i class="fas fa-calendar-days me-1"></i>Plantilla 2 · Concentrado diario
+                                                </button>
+                                            </div>
+
+                                            <span class="text-muted" style="opacity:.25">│</span>
+
+                                            <label class="text-muted fw-semibold mb-0" for="conci-rep-pax-fecha" style="font-size:.78rem">Fecha del reporte</label>
+                                            <input type="date" class="form-control form-control-sm" id="conci-rep-pax-fecha" style="width:150px">
+                                            <button class="btn btn-sm btn-primary" id="btn-conci-rep-pax-generar" type="button">
+                                                <i class="fas fa-rotate me-1"></i>Generar
+                                            </button>
+
+                                            <span class="text-muted" style="opacity:.25">│</span>
+
+                                            <button class="btn btn-sm btn-outline-secondary" id="btn-conci-rep-pax-imprimir" type="button"
+                                                title="Imprimir la hoja del reporte">
+                                                <i class="fas fa-print me-1"></i>Imprimir
+                                            </button>
+                                            <!-- Solo para las dos plantillas: el de Subsecretaría se captura
+                                                 en el oficio, no se entrega como archivo. -->
+                                            <button class="btn btn-sm btn-outline-success d-none" id="btn-conci-rep-pax-descargar" type="button"
+                                                title="Descargar la plantilla en Excel">
+                                                <i class="fas fa-file-excel me-1"></i>Descargar
+                                            </button>
+
+                                            <span class="flex-grow-1"></span>
+                                            <span id="conci-rep-pax-estado" class="text-muted" style="font-size:.75rem"></span>
+                                        </div>
+
+                                        <div id="conci-rep-pax-error" class="alert alert-danger d-none" role="alert"></div>
+
+                                        <div id="conci-rep-pax-salida">
+                                            <div class="text-center text-muted py-5" id="conci-rep-pax-vacio">
+                                                <i class="fas fa-users mb-3" style="font-size:2rem;opacity:.35"></i>
+                                                <p class="mb-1 fw-semibold">Elige una fecha y pulsa Generar</p>
+                                                <p class="small mb-0">Los tres reportes se calculan con lo capturado en Conciliación Manifiestos.</p>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div><!-- /conci-reportes-section -->
 
                 <!-- GSO Section (Impactos de Ave + Fauna Rescatada) -->
                 <div id="fauna-section" class="content-section">
@@ -39281,6 +39403,9 @@ FF
 <script src="js/conci-manifiestos-table.js?v=1" defer></script>
 <script src="js/conci-manifiestos-captura.js?v=20260727-v1" defer></script>
 <script src="js/conci-manifiestos-historial.js?v=20260727-insert-chips" defer></script>
+<!-- Reportes de Conciliación (Carga / Pasajeros) -->
+<script src="js/conci-reportes.js?v=20260909-v1" defer></script>
+<script src="js/conci-reportes-pasajeros.js?v=20260909-v1" defer></script>
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
 <script src="js/estadistico-informe-core.js?v=20260821-v6" defer></script>
 <script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>
