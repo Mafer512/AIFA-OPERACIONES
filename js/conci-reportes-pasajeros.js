@@ -91,6 +91,25 @@
     function esSalida(tipo) { return /SAL|DEP/.test(normaliza(tipo)); }
     function esInternacional(op) { return /INTERNACIONAL/.test(normaliza(op)); }
 
+    /**
+     * Nombre comercial de la aerolínea. La columna guarda indistintamente el
+     * código IATA o el nombre —"Y4" y "VOLARIS" son la misma aerolínea— y el
+     * reporte se lee, así que se muestra el nombre. Resuelve contra el mismo
+     * catálogo que usa la tabla de Manifiestos, de modo que ambas formas caen
+     * en un solo renglón. Un código que no esté en el catálogo se queda tal
+     * cual: es la señal de que hay que darlo de alta en Catálogo de aerolíneas.
+     */
+    function nombreAerolinea(valor) {
+        const bruto = String(valor ?? '').trim();
+        if (!bruto) return '';
+        try {
+            const meta = typeof window._conciResolveAirlineMeta === 'function'
+                ? window._conciResolveAirlineMeta(bruto) : null;
+            if (meta && meta.name) return String(meta.name).toUpperCase();
+        } catch (_) { /* sin catálogo se queda el valor capturado */ }
+        return bruto.toUpperCase();
+    }
+
     function diasDelMes(anio, mes) { return new Date(anio, mes, 0).getDate(); }
 
     /* ── columnas ───────────────────────────────────────────────────────── */
@@ -222,15 +241,19 @@
             if (!fecha || fecha > fechaIso) continue;
 
             if (fecha === fechaIso || fecha.startsWith(prefijoMes)) {
-                const aerolinea = String(columnas.aerolinea ? fila[columnas.aerolinea] : '').trim();
+                const bruto = String(columnas.aerolinea ? fila[columnas.aerolinea] : '').trim();
+                const aerolinea = nombreAerolinea(bruto);
                 if (aerolinea) {
                     const anota = alcance => {
                         const mapa = porAerolinea[alcance];
-                        const acc = mapa.get(aerolinea) || cubo();
+                        const acc = mapa.get(aerolinea) || { pax: 0, ops: 0, codigos: new Set() };
                         acc.pax += pax;
                         // El libro cuenta TIPO DE OPERACIÓN en el bloque del día
                         // y AEROLINEA en el acumulado; aquí ambos existen.
                         if (alcance === 'dia' ? cuentaSiHay(operacion) : true) acc.ops++;
+                        // El código capturado se guarda para el tooltip, igual
+                        // que hace la celda de aerolínea en la tabla.
+                        if (bruto && bruto.toUpperCase() !== aerolinea) acc.codigos.add(bruto.toUpperCase());
                         mapa.set(aerolinea, acc);
                     };
                     if (fecha.startsWith(prefijoMes)) anota('mes');
@@ -394,9 +417,12 @@
             ? filas.map(([aerolinea, v]) => {
                 const c = colorAerolinea(aerolinea);
                 const estilo = c ? ` style="background:${c.fondo};color:${c.texto}"` : '';
+                // Se conserva a la vista el código capturado, como en la tabla.
+                const codigos = v.codigos && v.codigos.size ? [...v.codigos].sort().join(', ') : '';
+                const titulo = codigos ? ` title="Capturado como ${escapar(codigos)}"` : '';
                 return `
                 <tr>
-                    <td class="conci-rep-aero"${estilo}>${escapar(aerolinea)}</td>
+                    <td class="conci-rep-aero"${estilo}${titulo}>${escapar(aerolinea)}</td>
                     <td class="num">${numero(v.pax)}</td>
                     <td class="num">${numero(v.ops)}</td>
                 </tr>`;
@@ -559,6 +585,12 @@
         estado('Leyendo manifiestos…');
 
         try {
+            // Sin el catálogo cargado, la Plantilla 1 saldría con los códigos
+            // IATA en vez del nombre comercial. A Reportes se puede llegar sin
+            // haber abierto antes la tabla, que es quien normalmente lo carga.
+            if (typeof window._ensureConciAirlineCatalog === 'function') {
+                try { await window._ensureConciAirlineCatalog(); } catch (_) {}
+            }
             const datos = await descargar(fechaIso, n => estado(`Leyendo manifiestos… ${numero(n)}`));
             ultimo = agregar(datos, fechaIso);
             pintar();
@@ -703,7 +735,7 @@
     });
 
     window.conciReportesPasajeros = {
-        generar, agregar, mostrar, aIso, imprimir,
+        generar, agregar, mostrar, aIso, imprimir, nombreAerolinea,
         descargar: descargar_,
         filasPlantilla1, filasPlantilla2,
         _cache: () => cache

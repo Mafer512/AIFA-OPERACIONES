@@ -165,14 +165,86 @@ describe('agregación', () => {
       manifiesto({ fecha: '2026-04-30', aerolinea: 'VOLARIS', pax: 150 }),
       manifiesto({ fecha: '2026-04-02', aerolinea: 'VIVA AEROBUS', pax: 170 })
     ]);
-    expect(r.porAerolinea.dia.get('VIVA AEROBUS')).toEqual({ pax: 180, ops: 1 });
-    expect(r.porAerolinea.dia.get('VOLARIS')).toEqual({ pax: 150, ops: 1 });
-    expect(r.porAerolinea.mes.get('VIVA AEROBUS')).toEqual({ pax: 350, ops: 2 });
+    expect(r.porAerolinea.dia.get('VIVA AEROBUS')).toMatchObject({ pax: 180, ops: 1 });
+    expect(r.porAerolinea.dia.get('VOLARIS')).toMatchObject({ pax: 150, ops: 1 });
+    expect(r.porAerolinea.mes.get('VIVA AEROBUS')).toMatchObject({ pax: 350, ops: 2 });
   });
 
   test('PLANTILLA 1 cuenta TIPO DE OPERACIÓN en el bloque del día', () => {
     const r = agregar([manifiesto({ fecha: '2026-04-30', operacion: '', pax: 90 })]);
-    expect(r.porAerolinea.dia.get('VIVA AEROBUS')).toEqual({ pax: 90, ops: 0 });
+    expect(r.porAerolinea.dia.get('VIVA AEROBUS')).toMatchObject({ pax: 90, ops: 0 });
+  });
+
+  describe('el código IATA se cambia por el nombre comercial', () => {
+    const CATALOGO = {
+      'Y4': 'Volaris', 'VB': 'Viva Aerobus', 'AM': 'Aeroméxico',
+      'XN': 'Mexicana de Aviación', 'DM': 'Arajet', 'ZV': 'Aerus',
+      'WH': 'La Nueva Aerolínea'
+    };
+
+    beforeEach(() => {
+      // Reproduce el catálogo real: resuelve por código y también por nombre.
+      window._conciResolveAirlineMeta = valor => {
+        const v = String(valor).toUpperCase();
+        if (CATALOGO[v]) return { name: CATALOGO[v] };
+        const porNombre = Object.values(CATALOGO)
+          .find(n => n.toUpperCase() === v);
+        return porNombre ? { name: porNombre } : null;
+      };
+      api = cargar();
+    });
+
+    afterEach(() => { delete window._conciResolveAirlineMeta; });
+
+    test('Y4 se reporta como VOLARIS', () => {
+      expect(api.nombreAerolinea('Y4')).toBe('VOLARIS');
+      expect(api.nombreAerolinea('VB')).toBe('VIVA AEROBUS');
+      expect(api.nombreAerolinea('DM')).toBe('ARAJET');
+      expect(api.nombreAerolinea('ZV')).toBe('AERUS');
+    });
+
+    test('el código y el nombre caen en un solo renglón', () => {
+      const r = api.agregar({
+        filas: [
+          manifiesto({ fecha: '2026-04-30', aerolinea: 'Y4', pax: 150 }),
+          manifiesto({ fecha: '2026-04-30', aerolinea: 'VOLARIS', pax: 120 })
+        ],
+        columnas: COLUMNAS
+      }, '2026-04-30');
+      expect([...r.porAerolinea.dia.keys()]).toEqual(['VOLARIS']);
+      expect(r.porAerolinea.dia.get('VOLARIS')).toMatchObject({ pax: 270, ops: 2 });
+    });
+
+    test('un código que no está en el catálogo se queda a la vista', () => {
+      // Es la señal de que hay que darlo de alta en Catálogo de aerolíneas.
+      expect(api.nombreAerolinea('G6')).toBe('G6');
+      expect(api.nombreAerolinea('2D')).toBe('2D');
+    });
+
+    test('sin catálogo cargado no se rompe: se queda lo capturado', () => {
+      delete window._conciResolveAirlineMeta;
+      const suelto = cargar();
+      expect(suelto.nombreAerolinea('Y4')).toBe('Y4');
+      expect(suelto.nombreAerolinea('')).toBe('');
+    });
+
+    test('la fila guarda el código capturado para el tooltip', () => {
+      const r = api.agregar({
+        filas: [manifiesto({ fecha: '2026-04-30', aerolinea: 'Y4', pax: 150 })],
+        columnas: COLUMNAS
+      }, '2026-04-30');
+      expect([...r.porAerolinea.dia.get('VOLARIS').codigos]).toEqual(['Y4']);
+    });
+
+    test('la Plantilla 1 que se descarga lleva el nombre, no el código', () => {
+      const datos = api.agregar({
+        filas: [manifiesto({ fecha: '2026-04-30', aerolinea: 'Y4', pax: 150 })],
+        columnas: COLUMNAS
+      }, '2026-04-30');
+      const plano = api.filasPlantilla1(datos).map(f => f.join('|')).join('\n');
+      expect(plano).toContain('VOLARIS|150|1');
+      expect(plano).not.toMatch(/^Y4\|/m);
+    });
   });
 
   test('PLANTILLA 2 reparte el mes por día y por llegada/salida', () => {
