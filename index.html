@@ -23107,6 +23107,380 @@ FF
 
                                     <!--  Tab: Estadística  -->
                                     <div class="tab-pane fade p-4" id="pane-conci-estadistica" role="tabpanel">
+                                        <!-- ───────────────────────────────────────────────────────────
+                                             Módulo estadístico de operaciones.
+                                             Sub-pestañas propias dentro de la pestaña Estadística. El
+                                             "Informe oficial" es la última y conserva EXACTAMENTE el
+                                             marcado que ya tenía: sus dos PDF no se tocan.
+                                             Lógica: js/estadistica-motor.js (núcleo puro),
+                                             js/estadistica-panel.js (pantallas) y
+                                             js/estadistica-clasificacion.js (reglas).
+                                             ─────────────────────────────────────────────────────────── -->
+                                        <ul class="nav nav-pills gap-1 mb-3 flex-wrap" id="est-subnav" role="tablist">
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link btn-sm active" id="est-tab-resumen" data-bs-toggle="pill" data-bs-target="#est-pane-resumen" type="button" role="tab" data-est-area="resumen">
+                                                    <i class="fas fa-gauge-high me-1"></i>Resumen
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link btn-sm" id="est-tab-explorador" data-bs-toggle="pill" data-bs-target="#est-pane-explorador" type="button" role="tab" data-est-area="explorador">
+                                                    <i class="fas fa-magnifying-glass-chart me-1"></i>Explorador
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link btn-sm" id="est-tab-operaciones" data-bs-toggle="pill" data-bs-target="#est-pane-operaciones" type="button" role="tab" data-est-area="operaciones">
+                                                    <i class="fas fa-plane-departure me-1"></i>Operaciones
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link btn-sm" id="est-tab-pasajeros" data-bs-toggle="pill" data-bs-target="#est-pane-pasajeros" type="button" role="tab" data-est-area="pasajeros">
+                                                    <i class="fas fa-users me-1"></i>Pasajeros
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link btn-sm" id="est-tab-aerolineas" data-bs-toggle="pill" data-bs-target="#est-pane-aerolineas" type="button" role="tab" data-est-area="aerolineas">
+                                                    <i class="fas fa-plane me-1"></i>Aerolíneas
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link btn-sm" id="est-tab-rutas" data-bs-toggle="pill" data-bs-target="#est-pane-rutas" type="button" role="tab" data-est-area="rutas">
+                                                    <i class="fas fa-route me-1"></i>Rutas y destinos
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link btn-sm" id="est-tab-aeronaves" data-bs-toggle="pill" data-bs-target="#est-pane-aeronaves" type="button" role="tab" data-est-area="aeronaves">
+                                                    <i class="fas fa-jet-fighter-up me-1"></i>Aeronaves
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link btn-sm" id="est-tab-carga" data-bs-toggle="pill" data-bs-target="#est-pane-carga" type="button" role="tab" data-est-area="carga">
+                                                    <i class="fas fa-box me-1"></i>Carga
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link btn-sm" id="est-tab-puntualidad" data-bs-toggle="pill" data-bs-target="#est-pane-puntualidad" type="button" role="tab" data-est-area="puntualidad">
+                                                    <i class="fas fa-clock me-1"></i>Puntualidad
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link btn-sm" id="est-tab-comparador" data-bs-toggle="pill" data-bs-target="#est-pane-comparador" type="button" role="tab" data-est-area="comparador">
+                                                    <i class="fas fa-scale-balanced me-1"></i>Comparador
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link btn-sm" id="est-tab-clasificacion" data-bs-toggle="pill" data-bs-target="#est-pane-clasificacion" type="button" role="tab" data-est-area="clasificacion">
+                                                    <i class="fas fa-sitemap me-1"></i>Clasificación
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link btn-sm" id="est-tab-descargas" data-bs-toggle="pill" data-bs-target="#est-pane-descargas" type="button" role="tab" data-est-area="descargas">
+                                                    <i class="fas fa-download me-1"></i>Descargas
+                                                </button>
+                                            </li>
+                                            <li class="nav-item" role="presentation">
+                                                <button class="nav-link btn-sm" id="est-tab-informe" data-bs-toggle="pill" data-bs-target="#est-pane-informe" type="button" role="tab" data-est-area="informe">
+                                                    <i class="fas fa-file-pdf me-1"></i>Informe oficial
+                                                </button>
+                                            </li>
+                                        </ul>
+
+                                        <!-- Filtros comunes a todo el módulo. Un solo estado; ninguna
+                                             sección define los suyos por su cuenta. -->
+                                        <div class="card border-0 shadow-sm mb-3" id="est-filtros">
+                                            <div class="card-body py-2 px-3">
+                                                <div class="d-flex align-items-end gap-2 flex-wrap">
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-desde">Desde</label>
+                                                        <input type="date" class="form-control form-control-sm" id="est-f-desde" style="width:9.5rem">
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-hasta">Hasta</label>
+                                                        <input type="date" class="form-control form-control-sm" id="est-f-hasta" style="width:9.5rem">
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-preset">Periodo</label>
+                                                        <select class="form-select form-select-sm" id="est-f-preset" style="width:auto">
+                                                            <option value="">Personalizado</option>
+                                                            <option value="mes_actual">Mes actual</option>
+                                                            <option value="mes_anterior">Mes anterior</option>
+                                                            <option value="anio_actual" selected>Año actual</option>
+                                                            <option value="anio_anterior">Año anterior</option>
+                                                            <option value="ultimos_30">Últimos 30 días</option>
+                                                            <option value="ultimos_90">Últimos 90 días</option>
+                                                            <option value="ultimos_12m">Últimos 12 meses</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-aerolinea">Aerolínea</label>
+                                                        <select class="form-select form-select-sm" id="est-f-aerolinea" style="width:auto;max-width:12rem"><option value="">Todas</option></select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-tipo-aeronave">Tipo aeronave</label>
+                                                        <select class="form-select form-select-sm" id="est-f-tipo-aeronave" style="width:auto;max-width:9rem"><option value="">Todos</option></select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-matricula">Matrícula</label>
+                                                        <select class="form-select form-select-sm" id="est-f-matricula" style="width:auto;max-width:9rem"><option value="">Todas</option></select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-endpoint">Origen / destino</label>
+                                                        <select class="form-select form-select-sm" id="est-f-endpoint" style="width:auto;max-width:12rem"><option value="">Todos</option></select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-direccion">Movimiento</label>
+                                                        <select class="form-select form-select-sm" id="est-f-direccion" style="width:auto">
+                                                            <option value="">Ambos</option>
+                                                            <option value="A">Llegadas</option>
+                                                            <option value="D">Salidas</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-nacint">Territorial</label>
+                                                        <select class="form-select form-select-sm" id="est-f-nacint" style="width:auto">
+                                                            <option value="">Todas</option>
+                                                            <option value="Nacional">Nacional</option>
+                                                            <option value="Internacional">Internacional</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-segmento">Segmento</label>
+                                                        <select class="form-select form-select-sm" id="est-f-segmento" style="width:auto">
+                                                            <option value="">Todos</option>
+                                                            <option value="COMERCIAL">Comercial</option>
+                                                            <option value="GENERAL">General</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-naturaleza">Naturaleza</label>
+                                                        <select class="form-select form-select-sm" id="est-f-naturaleza" style="width:auto">
+                                                            <option value="">Todas</option>
+                                                            <option value="PASAJEROS">Pasajeros</option>
+                                                            <option value="CARGA">Carga</option>
+                                                            <option value="MIXTA">Mixta</option>
+                                                            <option value="OTRA">Otra</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-servicio">Tipo servicio</label>
+                                                        <select class="form-select form-select-sm" id="est-f-servicio" style="width:auto;max-width:11rem"><option value="">Todos</option></select>
+                                                    </div>
+                                                    <button class="btn btn-sm btn-primary" id="est-btn-aplicar" type="button">
+                                                        <i class="fas fa-filter me-1"></i>Aplicar
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-secondary" id="est-btn-limpiar" type="button" title="Quitar todos los filtros">
+                                                        <i class="fas fa-eraser"></i>
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-secondary" id="est-btn-refrescar" type="button" title="Recalcular la estadística en la base">
+                                                        <i class="fas fa-sync-alt"></i>
+                                                    </button>
+                                                    <span class="flex-grow-1"></span>
+                                                    <span class="text-muted" id="est-frescura" style="font-size:.72rem;white-space:nowrap"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="alert alert-danger d-none" id="est-error"></div>
+                                        <div class="d-none mb-3" id="est-avisos"></div>
+
+                                        <div class="tab-content" id="est-subcontent">
+
+                                            <!-- A · RESUMEN EJECUTIVO -->
+                                            <div class="tab-pane fade show active" id="est-pane-resumen" role="tabpanel">
+                                                <div class="airline-stats-summary mb-3" id="est-resumen-tarjetas"></div>
+                                                <div class="mb-3" id="est-resumen-calidad"></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-chart-line me-2"></i>Evolución mensual</h6>
+                                                <div class="mb-4" style="position:relative;height:300px;">
+                                                    <canvas id="est-resumen-chart"></canvas>
+                                                </div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-scale-balanced me-2"></i>Variación contra periodos de referencia</h6>
+                                                <div class="table-responsive mb-4">
+                                                    <table class="table table-sm table-bordered align-middle mb-0" id="est-resumen-variaciones"><thead></thead><tbody></tbody></table>
+                                                </div>
+                                            </div>
+
+                                            <!-- B · EXPLORADOR -->
+                                            <div class="tab-pane fade" id="est-pane-explorador" role="tabpanel">
+                                                <div class="d-flex align-items-end gap-2 flex-wrap mb-3">
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-exp-dim1">Agrupar por</label>
+                                                        <select class="form-select form-select-sm" id="est-exp-dim1" style="width:auto"></select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-exp-dim2">y por</label>
+                                                        <select class="form-select form-select-sm" id="est-exp-dim2" style="width:auto"></select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-exp-dim3">y por</label>
+                                                        <select class="form-select form-select-sm" id="est-exp-dim3" style="width:auto"></select>
+                                                    </div>
+                                                    <button class="btn btn-sm btn-primary" id="est-exp-consultar" type="button"><i class="fas fa-play me-1"></i>Consultar</button>
+                                                    <button class="btn btn-sm btn-outline-success" id="est-exp-csv" type="button"><i class="fas fa-file-csv me-1"></i>CSV</button>
+                                                    <button class="btn btn-sm btn-outline-success" id="est-exp-excel" type="button"><i class="fas fa-file-excel me-1"></i>Excel</button>
+                                                    <span class="text-muted" id="est-exp-conteo" style="font-size:.75rem"></span>
+                                                </div>
+                                                <div class="airline-stats-summary mb-3" id="est-exp-tarjetas"></div>
+                                                <div class="mb-4" style="position:relative;height:300px;">
+                                                    <canvas id="est-exp-chart"></canvas>
+                                                </div>
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-bordered align-middle mb-0" id="est-exp-tabla"><thead></thead><tbody></tbody></table>
+                                                </div>
+                                            </div>
+
+                                            <!-- C · OPERACIONES -->
+                                            <div class="tab-pane fade" id="est-pane-operaciones" role="tabpanel">
+                                                <div class="airline-stats-summary mb-3" id="est-ops-tarjetas"></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-chart-column me-2"></i>Movimientos por mes</h6>
+                                                <div class="mb-4" style="position:relative;height:300px;"><canvas id="est-ops-chart"></canvas></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-table me-2"></i>Detalle mensual</h6>
+                                                <div class="table-responsive mb-4"><table class="table table-sm table-bordered align-middle mb-0" id="est-ops-tabla"><thead></thead><tbody></tbody></table></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-sitemap me-2"></i>Por segmento y naturaleza</h6>
+                                                <div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0" id="est-ops-clasif"><thead></thead><tbody></tbody></table></div>
+                                            </div>
+
+                                            <!-- D · PASAJEROS -->
+                                            <div class="tab-pane fade" id="est-pane-pasajeros" role="tabpanel">
+                                                <div class="airline-stats-summary mb-3" id="est-pax-tarjetas"></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-chart-line me-2"></i>Pasajeros por mes</h6>
+                                                <div class="mb-4" style="position:relative;height:300px;"><canvas id="est-pax-chart"></canvas></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-table me-2"></i>Detalle mensual</h6>
+                                                <div class="table-responsive mb-4"><table class="table table-sm table-bordered align-middle mb-0" id="est-pax-tabla"><thead></thead><tbody></tbody></table></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-percentage me-2"></i>Factor de ocupación por aerolínea</h6>
+                                                <div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0" id="est-pax-ocupacion"><thead></thead><tbody></tbody></table></div>
+                                            </div>
+
+                                            <!-- E · AEROLÍNEAS -->
+                                            <div class="tab-pane fade" id="est-pane-aerolineas" role="tabpanel">
+                                                <h6 class="fw-semibold text-primary mb-2"><i class="fas fa-chart-pie me-2"></i>Participación por operaciones</h6>
+                                                <div class="mb-4" style="position:relative;height:300px;"><canvas id="est-aero-chart"></canvas></div>
+                                                <div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0" id="est-aero-tabla"><thead></thead><tbody></tbody></table></div>
+                                            </div>
+
+                                            <!-- F · RUTAS Y DESTINOS -->
+                                            <div class="tab-pane fade" id="est-pane-rutas" role="tabpanel">
+                                                <div class="airline-stats-summary mb-3" id="est-rutas-tarjetas"></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-chart-column me-2"></i>Principales destinos y orígenes</h6>
+                                                <div class="mb-4" style="position:relative;height:320px;"><canvas id="est-rutas-chart"></canvas></div>
+                                                <div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0" id="est-rutas-tabla"><thead></thead><tbody></tbody></table></div>
+                                            </div>
+
+                                            <!-- G · AERONAVES -->
+                                            <div class="tab-pane fade" id="est-pane-aeronaves" role="tabpanel">
+                                                <h6 class="fw-semibold text-primary mb-2"><i class="fas fa-jet-fighter-up me-2"></i>Por tipo de aeronave</h6>
+                                                <div class="table-responsive mb-4"><table class="table table-sm table-bordered align-middle mb-0" id="est-aeronaves-tipo"><thead></thead><tbody></tbody></table></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-id-card me-2"></i>Por matrícula</h6>
+                                                <div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0" id="est-aeronaves-matricula"><thead></thead><tbody></tbody></table></div>
+                                            </div>
+
+                                            <!-- H · CARGA -->
+                                            <div class="tab-pane fade" id="est-pane-carga" role="tabpanel">
+                                                <div class="airline-stats-summary mb-3" id="est-carga-tarjetas"></div>
+                                                <div class="alert alert-info py-2 px-3 d-none" id="est-carga-nota" style="font-size:.8rem"></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-chart-line me-2"></i>Carga por mes</h6>
+                                                <div class="mb-4" style="position:relative;height:300px;"><canvas id="est-carga-chart"></canvas></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-table me-2"></i>Detalle mensual</h6>
+                                                <div class="table-responsive mb-4"><table class="table table-sm table-bordered align-middle mb-0" id="est-carga-tabla"><thead></thead><tbody></tbody></table></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-plane me-2"></i>Carga por aerolínea</h6>
+                                                <div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0" id="est-carga-aerolinea"><thead></thead><tbody></tbody></table></div>
+                                            </div>
+
+                                            <!-- I · PUNTUALIDAD Y DEMORAS -->
+                                            <div class="tab-pane fade" id="est-pane-puntualidad" role="tabpanel">
+                                                <div class="airline-stats-summary mb-3" id="est-punt-tarjetas"></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-chart-line me-2"></i>Puntualidad por mes</h6>
+                                                <div class="mb-4" style="position:relative;height:300px;"><canvas id="est-punt-chart"></canvas></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-plane me-2"></i>Por aerolínea</h6>
+                                                <div class="table-responsive mb-4"><table class="table table-sm table-bordered align-middle mb-0" id="est-punt-aerolinea"><thead></thead><tbody></tbody></table></div>
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-triangle-exclamation me-2"></i>Causas de demora</h6>
+                                                <div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0" id="est-punt-causas"><thead></thead><tbody></tbody></table></div>
+                                            </div>
+
+                                            <!-- J · COMPARADOR -->
+                                            <div class="tab-pane fade" id="est-pane-comparador" role="tabpanel">
+                                                <div class="d-flex align-items-end gap-2 flex-wrap mb-3">
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-cmp-preset">Comparación rápida</label>
+                                                        <select class="form-select form-select-sm" id="est-cmp-preset" style="width:auto">
+                                                            <option value="anio_anterior">Periodo actual vs mismo periodo del año anterior</option>
+                                                            <option value="periodo_anterior">Periodo actual vs periodo inmediato anterior</option>
+                                                            <option value="mes_actual_vs_anterior">Mes actual vs mes anterior</option>
+                                                            <option value="personalizado">Personalizado</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-cmp-a-desde">A · desde</label>
+                                                        <input type="date" class="form-control form-control-sm" id="est-cmp-a-desde" style="width:9.5rem">
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-cmp-a-hasta">A · hasta</label>
+                                                        <input type="date" class="form-control form-control-sm" id="est-cmp-a-hasta" style="width:9.5rem">
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-cmp-b-desde">B · desde</label>
+                                                        <input type="date" class="form-control form-control-sm" id="est-cmp-b-desde" style="width:9.5rem">
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-cmp-b-hasta">B · hasta</label>
+                                                        <input type="date" class="form-control form-control-sm" id="est-cmp-b-hasta" style="width:9.5rem">
+                                                    </div>
+                                                    <button class="btn btn-sm btn-primary" id="est-cmp-comparar" type="button"><i class="fas fa-scale-balanced me-1"></i>Comparar</button>
+                                                    <button class="btn btn-sm btn-outline-success" id="est-cmp-csv" type="button"><i class="fas fa-file-csv me-1"></i>CSV</button>
+                                                </div>
+                                                <div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0" id="est-cmp-tabla"><thead></thead><tbody></tbody></table></div>
+                                            </div>
+
+                                            <!-- K · CLASIFICACIÓN -->
+                                            <div class="tab-pane fade" id="est-pane-clasificacion" role="tabpanel">
+                                                <div class="alert alert-secondary py-2 px-3" style="font-size:.8rem">
+                                                    <i class="fas fa-circle-info me-1"></i>
+                                                    Las reglas resuelven dos dimensiones independientes: <strong>segmento de aviación</strong>
+                                                    (Comercial / General) y <strong>naturaleza de la operación</strong> (Pasajeros / Carga /
+                                                    Mixta / Otra). Una operación que no case con ninguna regla queda
+                                                    <strong>sin clasificar</strong> — no se adivina. Gana la regla de menor prioridad; a
+                                                    igual prioridad, la más específica.
+                                                </div>
+                                                <div class="d-flex align-items-center gap-2 flex-wrap mb-3">
+                                                    <button class="btn btn-sm btn-primary d-none" id="est-cla-nueva" type="button"><i class="fas fa-plus me-1"></i>Nueva regla</button>
+                                                    <div class="form-check form-switch mb-0">
+                                                        <input class="form-check-input" type="checkbox" id="est-cla-solo-activas" checked>
+                                                        <label class="form-check-label" for="est-cla-solo-activas" style="font-size:.8rem">Solo reglas activas</label>
+                                                    </div>
+                                                    <span class="text-muted" id="est-cla-conteo" style="font-size:.75rem"></span>
+                                                    <span class="flex-grow-1"></span>
+                                                    <span class="badge rounded-pill bg-light text-dark border d-none" id="est-cla-solo-lectura">
+                                                        <i class="fas fa-lock me-1"></i>Solo lectura
+                                                    </span>
+                                                </div>
+                                                <div class="table-responsive mb-4">
+                                                    <table class="table table-sm table-bordered align-middle mb-0" id="est-cla-tabla"><thead></thead><tbody></tbody></table>
+                                                </div>
+
+                                                <h6 class="fw-semibold text-primary mt-4 mb-2">
+                                                    <i class="fas fa-circle-question me-2"></i>Operaciones sin clasificar
+                                                    <small class="text-muted fw-normal" id="est-cla-sin-resumen"></small>
+                                                </h6>
+                                                <p class="text-muted mb-2" style="font-size:.78rem">
+                                                    Cada renglón es una combinación que ninguna regla resuelve. El botón crea la regla
+                                                    con esos criterios ya cargados.
+                                                </p>
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-bordered align-middle mb-0" id="est-cla-sin-tabla"><thead></thead><tbody></tbody></table>
+                                                </div>
+                                            </div>
+
+                                            <!-- L · CENTRO DE DESCARGAS -->
+                                            <div class="tab-pane fade" id="est-pane-descargas" role="tabpanel">
+                                                <p class="text-muted mb-3" style="font-size:.8rem">
+                                                    Todo lo descargable del módulo en un solo lugar. Cada documento respeta el periodo y
+                                                    los filtros de la barra superior, y se genera con el conjunto completo del resultado,
+                                                    no con la página visible en pantalla.
+                                                </p>
+                                                <div class="row g-3" id="est-descargas-lista"></div>
+                                            </div>
+
+                                            <!-- INFORME OFICIAL — contenido original, sin cambios -->
+                                            <div class="tab-pane fade" id="est-pane-informe" role="tabpanel">
+
 
                                         <div class="d-flex align-items-center gap-2 flex-wrap mb-3" id="informe-est-toolbar">
                                             <span class="fw-semibold text-primary d-flex align-items-center gap-2" style="font-size:.85rem;white-space:nowrap;">
@@ -23186,7 +23560,108 @@ FF
                                                 </table>
                                             </div>
                                         </div>
-                                    </div><!-- /pane-conci-estadistica -->
+                                                                                </div><!-- /est-pane-informe -->
+
+                                        </div><!-- /est-subcontent -->
+
+                                        <!-- Alta y edición de reglas de clasificación.
+                                             Solo se abre con nivel admin; la base lo vuelve a comprobar
+                                             en la política de escritura (migración 036). -->
+                                        <div class="modal fade" id="est-cla-modal" tabindex="-1" aria-labelledby="est-cla-modal-titulo" aria-hidden="true">
+                                            <div class="modal-dialog modal-lg modal-dialog-centered">
+                                                <div class="modal-content">
+                                                    <div class="modal-header">
+                                                        <h5 class="modal-title" id="est-cla-modal-titulo"><i class="fas fa-sitemap me-2"></i>Regla de clasificación</h5>
+                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                                                    </div>
+                                                    <div class="modal-body">
+                                                        <input type="hidden" id="est-cla-id">
+                                                        <p class="text-muted" style="font-size:.78rem">
+                                                            Los tres criterios son opcionales: en blanco significa <em>no restringe</em>.
+                                                            La regla aplica cuando <strong>todos</strong> los criterios que sí tengan valor
+                                                            coinciden con la operación.
+                                                        </p>
+                                                        <div class="row g-3">
+                                                            <div class="col-md-4">
+                                                                <label class="form-label" for="est-cla-aerolinea">Aerolínea</label>
+                                                                <select class="form-select form-select-sm" id="est-cla-aerolinea"><option value="">— Cualquiera —</option></select>
+                                                            </div>
+                                                            <div class="col-md-4">
+                                                                <label class="form-label" for="est-cla-tipo-aeronave">Tipo de aeronave</label>
+                                                                <input type="text" class="form-control form-control-sm" id="est-cla-tipo-aeronave" placeholder="A320, B738, …">
+                                                            </div>
+                                                            <div class="col-md-4">
+                                                                <label class="form-label" for="est-cla-tipo-servicio">Tipo de servicio</label>
+                                                                <select class="form-select form-select-sm" id="est-cla-tipo-servicio"><option value="">— Cualquiera —</option></select>
+                                                            </div>
+                                                            <div class="col-md-4">
+                                                                <label class="form-label" for="est-cla-aerolinea-texto">Aerolínea por texto</label>
+                                                                <input type="text" class="form-control form-control-sm" id="est-cla-aerolinea-texto" placeholder="Código o nombre crudo">
+                                                                <div class="form-text" style="font-size:.7rem">Solo si la operación aún no resolvió el catálogo.</div>
+                                                            </div>
+                                                            <div class="col-md-4">
+                                                                <label class="form-label" for="est-cla-segmento">Segmento de aviación</label>
+                                                                <select class="form-select form-select-sm" id="est-cla-segmento" required>
+                                                                    <option value="COMERCIAL">Comercial</option>
+                                                                    <option value="GENERAL">General</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-md-4">
+                                                                <label class="form-label" for="est-cla-naturaleza">Naturaleza de la operación</label>
+                                                                <select class="form-select form-select-sm" id="est-cla-naturaleza" required>
+                                                                    <option value="PASAJEROS">Pasajeros</option>
+                                                                    <option value="CARGA">Carga</option>
+                                                                    <option value="MIXTA">Mixta</option>
+                                                                    <option value="OTRA">Otra</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <label class="form-label" for="est-cla-prioridad">Prioridad</label>
+                                                                <input type="number" class="form-control form-control-sm" id="est-cla-prioridad" value="100" min="0" step="10">
+                                                                <div class="form-text" style="font-size:.7rem">Menor número gana.</div>
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <label class="form-label" for="est-cla-desde">Vigente desde</label>
+                                                                <input type="date" class="form-control form-control-sm" id="est-cla-desde">
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <label class="form-label" for="est-cla-hasta">Vigente hasta</label>
+                                                                <input type="date" class="form-control form-control-sm" id="est-cla-hasta">
+                                                            </div>
+                                                            <div class="col-md-3 d-flex align-items-end">
+                                                                <div class="form-check form-switch">
+                                                                    <input class="form-check-input" type="checkbox" id="est-cla-activo" checked>
+                                                                    <label class="form-check-label" for="est-cla-activo">Activa</label>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-12">
+                                                                <label class="form-label" for="est-cla-observaciones">Observaciones</label>
+                                                                <textarea class="form-control form-control-sm" id="est-cla-observaciones" rows="2" placeholder="Por qué existe esta regla, quién la pidió, en qué acuerdo se basa…"></textarea>
+                                                            </div>
+                                                        </div>
+                                                        <div class="alert alert-warning mt-3 mb-0 py-2 px-3 d-none" id="est-cla-modal-error" style="font-size:.8rem"></div>
+                                                        <div class="alert alert-info mt-3 mb-0 py-2 px-3 d-none" id="est-cla-modal-aviso-historico" style="font-size:.8rem">
+                                                            <i class="fas fa-clock-rotate-left me-1"></i>
+                                                            Esta regla ya gobierna estadísticas publicadas. Si el criterio cambia
+                                                            <strong>a partir de ahora</strong>, no la edites: usa
+                                                            <em>Reemplazar desde una fecha</em>, que la cierra y crea la nueva. Así el
+                                                            histórico se sigue reproduciendo igual.
+                                                        </div>
+                                                    </div>
+                                                    <div class="modal-footer">
+                                                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                                                        <button type="button" class="btn btn-outline-primary btn-sm d-none" id="est-cla-reemplazar">
+                                                            <i class="fas fa-clock-rotate-left me-1"></i>Reemplazar desde una fecha
+                                                        </button>
+                                                        <button type="button" class="btn btn-primary btn-sm" id="est-cla-guardar">
+                                                            <i class="fas fa-save me-1"></i>Guardar
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+</div><!-- /pane-conci-estadistica -->
 
                                     </div><!-- /tab-content -->
 
@@ -38810,6 +39285,10 @@ FF
 <script src="js/estadistico-informe-core.js?v=20260821-v6" defer></script>
 <script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>
 <script src="js/estadistico-informe.js?v=20260821-v6" defer></script>
+<!-- Modulo estadistico de operaciones (pestana Estadistica de Conciliacion) -->
+<script src="js/estadistica-motor.js?v=20260908-v1" defer></script>
+<script src="js/estadistica-panel.js?v=20260908-v1" defer></script>
+<script src="js/estadistica-clasificacion.js?v=20260908-v1" defer></script>
 <!-- Navegación inline del picker de fecha en Itinerario -->
 <script>
 (function () {
