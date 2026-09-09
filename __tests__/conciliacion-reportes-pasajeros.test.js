@@ -71,6 +71,17 @@ describe('el marcado del reporte', () => {
     expect(html).toContain('id="btn-conci-rep-pax-generar"');
   });
 
+  test('tiene botón de imprimir y de descargar', () => {
+    expect(html).toContain('id="btn-conci-rep-pax-imprimir"');
+    expect(html).toContain('id="btn-conci-rep-pax-descargar"');
+  });
+
+  test('el de descargar nace oculto: solo aplica a las dos plantillas', () => {
+    const boton = html.slice(html.indexOf('id="btn-conci-rep-pax-descargar"') - 160,
+      html.indexOf('id="btn-conci-rep-pax-descargar"'));
+    expect(boton).toContain('d-none');
+  });
+
   test('index.html carga el módulo', () => {
     expect(html).toContain('js/conci-reportes-pasajeros.js');
   });
@@ -203,6 +214,144 @@ describe('agregación', () => {
     expect(api.aIso(new Date(2026, 3, 30))).toBe('2026-04-30');
     expect(api.aIso('')).toBe('');
     expect(api.aIso(null)).toBe('');
+  });
+});
+
+describe('la hoja imprimible', () => {
+  const css = fs.readFileSync(path.join(raiz, 'style.css'), 'utf8').replace(/\r\n/g, '\n');
+  let api;
+  let datos;
+
+  beforeEach(() => {
+    document.body.className = '';
+    document.body.innerHTML = `
+      <input type="date" id="conci-rep-pax-fecha" value="2026-09-01">
+      <button id="btn-conci-rep-pax-generar"></button>
+      <button id="btn-conci-rep-pax-imprimir"></button>
+      <button id="btn-conci-rep-pax-descargar" class="d-none"></button>
+      <button data-conci-rep-pax="subsecretaria" class="active"></button>
+      <button data-conci-rep-pax="plantilla1"></button>
+      <button data-conci-rep-pax="plantilla2"></button>
+      <div id="conci-rep-pax-estado"></div>
+      <div id="conci-rep-pax-error" class="d-none"></div>
+      <div id="conci-rep-pax-salida"></div>
+    `;
+    delete window._conciRowIsCargo;
+    api = cargar();
+    datos = api.agregar({
+      filas: [
+        manifiesto({ fecha: '2026-09-01', tipo: 'LLEGADA', pax: 4337, aerolinea: 'VIVA AEROBUS' }),
+        manifiesto({ fecha: '2026-09-01', tipo: 'SALIDA', pax: 5425, aerolinea: 'VOLARIS' })
+      ],
+      columnas: COLUMNAS
+    }, '2026-09-01');
+  });
+
+  /** Pinta un reporte y devuelve el HTML de la hoja. */
+  function pintar(clave) {
+    api.mostrar(datos);
+    document.querySelector(`[data-conci-rep-pax="${clave}"]`).click();
+    return document.getElementById('conci-rep-pax-salida').innerHTML;
+  }
+
+  test('la paleta sale del libro, no de una aproximación', () => {
+    // Verde institucional, gris del TOTAL y vino de las etiquetas.
+    ['#255C4F', '#D9D9D9', '#A42145'].forEach(color => {
+      expect(css.toUpperCase()).toContain(color);
+    });
+    expect(css).toContain('"Noto Sans"');
+  });
+
+  test('imprimir esconde el resto de la aplicación', () => {
+    const bloque = css.slice(css.indexOf('@media print'));
+    expect(bloque).toContain('body.conci-rep-imprimiendo * {');
+    expect(bloque).toContain('visibility: hidden');
+    expect(bloque).toContain('body.conci-rep-imprimiendo .conci-rep-hoja');
+    // Sin esto el navegador tira los fondos de color al imprimir.
+    expect(bloque).toContain('print-color-adjust: exact');
+  });
+
+  test('el botón de imprimir marca el body y llama a print', () => {
+    window.print = jest.fn();
+    api.mostrar(datos);
+    document.getElementById('btn-conci-rep-pax-imprimir').click();
+    expect(window.print).toHaveBeenCalled();
+    expect(document.body.classList.contains('conci-rep-imprimiendo')).toBe(true);
+    delete window.print;
+  });
+
+  test('al terminar de imprimir el body vuelve a la normalidad', () => {
+    window.print = jest.fn();
+    api.mostrar(datos);
+    document.getElementById('btn-conci-rep-pax-imprimir').click();
+    window.dispatchEvent(new Event('afterprint'));
+    expect(document.body.classList.contains('conci-rep-imprimiendo')).toBe(false);
+    delete window.print;
+  });
+
+  test('imprimir sin reporte generado avisa en vez de imprimir', () => {
+    // Módulo recién cargado, sin `ultimo`: no debe llamar a print.
+    window.print = jest.fn();
+    api.imprimir();
+    expect(window.print).not.toHaveBeenCalled();
+    expect(document.getElementById('conci-rep-pax-error').classList.contains('d-none')).toBe(false);
+    delete window.print;
+  });
+
+  test('Descargar aparece en las plantillas y se esconde en Subsecretaría', () => {
+    const boton = document.getElementById('btn-conci-rep-pax-descargar');
+    document.querySelector('[data-conci-rep-pax="plantilla1"]').click();
+    expect(boton.classList.contains('d-none')).toBe(false);
+    document.querySelector('[data-conci-rep-pax="plantilla2"]').click();
+    expect(boton.classList.contains('d-none')).toBe(false);
+    document.querySelector('[data-conci-rep-pax="subsecretaria"]').click();
+    expect(boton.classList.contains('d-none')).toBe(true);
+  });
+
+  test('la Plantilla 1 que se descarga lleva encabezados y totales', () => {
+    const filas = api.filasPlantilla1(datos);
+    const plano = filas.map(f => f.join('|')).join('\n');
+    expect(plano).toContain('NUMERALIA AEROPORTUARIA SEPTIEMBRE 2026');
+    expect(plano).toContain('AEROLÍNEA|PAX TRANSPORTADOS|NÚMERO DE OPERACIONES');
+    expect(plano).toContain('VIVA AEROBUS|4337|1');
+    expect(plano).toContain('TOTAL|9762|2');
+  });
+
+  test('la Plantilla 2 que se descarga lleva los 30 días de septiembre', () => {
+    const filas = api.filasPlantilla2(datos);
+    const dias = filas.filter(f => /^\d{2}\/09\/2026$/.test(String(f[0])));
+    expect(dias).toHaveLength(30);
+    expect(dias[0].slice(0, 4)).toEqual(['01/09/2026', 4337, 5425, 9762]);
+    const plano = filas.map(f => f.join('|')).join('\n');
+    expect(plano).toContain('PASAJEROS');
+    expect(plano).toContain('OPERACIONES');
+    expect(plano).toContain('Máximo PAX del mes|9762');
+    expect(plano).toContain('PROMEDIO ANUAL');
+  });
+
+  test('cada reporte se dibuja dentro de una hoja con logo y nota', () => {
+    ['subsecretaria', 'plantilla1', 'plantilla2'].forEach(clave => {
+      const salida = pintar(clave);
+      expect(salida).toContain('conci-rep-hoja');
+      expect(salida).toContain('images/aifa-logo.png');
+      expect(salida).toContain('Nota:');
+    });
+  });
+
+  test('la Plantilla 1 tiñe la aerolínea con su color de catálogo', () => {
+    window._conciResolveAirlineMeta = nombre => (
+      String(nombre) === 'VIVA AEROBUS' ? { color: '#00a850', textColor: '#ffffff' } : null
+    );
+    const salida = pintar('plantilla1');
+    expect(salida).toContain('background:#00a850');
+    delete window._conciResolveAirlineMeta;
+  });
+
+  test('un color de catálogo que no sea hexadecimal no se inyecta', () => {
+    window._conciResolveAirlineMeta = () => ({ color: 'red;background:url(javascript:alert(1))' });
+    const salida = pintar('plantilla1');
+    expect(salida).not.toContain('javascript:');
+    delete window._conciResolveAirlineMeta;
   });
 });
 

@@ -273,136 +273,166 @@
         return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${a}`;
     }
 
-    function renderSubsecretaria(datos) {
-        const { sub, fechaIso, anio, mes } = datos;
-        const dia = sub.dia;
-        const filaCruce = carril => `
-            <tr>
-                <td class="fw-semibold">${carril}</td>
-                <td class="text-end">${numero(dia[carril].INTERNACIONAL.pax)}</td>
-                <td class="text-end">${numero(dia[carril].NACIONAL.pax)}</td>
-                <td class="text-end fw-semibold">${numero(dia[carril].INTERNACIONAL.pax + dia[carril].NACIONAL.pax)}</td>
-                <td class="text-end">${numero(dia[carril].INTERNACIONAL.ops)}</td>
-                <td class="text-end">${numero(dia[carril].NACIONAL.ops)}</td>
-                <td class="text-end fw-semibold">${numero(dia[carril].INTERNACIONAL.ops + dia[carril].NACIONAL.ops)}</td>
-            </tr>`;
-        const tDia = totalesSub(dia);
+    const NOTA = 'Los valores mostrados son el resultado de los registros de manifiestos recibidos '
+        + 'por parte de los prestadores de servicios. Sin embargo, estos datos pueden variar de acuerdo '
+        + 'al período de reporte y ajustes realizados por las aerolíneas.';
 
-        const bloques = [
-            ['Del día', totalesSub(sub.dia)],
-            [`A. Acumulado del mes de ${MESES[mes - 1].charAt(0) + MESES[mes - 1].slice(1).toLowerCase()} ${anio}`, totalesSub(sub.mes)],
-            [`B. Acumulado en el año ${anio}`, totalesSub(sub.anio)],
-            ['C. Acumulado desde el inicio de operaciones AIFA', totalesSub(sub.historico)]
-        ];
-
+    /**
+     * El marco imprimible: logo, título y nota, igual que las plantillas del
+     * libro. Lo que va dentro cambia por reporte; el marco no.
+     */
+    function hoja(titulo, subtitulo, cuerpo, ancha) {
         return `
-        <div class="conci-rep-doc">
-            <h5 class="conci-rep-titulo">Reporte a la Subsecretaría</h5>
-            <p class="conci-rep-sub">Cierre Subsecretaría: <strong>${fechaLarga(fechaIso)}</strong></p>
-
-            <div class="table-responsive mb-4">
-                <table class="table table-sm table-bordered align-middle conci-rep-tabla mb-0">
-                    <thead>
-                        <tr>
-                            <th rowspan="2" class="align-middle">Tipo de manifiesto</th>
-                            <th colspan="3">Pasajeros (suma de TOTAL PAX)</th>
-                            <th colspan="3">Operaciones (cuenta de AEROLÍNEA)</th>
-                        </tr>
-                        <tr>
-                            <th>Internacional</th><th>Nacional</th><th>Total</th>
-                            <th>Internacional</th><th>Nacional</th><th>Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${filaCruce('LLEGADA')}
-                        ${filaCruce('SALIDA')}
-                    </tbody>
-                    <tfoot>
-                        <tr class="conci-rep-total">
-                            <td>Total general</td>
-                            <td class="text-end">${numero(tDia.internacional.pax)}</td>
-                            <td class="text-end">${numero(tDia.nacional.pax)}</td>
-                            <td class="text-end">${numero(tDia.total.pax)}</td>
-                            <td class="text-end">${numero(tDia.internacional.ops)}</td>
-                            <td class="text-end">${numero(tDia.nacional.ops)}</td>
-                            <td class="text-end">${numero(tDia.total.ops)}</td>
-                        </tr>
-                    </tfoot>
-                </table>
+        <div class="conci-rep-hoja${ancha ? ' conci-rep-hoja-ancha' : ''}" id="conci-rep-hoja">
+            <div class="conci-rep-logo">
+                <img src="images/aifa-logo.png" alt="Aeropuerto Internacional Felipe Ángeles">
             </div>
-
-            <p class="fw-semibold mb-2" style="font-size:.85rem">Se envía la información correspondiente al:</p>
-            <div class="table-responsive">
-                <table class="table table-sm table-bordered align-middle conci-rep-tabla mb-0">
-                    <thead>
-                        <tr>
-                            <th rowspan="2" class="align-middle">Concepto</th>
-                            <th colspan="3">Pasajeros</th>
-                            <th colspan="3">Operaciones</th>
-                        </tr>
-                        <tr>
-                            <th>Dato</th><th>Nacional</th><th>Internacional</th>
-                            <th>Dato</th><th>Nacional</th><th>Internacional</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${bloques.map(([etiqueta, t]) => `
-                            <tr>
-                                <td class="fw-semibold">${escapar(etiqueta)}</td>
-                                <td class="text-end fw-semibold">${numero(t.total.pax)}</td>
-                                <td class="text-end">${numero(t.nacional.pax)}</td>
-                                <td class="text-end">${numero(t.internacional.pax)}</td>
-                                <td class="text-end fw-semibold">${numero(t.total.ops)}</td>
-                                <td class="text-end">${numero(t.nacional.ops)}</td>
-                                <td class="text-end">${numero(t.internacional.ops)}</td>
-                            </tr>`).join('')}
-                    </tbody>
-                </table>
-            </div>
+            <h1 class="conci-rep-h1">${escapar(titulo)}</h1>
+            ${subtitulo ? `<p class="conci-rep-actualizacion">${subtitulo}</p>` : ''}
+            ${cuerpo}
+            <p class="conci-rep-nota"><strong>Nota:</strong> ${NOTA}</p>
         </div>`;
     }
 
-    function tablaAerolineas(mapa, titulo) {
+    /** Color de marca de la aerolínea: el mismo catálogo que pinta la tabla. */
+    function colorAerolinea(nombre) {
+        try {
+            const meta = typeof window._conciResolveAirlineMeta === 'function'
+                ? window._conciResolveAirlineMeta(nombre) : null;
+            const fondo = meta && meta.color;
+            if (!/^#[0-9a-f]{3,8}$/i.test(String(fondo || ''))) return null;
+            const texto = String(meta.textColor || '#ffffff');
+            return { fondo, texto: /^#[0-9a-f]{3,8}$/i.test(texto) ? texto : '#ffffff' };
+        } catch (_) { return null; }
+    }
+
+    /* ── Reporte a la Subsecretaría ─────────────────────────────────────── */
+
+    function renderSubsecretaria(datos) {
+        const { sub, fechaIso, anio, mes } = datos;
+        const dia = sub.dia;
+        const totalDia = totalesSub(dia);
+        const mesCorto = MESES[mes - 1].charAt(0) + MESES[mes - 1].slice(1, 3).toLowerCase();
+
+        // Las dos dinámicas de la izquierda, tal como salen en la hoja.
+        const dinamica = (titulo, campo) => `
+            <table class="conci-rep-pivote">
+                <thead>
+                    <tr><th class="conci-rep-pivote-titulo" colspan="4">${escapar(titulo)}</th></tr>
+                    <tr><th>Etiquetas de fila</th><th>INTERNACIONAL</th><th>NACIONAL</th><th>Total general</th></tr>
+                </thead>
+                <tbody>
+                    ${['LLEGADA', 'SALIDA'].map(carril => `
+                        <tr>
+                            <td>${carril}</td>
+                            <td class="num">${numero(dia[carril].INTERNACIONAL[campo])}</td>
+                            <td class="num">${numero(dia[carril].NACIONAL[campo])}</td>
+                            <td class="num">${numero(dia[carril].INTERNACIONAL[campo] + dia[carril].NACIONAL[campo])}</td>
+                        </tr>`).join('')}
+                    <tr class="conci-rep-pivote-total">
+                        <td>Total general</td>
+                        <td class="num">${numero(totalDia.internacional[campo])}</td>
+                        <td class="num">${numero(totalDia.nacional[campo])}</td>
+                        <td class="num">${numero(totalDia.total[campo])}</td>
+                    </tr>
+                </tbody>
+            </table>`;
+
+        const bloques = [
+            ['', totalesSub(sub.dia)],
+            [`A. Acumulado del mes ${mesCorto}. ${anio}:`, totalesSub(sub.mes)],
+            [`B. Acumulado en el año ${anio}:`, totalesSub(sub.anio)],
+            ['C. Acumulado desde el inicio de operaciones AIFA:', totalesSub(sub.historico)]
+        ];
+
+        const cuadro = (etiqueta, t, esDelDia) => `
+            ${etiqueta ? `<p class="conci-rep-sub-apartado">${escapar(etiqueta)}</p>` : ''}
+            <table class="conci-rep-oficio${esDelDia ? ' conci-rep-oficio-hoy' : ''}">
+                <thead>
+                    <tr><th class="conci-rep-oficio-fecha" colspan="4">${fechaLarga(fechaIso)}</th></tr>
+                    <tr><th></th><th>Dato</th><th>Nacional</th><th>Internacional</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="rot">a. Pasajeros:</td>
+                        <td class="num">${numero(t.total.pax)}</td>
+                        <td class="num">${numero(t.nacional.pax)}</td>
+                        <td class="num">${numero(t.internacional.pax)}</td>
+                    </tr>
+                    <tr>
+                        <td class="rot">b. Operaciones:</td>
+                        <td class="num">${numero(t.total.ops)}</td>
+                        <td class="num">${numero(t.nacional.ops)}</td>
+                        <td class="num">${numero(t.internacional.ops)}</td>
+                    </tr>
+                </tbody>
+            </table>`;
+
+        const cuerpo = `
+            <div class="conci-rep-sub-rejilla">
+                <div class="conci-rep-sub-izq">
+                    <p class="conci-rep-filtro">CIERRE SUBSECRETARÍA <strong>${fechaLarga(fechaIso)}</strong></p>
+                    ${dinamica('Suma de TOTAL PAX', 'pax')}
+                    ${dinamica('Cuenta de AEROLINEA', 'ops')}
+                </div>
+                <div class="conci-rep-sub-der">
+                    <p class="conci-rep-sub-intro">Se envía la información correspondiente (carga y pasajeros) al:</p>
+                    ${bloques.map(([etiqueta, t], i) => cuadro(etiqueta, t, i === 0)).join('')}
+                </div>
+            </div>`;
+
+        return hoja(`REPORTE A LA SUBSECRETARÍA ${MESES[mes - 1]} ${anio}`, '', cuerpo, true);
+    }
+
+    /* ── Plantilla 1: numeralia por aerolínea ───────────────────────────── */
+
+    function tablaAerolineas(mapa) {
         const filas = [...mapa.entries()].sort((a, b) => a[0].localeCompare(b[0], 'es'));
         const totalPax = filas.reduce((a, [, v]) => a + v.pax, 0);
         const totalOps = filas.reduce((a, [, v]) => a + v.ops, 0);
         const cuerpo = filas.length
-            ? filas.map(([aerolinea, v]) => `
+            ? filas.map(([aerolinea, v]) => {
+                const c = colorAerolinea(aerolinea);
+                const estilo = c ? ` style="background:${c.fondo};color:${c.texto}"` : '';
+                return `
                 <tr>
-                    <td>${escapar(aerolinea)}</td>
-                    <td class="text-end">${numero(v.pax)}</td>
-                    <td class="text-end">${numero(v.ops)}</td>
-                </tr>`).join('')
-            : '<tr><td colspan="3" class="text-center text-muted py-3">Sin manifiestos de pasajeros en el periodo.</td></tr>';
+                    <td class="conci-rep-aero"${estilo}>${escapar(aerolinea)}</td>
+                    <td class="num">${numero(v.pax)}</td>
+                    <td class="num">${numero(v.ops)}</td>
+                </tr>`;
+            }).join('')
+            : '<tr><td colspan="3" class="conci-rep-vacia">Sin manifiestos de pasajeros en el periodo.</td></tr>';
         return `
-            <p class="conci-rep-sub mb-2">${escapar(titulo)}</p>
-            <div class="table-responsive mb-4">
-                <table class="table table-sm table-bordered align-middle conci-rep-tabla mb-0">
-                    <thead>
-                        <tr><th>Aerolínea</th><th>Pax transportados</th><th>Número de operaciones</th></tr>
-                    </thead>
-                    <tbody>${cuerpo}</tbody>
-                    <tfoot>
-                        <tr class="conci-rep-total">
-                            <td>TOTAL</td>
-                            <td class="text-end">${numero(totalPax)}</td>
-                            <td class="text-end">${numero(totalOps)}</td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>`;
+            <table class="conci-rep-plantilla conci-rep-p1">
+                <thead>
+                    <tr><th>AEROLÍNEA</th><th>PAX TRANSPORTADOS</th><th>NÚMERO DE OPERACIONES</th></tr>
+                </thead>
+                <tbody>${cuerpo}</tbody>
+                <tfoot>
+                    <tr class="conci-rep-fila-total">
+                        <td>TOTAL</td>
+                        <td class="num"><u>${numero(totalPax)}</u></td>
+                        <td class="num"><u>${numero(totalOps)}</u></td>
+                    </tr>
+                </tfoot>
+            </table>`;
     }
 
     function renderPlantilla1(datos) {
         const { porAerolinea, fechaIso, anio, mes } = datos;
-        return `
-        <div class="conci-rep-doc">
-            <h5 class="conci-rep-titulo">Numeralia aeroportuaria ${MESES[mes - 1]} ${anio}</h5>
-            <p class="conci-rep-sub">Fecha de actualización: <strong>${fechaLarga(fechaIso)}</strong></p>
-            ${tablaAerolineas(porAerolinea.dia, `Del día ${fechaLarga(fechaIso)}`)}
-            ${tablaAerolineas(porAerolinea.mes, `Cifras acumuladas: ${MESES[mes - 1].charAt(0) + MESES[mes - 1].slice(1).toLowerCase()}`)}
-        </div>`;
+        const mesTitulo = MESES[mes - 1].charAt(0) + MESES[mes - 1].slice(1).toLowerCase();
+        const cuerpo = `
+            ${tablaAerolineas(porAerolinea.dia)}
+            <p class="conci-rep-acumuladas">Cifras acumuladas: <strong><u>${escapar(mesTitulo)}</u></strong></p>
+            ${tablaAerolineas(porAerolinea.mes)}`;
+        return hoja(
+            `NUMERALIA AEROPORTUARIA ${MESES[mes - 1]} ${anio}`,
+            `Fecha de actualización: <strong><u>${fechaLarga(fechaIso)}</u></strong>`,
+            cuerpo
+        );
     }
+
+    /* ── Plantilla 2: concentrado diario del mes ────────────────────────── */
 
     function renderPlantilla2(datos) {
         const { porDia, sub, anio, mes, fechaIso } = datos;
@@ -422,67 +452,66 @@
         const diasTranscurridos = Math.max(1, Math.round((corte - inicio) / 86400000));
         const anual = totalesSub(sub.anio);
 
-        const filas = porDia.map((d, i) => {
-            const fecha = `${String(i + 1).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${anio}`;
-            const vacio = !d.hayDatos;
-            const celda = v => vacio ? '<td class="text-end text-muted">—</td>' : `<td class="text-end">${numero(v)}</td>`;
-            return `
-                <tr${vacio ? ' class="conci-rep-sin-datos"' : ''}>
-                    <td>${fecha}</td>
-                    ${celda(d.pax.llegada)}${celda(d.pax.salida)}${celda(paxTotal(d))}
-                    ${celda(d.ops.llegada)}${celda(d.ops.salida)}${celda(opsTotal(d))}
-                </tr>`;
-        }).join('');
+        // Las dos tablas —pasajeros y operaciones— son gemelas y van lado a lado.
+        const tabla = (banda, llegada, salida, total) => `
+            <table class="conci-rep-plantilla conci-rep-p2">
+                <thead>
+                    <tr><th class="conci-rep-banda" colspan="4">${banda}</th></tr>
+                    <tr class="conci-rep-subcabecera"><th>FECHA</th><th>LLEGADA</th><th>SALIDA</th><th>TOTAL</th></tr>
+                </thead>
+                <tbody>
+                    ${porDia.map((d, i) => {
+                        const fecha = `${String(i + 1).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${anio}`;
+                        const celda = v => d.hayDatos ? `<td class="num">${numero(v)}</td>` : '<td class="num"></td>';
+                        return `<tr><td class="conci-rep-dia">${fecha}</td>${celda(llegada(d))}${celda(salida(d))}${celda(total(d))}</tr>`;
+                    }).join('')}
+                </tbody>
+                <tfoot>
+                    <tr class="conci-rep-fila-total">
+                        <td>TOTAL</td>
+                        <td class="num"><u>${numero(suma(llegada))}</u></td>
+                        <td class="num"><u>${numero(suma(salida))}</u></td>
+                        <td class="num"><u>${numero(suma(total))}</u></td>
+                    </tr>
+                    <tr class="conci-rep-fila-promedio">
+                        <td>PROMEDIO</td>
+                        <td class="num">${decimal(promedio(llegada))}</td>
+                        <td class="num">${decimal(promedio(salida))}</td>
+                        <td class="num">${decimal(promedio(total))}</td>
+                    </tr>
+                </tfoot>
+            </table>`;
 
-        return `
-        <div class="conci-rep-doc">
-            <h5 class="conci-rep-titulo">Numeralia aeroportuaria ${MESES[mes - 1]} ${anio}</h5>
-            <p class="conci-rep-sub">Fecha de actualización: <strong>${fechaLarga(fechaIso)}</strong></p>
-
-            <div class="table-responsive">
-                <table class="table table-sm table-bordered align-middle conci-rep-tabla mb-0">
-                    <thead>
-                        <tr>
-                            <th rowspan="2" class="align-middle">Fecha</th>
-                            <th colspan="3">Pasajeros</th>
-                            <th colspan="3">Operaciones</th>
-                        </tr>
-                        <tr>
-                            <th>Llegada</th><th>Salida</th><th>Total</th>
-                            <th>Llegada</th><th>Salida</th><th>Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>${filas}</tbody>
-                    <tfoot>
-                        <tr class="conci-rep-total">
-                            <td>TOTAL</td>
-                            <td class="text-end">${numero(suma(d => d.pax.llegada))}</td>
-                            <td class="text-end">${numero(suma(d => d.pax.salida))}</td>
-                            <td class="text-end">${numero(suma(paxTotal))}</td>
-                            <td class="text-end">${numero(suma(d => d.ops.llegada))}</td>
-                            <td class="text-end">${numero(suma(d => d.ops.salida))}</td>
-                            <td class="text-end">${numero(suma(opsTotal))}</td>
-                        </tr>
-                        <tr class="conci-rep-promedio">
-                            <td>PROMEDIO</td>
-                            <td class="text-end">${decimal(promedio(d => d.pax.llegada))}</td>
-                            <td class="text-end">${decimal(promedio(d => d.pax.salida))}</td>
-                            <td class="text-end">${decimal(promedio(paxTotal))}</td>
-                            <td class="text-end">${decimal(promedio(d => d.ops.llegada))}</td>
-                            <td class="text-end">${decimal(promedio(d => d.ops.salida))}</td>
-                            <td class="text-end">${decimal(promedio(opsTotal))}</td>
-                        </tr>
-                    </tfoot>
+        const cuerpo = `
+            <div class="conci-rep-p2-rejilla">
+                ${tabla('PASAJEROS', d => d.pax.llegada, d => d.pax.salida, paxTotal)}
+                ${tabla('OPERACIONES', d => d.ops.llegada, d => d.ops.salida, opsTotal)}
+            </div>
+            <div class="conci-rep-p2-pie">
+                <table class="conci-rep-maximos">
+                    <tbody>
+                        <tr><td class="conci-rep-etiqueta-vino">Máximo PAX del mes</td><td class="num"><u>${numero(maximo(paxTotal))}</u></td></tr>
+                        <tr><td class="conci-rep-etiqueta-vino">Máximo OP del mes</td><td class="num"><u>${numero(maximo(opsTotal))}</u></td></tr>
+                    </tbody>
                 </table>
-            </div>
+                <table class="conci-rep-maximos">
+                    <tbody>
+                        <tr><td class="conci-rep-hueco"></td><td class="conci-rep-th-simple">PAX</td><td class="conci-rep-th-simple">OP</td></tr>
+                        <tr>
+                            <td class="conci-rep-etiqueta-vino">PROMEDIO ANUAL</td>
+                            <td class="num"><u>${decimal(anual.total.pax / diasTranscurridos)}</u></td>
+                            <td class="num"><u>${decimal(anual.total.ops / diasTranscurridos)}</u></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>`;
 
-            <div class="d-flex gap-4 flex-wrap mt-3">
-                <div class="conci-rep-dato"><span>Máximo PAX del mes</span><strong>${numero(maximo(paxTotal))}</strong></div>
-                <div class="conci-rep-dato"><span>Máximo OP del mes</span><strong>${numero(maximo(opsTotal))}</strong></div>
-                <div class="conci-rep-dato"><span>Promedio anual PAX</span><strong>${decimal(anual.total.pax / diasTranscurridos)}</strong></div>
-                <div class="conci-rep-dato"><span>Promedio anual OP</span><strong>${decimal(anual.total.ops / diasTranscurridos)}</strong></div>
-            </div>
-        </div>`;
+        return hoja(
+            `NUMERALIA AEROPORTUARIA ${MESES[mes - 1]} ${anio}`,
+            `Fecha de actualización: <strong><u>${fechaLarga(fechaIso)}</u></strong>`,
+            cuerpo,
+            true
+        );
     }
 
     const RENDERS = {
@@ -499,6 +528,12 @@
         const salida = el('conci-rep-pax-salida');
         if (!salida || !ultimo) return;
         salida.innerHTML = (RENDERS[reporteActivo] || renderSubsecretaria)(ultimo);
+    }
+
+    /** Toma unos totales ya calculados y los dibuja. */
+    function mostrar(datos) {
+        ultimo = datos;
+        pintar();
     }
 
     function estado(texto) {
@@ -544,7 +579,111 @@
         reporteActivo = clave;
         document.querySelectorAll('[data-conci-rep-pax]')
             .forEach(b => b.classList.toggle('active', b === boton));
+        // Descargar solo aplica a las dos plantillas: el de Subsecretaría se
+        // captura en el oficio, no se entrega como archivo.
+        const descarga = el('btn-conci-rep-pax-descargar');
+        if (descarga) descarga.classList.toggle('d-none', clave === 'subsecretaria');
         pintar();
+    }
+
+    /* ── imprimir y descargar ───────────────────────────────────────────── */
+
+    /**
+     * Imprime solo la hoja del reporte. La clase la lee @media print, que
+     * esconde el resto de la aplicación: sin ella saldrían también la barra de
+     * herramientas y los botones.
+     */
+    function imprimir() {
+        if (!ultimo) { error('Genera el reporte antes de imprimirlo.'); return; }
+        document.body.classList.add('conci-rep-imprimiendo');
+        const limpiar = () => document.body.classList.remove('conci-rep-imprimiendo');
+        window.addEventListener('afterprint', limpiar, { once: true });
+        try { window.print(); } finally { setTimeout(limpiar, 1500); }
+    }
+
+    /** Nombre de archivo sin caracteres que Windows rechace. */
+    function nombreArchivo(base) {
+        return String(base).replace(/[\\/:*?"<>|]/g, '-');
+    }
+
+    function filasPlantilla1(datos) {
+        const bloque = (mapa, encabezado) => {
+            const filas = [...mapa.entries()].sort((a, b) => a[0].localeCompare(b[0], 'es'));
+            return [
+                [encabezado],
+                ['AEROLÍNEA', 'PAX TRANSPORTADOS', 'NÚMERO DE OPERACIONES'],
+                ...filas.map(([a, v]) => [a, v.pax, v.ops]),
+                ['TOTAL',
+                    filas.reduce((s, [, v]) => s + v.pax, 0),
+                    filas.reduce((s, [, v]) => s + v.ops, 0)],
+                []
+            ];
+        };
+        const mesTitulo = MESES[datos.mes - 1].charAt(0) + MESES[datos.mes - 1].slice(1).toLowerCase();
+        return [
+            [`NUMERALIA AEROPORTUARIA ${MESES[datos.mes - 1]} ${datos.anio}`],
+            [`Fecha de actualización: ${fechaLarga(datos.fechaIso)}`],
+            [],
+            ...bloque(datos.porAerolinea.dia, `Del día ${fechaLarga(datos.fechaIso)}`),
+            ...bloque(datos.porAerolinea.mes, `Cifras acumuladas: ${mesTitulo}`),
+            [NOTA]
+        ];
+    }
+
+    function filasPlantilla2(datos) {
+        const { porDia, sub, anio, mes, fechaIso } = datos;
+        const conDatos = porDia.filter(d => d.hayDatos);
+        const suma = sel => porDia.reduce((a, d) => a + sel(d), 0);
+        const prom = sel => conDatos.length ? Math.round(suma(sel) / conDatos.length) : 0;
+        const paxTotal = d => d.pax.llegada + d.pax.salida;
+        const opsTotal = d => d.ops.llegada + d.ops.salida;
+
+        const inicio = new Date(anio, 0, 1);
+        const corte = new Date(`${fechaIso}T12:00:00`);
+        const dias = Math.max(1, Math.round((corte - inicio) / 86400000));
+        const anual = totalesSub(sub.anio);
+
+        const cuerpo = porDia.map((d, i) => {
+            const fecha = `${String(i + 1).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${anio}`;
+            return d.hayDatos
+                ? [fecha, d.pax.llegada, d.pax.salida, paxTotal(d), '', fecha, d.ops.llegada, d.ops.salida, opsTotal(d)]
+                : [fecha, '', '', '', '', fecha, '', '', ''];
+        });
+
+        return [
+            [`NUMERALIA AEROPORTUARIA ${MESES[mes - 1]} ${anio}`],
+            [`Fecha de actualización: ${fechaLarga(fechaIso)}`],
+            [],
+            ['PASAJEROS', '', '', '', '', 'OPERACIONES'],
+            ['FECHA', 'LLEGADA', 'SALIDA', 'TOTAL', '', 'FECHA', 'LLEGADA', 'SALIDA', 'TOTAL'],
+            ...cuerpo,
+            ['TOTAL', suma(d => d.pax.llegada), suma(d => d.pax.salida), suma(paxTotal), '',
+                'TOTAL', suma(d => d.ops.llegada), suma(d => d.ops.salida), suma(opsTotal)],
+            ['PROMEDIO', prom(d => d.pax.llegada), prom(d => d.pax.salida), prom(paxTotal), '',
+                'PROMEDIO', prom(d => d.ops.llegada), prom(d => d.ops.salida), prom(opsTotal)],
+            [],
+            ['Máximo PAX del mes', conDatos.length ? Math.max(...conDatos.map(paxTotal)) : 0],
+            ['Máximo OP del mes', conDatos.length ? Math.max(...conDatos.map(opsTotal)) : 0],
+            ['PROMEDIO ANUAL', Math.round(anual.total.pax / dias), Math.round(anual.total.ops / dias)],
+            [],
+            [NOTA]
+        ];
+    }
+
+    function descargar_() {
+        if (!ultimo) { error('Genera el reporte antes de descargarlo.'); return; }
+        if (typeof XLSX === 'undefined') { error('No se pudo cargar el generador de Excel.'); return; }
+        const esP1 = reporteActivo === 'plantilla1';
+        if (!esP1 && reporteActivo !== 'plantilla2') return;
+
+        const filas = esP1 ? filasPlantilla1(ultimo) : filasPlantilla2(ultimo);
+        const hojaExcel = XLSX.utils.aoa_to_sheet(filas);
+        const libro = XLSX.utils.book_new();
+        const etiqueta = esP1 ? 'Plantilla 1' : 'Plantilla 2';
+        XLSX.utils.book_append_sheet(libro, hojaExcel, etiqueta);
+        XLSX.writeFile(libro, nombreArchivo(
+            `${etiqueta} - Numeralia ${MESES[ultimo.mes - 1]} ${ultimo.anio} - ${fechaLarga(ultimo.fechaIso)}.xlsx`
+        ));
     }
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -554,6 +693,8 @@
             campo.value = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
         }
         el('btn-conci-rep-pax-generar')?.addEventListener('click', generar);
+        el('btn-conci-rep-pax-imprimir')?.addEventListener('click', imprimir);
+        el('btn-conci-rep-pax-descargar')?.addEventListener('click', descargar_);
         // Cambiar la fecha invalida lo descargado: el rango pedido es otro.
         campo?.addEventListener('change', () => { cache = null; });
         document.querySelectorAll('[data-conci-rep-pax]').forEach(boton => {
@@ -561,5 +702,10 @@
         });
     });
 
-    window.conciReportesPasajeros = { generar, agregar, aIso, _cache: () => cache };
+    window.conciReportesPasajeros = {
+        generar, agregar, mostrar, aIso, imprimir,
+        descargar: descargar_,
+        filasPlantilla1, filasPlantilla2,
+        _cache: () => cache
+    };
 })();
