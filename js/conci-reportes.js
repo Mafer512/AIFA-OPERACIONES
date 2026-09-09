@@ -18,10 +18,14 @@
     const ID_REPORTES = 'conci-reportes-section';
     const ID_ORIGEN = 'conciliacion-section';
 
-    /* Clases del espacio de trabajo a pantalla completa de Manifiestos. En
-       Reportes estorban: esconden el encabezado y la barra lateral y fijan
-       #conciliacion-section sobre todo lo demás. */
-    const CLASES_WORKSPACE = ['conci-manifest-workspace', 'conci-itinerary-workspace'];
+    /* Clases del espacio de trabajo a pantalla completa de Conciliación: fijan
+       esa sección sobre todo lo demás, así que hay que soltarlas al salir. */
+    const CLASES_ORIGEN = ['conci-manifest-workspace', 'conci-itinerary-workspace'];
+
+    /* Reportes usa su propio espacio de trabajo a pantalla completa, con las
+       mismas reglas: sin encabezado, sin barra de agenda y sin barra lateral,
+       de modo que arriba quede solo su barra con el botón Menú. */
+    const CLASE_WORKSPACE = 'conci-reportes-workspace';
 
     function seccion(id) { return document.getElementById(id); }
 
@@ -34,11 +38,11 @@
         const destino = seccion(ID_REPORTES);
         if (!destino) return;
 
-        document.body.classList.remove(...CLASES_WORKSPACE);
+        document.body.classList.remove(...CLASES_ORIGEN);
         document.querySelectorAll('.content-section.active')
             .forEach(sec => sec.classList.remove('active'));
         destino.classList.add('active');
-        document.body.classList.add('conci-reportes-abierto');
+        document.body.classList.add('conci-reportes-abierto', CLASE_WORKSPACE);
 
         try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { window.scrollTo(0, 0); }
         seccion(ID_REPORTES)?.querySelector('#tab-conci-rep-carga')?.focus();
@@ -52,7 +56,7 @@
     function cerrarReportes() {
         const origen = seccion(ID_ORIGEN);
         seccion(ID_REPORTES)?.classList.remove('active');
-        document.body.classList.remove('conci-reportes-abierto');
+        document.body.classList.remove('conci-reportes-abierto', CLASE_WORKSPACE);
         if (!origen) return;
 
         origen.classList.add('active');
@@ -71,7 +75,7 @@
     /** El botón Menú sale del módulo por completo, no regresa a Manifiestos. */
     function irAlMenu() {
         seccion(ID_REPORTES)?.classList.remove('active');
-        document.body.classList.remove('conci-reportes-abierto', ...CLASES_WORKSPACE);
+        document.body.classList.remove('conci-reportes-abierto', CLASE_WORKSPACE, ...CLASES_ORIGEN);
         if (typeof window._navdeckShowMenu === 'function') window._navdeckShowMenu();
         else if (typeof window.exitSectionToMenu === 'function') window.exitSectionToMenu();
     }
@@ -93,7 +97,8 @@
         document.querySelectorAll('.menu-item[data-section]').forEach(link => {
             link.addEventListener('click', () => {
                 setTimeout(() => {
-                    if (!reportesAbiertos()) document.body.classList.remove('conci-reportes-abierto');
+                    if (reportesAbiertos()) return;
+                    document.body.classList.remove('conci-reportes-abierto', CLASE_WORKSPACE);
                 }, 0);
             });
         });

@@ -104,6 +104,34 @@ describe('los dos apartados', () => {
   });
 });
 
+describe('el espacio de trabajo a pantalla completa', () => {
+  const css = fs.readFileSync(path.join(raiz, 'style.css'), 'utf8').replace(/\r\n/g, '\n');
+
+  /** Reglas de style.css que aplican con el body en modo Reportes. */
+  function reglas() {
+    return css.split('}').filter(bloque => bloque.includes('body.conci-reportes-workspace'));
+  }
+
+  test('oculta el encabezado, la barra de agenda y la barra lateral', () => {
+    const ocultas = reglas().find(bloque => /display:\s*none/.test(bloque));
+    expect(ocultas).toBeDefined();
+    ['.header', '#ag-today-bar', '.sidebar'].forEach(selector => {
+      expect(ocultas).toContain(`body.conci-reportes-workspace ${selector}`);
+    });
+  });
+
+  test('oculta también el botón flotante de Menú, que quedaría duplicado', () => {
+    const ocultas = reglas().find(bloque => /display:\s*none/.test(bloque));
+    expect(ocultas).toContain('body.conci-reportes-workspace #navdeck-back');
+  });
+
+  test('la página ocupa la pantalla completa', () => {
+    const fijada = reglas().find(bloque => bloque.includes('#conci-reportes-section.active')
+      && /position:\s*fixed/.test(bloque));
+    expect(fijada).toBeDefined();
+  });
+});
+
 describe('navegación entre páginas', () => {
   let conciliacion;
   let reportes;
@@ -153,9 +181,10 @@ describe('navegación entre páginas', () => {
     expect(document.body.classList.contains('conci-reportes-abierto')).toBe(true);
   });
 
-  test('sale del modo pantalla completa de Manifiestos', () => {
+  test('suelta el espacio de trabajo de Manifiestos y enciende el suyo', () => {
     boton.click();
     expect(document.body.classList.contains('conci-manifest-workspace')).toBe(false);
+    expect(document.body.classList.contains('conci-reportes-workspace')).toBe(true);
   });
 
   test('Regresar a Manifiestos devuelve la sección de Conciliación', () => {
@@ -164,6 +193,7 @@ describe('navegación entre páginas', () => {
     expect(conciliacion.classList.contains('active')).toBe(true);
     expect(reportes.classList.contains('active')).toBe(false);
     expect(document.body.classList.contains('conci-reportes-abierto')).toBe(false);
+    expect(document.body.classList.contains('conci-reportes-workspace')).toBe(false);
   });
 
   test('al regresar se restaura el modo pantalla completa', () => {
@@ -189,6 +219,8 @@ describe('navegación entre páginas', () => {
     expect(salir).toHaveBeenCalled();
     expect(reportes.classList.contains('active')).toBe(false);
     expect(conciliacion.classList.contains('active')).toBe(false);
+    // Sin esto el encabezado y la barra lateral quedarían ocultos en el menú.
+    expect(document.body.classList.contains('conci-reportes-workspace')).toBe(false);
     delete window._navdeckShowMenu;
   });
 

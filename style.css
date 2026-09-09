@@ -21389,16 +21389,13 @@ body.conci-manifest-workspace #navdeck-back {
 
 /* ==========================================================================
    Reportes (Carga / Pasajeros)
-   Pagina propia, hermana de Conciliacion. Hereda el marco de la aplicacion,
-   asi que solo necesita alinear su encabezado y sus pestanas con el resto de
-   los modulos.
+   Pagina propia, hermana de Conciliacion, con el mismo espacio de trabajo a
+   pantalla completa que Manifiestos: sin encabezado, sin barra de agenda y
+   sin barra lateral, para que arriba quede solo su barra con el boton Menu.
+   Lo enciende y lo apaga js/conci-reportes.js.
    ========================================================================== */
 .conci-reportes-shell {
    border: 0;
-}
-
-.conci-reportes-heading .section-title {
-   line-height: 1.2;
 }
 
 #conci-reportes-tabs .nav-link {
@@ -21412,4 +21409,88 @@ body.conci-manifest-workspace #navdeck-back {
 
 .conci-reportes-tab-content {
    min-height: 60vh;
+}
+
+body.conci-reportes-workspace {
+   height: 100vh;
+   overflow: hidden !important;
+}
+
+body.conci-reportes-workspace > #main-app,
+body.conci-reportes-workspace .app-body {
+   height: 100vh;
+   min-height: 0;
+   overflow: hidden;
+}
+
+/* Siguen en el DOM y reaparecen al salir de Reportes. */
+body.conci-reportes-workspace .header,
+body.conci-reportes-workspace #ag-today-bar,
+body.conci-reportes-workspace .sidebar,
+body.conci-reportes-workspace #sidebar-overlay,
+body.conci-reportes-workspace #navdeck-back {
+   display: none !important;
+}
+
+body.conci-reportes-workspace .main-content {
+   display: flex;
+   flex-direction: column;
+   width: 100% !important;
+   height: 100vh;
+   min-height: 0;
+   margin-left: 0 !important;
+   padding: .4rem !important;
+   overflow: hidden !important;
+}
+
+body.conci-reportes-workspace #conci-reportes-section.active,
+body.conci-reportes-workspace .conci-reportes-shell,
+body.conci-reportes-workspace .conci-reportes-shell > .card-body {
+   display: flex;
+   flex: 1 1 auto;
+   flex-direction: column;
+   min-height: 0;
+}
+
+body.conci-reportes-workspace #conci-reportes-section.active {
+   position: fixed;
+   inset: 0;
+   z-index: 1500;
+   width: 100%;
+   height: 100%;
+   overflow: hidden;
+   background: var(--body-bg, #f4f7fb);
+}
+
+body.conci-reportes-workspace .conci-reportes-shell {
+   width: 100%;
+   height: 100%;
+   overflow: hidden;
+}
+
+body.conci-reportes-workspace .conci-reportes-heading {
+   flex: 0 0 auto;
+   padding: .4rem .75rem !important;
+}
+
+body.conci-reportes-workspace .conci-reportes-heading .section-title {
+   font-size: 1.1rem;
+}
+
+body.conci-reportes-workspace #conci-reportes-tabs {
+   flex: 0 0 auto;
+   gap: .25rem;
+   padding: .25rem .75rem 0 !important;
+}
+
+body.conci-reportes-workspace #conci-reportes-tabs .nav-link {
+   padding: .35rem .75rem;
+   font-size: .8rem;
+}
+
+/* El contenido del apartado es lo unico que scrollea. */
+body.conci-reportes-workspace .conci-reportes-tab-content {
+   flex: 1 1 auto;
+   min-height: 0;
+   overflow: auto;
 }
