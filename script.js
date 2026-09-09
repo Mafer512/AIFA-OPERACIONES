@@ -21924,6 +21924,135 @@ async function _conciExportToExcel(kind) {
     saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fname);
 }
 window.conciExportExcel = _conciExportToExcel;
+
+// ─── Exportación a Excel (por capturista) ──────────────────────────────────
+// Un libro con una hoja por capturista, cada una con el nombre completo como
+// encabezado y debajo una tabla con las mismas columnas que se ven en pantalla
+// (mismo criterio que _renderConciManifiestosTable para armar el <thead>: se
+// excluyen las columnas internas). Solo entran manifiestos ya capturados —
+// HR. DE RECEPCIÓN es la misma autoridad de estado que usan los contadores y
+// el filtro "Capturados/Sin capturar" (ver _conciIsReceptionColumn).
+const _CONCI_EXPORT_CAPTURISTA_HIDDEN_COLS = new Set(['_fuente', '_isPax', '_validado_itinerario', '_validado_por_itinerario', 'id', 'Año', 'Mes', 'Día']);
+
+// Convierte a número cuando el texto es puramente numérico (para que sume/ordene
+// bien en Excel); cualquier otra cosa (fechas, horas, matrículas, # de vuelo,
+// códigos) se deja como texto tal cual se capturó.
+function _conciExportCapturistaCellValue(raw) {
+    const s = String(raw ?? '').trim();
+    if (s === '') return '';
+    if (/^-?\d+([.,]\d+)?$/.test(s)) {
+        const n = parseFloat(s.replace(',', '.'));
+        if (Number.isFinite(n)) return n;
+    }
+    return s;
+}
+
+async function _conciExportPorCapturista() {
+    if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
+        alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
+        return;
+    }
+    const rows = _conciGetExportRows();
+    if (!rows.length) {
+        alert('No hay datos cargados para exportar.');
+        return;
+    }
+
+    const allCols = (Array.isArray(_conciManifestosSummaryColumns) && _conciManifestosSummaryColumns.length)
+        ? _conciManifestosSummaryColumns
+        : Object.keys(rows[0] || {});
+    const cols = allCols.filter(c => !_CONCI_EXPORT_CAPTURISTA_HIDDEN_COLS.has(c));
+
+    const get = _conciExportGetField;
+    const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
+    const capturoCol = cols.find(c => /^captur[oó]$/i.test(c.trim())) || null;
+
+    const capturados = rows.filter(r => recepcionCol && String(get(r, [recepcionCol])).trim() !== '');
+    if (!capturados.length) {
+        alert('No hay manifiestos capturados en el día cargado.');
+        return;
+    }
+
+    const grupos = new Map();
+    capturados.forEach(r => {
+        const nombre = String((capturoCol ? get(r, [capturoCol]) : '') || '').trim() || 'SIN CAPTURISTA IDENTIFICADO';
+        if (!grupos.has(nombre)) grupos.set(nombre, []);
+        grupos.get(nombre).push(r);
+    });
+
+    const wb = new ExcelJS.Workbook();
+    const thin = { style: 'thin', color: { argb: 'FFBFBFBF' } };
+    const border = { top: thin, left: thin, bottom: thin, right: thin };
+    const baseFont = { name: 'Noto Sans', size: 10 };
+    const usedSheetNames = new Set();
+    const sheetNameFor = (nombre) => {
+        const base = nombre.replace(/[*?:\/\\\[\]]/g, ' ').trim().slice(0, 31) || 'Capturista';
+        let candidate = base;
+        let n = 2;
+        while (usedSheetNames.has(candidate.toUpperCase())) {
+            const suffix = ` (${n++})`;
+            candidate = base.slice(0, 31 - suffix.length) + suffix;
+        }
+        usedSheetNames.add(candidate.toUpperCase());
+        return candidate;
+    };
+
+    const nombresOrdenados = [...grupos.keys()].sort((a, b) => a.localeCompare(b, 'es'));
+    for (const nombre of nombresOrdenados) {
+        const filas = grupos.get(nombre);
+        const ws = wb.addWorksheet(sheetNameFor(nombre), { views: [{ state: 'frozen', ySplit: 3 }] });
+
+        ws.mergeCells(1, 1, 1, cols.length);
+        const titleCell = ws.getCell(1, 1);
+        titleCell.value = nombre;
+        titleCell.font = { name: 'Noto Sans', size: 13, bold: true, color: { argb: 'FFFFFFFF' } };
+        titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF15683F' } };
+        titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+        ws.getRow(1).height = 26;
+
+        ws.mergeCells(2, 1, 2, cols.length);
+        const subtitleCell = ws.getCell(2, 1);
+        subtitleCell.value = `${filas.length} manifiesto${filas.length === 1 ? '' : 's'} capturado${filas.length === 1 ? '' : 's'}`;
+        subtitleCell.font = { name: 'Noto Sans', size: 9, italic: true, color: { argb: 'FF555555' } };
+        subtitleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        const headerRow = ws.getRow(3);
+        cols.forEach((c, i) => { headerRow.getCell(i + 1).value = c; });
+        headerRow.height = 30;
+        headerRow.eachCell((cell) => {
+            cell.font = { name: 'Noto Sans', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E7D32' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            cell.border = border;
+        });
+
+        const maxLen = cols.map(c => c.length);
+        filas.forEach(row => {
+            const values = cols.map(c => _conciExportCapturistaCellValue(get(row, [c])));
+            const xr = ws.addRow(values);
+            xr.eachCell((cell, colNumber) => {
+                const isObservaciones = /observacion/i.test(cols[colNumber - 1] || '');
+                cell.font = { ...baseFont };
+                cell.alignment = isObservaciones
+                    ? { vertical: 'middle', horizontal: 'left', wrapText: true }
+                    : { vertical: 'middle', horizontal: typeof cell.value === 'number' ? 'right' : 'center' };
+                cell.border = border;
+                const len = String(cell.value ?? '').length;
+                if (len > maxLen[colNumber - 1]) maxLen[colNumber - 1] = len;
+            });
+        });
+
+        cols.forEach((_, i) => { ws.getColumn(i + 1).width = Math.min(46, Math.max(11, maxLen[i] + 2)); });
+        ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: cols.length } };
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    const stamp = new Date().toISOString().slice(0, 10);
+    const fname = `Conciliacion_Por_Capturista_${stamp}.xlsx`;
+    saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fname);
+}
+window.conciExportPorCapturista = _conciExportPorCapturista;
+
 // ─── Importación de archivos para Conciliación Manifiestos ───────────────────
 // Cada manifiesto se identifica por Fecha + Tipo de manifiesto + Número de vuelo.
 // Esa llave permite sustituir una carga previa sin añadir filas duplicadas.
@@ -22553,7 +22682,14 @@ window.conciReturnToMainMenu = function () {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    ['tab-conci-comercial', 'tab-conci-itinerario'].forEach(id => {
+    // Estadistica va en la lista aunque NO use el modo hoja de calculo: es
+    // justamente la pestana que tiene que APAGARLO. Sin este listener, entrar a
+    // Estadistica desde Itinerario o Manifiestos dejaba el body en
+    // conci-manifest-workspace, que fija la pagina a 100vh con overflow:hidden;
+    // el contenido se veia cortado a media pantalla y no bajaba con el scroll.
+    // _conciUpdateWorkspaceMode ya decide sola segun el panel activo, asi que
+    // basta con que se vuelva a ejecutar al cambiar a cualquiera de las tres.
+    ['tab-conci-comercial', 'tab-conci-itinerario', 'tab-conci-estadistica'].forEach(id => {
         document.getElementById(id)?.addEventListener('shown.bs.tab', _conciUpdateWorkspaceMode);
     });
     document.querySelectorAll('.menu-item[data-section]').forEach(link => {
