@@ -46,3 +46,8 @@ videos/FBO AIFA - Trim.mp4
 *.tsbuildinfo
 .vercel
 .env*
+
+# Libros de trabajo sueltos en la raiz. Traen datos operativos y el repo es
+# publico: una vez en el historial de git ya no se quitan facil. Los que si se
+# versionan viven en excel/ y no los alcanza esta regla.
+/*.xlsx
