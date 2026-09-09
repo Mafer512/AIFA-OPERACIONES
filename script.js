@@ -22553,7 +22553,14 @@ window.conciReturnToMainMenu = function () {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    ['tab-conci-comercial', 'tab-conci-itinerario'].forEach(id => {
+    // Estadistica va en la lista aunque NO use el modo hoja de calculo: es
+    // justamente la pestana que tiene que APAGARLO. Sin este listener, entrar a
+    // Estadistica desde Itinerario o Manifiestos dejaba el body en
+    // conci-manifest-workspace, que fija la pagina a 100vh con overflow:hidden;
+    // el contenido se veia cortado a media pantalla y no bajaba con el scroll.
+    // _conciUpdateWorkspaceMode ya decide sola segun el panel activo, asi que
+    // basta con que se vuelva a ejecutar al cambiar a cualquiera de las tres.
+    ['tab-conci-comercial', 'tab-conci-itinerario', 'tab-conci-estadistica'].forEach(id => {
         document.getElementById(id)?.addEventListener('shown.bs.tab', _conciUpdateWorkspaceMode);
     });
     document.querySelectorAll('.menu-item[data-section]').forEach(link => {

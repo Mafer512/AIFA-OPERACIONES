@@ -204,6 +204,38 @@ describe('la página carga entera', () => {
   });
 });
 
+describe('Conciliación · el modo hoja de cálculo se apaga fuera de sus pestañas', () => {
+  // Itinerario y Manifiestos usan un layout de altura fija que fija la página a
+  // 100vh y le pone overflow:hidden (body.conci-manifest-workspace). Estadística
+  // NO: su contenido es largo y tiene que poder recorrerse con el scroll normal.
+  // Si al cambiar de pestaña ese modo se queda encendido, el módulo se ve
+  // cortado a media pantalla y no baja — que es justo lo que se reportó.
+  const mostrarPestana = async (id) => {
+    const boton = win.document.getElementById(id);
+    win.bootstrap.Tab.getOrCreateInstance(boton).show();
+    await esperar(120);
+  };
+
+  test('al pasar de Itinerario a Estadística la página vuelve a poder recorrerse', async () => {
+    const entrada = win.document.querySelector('a.menu-item[data-section="conciliacion"]');
+    await abrir(entrada);
+    await mostrarPestana('tab-conci-itinerario');
+    expect(win.document.body.classList.contains('conci-manifest-workspace')).toBe(true);
+
+    await mostrarPestana('tab-conci-estadistica');
+    expect(win.document.getElementById('pane-conci-estadistica').classList.contains('active')).toBe(true);
+    expect(win.document.body.classList.contains('conci-manifest-workspace')).toBe(false);
+    expect(win.document.body.classList.contains('conci-itinerary-workspace')).toBe(false);
+  });
+
+  test('y al volver a Manifiestos se enciende otra vez', async () => {
+    await mostrarPestana('tab-conci-comercial');
+    expect(win.document.body.classList.contains('conci-manifest-workspace')).toBe(true);
+    await mostrarPestana('tab-conci-estadistica');
+    expect(win.document.body.classList.contains('conci-manifest-workspace')).toBe(false);
+  });
+});
+
 describe('cada entrada del menú abre lo que dice', () => {
   test('todas, sin excepción', async () => {
     const fallos = [];
