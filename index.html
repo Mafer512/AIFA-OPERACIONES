@@ -23255,11 +23255,48 @@ FF
                                 <!--  Reportes: Pasajeros  -->
                                 <div class="tab-pane fade p-4" id="pane-conci-rep-pasajeros" role="tabpanel" aria-labelledby="tab-conci-rep-pasajeros">
                                     <div class="conci-reportes-lista" id="conci-reportes-lista-pasajeros">
-                                        <div class="text-center text-muted py-5" id="conci-reportes-vacio-pasajeros">
-                                            <i class="fas fa-users mb-3" style="font-size:2rem;opacity:.35"></i>
-                                            <p class="mb-1 fw-semibold">Sin reportes de Pasajeros todavía</p>
-                                            <p class="small mb-0">Aquí se listarán los reportes de Pasajeros conforme se definan.</p>
+
+                                        <!-- Barra: que reporte, para que fecha, y de donde salen los numeros -->
+                                        <div class="d-flex align-items-center gap-2 flex-wrap mb-3 conci-rep-pax-toolbar">
+                                            <div class="btn-group btn-group-sm shadow-sm" role="group" aria-label="Elegir reporte de Pasajeros">
+                                                <button type="button" class="btn btn-outline-primary active" data-conci-rep-pax="subsecretaria">
+                                                    <i class="fas fa-file-signature me-1"></i>Subsecretaría
+                                                </button>
+                                                <button type="button" class="btn btn-outline-primary" data-conci-rep-pax="plantilla1">
+                                                    <i class="fas fa-plane-up me-1"></i>Plantilla 1 · Por aerolínea
+                                                </button>
+                                                <button type="button" class="btn btn-outline-primary" data-conci-rep-pax="plantilla2">
+                                                    <i class="fas fa-calendar-days me-1"></i>Plantilla 2 · Concentrado diario
+                                                </button>
+                                            </div>
+
+                                            <span class="text-muted" style="opacity:.25">│</span>
+
+                                            <label class="text-muted fw-semibold mb-0" for="conci-rep-pax-fecha" style="font-size:.78rem">Fecha del reporte</label>
+                                            <input type="date" class="form-control form-control-sm" id="conci-rep-pax-fecha" style="width:150px">
+                                            <button class="btn btn-sm btn-primary" id="btn-conci-rep-pax-generar" type="button">
+                                                <i class="fas fa-rotate me-1"></i>Generar
+                                            </button>
+
+                                            <span class="flex-grow-1"></span>
+                                            <span id="conci-rep-pax-estado" class="text-muted" style="font-size:.75rem"></span>
                                         </div>
+
+                                        <div id="conci-rep-pax-error" class="alert alert-danger d-none" role="alert"></div>
+
+                                        <div id="conci-rep-pax-salida">
+                                            <div class="text-center text-muted py-5" id="conci-rep-pax-vacio">
+                                                <i class="fas fa-users mb-3" style="font-size:2rem;opacity:.35"></i>
+                                                <p class="mb-1 fw-semibold">Elige una fecha y pulsa Generar</p>
+                                                <p class="small mb-0">Los tres reportes se calculan con lo capturado en Conciliación Manifiestos.</p>
+                                            </div>
+                                        </div>
+
+                                        <p class="text-muted mt-4 mb-0 fst-italic" style="font-size:.72rem;line-height:1.5">
+                                            <strong>Nota:</strong> Los valores mostrados son el resultado de los registros de manifiestos
+                                            recibidos por parte de los prestadores de servicios. Sin embargo, estos datos pueden variar
+                                            de acuerdo al período de reporte y ajustes realizados por las aerolíneas.
+                                        </p>
                                     </div>
                                 </div>
                             </div>
@@ -38882,6 +38919,7 @@ FF
 <script src="js/conci-manifiestos-historial.js?v=20260727-insert-chips" defer></script>
 <!-- Reportes de Conciliación (Carga / Pasajeros) -->
 <script src="js/conci-reportes.js?v=20260909-v1" defer></script>
+<script src="js/conci-reportes-pasajeros.js?v=20260909-v1" defer></script>
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
 <script src="js/estadistico-informe-core.js?v=20260821-v6" defer></script>
 <script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>

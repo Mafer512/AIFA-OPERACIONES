@@ -21494,3 +21494,111 @@ body.conci-reportes-workspace .conci-reportes-tab-content {
    min-height: 0;
    overflow: auto;
 }
+
+/* ==========================================================================
+   Reportes > Pasajeros
+   Los tres reportes son documentos que se leen y se copian a un oficio, no
+   tableros: tipografia compacta, encabezados oscuros y totales marcados, como
+   en las plantillas del libro que sustituyen.
+   ========================================================================== */
+.conci-rep-pax-toolbar {
+   position: sticky;
+   top: 0;
+   z-index: 5;
+   background: var(--card-bg, #fff);
+   padding: .35rem 0;
+}
+
+.conci-rep-doc {
+   max-width: 1100px;
+}
+
+.conci-rep-titulo {
+   font-weight: 700;
+   color: #14532d;
+   letter-spacing: .01em;
+   margin-bottom: .25rem;
+}
+
+.conci-rep-sub {
+   font-size: .82rem;
+   color: #5a6a85;
+   margin-bottom: .5rem;
+}
+
+.conci-rep-tabla {
+   font-size: .8rem;
+}
+
+.conci-rep-tabla thead th {
+   background: #1b5e3f;
+   color: #fff;
+   font-weight: 600;
+   text-align: center;
+   vertical-align: middle;
+   white-space: nowrap;
+}
+
+.conci-rep-tabla tbody td,
+.conci-rep-tabla tfoot td {
+   white-space: nowrap;
+}
+
+.conci-rep-tabla tbody tr:nth-child(even) td {
+   background: #f7faf8;
+}
+
+.conci-rep-tabla tr.conci-rep-sin-datos td {
+   color: #9aa6b8;
+}
+
+.conci-rep-tabla tfoot tr.conci-rep-total td {
+   background: #d9e6df;
+   font-weight: 700;
+   border-top: 2px solid #1b5e3f;
+}
+
+.conci-rep-tabla tfoot tr.conci-rep-promedio td {
+   background: #eef4f1;
+   font-weight: 600;
+}
+
+.conci-rep-dato {
+   display: flex;
+   flex-direction: column;
+   gap: .1rem;
+   padding: .4rem .75rem;
+   border-left: 3px solid #1b5e3f;
+   background: #f2f7f4;
+   border-radius: 4px;
+}
+
+.conci-rep-dato span {
+   font-size: .7rem;
+   text-transform: uppercase;
+   letter-spacing: .04em;
+   color: #5a6a85;
+}
+
+.conci-rep-dato strong {
+   font-size: 1.05rem;
+   color: #14532d;
+}
+
+body.dark-mode .conci-rep-titulo,
+body.dark-mode .conci-rep-dato strong {
+   color: #86efac;
+}
+
+body.dark-mode .conci-rep-tabla tbody tr:nth-child(even) td {
+   background: rgba(255, 255, 255, .03);
+}
+
+body.dark-mode .conci-rep-tabla tfoot tr.conci-rep-total td {
+   background: rgba(134, 239, 172, .14);
+}
+
+body.dark-mode .conci-rep-tabla tfoot tr.conci-rep-promedio td,
+body.dark-mode .conci-rep-dato {
+   background: rgba(255, 255, 255, .05);
+}
