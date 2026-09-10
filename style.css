@@ -21310,6 +21310,18 @@ body.conci-reportes-workspace .conci-reportes-tab-content {
    border-top: 2px solid #1f3864;
 }
 
+/* Cuando el mes pedido aun no tiene cierre y se entrega el anterior. */
+.conci-rep-aviso {
+   font-size: .72rem;
+   font-weight: 600;
+   color: #7a4a00;
+   background: #fff4d6;
+   border: 1px solid #f0c36d;
+   border-radius: 4px;
+   padding: .4rem .7rem;
+   margin: 0 0 1rem;
+}
+
 .conci-rep-sub-intro {
    font-size: .76rem;
    margin: 0 0 1rem;

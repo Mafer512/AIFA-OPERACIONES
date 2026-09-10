@@ -108,55 +108,119 @@ describe('agregación', () => {
 
   test('SUBSECRETARÍA cruza llegada/salida contra nacional/internacional', () => {
     const r = agregar([
-      manifiesto({ fecha: '2026-04-30', tipo: 'LLEGADA', operacion: 'NACIONAL', pax: 100 }),
-      manifiesto({ fecha: '2026-04-30', tipo: 'LLEGADA', operacion: 'INTERNACIONAL', pax: 50 }),
-      manifiesto({ fecha: '2026-04-30', tipo: 'SALIDA', operacion: 'NACIONAL', pax: 80 })
-    ]);
-    expect(r.sub.dia.LLEGADA.NACIONAL).toEqual({ pax: 100, ops: 1 });
-    expect(r.sub.dia.LLEGADA.INTERNACIONAL).toEqual({ pax: 50, ops: 1 });
-    expect(r.sub.dia.SALIDA.NACIONAL).toEqual({ pax: 80, ops: 1 });
-    expect(r.sub.dia.SALIDA.INTERNACIONAL).toEqual({ pax: 0, ops: 0 });
+      manifiesto({ fecha: '2026-03-31', cierre: '2026-04-01', tipo: 'LLEGADA', operacion: 'NACIONAL', pax: 100 }),
+      manifiesto({ fecha: '2026-03-31', cierre: '2026-04-01', tipo: 'LLEGADA', operacion: 'INTERNACIONAL', pax: 50 }),
+      manifiesto({ fecha: '2026-03-31', cierre: '2026-04-01', tipo: 'SALIDA', operacion: 'NACIONAL', pax: 80 })
+    ], '2026-04-01');
+    const dia = r.sub.actual.dia;
+    expect(dia.LLEGADA.NACIONAL).toEqual({ pax: 100, ops: 1 });
+    expect(dia.LLEGADA.INTERNACIONAL).toEqual({ pax: 50, ops: 1 });
+    expect(dia.SALIDA.NACIONAL).toEqual({ pax: 80, ops: 1 });
+    expect(dia.SALIDA.INTERNACIONAL).toEqual({ pax: 0, ops: 0 });
   });
 
   test('SUBSECRETARÍA agrupa por CIERRE SUBSECRETARIA, no por FECHA', () => {
-    // Vuelo del 29 que se cierra el 30: cuenta en el reporte del 30.
-    const r = agregar([manifiesto({ fecha: '2026-04-29', cierre: '2026-04-30', pax: 200 })]);
-    expect(r.sub.dia.LLEGADA.NACIONAL.pax).toBe(200);
-    // Y en las plantillas, que van por FECHA, cae en el día 29.
-    expect(r.porDia[28].pax.llegada).toBe(200);
-    expect(r.porDia[29].pax.llegada).toBe(0);
+    // Vuelo del 30 de marzo que se cierra el 1 de abril: entra en el oficio de
+    // abril, pero en las plantillas —que van por FECHA— sigue siendo de marzo.
+    const r = agregar([manifiesto({ fecha: '2026-03-30', cierre: '2026-04-01', pax: 200 })], '2026-04-01');
+    expect(r.sub.actual.dia.LLEGADA.NACIONAL.pax).toBe(200);
+    expect(r.porDia.every(d => d.pax.llegada === 0)).toBe(true);
   });
 
   test('los acumulados encadenan día → mes → año → histórico', () => {
     const r = agregar([
-      manifiesto({ fecha: '2026-04-30', pax: 10 }),   // día, mes, año, histórico
-      manifiesto({ fecha: '2026-04-01', pax: 100 }),  // mes, año, histórico
-      manifiesto({ fecha: '2026-01-15', pax: 1000 }), // año, histórico
-      manifiesto({ fecha: '2025-06-10', pax: 10000 }) // solo histórico
-    ]);
-    const pax = alcance => r.sub[alcance].LLEGADA.NACIONAL.pax;
+      manifiesto({ fecha: '2026-03-31', cierre: '2026-04-01', pax: 10 }),    // día, mes, año, histórico
+      manifiesto({ fecha: '2026-01-14', cierre: '2026-01-15', pax: 1000 }),  // año, histórico
+      manifiesto({ fecha: '2025-06-09', cierre: '2025-06-10', pax: 10000 })  // solo histórico
+    ], '2026-04-01');
+    const pax = alcance => r.sub.actual[alcance].LLEGADA.NACIONAL.pax;
     expect(pax('dia')).toBe(10);
-    expect(pax('mes')).toBe(110);
-    expect(pax('anio')).toBe(1110);
-    expect(pax('historico')).toBe(11110);
+    // Pidiendo el día 1, el acumulado del mes es ese mismo día.
+    expect(pax('mes')).toBe(10);
+    expect(pax('anio')).toBe(1010);
+    expect(pax('historico')).toBe(11010);
   });
 
-  test('nada posterior a la fecha del reporte entra en el histórico', () => {
+  test('nada posterior al cierre de la columna entra en sus acumulados', () => {
     const r = agregar([
-      manifiesto({ fecha: '2026-04-30', pax: 10 }),
-      manifiesto({ fecha: '2026-05-01', pax: 999 })
-    ]);
-    expect(r.sub.historico.LLEGADA.NACIONAL.pax).toBe(10);
+      manifiesto({ fecha: '2026-03-31', cierre: '2026-04-01', pax: 10 }),
+      manifiesto({ fecha: '2026-04-01', cierre: '2026-04-02', pax: 999 })
+    ], '2026-04-01');
+    expect(r.sub.actual.historico.LLEGADA.NACIONAL.pax).toBe(10);
   });
 
   test('SUBSECRETARÍA cuenta AEROLINEA: sin aerolínea no hay operación', () => {
     const r = agregar([
-      manifiesto({ fecha: '2026-04-30', pax: 120, aerolinea: 'VOLARIS' }),
-      manifiesto({ fecha: '2026-04-30', pax: 30, aerolinea: '' })
-    ]);
+      manifiesto({ fecha: '2026-03-31', cierre: '2026-04-01', pax: 120, aerolinea: 'VOLARIS' }),
+      manifiesto({ fecha: '2026-03-31', cierre: '2026-04-01', pax: 30, aerolinea: '' })
+    ], '2026-04-01');
     // Los pasajeros del manifiesto incompleto sí suman; la operación no.
-    expect(r.sub.dia.LLEGADA.NACIONAL.pax).toBe(150);
-    expect(r.sub.dia.LLEGADA.NACIONAL.ops).toBe(1);
+    expect(r.sub.actual.dia.LLEGADA.NACIONAL.pax).toBe(150);
+    expect(r.sub.actual.dia.LLEGADA.NACIONAL.ops).toBe(1);
+  });
+
+  describe('el oficio va por mes, no por día suelto', () => {
+    const mesCompleto = [
+      manifiesto({ fecha: '2026-03-30', cierre: '2026-03-31', pax: 500 }),  // último día de marzo
+      manifiesto({ fecha: '2026-03-31', cierre: '2026-04-01', pax: 300 }),  // día 1 de abril
+      manifiesto({ fecha: '2026-04-10', cierre: '2026-04-11', pax: 999 })   // un cierre intermedio
+    ];
+
+    test('las columnas son el último día del mes anterior y el día 1 del pedido', () => {
+      const r = agregar(mesCompleto, '2026-04-01');
+      expect(r.cierres).toEqual({ anterior: '2026-03-31', actual: '2026-04-01' });
+      expect(r.sub.anterior.dia.LLEGADA.NACIONAL.pax).toBe(500);
+      expect(r.sub.actual.dia.LLEGADA.NACIONAL.pax).toBe(300);
+    });
+
+    test('el día que se pida da igual: manda el mes', () => {
+      const porElUno = agregar(mesCompleto, '2026-04-01');
+      const porElQuince = agregar(mesCompleto, '2026-04-15');
+      expect(porElQuince.cierres).toEqual(porElUno.cierres);
+      expect(porElQuince.sub.actual.dia).toEqual(porElUno.sub.actual.dia);
+    });
+
+    test('un cierre intermedio no aparece como columna, pero sí acumula', () => {
+      const r = agregar(mesCompleto, '2026-05-01');
+      // Mayo no tiene cierre del día 1, así que retrocede a abril.
+      expect(r.cierres.actual).toBe('2026-04-01');
+      // El del 11 de abril es posterior al corte: no entra en esa columna.
+      expect(r.sub.actual.historico.LLEGADA.NACIONAL.pax).toBe(800);
+    });
+
+    test('el cruce de año se resuelve bien', () => {
+      const r = agregar([manifiesto({ fecha: '2025-12-31', cierre: '2026-01-01', pax: 77 })], '2026-01-01');
+      expect(r.cierres).toEqual({ anterior: '2025-12-31', actual: '2026-01-01' });
+      expect(r.sub.actual.dia.LLEGADA.NACIONAL.pax).toBe(77);
+      // Enero de 2026: el vuelo de diciembre no entra en el acumulado del año.
+      expect(r.sub.actual.anio.LLEGADA.NACIONAL.pax).toBe(77);
+    });
+
+    test('febrero bisiesto: el último día del mes anterior es el 29', () => {
+      const r = agregar([manifiesto({ fecha: '2024-02-29', cierre: '2024-03-01', pax: 5 })], '2024-03-01');
+      expect(r.cierres.anterior).toBe('2024-02-29');
+    });
+  });
+
+  describe('cuando el día 1 aún no tiene cierre', () => {
+    const soloMarzo = [
+      manifiesto({ fecha: '2026-02-28', cierre: '2026-03-01', pax: 400 }),
+      manifiesto({ fecha: '2026-02-27', cierre: '2026-02-28', pax: 250 })
+    ];
+
+    test('retrocede un mes y lo avisa', () => {
+      const r = agregar(soloMarzo, '2026-04-01');
+      expect(r.retrocedido).toBe(true);
+      expect(r.cierres).toEqual({ anterior: '2026-02-28', actual: '2026-03-01' });
+      expect(r.sub.actual.dia.LLEGADA.NACIONAL.pax).toBe(400);
+      expect(r.sub.anterior.dia.LLEGADA.NACIONAL.pax).toBe(250);
+    });
+
+    test('si el mes pedido sí tiene cierre, no retrocede', () => {
+      const r = agregar(soloMarzo, '2026-03-01');
+      expect(r.retrocedido).toBe(false);
+      expect(r.cierres.actual).toBe('2026-03-01');
+    });
   });
 
   test('PLANTILLA 1 agrupa por aerolínea, del día y del mes', () => {
@@ -268,13 +332,13 @@ describe('agregación', () => {
     api = cargar();
     const r = api.agregar({
       filas: [
-        manifiesto({ fecha: '2026-04-30', aerolinea: 'VIVA AEROBUS', pax: 180 }),
-        manifiesto({ fecha: '2026-04-30', aerolinea: 'ESTAFETA', pax: 0 })
+        manifiesto({ fecha: '2026-04-30', cierre: '2026-05-01', aerolinea: 'VIVA AEROBUS', pax: 180 }),
+        manifiesto({ fecha: '2026-04-30', cierre: '2026-05-01', aerolinea: 'ESTAFETA', pax: 0 })
       ],
       columnas: COLUMNAS
-    }, '2026-04-30');
+    }, '2026-05-01');
     expect(r.descartadosCarga).toBe(1);
-    expect(r.sub.dia.LLEGADA.NACIONAL.ops).toBe(1);
+    expect(r.sub.actual.dia.LLEGADA.NACIONAL.ops).toBe(1);
     expect(r.porAerolinea.dia.has('ESTAFETA')).toBe(false);
     delete window._conciRowIsCargo;
   });
