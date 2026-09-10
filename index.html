@@ -22997,6 +22997,37 @@ FF
                                                         <span class="conci-count-pill" id="conci-pill-pax" role="button" tabindex="0" title="Filtrar solo vuelos de pasajeros (clic para ver llegadas/salidas)" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:999px;font-weight:600;background:#ede7f6;color:#5e35b1;border:1px solid #d1c4e9"><i class="fas fa-users"></i> Pasajeros <span class="badge" style="background:#5e35b1" id="conci-count-pax">0</span><span id="conci-count-pax-detail" class="d-none" style="display:inline-flex;align-items:center;gap:6px;margin-left:2px;padding-left:6px;border-left:1px solid #d1c4e9;font-weight:600"><span title="Llegadas de pasajeros"><i class="fas fa-plane-arrival"></i> <span id="conci-count-pax-arr">0</span></span><span title="Salidas de pasajeros"><i class="fas fa-plane-departure"></i> <span id="conci-count-pax-dep">0</span></span></span></span>
                                                         <span class="conci-count-pill" id="conci-pill-carga" role="button" tabindex="0" title="Filtrar solo vuelos de carga (clic para ver llegadas/salidas)" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:999px;font-weight:600;background:#fff3e0;color:#e65100;border:1px solid #ffe0b2"><i class="fas fa-box-open"></i> Carga <span class="badge" style="background:#e65100" id="conci-count-carga">0</span><span id="conci-count-carga-detail" class="d-none" style="display:inline-flex;align-items:center;gap:6px;margin-left:2px;padding-left:6px;border-left:1px solid #ffe0b2;font-weight:600"><span title="Llegadas de carga"><i class="fas fa-plane-arrival"></i> <span id="conci-count-carga-arr">0</span></span><span title="Salidas de carga"><i class="fas fa-plane-departure"></i> <span id="conci-count-carga-dep">0</span></span></span></span>
                                                         <span class="conci-count-pill conci-pill-sobrecupo-alert d-none" id="conci-pill-sobrecupo" role="button" tabindex="0" title="Filtrar solo vuelos con sobrecupo (pax capturados por encima de la capacidad máxima)" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:999px;font-weight:700;background:#ffebee;color:#c62828;border:1px solid #ef9a9a"><i class="fas fa-triangle-exclamation"></i> Sobrecupo <span class="badge" style="background:#c62828" id="conci-count-sobrecupo">0</span></span>
+                                                        <!-- Resumen KPI — chips compactos, misma fila que los pills de arriba (se muestran cuando hay datos cargados) -->
+                                                        <div id="manifiestos-summary-strip" class="d-none">
+                                                            <div class="ops-kpi-card ops-kpi-pax" title="Operaciones de Pasajeros">
+                                                                <div class="ops-kpi-icon"><i class="fas fa-plane-arrival"></i><i class="fas fa-plane-departure"></i></div>
+                                                                <div class="ops-kpi-content">
+                                                                    <div class="ops-kpi-value" id="mf-sum-pax-ops">—</div>
+                                                                    <div class="ops-kpi-sub">manifiestos PAX</div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="ops-kpi-card ops-kpi-pax2" title="Pasajeros Transportados">
+                                                                <div class="ops-kpi-icon"><i class="fas fa-users"></i></div>
+                                                                <div class="ops-kpi-content">
+                                                                    <div class="ops-kpi-value" id="mf-sum-total-pax">—</div>
+                                                                    <div class="ops-kpi-sub">Total PAX</div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="ops-kpi-card ops-kpi-cargo" title="Operaciones de Carga">
+                                                                <div class="ops-kpi-icon"><i class="fas fa-box-open"></i></div>
+                                                                <div class="ops-kpi-content">
+                                                                    <div class="ops-kpi-value" id="mf-sum-cargo-ops">—</div>
+                                                                    <div class="ops-kpi-sub">manifiestos carga</div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="ops-kpi-card ops-kpi-kg" title="Kilogramos de Carga">
+                                                                <div class="ops-kpi-icon"><i class="fas fa-weight-hanging"></i></div>
+                                                                <div class="ops-kpi-content">
+                                                                    <div class="ops-kpi-value" id="mf-sum-kgs-carga">—</div>
+                                                                    <div class="ops-kpi-sub">KGS capturados</div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                     <div class="d-flex gap-2 align-items-center">
                                                         <div class="btn-group btn-group-sm shadow-sm" role="group" aria-label="Filtrar manifiestos por estado de captura">
@@ -23052,51 +23083,6 @@ FF
                                                     </div>
                                                 </div>
                                                 <div class="card-body p-0 conci-manifest-data">
-                                                    <!-- Resumen KPI — se muestra cuando hay datos cargados -->
-                                                    <div id="manifiestos-summary-strip" class="d-none border-bottom bg-white">
-                                                        <div class="row g-2 px-3 py-3">
-                                                            <div class="col-6 col-xl-3">
-                                                                <div class="ops-kpi-card ops-kpi-pax">
-                                                                    <div class="ops-kpi-icon"><i class="fas fa-plane-arrival"></i><i class="fas fa-plane-departure"></i></div>
-                                                                    <div class="ops-kpi-content">
-                                                                        <div class="ops-kpi-label">Operaciones de Pasajeros</div>
-                                                                        <div class="ops-kpi-value" id="mf-sum-pax-ops">—</div>
-                                                                        <div class="ops-kpi-sub">manifiestos PAX</div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div class="col-6 col-xl-3">
-                                                                <div class="ops-kpi-card ops-kpi-pax2">
-                                                                    <div class="ops-kpi-icon"><i class="fas fa-users"></i></div>
-                                                                    <div class="ops-kpi-content">
-                                                                        <div class="ops-kpi-label">Pasajeros Transportados</div>
-                                                                        <div class="ops-kpi-value" id="mf-sum-total-pax">—</div>
-                                                                        <div class="ops-kpi-sub">Total PAX</div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div class="col-6 col-xl-3">
-                                                                <div class="ops-kpi-card ops-kpi-cargo">
-                                                                    <div class="ops-kpi-icon"><i class="fas fa-box-open"></i></div>
-                                                                    <div class="ops-kpi-content">
-                                                                        <div class="ops-kpi-label">Operaciones de Carga</div>
-                                                                        <div class="ops-kpi-value" id="mf-sum-cargo-ops">—</div>
-                                                                        <div class="ops-kpi-sub">manifiestos carga</div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div class="col-6 col-xl-3">
-                                                                <div class="ops-kpi-card ops-kpi-kg">
-                                                                    <div class="ops-kpi-icon"><i class="fas fa-weight-hanging"></i></div>
-                                                                    <div class="ops-kpi-content">
-                                                                        <div class="ops-kpi-label">Kilogramos de Carga</div>
-                                                                        <div class="ops-kpi-value" id="mf-sum-kgs-carga">—</div>
-                                                                        <div class="ops-kpi-sub">KGS capturados</div>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
                                                     <div id="conci-manifiestos-loading" class="text-center py-5 text-muted d-none">
                                                         <div class="spinner-border text-success mb-2"></div>
                                                         <p class="small mb-0">Cargando manifiestos...</p>
