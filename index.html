@@ -23722,10 +23722,56 @@ FF
                                 <!--  Reportes: Carga  -->
                                 <div class="tab-pane fade show active p-4" id="pane-conci-rep-carga" role="tabpanel" aria-labelledby="tab-conci-rep-carga">
                                     <div class="conci-reportes-lista" id="conci-reportes-lista-carga">
-                                        <div class="text-center text-muted py-5" id="conci-reportes-vacio-carga">
-                                            <i class="fas fa-box-open mb-3" style="font-size:2rem;opacity:.35"></i>
-                                            <p class="mb-1 fw-semibold">Sin reportes de Carga todavía</p>
-                                            <p class="small mb-0">Aquí se listarán los reportes de Carga conforme se definan.</p>
+
+                                        <div class="d-flex align-items-center gap-2 flex-wrap mb-3 conci-rep-pax-toolbar">
+                                            <div class="btn-group btn-group-sm shadow-sm" role="group" aria-label="Elegir reporte de Carga">
+                                                <button type="button" class="btn btn-outline-primary active" data-conci-rep-carga="subsecretaria">
+                                                    <i class="fas fa-file-signature me-1"></i>Subsecretaría
+                                                </button>
+                                                <button type="button" class="btn btn-outline-primary" data-conci-rep-carga="hoja1">
+                                                    <i class="fas fa-plane-up me-1"></i>Hoja 1 · Por aerolínea
+                                                </button>
+                                                <button type="button" class="btn btn-outline-primary" data-conci-rep-carga="hoja2">
+                                                    <i class="fas fa-table-cells me-1"></i>Hoja 2 · Tarjetas
+                                                </button>
+                                                <button type="button" class="btn btn-outline-primary" data-conci-rep-carga="reportecarga">
+                                                    <i class="fas fa-calendar-days me-1"></i>Reporte de Carga
+                                                </button>
+                                                <button type="button" class="btn btn-outline-primary" data-conci-rep-carga="presentacion">
+                                                    <i class="fas fa-display me-1"></i>Presentación
+                                                </button>
+                                            </div>
+
+                                            <span class="text-muted" style="opacity:.25">│</span>
+
+                                            <label class="text-muted fw-semibold mb-0" for="conci-rep-carga-fecha" style="font-size:.78rem">Fecha del reporte</label>
+                                            <input type="date" class="form-control form-control-sm" id="conci-rep-carga-fecha" style="width:150px">
+                                            <button class="btn btn-sm btn-primary" id="btn-conci-rep-carga-generar" type="button">
+                                                <i class="fas fa-rotate me-1"></i>Generar
+                                            </button>
+
+                                            <!-- Imprimir y descargar son solo de la presentación. -->
+                                            <button class="btn btn-sm btn-outline-secondary d-none" id="btn-conci-rep-carga-imprimir" type="button"
+                                                title="Imprimir la presentación">
+                                                <i class="fas fa-print me-1"></i>Imprimir
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-success d-none" id="btn-conci-rep-carga-descargar" type="button"
+                                                title="Descargar la presentación en PowerPoint">
+                                                <i class="fas fa-file-powerpoint me-1"></i>Descargar
+                                            </button>
+
+                                            <span class="flex-grow-1"></span>
+                                            <span id="conci-rep-carga-estado" class="text-muted" style="font-size:.75rem"></span>
+                                        </div>
+
+                                        <div id="conci-rep-carga-error" class="alert alert-danger d-none" role="alert"></div>
+
+                                        <div id="conci-rep-carga-salida">
+                                            <div class="text-center text-muted py-5" id="conci-rep-carga-vacio">
+                                                <i class="fas fa-box-open mb-3" style="font-size:2rem;opacity:.35"></i>
+                                                <p class="mb-1 fw-semibold">Elige una fecha y pulsa Generar</p>
+                                                <p class="small mb-0">Los cuatro reportes y la presentación se calculan con lo capturado en Conciliación Manifiestos.</p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -39406,6 +39452,7 @@ FF
 <!-- Reportes de Conciliación (Carga / Pasajeros) -->
 <script src="js/conci-reportes.js?v=20260909-v1" defer></script>
 <script src="js/conci-reportes-pasajeros.js?v=20260909-v1" defer></script>
+<script src="js/conci-reportes-carga.js?v=20260910-v1" defer></script>
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
 <script src="js/estadistico-informe-core.js?v=20260821-v6" defer></script>
 <script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>

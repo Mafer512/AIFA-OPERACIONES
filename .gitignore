@@ -51,3 +51,4 @@ videos/FBO AIFA - Trim.mp4
 # publico: una vez en el historial de git ya no se quitan facil. Los que si se
 # versionan viven en excel/ y no los alcanza esta regla.
 /*.xlsx
+/*.pptx
