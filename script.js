@@ -2218,6 +2218,15 @@ document.addEventListener('click', (event) => {
     handleDirectorioDocClick(trigger);
 });
 
+// Páginas que viven fuera de su módulo pero forman parte de él. Reportes se
+// abre desde Conciliación Manifiestos: quien tiene Conciliación la ve, aunque
+// no sea un módulo que el administrador asigne por separado.
+const SECCIONES_DE_MODULO = { 'conci-reportes': 'conciliacion' };
+
+function permisoDeSeccion(key) {
+    return SECCIONES_DE_MODULO[key] || key;
+}
+
 function normalizeSectionKey(key) {
     return (key || '').toString().trim();
 }
@@ -2257,7 +2266,7 @@ function hideEmptySidebarGroups() {
 function isSectionAllowed(sectionKey) {
     if (!sectionKey) return true;
     if (!Array.isArray(userSectionWhitelist) || !userSectionWhitelist.length) return true;
-    return userSectionWhitelist.includes(sectionKey);
+    return userSectionWhitelist.includes(permisoDeSeccion(sectionKey));
 }
 
 function getDefaultAllowedSection() {
@@ -2316,7 +2325,7 @@ function applySectionPermissions(userName) {
             }
         });
         document.querySelectorAll('.content-section').forEach(sectionEl => {
-            const key = (sectionEl.id || '').replace(/-section$/, '');
+            const key = permisoDeSeccion((sectionEl.id || '').replace(/-section$/, ''));
             if (key !== 'colaboradores' && !authenticatedCoreSections.includes(key)) {
                 sectionEl.classList.add('perm-hidden');
                 sectionEl.classList.remove('active');
@@ -2381,7 +2390,7 @@ function applySectionPermissions(userName) {
             }
         });
         document.querySelectorAll('.content-section').forEach((sectionEl) => {
-            const key = normalizeSectionKey((sectionEl.id || '').replace(/-section$/, ''));
+            const key = permisoDeSeccion(normalizeSectionKey((sectionEl.id || '').replace(/-section$/, '')));
             if (!userSectionWhitelist.includes(key)) {
                 sectionEl.classList.add('perm-hidden');
                 sectionEl.classList.remove('active');
@@ -2476,7 +2485,7 @@ function applySectionPermissions(userName) {
         // desajuste "contenido = Operaciones, pero la barra dice #colaboradores".
         const hashKey = (location.hash || '').replace(/^#/, '');
         const activeKey = activeSection
-            ? (activeSection.id || '').replace(/-section$/, '')
+            ? permisoDeSeccion((activeSection.id || '').replace(/-section$/, ''))
             : (getDefaultAllowedSection() || 'operaciones-totales');
         // En el lanzador no hay sección activa contra la que normalizar, y el
         // hash ya se limpió al salir del módulo (exitSectionToMenu). Escribir

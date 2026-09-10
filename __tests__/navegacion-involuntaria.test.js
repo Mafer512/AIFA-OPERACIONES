@@ -60,6 +60,10 @@ describe('el sondeo de permisos no re-navega si nada cambió', () => {
       from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: servidor.actual }) }) }) }),
     };
     ${extraer('_seccionesPermitidasCambiaron')}
+    // isSectionAllowed resuelve primero el módulo al que pertenece la sección
+    // (Reportes cuenta como Conciliación).
+    ${source.slice(source.indexOf('const SECCIONES_DE_MODULO'), source.indexOf('\n', source.indexOf('const SECCIONES_DE_MODULO')))}
+    ${extraer('permisoDeSeccion')}
     ${extraer('isSectionAllowed')}
     ${extraer('getDefaultAllowedSection')}
     ${extraer('refreshUserPermissionsFromServer')}
