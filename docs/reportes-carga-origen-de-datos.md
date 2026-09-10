@@ -199,6 +199,49 @@ La implementación vive en [`js/conci-reportes-carga.js`](../js/conci-reportes-c
 y las reglas están fijadas en
 [`__tests__/conciliacion-reportes-carga.test.js`](../__tests__/conciliacion-reportes-carga.test.js).
 
+## La presentación sobre la plantilla original
+
+La baraja tiene que salir igual que siempre y cambiar solo en los números, así
+que la descarga no la dibuja desde cero: parte de la baraja original.
+
+**La plantilla.** `plantillas/presentacion-carga.pptx` es la presentación de
+agosto sin cifras. Conserva fondos, encabezado, logotipo de Defensa,
+ilustración de portada, fuentes (Patria y Noto Sans), tablas con sus colores y
+los catálogos de las diapositivas 8 y 9. Donde había un número quedó un
+marcador `{{...}}`: 143 en total. Las tarjetas de las diapositivas 3 a 6 eran
+una imagen EMF pegada desde Excel, con las cifras de agosto dentro; esas
+imágenes se quitaron. Los metadatos traían nombres de personas (`Secretaría`,
+`ComSocial2`) y quedaron a nombre de `AIFA`.
+
+La plantilla se genera con
+`node scripts/construye-plantilla-carga.js "<baraja original>.pptx"`, y solo
+hace falta volver a correrlo si cambia el diseño.
+
+**Las tarjetas.** El generador (`js/conci-presentacion-carga.js`) las vuelve a
+dibujar con formas nativas —logotipo arriba, recuadro crema `#FFF2CC` con
+operaciones y toneladas abajo— en la misma cuadrícula que tenían: columnas,
+anchos y renglones salen de la posición de cada EMF y de sus recuadros crema.
+Quedan editables en PowerPoint.
+
+**Los logotipos.** Los 58 salieron de las propias tarjetas de la original:
+cada EMF se dibujó sobre fondo transparente, se ubicaron sus recuadros crema
+—18, 18, 17 y 5, justo los esperados— y se recortó lo que había encima de cada
+uno. Viven en `images/presentacion-carga/logos/` y los usan tanto la baraja
+como la Hoja 2. Una aerolínea que no esté en el catálogo usa el logotipo que ya
+usa el resto de la aplicación.
+
+**Qué se comprobó.** El `.pptx` generado se abrió con PowerPoint y se exportó
+diapositiva por diapositiva: abre sin reparaciones, trae las 10 diapositivas y
+el número de formas cuadra (diapositiva 3: 5 del diseño + 18 tarjetas × 3). A
+la vista, las diapositivas 3 a 7 son indistinguibles de la original salvo por
+las cifras.
+
+**Un cambio de criterio.** En el libro, el renglón `Carga <fecha>` de la
+diapositiva 2 era el incremento desde la presentación anterior: se tecleaba a
+mano el total de la vez pasada y se restaba. Aquí es la carga de los vuelos
+del día del corte, que no depende de cuándo se hizo la presentación anterior.
+`CARGA <año>` va hasta el día previo y el acumulado suma ambos una sola vez.
+
 ## Qué falta validar
 
 Las cifras se comprobaron corriendo la agregación del módulo sobre la hoja
