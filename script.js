@@ -21382,6 +21382,27 @@ function _conciClearAllTableFilters() {
     _conciApplyPillFilter();
 }
 
+// Ordena valores de un filtro por relevancia respecto al texto buscado:
+// 1) coincidencia exacta (case-insensitive) primero
+// 2) luego los que EMPIEZAN con el texto (startsWith), alfabético entre ellos
+// 3) luego el resto (coincide en cualquier posición), alfabético entre ellos
+// Con texto vacío devuelve el orden original sin reordenar.
+function sortBySearchRelevance(values, query) {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return values.slice();
+    const rank = (v) => {
+        const s = String(v).trim().toLowerCase();
+        if (s === q) return 0;
+        if (s.startsWith(q)) return 1;
+        return 2;
+    };
+    return values.slice().sort((a, b) => {
+        const diff = rank(a) - rank(b);
+        if (diff !== 0) return diff;
+        return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+    });
+}
+
 function _showConciExcelFilter(col, triggerEl) {
     document.querySelectorAll('.conci-excel-dropdown').forEach(el => el.remove());
 
@@ -21432,9 +21453,19 @@ function _showConciExcelFilter(col, triggerEl) {
     const listEl = menu.querySelector('#conci-ef-list');
 
     searchBox.addEventListener('input', () => {
-        const txt = searchBox.value.toLowerCase();
-        listEl.querySelectorAll('.conci-ef-item').forEach(item => {
+        const txt = searchBox.value.trim().toLowerCase();
+        const items = [...listEl.querySelectorAll('.conci-ef-item')];
+        items.forEach(item => {
             item.style.display = item.dataset.value.toLowerCase().includes(txt) ? '' : 'none';
+        });
+        // Reordena los elementos existentes (sin recrearlos) para que las
+        // coincidencias más relevantes queden arriba; esto preserva el estado
+        // "checked" de cada checkbox porque appendChild mueve el nodo, no lo recrea.
+        const itemByValue = new Map(items.map(item => [item.dataset.value, item]));
+        const order = txt ? sortBySearchRelevance(values, txt) : values;
+        order.forEach(v => {
+            const item = itemByValue.get(v);
+            if (item) listEl.appendChild(item);
         });
     });
 
@@ -21458,10 +21489,7 @@ function _showConciExcelFilter(col, triggerEl) {
     });
     menu.querySelector('#conci-ef-none').addEventListener('click', e => {
         e.preventDefault();
-        delete _conciExcelFilters[col];
-        menu.remove();
-        _updateConciExcelFilterIcons();
-        _conciApplyPillFilter();
+        listEl.querySelectorAll('.conci-ef-chk').forEach(c2 => { c2.checked = false; });
     });
     menu.querySelector('#conci-ef-cancel').addEventListener('click', () => menu.remove());
     menu.querySelector('#conci-ef-apply').addEventListener('click', () => {
