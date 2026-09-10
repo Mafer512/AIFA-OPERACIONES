@@ -21425,6 +21425,17 @@ function _showConciExcelFilter(col, triggerEl) {
 
     const esc2 = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
+    // La columna AEROL\u00cdNEA guarda el c\u00f3digo IATA; se le antepone el nombre
+    // comercial tomado del mismo cat\u00e1logo (tabla `airlines`) que ya usa la
+    // celda de la tabla, para que el capturista no tenga que memorizar c\u00f3digos.
+    const _isAirlineFilterCol = /aerol[i\u00ed]nea|airline/i.test(col);
+    const airlineLabelFor = (v) => {
+        const meta = _conciResolveAirlineMeta(v);
+        if (meta && meta.name) return `${esc2(v)} \u2014 ${esc2(meta.name)}`;
+        console.warn(`[Conciliaci\u00f3n] C\u00f3digo de aerol\u00ednea sin match en el cat\u00e1logo: "${v}"`);
+        return esc2(v);
+    };
+
     menu.innerHTML = `
         <input type="text" class="form-control form-control-sm mb-2" placeholder="Buscar valor..." id="conci-ef-search">
         <div class="d-flex justify-content-between mb-2 small px-1">
@@ -21434,7 +21445,7 @@ function _showConciExcelFilter(col, triggerEl) {
         <div style="max-height:200px;overflow-y:auto;border:1px solid #eee;border-radius:4px;padding:4px;margin-bottom:10px;background:#f8f9fa;" id="conci-ef-list">
             ${values.map((v, i) => {
         const checked = !activeSet || activeSet.has(v);
-        const label = v === '' ? '(Vac\u00edo)' : esc2(v);
+        const label = v === '' ? '(Vac\u00edo)' : (_isAirlineFilterCol ? airlineLabelFor(v) : esc2(v));
         const safeVal = esc2(v);
         return `<div class="conci-ef-item d-flex align-items-center gap-2" style="padding:2px 4px;cursor:pointer;" data-value="${safeVal}">
                     <input class="form-check-input conci-ef-chk" type="checkbox" id="conci-ef-${i}" value="${safeVal}" ${checked ? 'checked' : ''}>
