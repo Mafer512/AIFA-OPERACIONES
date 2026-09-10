@@ -21694,6 +21694,13 @@ const _CONCI_EXPORT_COLS_CARGA = [
     { h: 'CAPTURÓ', t: 'text', a: ['CAPTURÓ', 'CAPTURO'] },
 ];
 
+// Para la exportación "Total": encabezado (normalizado) -> definición de
+// columna, tomando Pasajeros como preferida cuando un mismo encabezado
+// existe en ambos catálogos (la grilla combinada usa esos nombres).
+const _CONCI_EXPORT_COLS_TOTAL_BY_HEADER = new Map(
+    [..._CONCI_EXPORT_COLS_CARGA, ..._CONCI_EXPORT_COLS_PAX].map(d => [d.h.trim().toUpperCase(), d])
+);
+
 // Localiza el valor de una fila probando alias exactos y luego una comparación
 // normalizada (sin acentos/espacios/signos) contra las llaves reales.
 function _conciExportGetField(row, aliases) {
@@ -21803,12 +21810,19 @@ async function _conciExportToExcel(kind) {
     const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
 
     const isCarga = kind === 'carga';
-    const defs = isCarga ? _CONCI_EXPORT_COLS_CARGA : _CONCI_EXPORT_COLS_PAX;
-    const dataRows = rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga);
+    const isTotal = kind === 'total';
+    // 'total' no separa por tipo: junta pasajeros y carga en una sola hoja con
+    // las mismas columnas que se ven en la grilla (mismo criterio que usa
+    // _conciExportPorCapturista para su tabla por capturista), reutilizando el
+    // formato de Pasajeros/Carga columna por columna cuando aplica.
+    const defs = isTotal
+        ? cols.map(c => _CONCI_EXPORT_COLS_TOTAL_BY_HEADER.get(String(c).trim().toUpperCase()) || { h: c, t: 'text', a: [c] })
+        : (isCarga ? _CONCI_EXPORT_COLS_CARGA : _CONCI_EXPORT_COLS_PAX);
+    const dataRows = isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga);
     if (!dataRows.length) {
         // Decía "en la vista actual", lo que daba a entender que respeta los
         // filtros de la tabla. No los respeta: exporta el día completo.
-        alert(`No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
+        alert(isTotal ? 'No hay datos cargados para exportar.' : `No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
         return;
     }
 
@@ -21914,8 +21928,9 @@ async function _conciExportToExcel(kind) {
         }
     };
 
+    const sheetLabel = isTotal ? 'Total' : (isCarga ? 'Carga' : 'Pasajeros');
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet(isCarga ? 'Carga' : 'Pasajeros', {
+    const ws = wb.addWorksheet(sheetLabel, {
         views: [{ state: 'frozen', ySplit: 1 }],
     });
     const headers = defs.map(d => d.h.trim());
@@ -21959,7 +21974,7 @@ async function _conciExportToExcel(kind) {
 
     const buf = await wb.xlsx.writeBuffer();
     const stamp = new Date().toISOString().slice(0, 10);
-    const fname = `Conciliacion_${isCarga ? 'Carga' : 'Pasajeros'}_${stamp}.xlsx`;
+    const fname = `Conciliacion_${sheetLabel}_${stamp}.xlsx`;
     saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fname);
 }
 window.conciExportExcel = _conciExportToExcel;
