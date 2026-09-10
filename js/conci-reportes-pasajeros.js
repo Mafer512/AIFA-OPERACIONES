@@ -12,6 +12,11 @@
                      operaciones = cuenta de AEROLINEA. Debajo, el acumulado
                      del mes, del año y desde el inicio de operaciones, que en
                      el libro son la recurrencia "acumulado previo + hoy".
+                     Va por MES: se pide con el día 1 y lleva dos columnas, el
+                     cierre del último día del mes anterior y el del día 1 del
+                     mes pedido, cada una con sus propios acumulados contados
+                     hasta su fecha de cierre. Si el día 1 aún no está
+                     capturado, se entrega el mes anterior y se avisa.
 
      PLANTILLA 1     filtra por FECHA; agrupa por AEROLINEA. Pasajeros = suma
                      de TOTAL PAX; operaciones = cuenta de TIPO DE OPERACIÓN.
@@ -112,6 +117,19 @@
 
     function diasDelMes(anio, mes) { return new Date(anio, mes, 0).getDate(); }
 
+    const dosDigitos = n => String(n).padStart(2, '0');
+
+    /** AAAA-MM-01 del mes dado. */
+    function primerDia(anio, mes) { return `${anio}-${dosDigitos(mes)}-01`; }
+
+    /** AAAA-MM-DD del último día del mes dado. */
+    function ultimoDia(anio, mes) { return `${anio}-${dosDigitos(mes)}-${dosDigitos(diasDelMes(anio, mes))}`; }
+
+    /** El mes anterior, cruzando el cambio de año. */
+    function mesAnterior(anio, mes) {
+        return mes === 1 ? { anio: anio - 1, mes: 12 } : { anio, mes: mes - 1 };
+    }
+
     /* ── columnas ───────────────────────────────────────────────────────── */
 
     /** Resuelve los nombres reales de columna, que varían entre capturas. */
@@ -186,14 +204,52 @@
         const prefijoMes = fechaIso.slice(0, 7);
         const prefijoAnio = fechaIso.slice(0, 4);
 
-        // Subsecretaría: LLEGADA/SALIDA × NACIONAL/INTERNACIONAL, por alcance.
-        const sub = {};
-        for (const alcance of ['dia', 'mes', 'anio', 'historico']) {
-            sub[alcance] = {
-                LLEGADA: { NACIONAL: cubo(), INTERNACIONAL: cubo() },
-                SALIDA: { NACIONAL: cubo(), INTERNACIONAL: cubo() }
-            };
+        // El oficio a la Subsecretaría se arma por MES, no por día suelto: se
+        // pide siempre con el día 1 del mes y lleva dos columnas, el cierre del
+        // último día del mes anterior y el del día 1 del mes pedido. Da igual
+        // qué día traiga fechaIso; de ahí solo se toma el mes.
+        const cierresPresentes = new Set();
+        if (columnas.cierre) {
+            for (const fila of filas) {
+                const c = aIso(fila[columnas.cierre]);
+                if (c) cierresPresentes.add(c);
+            }
         }
+
+        let mesSub = mes;
+        let anioSub = anio;
+        // Si el día 1 del mes pedido aún no tiene cierre capturado, se entrega
+        // el mes pasado completo en vez de un oficio en ceros.
+        let retrocedido = false;
+        if (!cierresPresentes.has(primerDia(anioSub, mesSub))) {
+            const previo = mesAnterior(anioSub, mesSub);
+            anioSub = previo.anio;
+            mesSub = previo.mes;
+            retrocedido = true;
+        }
+        const previoASub = mesAnterior(anioSub, mesSub);
+        const cierres = {
+            anterior: ultimoDia(previoASub.anio, previoASub.mes),
+            actual: primerDia(anioSub, mesSub)
+        };
+
+        // Subsecretaría: por columna, LLEGADA/SALIDA × NACIONAL/INTERNACIONAL
+        // en cada alcance.
+        const sub = {};
+        for (const clave of ['anterior', 'actual']) {
+            sub[clave] = {};
+            for (const alcance of ['dia', 'mes', 'anio', 'historico']) {
+                sub[clave][alcance] = {
+                    LLEGADA: { NACIONAL: cubo(), INTERNACIONAL: cubo() },
+                    SALIDA: { NACIONAL: cubo(), INTERNACIONAL: cubo() }
+                };
+            }
+        }
+
+        // Las plantillas llevan su propio acumulado del año, por FECHA y hasta
+        // el día pedido: el promedio anual de la Plantilla 2 no depende de los
+        // cierres de la Subsecretaría.
+        const anioPlantillas = cubo();
 
         const porAerolinea = { dia: new Map(), mes: new Map() };
 
@@ -220,25 +276,37 @@
             const salida = esSalida(tipo);
 
             // ── Subsecretaría: se agrupa por CIERRE SUBSECRETARIA ──
+            // Cada columna del oficio lleva sus propios acumulados, contados
+            // hasta su fecha de cierre, no hasta la fecha pedida.
             const cierre = aIso(columnas.cierre ? fila[columnas.cierre] : '');
-            if (cierre && cierre <= fechaIso && (llegada || salida)) {
+            if (cierre && (llegada || salida)) {
                 const carril = llegada ? 'LLEGADA' : 'SALIDA';
                 const columna = esInternacional(operacion) ? 'INTERNACIONAL' : 'NACIONAL';
-                const suma = alcance => {
-                    const c = sub[alcance][carril][columna];
-                    c.pax += pax;
-                    // El libro cuenta AEROLINEA, no filas.
-                    if (cuentaSiHay(columnas.aerolinea ? fila[columnas.aerolinea] : '')) c.ops++;
-                };
-                suma('historico');
-                if (cierre.startsWith(prefijoAnio)) suma('anio');
-                if (cierre.startsWith(prefijoMes)) suma('mes');
-                if (cierre === fechaIso) suma('dia');
+                // El libro cuenta AEROLINEA, no filas.
+                const cuentaOp = cuentaSiHay(columnas.aerolinea ? fila[columnas.aerolinea] : '');
+                for (const clave of ['anterior', 'actual']) {
+                    const corte = cierres[clave];
+                    if (cierre > corte) continue;
+                    const suma = alcance => {
+                        const c = sub[clave][alcance][carril][columna];
+                        c.pax += pax;
+                        if (cuentaOp) c.ops++;
+                    };
+                    suma('historico');
+                    if (cierre.slice(0, 4) === corte.slice(0, 4)) suma('anio');
+                    if (cierre.slice(0, 7) === corte.slice(0, 7)) suma('mes');
+                    if (cierre === corte) suma('dia');
+                }
             }
 
             // ── Plantillas 1 y 2: se agrupan por FECHA ──
             const fecha = aIso(columnas.fecha ? fila[columnas.fecha] : '');
             if (!fecha || fecha > fechaIso) continue;
+
+            if (fecha.startsWith(prefijoAnio)) {
+                anioPlantillas.pax += pax;
+                if (cuentaSiHay(tipo)) anioPlantillas.ops++;
+            }
 
             if (fecha === fechaIso || fecha.startsWith(prefijoMes)) {
                 const bruto = String(columnas.aerolinea ? fila[columnas.aerolinea] : '').trim();
@@ -273,7 +341,11 @@
             }
         }
 
-        return { sub, porAerolinea, porDia, anio, mes, fechaIso, descartadosCarga, totalFilas: filas.length };
+        return {
+            sub, cierres, retrocedido, anioSub, mesSub,
+            porAerolinea, porDia, anioPlantillas,
+            anio, mes, fechaIso, descartadosCarga, totalFilas: filas.length
+        };
     }
 
     /* ── render ─────────────────────────────────────────────────────────── */
@@ -332,12 +404,14 @@
     /* ── Reporte a la Subsecretaría ─────────────────────────────────────── */
 
     function renderSubsecretaria(datos) {
-        const { sub, fechaIso, anio, mes } = datos;
-        const dia = sub.dia;
+        const { sub, cierres, retrocedido, anioSub, mesSub } = datos;
+        const dia = sub.actual.dia;
         const totalDia = totalesSub(dia);
-        const mesCorto = MESES[mes - 1].charAt(0) + MESES[mes - 1].slice(1, 3).toLowerCase();
+        const mesCorto = MESES[mesSub - 1].charAt(0) + MESES[mesSub - 1].slice(1, 3).toLowerCase();
+        const previo = mesAnterior(anioSub, mesSub);
+        const mesCortoPrevio = MESES[previo.mes - 1].charAt(0) + MESES[previo.mes - 1].slice(1, 3).toLowerCase();
 
-        // Las dos dinámicas de la izquierda, tal como salen en la hoja.
+        // Las dos dinámicas de la izquierda reflejan el cierre del mes pedido.
         const dinamica = (titulo, campo) => `
             <table class="conci-rep-pivote">
                 <thead>
@@ -361,50 +435,70 @@
                 </tbody>
             </table>`;
 
-        const bloques = [
-            ['', totalesSub(sub.dia)],
-            [`A. Acumulado del mes ${mesCorto}. ${anio}:`, totalesSub(sub.mes)],
-            [`B. Acumulado en el año ${anio}:`, totalesSub(sub.anio)],
-            ['C. Acumulado desde el inicio de operaciones AIFA:', totalesSub(sub.historico)]
+        // Cada apartado del oficio compara las dos columnas: el cierre del
+        // último día del mes anterior y el del día 1 del mes pedido.
+        const apartados = [
+            ['', 'dia'],
+            [`A. Acumulado del mes`, 'mes'],
+            [`B. Acumulado en el año`, 'anio'],
+            ['C. Acumulado desde el inicio de operaciones AIFA:', 'historico']
         ];
 
-        const cuadro = (etiqueta, t, esDelDia) => `
+        const etiquetaApartado = (base, alcance) => {
+            if (alcance === 'mes') return `${base} ${mesCortoPrevio}. / ${mesCorto}. :`;
+            if (alcance === 'anio') return `${base} ${previo.anio === anioSub ? anioSub : `${previo.anio} / ${anioSub}`}:`;
+            return base;
+        };
+
+        const bloque = (etiqueta, alcance) => {
+            const a = totalesSub(sub.anterior[alcance]);
+            const b = totalesSub(sub.actual[alcance]);
+            const trio = (t, campo) => `
+                <td class="num">${numero(t.total[campo])}</td>
+                <td class="num">${numero(t.nacional[campo])}</td>
+                <td class="num">${numero(t.internacional[campo])}</td>`;
+            return `
             ${etiqueta ? `<p class="conci-rep-sub-apartado">${escapar(etiqueta)}</p>` : ''}
-            <table class="conci-rep-oficio${esDelDia ? ' conci-rep-oficio-hoy' : ''}">
+            <table class="conci-rep-oficio${alcance === 'dia' ? ' conci-rep-oficio-hoy' : ''}">
                 <thead>
-                    <tr><th class="conci-rep-oficio-fecha" colspan="4">${fechaLarga(fechaIso)}</th></tr>
-                    <tr><th></th><th>Dato</th><th>Nacional</th><th>Internacional</th></tr>
+                    <tr>
+                        <th></th>
+                        <th class="conci-rep-oficio-fecha" colspan="3">${fechaLarga(cierres.anterior)}</th>
+                        <th class="conci-rep-oficio-fecha" colspan="3">${fechaLarga(cierres.actual)}</th>
+                    </tr>
+                    <tr>
+                        <th></th>
+                        <th>Dato</th><th>Nacional</th><th>Internacional</th>
+                        <th>Dato</th><th>Nacional</th><th>Internacional</th>
+                    </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td class="rot">a. Pasajeros:</td>
-                        <td class="num">${numero(t.total.pax)}</td>
-                        <td class="num">${numero(t.nacional.pax)}</td>
-                        <td class="num">${numero(t.internacional.pax)}</td>
-                    </tr>
-                    <tr>
-                        <td class="rot">b. Operaciones:</td>
-                        <td class="num">${numero(t.total.ops)}</td>
-                        <td class="num">${numero(t.nacional.ops)}</td>
-                        <td class="num">${numero(t.internacional.ops)}</td>
-                    </tr>
+                    <tr><td class="rot">a. Pasajeros:</td>${trio(a, 'pax')}${trio(b, 'pax')}</tr>
+                    <tr><td class="rot">b. Operaciones:</td>${trio(a, 'ops')}${trio(b, 'ops')}</tr>
                 </tbody>
             </table>`;
+        };
+
+        const aviso = retrocedido
+            ? `<p class="conci-rep-aviso">El mes solicitado aún no tiene cierre capturado en el día 1.
+                 Se entrega el mes anterior completo: ${escapar(MESES[mesSub - 1])} ${anioSub}.</p>`
+            : '';
 
         const cuerpo = `
+            ${aviso}
             <div class="conci-rep-sub-rejilla">
                 <div class="conci-rep-sub-izq">
-                    <p class="conci-rep-filtro">CIERRE SUBSECRETARÍA <strong>${fechaLarga(fechaIso)}</strong></p>
+                    <p class="conci-rep-filtro">CIERRE SUBSECRETARÍA <strong>${fechaLarga(cierres.actual)}</strong></p>
                     ${dinamica('Suma de TOTAL PAX', 'pax')}
                     ${dinamica('Cuenta de AEROLINEA', 'ops')}
                 </div>
                 <div class="conci-rep-sub-der">
                     <p class="conci-rep-sub-intro">Se envía la información correspondiente (carga y pasajeros) al:</p>
-                    ${bloques.map(([etiqueta, t], i) => cuadro(etiqueta, t, i === 0)).join('')}
+                    ${apartados.map(([base, alcance]) => bloque(etiquetaApartado(base, alcance), alcance)).join('')}
                 </div>
             </div>`;
 
-        return hoja(`REPORTE A LA SUBSECRETARÍA ${MESES[mes - 1]} ${anio}`, '', cuerpo, true);
+        return hoja(`REPORTE A LA SUBSECRETARÍA ${MESES[mesSub - 1]} ${anioSub}`, '', cuerpo, true);
     }
 
     /* ── Plantilla 1: numeralia por aerolínea ───────────────────────────── */
@@ -461,7 +555,7 @@
     /* ── Plantilla 2: concentrado diario del mes ────────────────────────── */
 
     function renderPlantilla2(datos) {
-        const { porDia, sub, anio, mes, fechaIso } = datos;
+        const { porDia, anioPlantillas, anio, mes, fechaIso } = datos;
         const conDatos = porDia.filter(d => d.hayDatos);
 
         const suma = sel => porDia.reduce((a, d) => a + sel(d), 0);
@@ -476,7 +570,7 @@
         const inicio = new Date(anio, 0, 1);
         const corte = new Date(`${fechaIso}T12:00:00`);
         const diasTranscurridos = Math.max(1, Math.round((corte - inicio) / 86400000));
-        const anual = totalesSub(sub.anio);
+        const anual = anioPlantillas;
 
         // Las dos tablas —pasajeros y operaciones— son gemelas y van lado a lado.
         const tabla = (banda, llegada, salida, total) => `
@@ -525,8 +619,8 @@
                         <tr><td class="conci-rep-hueco"></td><td class="conci-rep-th-simple">PAX</td><td class="conci-rep-th-simple">OP</td></tr>
                         <tr>
                             <td class="conci-rep-etiqueta-vino">PROMEDIO ANUAL</td>
-                            <td class="num"><u>${decimal(anual.total.pax / diasTranscurridos)}</u></td>
-                            <td class="num"><u>${decimal(anual.total.ops / diasTranscurridos)}</u></td>
+                            <td class="num"><u>${decimal(anual.pax / diasTranscurridos)}</u></td>
+                            <td class="num"><u>${decimal(anual.ops / diasTranscurridos)}</u></td>
                         </tr>
                     </tbody>
                 </table>
@@ -663,7 +757,7 @@
     }
 
     function filasPlantilla2(datos) {
-        const { porDia, sub, anio, mes, fechaIso } = datos;
+        const { porDia, anioPlantillas, anio, mes, fechaIso } = datos;
         const conDatos = porDia.filter(d => d.hayDatos);
         const suma = sel => porDia.reduce((a, d) => a + sel(d), 0);
         const prom = sel => conDatos.length ? Math.round(suma(sel) / conDatos.length) : 0;
@@ -673,7 +767,7 @@
         const inicio = new Date(anio, 0, 1);
         const corte = new Date(`${fechaIso}T12:00:00`);
         const dias = Math.max(1, Math.round((corte - inicio) / 86400000));
-        const anual = totalesSub(sub.anio);
+        const anual = anioPlantillas;
 
         const cuerpo = porDia.map((d, i) => {
             const fecha = `${String(i + 1).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${anio}`;
@@ -696,7 +790,7 @@
             [],
             ['Máximo PAX del mes', conDatos.length ? Math.max(...conDatos.map(paxTotal)) : 0],
             ['Máximo OP del mes', conDatos.length ? Math.max(...conDatos.map(opsTotal)) : 0],
-            ['PROMEDIO ANUAL', Math.round(anual.total.pax / dias), Math.round(anual.total.ops / dias)],
+            ['PROMEDIO ANUAL', Math.round(anual.pax / dias), Math.round(anual.ops / dias)],
             [],
             [NOTA]
         ];

@@ -45,6 +45,34 @@ píldoras *Pasajeros / Carga* de la tabla de Manifiestos.
 
 ## Reporte 1 — SUBSECRETARÍA
 
+### El oficio va por mes, no por día suelto
+
+En el libro, `CIERRE SUBSECRETARIA` tiene un valor por cada día: la captura se
+cierra a diario y cada cierre abarca dos o tres días de operación. En abril 2026
+hay 32 cierres distintos, del `2026-04-01` al `2026-05-04`.
+
+Pero el **oficio que se envía** no es cualquiera de esos días: es el del cierre
+del mes. Por eso lleva dos columnas —el último día del mes anterior y el día 1
+del mes que se reporta— como se ve en la hoja de septiembre, con `31/08/2026` y
+`01/09/2026`.
+
+En el sistema el reporte se pide con el día 1 del mes correspondiente, y de la
+fecha pedida solo se toma **el mes**:
+
+```
+columna izquierda = último día del mes anterior     p. ej. 31/08/2026
+columna derecha   = día 1 del mes pedido            p. ej. 01/09/2026
+```
+
+Cada columna trae sus propios acumulados, contados **hasta su fecha de cierre**,
+no hasta la fecha que se pidió. Por eso el acumulado del mes de la columna
+izquierda es el mes anterior completo, y el de la derecha es solo ese día 1.
+
+Si el día 1 del mes pedido todavía no tiene cierre capturado, se retrocede un
+mes y se avisa en pantalla, en vez de entregar un oficio en ceros.
+
+### Las dinámicas
+
 Dos tablas dinámicas sobre el mismo filtro, `CIERRE SUBSECRETARIA = <fecha>`:
 
 | | Ejes | Valor |
@@ -157,7 +185,7 @@ total 22,383; operaciones 78 / 78 / 156. Idéntico a la hoja.
 
 | Reporte | Fecha que agrupa | Agrupación | Pasajeros | Operaciones |
 |---|---|---|---|---|
-| Subsecretaría | `CIERRE SUBSECRETARIA` | `TIPO DE MANIFIESTO` × `TIPO DE OPERACIÓN` | `SUM(TOTAL PAX)` | `COUNT(AEROLINEA)` |
+| Subsecretaría | `CIERRE SUBSECRETARIA`, por mes: último día del anterior + día 1 del pedido | `TIPO DE MANIFIESTO` × `TIPO DE OPERACIÓN` | `SUM(TOTAL PAX)` | `COUNT(AEROLINEA)` |
 | Plantilla 1 | `FECHA` | `AEROLINEA` | `SUM(TOTAL PAX)` | `COUNT(TIPO DE OPERACIÓN)` |
 | Plantilla 2 | `FECHA` | día del mes × `TIPO DE MANIFIESTO` | `SUM(TOTAL PAX)` | `COUNT(TIPO DE MANIFIESTO)` |
 
