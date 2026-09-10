@@ -17591,6 +17591,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnConciSaveAll = document.getElementById('btn-conci-save-all');
     const btnConciRewriteAll = document.getElementById('btn-conci-rewrite-all');
     const btnConciClearFilters = document.getElementById('btn-conci-clear-filters');
+    const btnConciPendientesAerolinea = document.getElementById('btn-conci-pendientes-aerolinea');
     if (btnConciRefresh) btnConciRefresh.addEventListener('click', () => loadConciliacionManifiestos({ forceRefresh: true }));
     if (btnConciAdd) btnConciAdd.addEventListener('click', _conciAddBlankRow);
     // El autoguardado por celda dispara un insert/update a Supabase sin esperar
@@ -17643,6 +17644,10 @@ document.addEventListener('DOMContentLoaded', () => {
         _conciReescribirTodasLasFilas();
     });
     if (btnConciClearFilters) btnConciClearFilters.addEventListener('click', _conciClearAllTableFilters);
+    if (btnConciPendientesAerolinea) btnConciPendientesAerolinea.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        _conciShowPendientesPorAerolinea(btnConciPendientesAerolinea);
+    });
     // Formato dd/mm/aaaa fijo en los filtros de fecha, tanto de Manifiestos
     // como de Itinerario de Vuelos, sin depender del idioma del navegador.
     _conciInitCamposFecha(document);
@@ -20555,6 +20560,11 @@ async function loadConciliacionManifiestos(options = {}) {
         _conciPendingRemoteRefresh = true;
         return;
     }
+    // El panel "Manifiestos por capturar" muestra una foto del día cargado;
+    // si el usuario cambia de fecha mientras está abierto, se cierra para no
+    // dejar en pantalla un desglose de un día que ya no es el seleccionado.
+    document.querySelectorAll('.conci-pendientes-dropdown').forEach(el => el.remove());
+
     const requestSeq = ++_conciLoadRequestSeq;
 
     let year, month, day, dayEnd = null;
@@ -20933,6 +20943,107 @@ function _conciUpdateResumen(data, columns) {
     }
     _conciCountBreakdown = { paxArr, paxDep, cargaArr, cargaDep };
 }
+
+// ── Panel "Manifiestos por capturar" agrupado por aerolínea ──────────────────
+// Mismo criterio de "sin capturar" que ya usa el badge de la barra superior
+// (ver _conciUpdateResumen): HR. DE RECEPCIÓN vacía. Al agrupar por el valor
+// crudo de AEROLÍNEA (incluida la cadena vacía cuando falta) cada fila sin
+// capturar cae en un único grupo, así que la suma de todos los grupos siempre
+// coincide con el badge "Sin capturar", sin excepciones.
+function _conciComputeSinCapturarPorAerolinea() {
+    const cols = (Array.isArray(_conciManifestosSummaryColumns) && _conciManifestosSummaryColumns.length)
+        ? _conciManifestosSummaryColumns
+        : Object.keys((_conciManifestosAllData && _conciManifestosAllData[0]) || {});
+    const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
+    const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
+
+    const counts = new Map();
+    (_conciManifestosAllData || []).forEach(r => {
+        if (recepcionCol && String(r?.[recepcionCol] ?? '').trim()) return; // ya capturado
+        const code = airlineCol ? String(r[airlineCol] ?? '').trim() : '';
+        counts.set(code, (counts.get(code) || 0) + 1);
+    });
+
+    const entries = [...counts.entries()]
+        .map(([code, count]) => ({ code, count }))
+        .sort((a, b) => b.count - a.count);
+    return { airlineCol, entries };
+}
+
+function _conciShowPendientesPorAerolinea(triggerEl) {
+    document.querySelectorAll('.conci-pendientes-dropdown').forEach(el => el.remove());
+
+    const { airlineCol, entries } = _conciComputeSinCapturarPorAerolinea();
+    const total = entries.reduce((sum, e) => sum + e.count, 0);
+
+    const rect = triggerEl.getBoundingClientRect();
+    const menu = document.createElement('div');
+    menu.className = 'conci-pendientes-dropdown';
+    document.body.appendChild(menu);
+
+    // Mismo look que los popovers de filtro por columna (_showConciExcelFilter),
+    // para que se sienta parte del mismo sistema.
+    let left = rect.left;
+    if (left + 300 > window.innerWidth) left = window.innerWidth - 310;
+    menu.style.cssText = `position:fixed;top:${rect.bottom + 4}px;left:${Math.max(4, left)}px;z-index:99999;` +
+        `background:#fff;border:1px solid #ddd;box-shadow:0 4px 14px rgba(0,0,0,.18);` +
+        `width:300px;border-radius:6px;padding:10px;font-size:.84rem;`;
+
+    const esc2 = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+    const rowsHtml = entries.map(({ code, count }) => {
+        let label;
+        if (code) {
+            const meta = _conciResolveAirlineMeta(code);
+            label = meta && meta.name ? `${esc2(code)} — ${esc2(meta.name)}` : esc2(code);
+        } else {
+            label = '(Sin aerolínea)';
+        }
+        return `<button type="button" class="conci-pendientes-item" data-code="${esc2(code)}"
+                    style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;border:0;background:none;padding:6px 8px;border-radius:4px;text-align:left;cursor:pointer;font-size:.84rem;">
+                    <span>${label}</span>
+                    <span class="badge bg-danger">${count}</span>
+                </button>`;
+    }).join('');
+
+    menu.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+            <strong style="font-size:.82rem;">Sin capturar por aerolínea</strong>
+            <button type="button" class="btn-close" id="conci-pend-close" aria-label="Cerrar" style="font-size:.65rem;"></button>
+        </div>
+        <div style="max-height:280px;overflow-y:auto;border:1px solid #eee;border-radius:4px;padding:4px;margin-bottom:8px;background:#f8f9fa;">
+            ${entries.length ? rowsHtml : '<div class="text-muted text-center py-3" style="font-size:.8rem;">No hay manifiestos pendientes de capturar.</div>'}
+        </div>
+        <div class="text-muted px-1" style="font-size:.72rem;">Total: ${total} sin capturar${airlineCol ? '' : ' — no se detectó la columna AEROLÍNEA'}</div>
+    `;
+
+    menu.addEventListener('click', e => e.stopPropagation());
+    menu.querySelector('#conci-pend-close').addEventListener('click', () => menu.remove());
+
+    menu.querySelectorAll('.conci-pendientes-item').forEach(btn => {
+        btn.addEventListener('mouseenter', () => { btn.style.background = '#f1f3f5'; });
+        btn.addEventListener('mouseleave', () => { btn.style.background = 'none'; });
+        btn.addEventListener('click', () => {
+            const code = btn.dataset.code;
+            // Mismo mecanismo que ya usa el filtro desplegable de columna
+            // ("solo este valor") combinado con el pill "Sin capturar" — no
+            // se duplica lógica de filtrado, solo se fija el mismo estado que
+            // esos controles ya leen.
+            if (airlineCol) _conciExcelFilters[airlineCol] = new Set([code]);
+            _conciCaptureFilter = 'sin-capturar';
+            menu.remove();
+            _updateConciExcelFilterIcons();
+            _conciApplyPillFilter();
+        });
+    });
+
+    setTimeout(() => {
+        document.addEventListener('click', function closeFn(e) {
+            if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', closeFn); }
+        });
+    }, 0);
+}
+window.conciShowPendientesPorAerolinea = _conciShowPendientesPorAerolinea;
 
 // Muestra una alerta emergente (toast) cuando una carga fresca de datos detecta
 // vuelos con más pasajeros capturados que la capacidad máxima de la aeronave.
