@@ -55,58 +55,11 @@
     const MES_CORTO = ['Ene.', 'Feb.', 'Mar.', 'Abr.', 'May.', 'Jun.',
         'Jul.', 'Ago.', 'Sep.', 'Oct.', 'Nov.', 'Dic.'];
 
-    /* Colores institucionales de la baraja original (ppt/theme + diapositiva 2). */
-    const VINO = '#691B32';
-    const DORADO = '#BC945A';
-
-    /**
-     * Catálogo de aerolíneas de carga tal como aparece en las diapositivas 8 y
-     * 9. No sale de los manifiestos: es la situación contractual de cada una,
-     * y de aquí salen los conteos de "OPERANDO ACTUALMENTE".
-     */
-    const CATALOGO = {
-        regular: [
-            'Cathay Pacific Airways Limited', 'Turk Hava YOralli., A.O. (Turkish)',
-            'DHL Guatemala, S.A.', 'Estafeta Carga Aérea, S.A. de C.V.',
-            'Societe Air France', 'Cargolux Airlines International, S.A.',
-            'DHL Express México, S.A. de C.V. (Cargojet)', 'Emirates',
-            'Aerotransportes Mas de Carga S.A. de C.V. (Mas Air)',
-            'Lufthansa Cargo Aktiengesellschaft',
-            'Aero Transportes de Carga Unión, S.A. de C.V.',
-            'Amerijet International Inc.', 'Qatar Airways Company Q.C.S.C.',
-            'United Parcel Service CO.', 'TM Aerolíneas, S.A. de C.V. (Awesome Cargo)',
-            'Air Canadá', 'Aeronaves T S M, S.A. de C.V.',
-            'La Nueva Aerolínea, S.A. (Copa Cargo)'
-        ],
-        fletamento: [
-            'Absa Aerolinhas Brasileiras', 'ABX Air', 'Air China', 'Atlas Air Inc',
-            'Berry Aviation', 'China Southern Airlines', 'Kalitta Air',
-            'Ethiopian Cargo', 'Federal Express Corporation', 'Galistair Trading Limited',
-            'National Air Cargo', 'Silway West Airlines', 'Sky Lease Cargo',
-            'Ukraine Air Alliance', 'Western Global Airlines', 'Lan Cargo',
-            'Mcnelly Charter', 'Usa Jet', 'Lynden Air Cargo', 'Air Express',
-            'Everts Air Cargo', 'Kalitta Charters', 'Aero Sucre, S.A.',
-            'Uniworld Air Cargo', 'Latam Cargo', 'Aerolíneas Argentinas Cargo',
-            'Global Crossing Airlines', 'Saudía Cargo', 'IFL Group',
-            'Suparna Airlines', 'Legends Airways', 'Cavok Air',
-            'China Cargo Airlines', 'Air Atlanta Europe', 'Ameristar Air Cargo'
-        ],
-        mixtas: ['Aeroméxico', 'Conviasa', 'Mexicana', 'Viva Aerobus', 'Volaris']
-    };
-
-    /** Arrendamiento húmedo (wet lease), diapositiva 2. */
-    const WET_LEASE = [['AEROUNION', 'AVIANCA CARGO'], ['MAS AIR', 'GALISTAIR']];
-
-    /**
-     * Años cerrados antes de que la operación viviera en este sistema. La
-     * presentación los muestra como línea base y los suma al acumulado; no hay
-     * manifiestos capturados de esos años con los que calcularlos.
-     */
-    const BASE_HISTORICA = [
-        { anio: 2023, ops: 6661, ton: 186634.24 },
-        { anio: 2024, ops: 15719, ton: 447455.68 },
-        { anio: 2025, ops: 14830, ton: 406192.76 }
-    ];
+    /* El catálogo de aerolíneas de la presentación —su orden, modalidad y
+       logotipo—, el arrendamiento húmedo y la línea base histórica viven en
+       js/conci-carga-catalogo.js; el armado del .pptx, en
+       js/conci-presentacion-carga.js. */
+    const CAT = () => window.ConciCargaCatalogo;
 
     let cache = null;
     let reporteActivo = 'subsecretaria';
@@ -173,6 +126,15 @@
             if (meta && meta.name) return String(meta.name).toUpperCase();
         } catch (_) { /* sin catálogo se queda lo capturado */ }
         return bruto.toUpperCase();
+    }
+
+    /** Código IATA que el catálogo de la tabla le conoce a lo capturado. */
+    function iataDe(valor) {
+        try {
+            const meta = typeof window._conciResolveAirlineMeta === 'function'
+                ? window._conciResolveAirlineMeta(String(valor ?? '').trim()) : null;
+            return meta && meta.iata ? String(meta.iata).toUpperCase() : '';
+        } catch (_) { return ''; }
     }
 
     /**
@@ -359,7 +321,7 @@
             if (fecha.startsWith(prefijoAnio)) {
                 const aerolinea = nombreAerolinea(bruto);
                 if (aerolinea) {
-                    const acc = porAerolinea.get(aerolinea) || { kg: 0, ops: 0 };
+                    const acc = porAerolinea.get(aerolinea) || { kg: 0, ops: 0, iata: iataDe(bruto) };
                     acc.kg += kg;
                     if (cuentaOp) acc.ops++;
                     porAerolinea.set(aerolinea, acc);
@@ -610,25 +572,58 @@
         );
     }
 
-    /* ── Reporte 3: Hoja 2 — tarjetas ───────────────────────────────────── */
+    /* ── Reporte 3: Hoja 2 — tarjetas con logotipo ─────────────────────── */
 
-    function tarjetas(filas) {
-        if (!filas.length) return '<p class="conci-rep-vacia">Sin manifiestos de carga en el periodo.</p>';
-        return `<div class="conci-carga-tarjetas">${filas.map(f => `
-            <div class="conci-carga-tarjeta">
-                <p class="conci-carga-tarjeta-nombre">${escapar(f.aerolinea)}</p>
-                <dl>
-                    <dt>No. de operaciones</dt><dd>${entero(f.ops)}</dd>
-                    <dt>Total de carga en Tn.</dt><dd>${dosDec(f.ton)}</dd>
-                </dl>
-            </div>`).join('')}</div>`;
+    /** Logotipo de una aerolínea fuera del catálogo: el mismo que usa el resto de la app. */
+    function logosDeLaApp(nombre) {
+        try {
+            return typeof window.getAirlineLogoCandidates === 'function'
+                ? (window.getAirlineLogoCandidates(nombre) || []) : [];
+        } catch (_) { return []; }
     }
 
+    function tarjetaHtml({ nombre, logos, ops, ton }) {
+        const [primero, ...resto] = logos || [];
+        const logo = primero
+            ? `<img src="${escapar(primero)}" alt="${escapar(nombre)}" loading="lazy"${resto.length
+                ? ` data-cands="${escapar(logos.join('|'))}" data-cand-idx="0" onerror="window.handleLogoError && window.handleLogoError(this)"`
+                : ''}>`
+            : `<span>${escapar(nombre)}</span>`;
+        return `<div class="cc-tarjeta" title="${escapar(nombre)}">
+                <div class="cc-logo">${logo}</div>
+                <dl class="cc-cifras">
+                    <dt>No. de operaciones</dt><dd>${escapar(ops)}</dd>
+                    <dt>Total de carga en Tn.</dt><dd>${escapar(ton)}</dd>
+                </dl>
+            </div>`;
+    }
+
+    /**
+     * La Hoja 2 del libro es la maqueta de las diapositivas 3 a 6: las mismas
+     * tarjetas, en los mismos grupos y con el mismo logotipo. Una aerolínea sin
+     * operaciones en el periodo lleva la tarjeta en blanco, como en la original.
+     */
     function renderHoja2(datos) {
+        const modelo = modeloPresentacion(datos);
+        const grupos = [3, 4, 5, 6].map(n => `
+            <section class="cc-grupo">
+                <h2 class="cc-grupo-titulo">${escapar(CAT().TARJETAS[n].titulo)}</h2>
+                <div class="cc-tarjetas">${modelo.tarjetas[n].map(t => tarjetaHtml({ ...t, logos: [t.logo] })).join('')}</div>
+            </section>`).join('');
+        const otras = modelo.sinCatalogo.length ? `
+            <section class="cc-grupo">
+                <h2 class="cc-grupo-titulo">Otras aerolíneas con manifiestos de carga</h2>
+                <p class="conci-rep-aviso">No están en el catálogo de la presentación, así que sus cifras no salen
+                    en ninguna tarjeta de la baraja; sí cuentan en los totales.</p>
+                <div class="cc-tarjetas">${modelo.sinCatalogo.map(s => tarjetaHtml({
+                    nombre: s.nombre, logos: logosDeLaApp(s.nombre),
+                    ops: entero(s.ops), ton: dosDec(CAT().trunc2(s.kg))
+                })).join('')}</div>
+            </section>` : '';
         return hoja(
             `TARJETAS POR AEROLÍNEA ${datos.anio}`,
             `Fecha de actualización: <strong><u>${fechaLarga(datos.fechaIso)}</u></strong>`,
-            tarjetas(filasHoja1(datos)),
+            grupos + otras,
             true
         );
     }
@@ -686,130 +681,200 @@
 
     /* ── Reporte 5: la presentación ─────────────────────────────────────── */
 
-    /** Las cifras de la diapositiva del resumen. */
-    function resumenPresentacion(datos) {
-        const anios = BASE_HISTORICA.map(b => ({ etiqueta: `CARGA ${b.anio}`, ops: b.ops, ton: b.ton }));
-        anios.push({ etiqueta: `CARGA ${datos.anio}`, ops: datos.anioActual.ops, ton: datos.anioActual.kg / 1000 });
-        const delDia = { etiqueta: `Carga ${fechaLarga(datos.fechaIso)}`, ops: datos.delDia.ops, ton: datos.delDia.kg / 1000 };
-        const acumulado = {
-            etiqueta: 'ACUMULADO',
-            ops: anios.reduce((a, x) => a + x.ops, 0) + delDia.ops,
-            ton: anios.reduce((a, x) => a + x.ton, 0) + delDia.ton
+    const capital = s => s.charAt(0) + s.slice(1).toLowerCase();
+
+    /**
+     * Todo lo que lleva la baraja, ya con formato. La misma pieza alimenta la
+     * vista en pantalla, la Hoja 2 y el .pptx, así que los tres dicen lo mismo.
+     *
+     * CARGA <año> va hasta el día anterior al corte y el renglón "Carga <fecha>"
+     * es ese día: así los suma el libro (10,471 + 51 = 10,522). Las toneladas
+     * por aerolínea se truncan a dos decimales y el total es la suma de las
+     * truncadas, como la columna O de la Hoja 1.
+     */
+    function modeloPresentacion(datos) {
+        const C = CAT();
+        const { anio, mes, fechaIso, anioActual, delDia } = datos;
+        const { catalogo, sinCatalogo } = C.cifras(datos.porAerolinea);
+        const ton = kg => C.trunc2(kg);
+        const total = {
+            ops: anioActual.ops,
+            ton: [...catalogo.values()].reduce((a, v) => a + ton(v.kg), 0) + sinCatalogo.reduce((a, v) => a + ton(v.kg), 0)
         };
-        return { anios, delDia, acumulado };
+        const dia = { ops: delDia.ops, ton: Math.round(delDia.kg / 10) / 100 };
+
+        const anios = C.BASE_HISTORICA.filter(b => b.anio < anio)
+            .map(b => ({ etiqueta: `CARGA ${b.anio}`, ops: b.ops, ton: b.ton }));
+        anios.push({ etiqueta: `CARGA ${anio}`, ops: total.ops - dia.ops, ton: total.ton - dia.ton });
+        const acumulado = {
+            ops: anios.reduce((a, x) => a + x.ops, 0) + dia.ops,
+            ton: anios.reduce((a, x) => a + x.ton, 0) + dia.ton
+        };
+
+        const conteos = C.conteos();
+        const texto = {
+            MES_ANIO: `${capital(MESES[mes - 1])} ${anio}`,
+            DIA: fechaIso.slice(8, 10),
+            MES_CORTO_ANIO: `${MES_CORTO[mes - 1]} ${anio}`,
+            N_REGULAR: String(conteos.regular),
+            N_FLETAMENTO: String(conteos.fletamento),
+            N_MIXTA: String(conteos.mixta),
+            DIA_FECHA: fechaLarga(fechaIso), DIA_OPS: entero(dia.ops), DIA_TON: dosDec(dia.ton),
+            ACUM_OPS: entero(acumulado.ops), ACUM_TON: dosDec(acumulado.ton),
+            H1_OPS_TOTAL: entero(total.ops), H1_TON_TOTAL: dosDec(total.ton)
+        };
+        anios.forEach((x, i) => {
+            texto[`ANIO_${i + 1}_ETQ`] = x.etiqueta;
+            texto[`ANIO_${i + 1}_OPS`] = entero(x.ops);
+            texto[`ANIO_${i + 1}_TON`] = dosDec(x.ton);
+        });
+        const cifrasDe = nombre => {
+            const v = catalogo.get(nombre);
+            return v && v.hay ? { ops: entero(v.ops), ton: dosDec(ton(v.kg)) } : { ops: '', ton: '' };
+        };
+        const filas = C.AEROLINEAS.map((a, i) => {
+            const c = cifrasDe(a.nombre);
+            texto[`H1_OPS_${i + 1}`] = c.ops;
+            texto[`H1_TON_${i + 1}`] = c.ton;
+            return { nombre: a.nombre, grupo: a.grupo, ...c };
+        });
+        const tarjetas = {};
+        for (const n of [3, 4, 5, 6]) {
+            tarjetas[n] = C.TARJETAS[n].nombres.map(nombre => ({ nombre, logo: C.logoDe(nombre), ...cifrasDe(nombre) }));
+        }
+        return { texto, anios: anios.length, filas, tarjetas, sinCatalogo, resumen: { anios, dia, acumulado, total } };
     }
 
-    function diapositiva(clase, contenido) {
-        return `<section class="conci-ppt-slide ${clase}">${contenido}</section>`;
-    }
+    /* Vista en pantalla: cada diapositiva es un lienzo de 10 × 7.5 pulgadas y
+       cada pieza se coloca con las coordenadas que tiene en la baraja. Los
+       tamaños de letra van en cqw para que escalen con el ancho del lienzo. */
+    const RECURSOS = 'images/presentacion-carga/';
+    const caja = (x, y, w, h) => `left:${(x * 10).toFixed(3)}%;top:${(y / 7.5 * 100).toFixed(3)}%;`
+        + `width:${(w * 10).toFixed(3)}%;height:${(h / 7.5 * 100).toFixed(3)}%`;
+    const pt = n => `font-size:${(n * 100 / 720).toFixed(3)}cqw`;
+    const img = (src, x, y, w, h) => `<img class="cp-img" src="${RECURSOS}${src}" alt="" style="${caja(x, y, w, h)}">`;
+    // Un solo hijo: si el texto, sus <b> y sus <br> quedaran sueltos, cada uno
+    // sería un renglón del contenedor flexible y los <br> abrirían líneas en blanco.
+    const txt = (x, y, w, h, html, estilo = '') => `<div class="cp-txt" style="${caja(x, y, w, h)};${estilo}">`
+        + `<div class="cp-txt-in">${html}</div></div>`;
+    const lamina = (n, html) => `<section class="cp-slide" aria-label="Diapositiva ${n}">${html}</section>`;
+    const COLOR_ANIO = ['#BC945A', '#691B32', '#245C4F'];
+    const COLOR_GRUPO = { regular: '#B4C6E7', mixta: '#C6E0B4', fletamento: '#FFE699' };
 
     function renderPresentacion(datos) {
-        const { anio, mes, fechaIso } = datos;
-        const r = resumenPresentacion(datos);
-        const filas = filasHoja1(datos);
-        const porNombre = new Map(filas.map(f => [normaliza(f.aerolinea), f]));
+        const m = modeloPresentacion(datos);
+        const t = m.texto;
+        const C = CAT();
+        const P = window.ConciPresentacionCarga;
 
-        /** Busca las cifras de una aerolínea del catálogo entre lo capturado. */
-        const cifras = nombre => {
-            const clave = normaliza(nombreAerolinea(nombre));
-            if (porNombre.has(clave)) return porNombre.get(clave);
-            // El catálogo trae razones sociales; se intenta por la primera palabra.
-            const corto = clave.split(/[ ,.(]/)[0];
-            for (const [k, v] of porNombre) if (k.startsWith(corto) && corto.length > 3) return v;
-            return { ops: 0, ton: 0 };
+        const cabecera = `${img('fondo.svg', 0, 0, 10.04, 7.5)}${img('encabezado.svg', -0.02, 0, 10.04, 1.76)}`
+            + `${img('avion.jpg', 4.90, 0.92, 5.10, 1.34)}${img('logo-defensa.svg', 7.18, 0.33, 2.29, 0.57)}`;
+
+        const tarjetas = n => {
+            const cuad = P.CUADRICULAS[n];
+            return m.tarjetas[n].map((c, i) => {
+                const { renglon, columna } = P.posicion(cuad, i);
+                const x = cuad.columnas[columna];
+                const y = cuad.tops[renglon];
+                return `<div class="cp-logo" style="${caja(x, y - cuad.logoAlto - 0.02, cuad.ancho, cuad.logoAlto)}">`
+                    + `<img src="${escapar(c.logo)}" alt="${escapar(c.nombre)}" loading="lazy"></div>`
+                    + `<div class="cp-card" style="${caja(x, y, cuad.ancho, cuad.alto)};${pt(cuad.puntos)}">`
+                    + `<span>No. de operaciones</span><b>${escapar(c.ops)}</b>`
+                    + `<span>Total de carga en Tn.</span><b>${escapar(c.ton)}</b></div>`;
+            }).join('');
         };
+        const laminaTarjetas = n => lamina(n, cabecera
+            + txt(0.30, 0.30, 6.10, 0.95, `<b>${escapar(C.TARJETAS[n].titulo)}</b>`, `${pt(24)};text-align:center`)
+            + tarjetas(n));
 
-        const tarjetasCatalogo = lista => `<div class="conci-carga-tarjetas conci-carga-tarjetas-ppt">${lista.map(nombre => {
-            const c = cifras(nombre);
-            return `<div class="conci-carga-tarjeta">
-                <p class="conci-carga-tarjeta-nombre">${escapar(nombre)}</p>
-                <dl>
-                    <dt>No. de operaciones</dt><dd>${entero(c.ops)}</dd>
-                    <dt>Total de carga en Tn.</dt><dd>${dosDec(c.ton)}</dd>
-                </dl>
-            </div>`;
-        }).join('')}</div>`;
-
-        const tablaCatalogo = (lista, tipo) => `
-            <table class="conci-ppt-catalogo">
+        const tablaCatalogo = (lista, tipo, puntos) => `
+            <table class="cp-tabla cp-catalogo" style="${pt(puntos)}"><colgroup><col style="width:5%"><col style="width:44%"><col style="width:25.5%"><col style="width:25.5%"></colgroup>
                 <thead><tr><th>No.</th><th>Aerolínea</th><th>Tipo de operación</th><th>Situación actual</th></tr></thead>
-                <tbody>${lista.map((n, i) => `
-                    <tr>
-                        <td class="num">${i + 1}</td>
-                        <td>${escapar(n)}</td>
-                        ${i === 0 ? `<td rowspan="${lista.length}">${escapar(tipo)}</td><td rowspan="${lista.length}">Operando</td>` : ''}
-                    </tr>`).join('')}
+                <tbody>${lista.map((n, i) => `<tr><td>${i + 1}</td><td>${escapar(n)}</td>${i === 0
+                    ? `<td rowspan="${lista.length}">${tipo}</td><td rowspan="${lista.length}">Operando</td>` : ''}</tr>`).join('')}
                 </tbody>
             </table>`;
 
         const slides = [
-            diapositiva('conci-ppt-portada', `
-                <img class="conci-ppt-logo" src="images/aifa-logo.png" alt="AIFA">
-                <h2>Aeropuerto Internacional<br>“Felipe Ángeles”</h2>
-                <p class="conci-ppt-fecha">${MESES[mes - 1].charAt(0)}${MESES[mes - 1].slice(1).toLowerCase()} ${anio}</p>`),
+            lamina(1, img('fondo-portada.svg', -0.02, -1.27, 10.02, 10.02)
+                + img('franja-vino.svg', -0.02, 7.35, 10.04, 0.15)
+                + img('ilustracion.png', 0, 1.33, 5.00, 6.05)
+                + img('alas-aifa.png', 6.70, 1.33, 2.06, 1.26)
+                + txt(5.73, 2.47, 4.05, 0.91, 'Aeropuerto Internacional<br><b>“Felipe Ángeles”</b>', `${pt(24)};text-align:center`)
+                + img('linea-dorada.png', 5.50, 3.74, 4.52, 0.05)
+                + img('logo-defensa.svg', 6.18, 4.67, 3.10, 0.77)
+                + img('recuadro-fecha.svg', 6.14, 6.30, 3.87, 0.68)
+                + txt(7.08, 6.42, 2.63, 0.44, escapar(t.MES_ANIO), `${pt(20)};text-align:right`)),
 
-            diapositiva('conci-ppt-resumen', `
-                <h3>Operaciones en la Terminal de Carga</h3>
-                <p class="conci-ppt-periodo">01 Ene. al ${fechaLarga(fechaIso).slice(0, 2)} ${MES_CORTO[mes - 1]} ${anio}</p>
-                <div class="conci-ppt-resumen-rejilla">
-                    <div>
-                        <p class="conci-ppt-etiqueta">OPERANDO ACTUALMENTE</p>
-                        <table class="conci-ppt-mini">
-                            <tbody>
-                                <tr><td class="num">${CATALOGO.regular.length}</td><td>CARGA REGULAR</td></tr>
-                                <tr><td class="num">${CATALOGO.fletamento.length}</td><td>FLETAMENTO</td></tr>
-                                <tr><td class="num">${CATALOGO.mixtas.length}</td><td>CARGA MIXTA</td></tr>
-                            </tbody>
-                        </table>
-                        <p class="conci-ppt-etiqueta">AEROLÍNEAS QUE OPERAN AERONAVES BAJO LA FIGURA DE ARRENDAMIENTO HÚMEDO (WET LEASE)</p>
-                        <table class="conci-ppt-mini">
-                            <thead><tr><th>AEROLÍNEA</th><th>ARRENDADOR</th></tr></thead>
-                            <tbody>${WET_LEASE.map(([a, b]) => `<tr><td>${escapar(a)}</td><td>${escapar(b)}</td></tr>`).join('')}</tbody>
-                        </table>
-                    </div>
-                    <div>
-                        <table class="conci-ppt-cifras">
-                            <thead><tr><th></th><th>OPERACIONES</th><th>TONELADAS</th></tr></thead>
-                            <tbody>
-                                ${r.anios.map(x => `<tr><td>${escapar(x.etiqueta)}</td><td class="num">${entero(x.ops)}</td><td class="num">${dosDec(x.ton)}</td></tr>`).join('')}
-                                <tr class="conci-ppt-dia"><td>${escapar(r.delDia.etiqueta)}</td><td class="num">${entero(r.delDia.ops)}</td><td class="num">${dosDec(r.delDia.ton)}</td></tr>
-                                <tr class="conci-ppt-acumulado"><td>${escapar(r.acumulado.etiqueta)}</td><td class="num">${entero(r.acumulado.ops)}</td><td class="num">${dosDec(r.acumulado.ton)}</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>`),
+            lamina(2, img('fondo.svg', 0, 0.02, 10, 7.5)
+                + txt(0.28, 0.17, 4.50, 0.67, `<b>Operaciones en la Terminal de Carga</b><br>01 Ene. al ${escapar(t.DIA)} ${escapar(t.MES_CORTO_ANIO)}`,
+                    `${pt(17)};text-align:center`)
+                + img('linea-dorada.png', 0.42, 0.81, 4.20, 0.06)
+                + `<div class="cp-abs" style="${caja(1.55, 1.17, 2.27, 0.92)}"><table class="cp-tabla cp-t1" style="${pt(12)}"><colgroup><col style="width:40%"><col style="width:60%"></colgroup>
+                    <tr><th colspan="2">OPERANDO ACTUALMENTE</th></tr>
+                    <tr><td style="background:${COLOR_GRUPO.regular}">${t.N_REGULAR}</td><td><b>CARGA REGULAR</b></td></tr>
+                    <tr><td style="background:${COLOR_GRUPO.fletamento}">${t.N_FLETAMENTO}</td><td><b>FLETAMENTO</b></td></tr>
+                    <tr><td style="background:${COLOR_GRUPO.mixta}">${t.N_MIXTA}</td><td><b>CARGA MIXTA</b></td></tr>
+                </table></div>`
+                + `<div class="cp-abs" style="${caja(0.70, 2.35, 4.36, 1.40)}"><table class="cp-tabla cp-t9" style="${pt(12)}"><colgroup><col style="width:36.5%"><col style="width:39.5%"><col style="width:24%"></colgroup>
+                    <tr><th></th><th>OPERACIONES</th><th>TONELADAS</th></tr>
+                    ${m.resumen.anios.map((x, i) => `<tr><td class="cp-etq" style="background:${COLOR_ANIO[i % 3]}">${escapar(x.etiqueta)}</td>
+                        <td>${entero(x.ops)}</td><td>${dosDec(x.ton)}</td></tr>`).join('')}
+                    <tr><td class="cp-etq" style="background:#305496">Carga ${escapar(t.DIA_FECHA)}</td><td>${t.DIA_OPS}</td><td>${t.DIA_TON}</td></tr>
+                    <tr class="cp-acum"><td>ACUMULADO</td><td>${t.ACUM_OPS}</td><td>${t.ACUM_TON}</td></tr>
+                </table></div>`
+                + `<div class="cp-abs" style="${caja(0.83, 4.23, 3.90, 1.11)}"><table class="cp-tabla cp-t19" style="${pt(12)}"><colgroup><col style="width:52.3%"><col style="width:47.7%"></colgroup>
+                    <tr><th colspan="2" class="cp-titulo-tabla">AEROLÍNEAS QUE OPERAN AERONAVES BAJO LA FIGURA DE ARRENDAMIENTO HÚMEDO <b>(WET LEASE)</b></th></tr>
+                    <tr><th>AEROLÍNEA</th><th>ARRENDADOR</th></tr>
+                    ${C.WET_LEASE.map(([a, b]) => `<tr><td>${escapar(a)}</td><td>${escapar(b)}</td></tr>`).join('')}
+                </table></div>`
+                + img('avion-frente.jpg', -0.03, 5.50, 5.43, 1.84)
+                + `<div class="cp-abs" style="${caja(5.40, 0.29, 4.33, 7.00)}"><table class="cp-tabla cp-t3" style="${pt(7)}"><colgroup><col style="width:39.8%"><col style="width:24.8%"><col style="width:35.4%"></colgroup>
+                    <tr><th>AEROLÍNEA</th><th>OPERACIONES</th><th>CARGA EN TONELADAS</th></tr>
+                    ${m.filas.map(f => `<tr><td style="background:${COLOR_GRUPO[f.grupo]}">${escapar(f.nombre)}</td>
+                        <td>${escapar(f.ops)}</td><td>${escapar(f.ton)}</td></tr>`).join('')}
+                    <tr class="cp-acum"><td>TOTAL</td><td>${t.H1_OPS_TOTAL}</td><td>${t.H1_TON_TOTAL}</td></tr>
+                </table></div>`),
 
-            diapositiva('conci-ppt-tarjetas', `
-                <h3>Aerolíneas que operan con un contrato de Servicios Aeroportuarios:</h3>
-                ${tarjetasCatalogo(CATALOGO.regular)}`),
+            laminaTarjetas(3), laminaTarjetas(4), laminaTarjetas(5), laminaTarjetas(6),
 
-            diapositiva('conci-ppt-tarjetas', `
-                <h3>Aerolíneas que operan en la modalidad de fletamento de carga:</h3>
-                ${tarjetasCatalogo(CATALOGO.fletamento)}`),
+            lamina(7, img('fondo.svg', 0.02, 0.18, 10, 7.5) + img('encabezado.svg', -0.02, 0, 10.04, 1.76)
+                + img('logo-defensa.svg', 7.18, 0.33, 2.29, 0.57)
+                + img('avion-frente.jpg', 1.04, 4.84, 7.91, 2.68)
+                + `<div class="cp-marco" style="${caja(0.87, 1.53, 3.10, 4.16)}"></div>`
+                + `<div class="cp-marco" style="${caja(6.03, 1.53, 3.10, 4.16)}"></div>`
+                + img('icono-avion.png', 1.91, 1.94, 1.02, 1.02)
+                + img('icono-carga.png', 7.11, 1.83, 1.02, 1.02)
+                + txt(0.87, 3.05, 3.10, 0.75, '<b>Total de operaciones</b>', `${pt(24)};text-align:center;color:#6F7271`)
+                + txt(6.03, 2.85, 3.10, 1.00, '<b>Total de carga transportada (tons.)</b>', `${pt(24)};text-align:center;color:#6F7271`)
+                + `<div class="cp-cifra" style="${caja(1.04, 3.93, 2.67, 0.79)};${pt(32)}">${t.ACUM_OPS}</div>`
+                + `<div class="cp-cifra" style="${caja(6.28, 3.93, 2.67, 0.79)};${pt(32)}">${t.ACUM_TON}</div>`
+                + txt(0.80, 0.22, 6.13, 0.91, '<b>Cifras acumuladas desde el inicio de operaciones de la Terminal de Carga:</b>', pt(24))),
 
-            diapositiva('conci-ppt-tarjetas', `
-                <h3>Aerolíneas que realizan operaciones mixtas (carga y pasajeros):</h3>
-                ${tarjetasCatalogo(CATALOGO.mixtas)}`),
+            lamina(8, img('fondo.svg', 0, 0.02, 10, 7.5) + img('logo-defensa.svg', 7.18, 0.33, 2.29, 0.57)
+                + txt(0.52, 0.28, 5.24, 1.04, '<b>Aerolíneas de carga que operan en el AIFA</b>', pt(28))
+                + `<div class="cp-abs" style="${caja(0.57, 1.59, 8.87, 4.46)}">${tablaCatalogo(C.RAZONES.regular,
+                    '<b>Regular</b> con contrato de Servicios Aeroportuarios', 12)}</div>`
+                + txt(0.52, 6.10, 8.87, 0.57, 'Las aerolíneas <b>Volaris, Conviasa, Mexicana, Viva Aerobús y Aeroméxico</b> '
+                    + 'realizan operaciones mixtas <b>(pasajeros y carga)</b>.', `${pt(14)};color:#000;text-align:justify`)),
 
-            diapositiva('conci-ppt-totales', `
-                <h3>Cifras acumuladas desde el inicio de operaciones de la Terminal de Carga:</h3>
-                <div class="conci-ppt-total-caja">
-                    <p><span>Total de operaciones</span><strong>${entero(r.acumulado.ops)}</strong></p>
-                    <p><span>Total de carga transportada (tons.)</span><strong>${dosDec(r.acumulado.ton)}</strong></p>
-                </div>`),
+            lamina(9, img('fondo.svg', 0, 0.02, 10, 7.5) + img('logo-defensa.svg', 7.18, 0.18, 2.29, 0.57)
+                + txt(0.20, 0.27, 6.89, 0.50, '<b>Aerolíneas de carga que operan en el AIFA</b>', pt(24))
+                + `<div class="cp-abs" style="${caja(0.20, 0.79, 9.61, 6.31)}">${tablaCatalogo(C.RAZONES.fletamento,
+                    '<b>Fletamento de Carga,</b><br>(no necesitan contrato)', 9.5)}</div>`),
 
-            diapositiva('conci-ppt-catalogo-slide', `
-                <h3>Aerolíneas de carga que operan en el AIFA</h3>
-                ${tablaCatalogo(CATALOGO.regular, 'Regular con contrato de Servicios Aeroportuarios')}`),
-
-            diapositiva('conci-ppt-catalogo-slide', `
-                <h3>Aerolíneas de carga que operan en el AIFA</h3>
-                ${tablaCatalogo(CATALOGO.fletamento, 'Fletamento de Carga, (no necesitan contrato)')}`),
-
-            diapositiva('conci-ppt-gracias', '<h2>GRACIAS</h2>')
+            lamina(10, img('recuadro-fecha.svg', 0, 2.69, 6.13, 1.49) + img('fondo.svg', 0, 0.02, 10, 7.5)
+                + txt(0.80, 2.99, 4.91, 0.67, 'GRACIAS', pt(34))
+                + img('logo-defensa.svg', 0.48, 5.59, 2.93, 0.73)
+                + img('ilustracion.png', 3.81, 1.07, 5.92, 6.27))
         ];
 
-        return `<div class="conci-ppt" id="conci-rep-hoja">${slides.join('')}</div>`;
+        const aviso = m.sinCatalogo.length
+            ? `<p class="conci-rep-aviso">Hay aerolíneas con manifiestos de carga que no están en el catálogo de la
+                presentación: ${m.sinCatalogo.map(s => `${escapar(s.nombre)} (${entero(s.ops)} op.)`).join(', ')}.
+                Cuentan en los totales, pero no tienen renglón ni tarjeta propios.</p>`
+            : '';
+        return `${aviso}<div class="cp-baraja" id="conci-rep-hoja">${slides.join('')}</div>`;
     }
 
     const RENDERS = {
@@ -886,93 +951,42 @@
         try { window.print(); } finally { setTimeout(limpiar, 1500); }
     }
 
-    const PPTX_CDN = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
-
-    /** Carga el generador de PowerPoint la primera vez que se pide. */
-    function cargarPptx() {
-        if (window.PptxGenJS) return Promise.resolve(window.PptxGenJS);
-        return new Promise((resolve, reject) => {
-            const s = document.createElement('script');
-            s.src = PPTX_CDN;
-            s.onload = () => window.PptxGenJS ? resolve(window.PptxGenJS) : reject(new Error('PptxGenJS no quedó disponible'));
-            s.onerror = () => reject(new Error('No se pudo descargar el generador de PowerPoint'));
-            document.head.appendChild(s);
-        });
-    }
-
     const nombreArchivo = base => String(base).replace(/[\\/:*?"<>|]/g, '-');
 
+    /** Lee un archivo del sitio: la plantilla y los logotipos. */
+    async function leerDelSitio(ruta) {
+        const r = await fetch(ruta, { cache: 'force-cache' });
+        if (!r.ok) throw new Error(`No se pudo leer ${ruta} (${r.status})`);
+        return r.arrayBuffer();
+    }
+
+    /**
+     * Descarga la baraja armada sobre la plantilla original: los mismos fondos,
+     * fuentes y logotipos, con las cifras del periodo en su lugar.
+     */
     async function descargarPptx() {
         if (!ultimo) { error('Genera la presentación antes de descargarla.'); return; }
+        const P = window.ConciPresentacionCarga;
+        if (!P || !window.JSZip) { error('No se pudo cargar el generador de la presentación.'); return; }
         const boton = el('btn-conci-rep-carga-descargar');
         if (boton) boton.disabled = true;
         try {
-            estado('Preparando la presentación…');
-            const Pptx = await cargarPptx();
-            const pptx = new Pptx();
-            pptx.layout = 'LAYOUT_4x3';           // 10 × 7.5 in, como la original
-            const r = resumenPresentacion(ultimo);
-            const filas = filasHoja1(ultimo);
+            estado('Armando la presentación…');
+            const modelo = modeloPresentacion(ultimo);
+            const bytes = await P.construir({ JSZip: window.JSZip, cargar: leerDelSitio }, modelo);
+            const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
             const { anio, mes, fechaIso } = ultimo;
-
-            const portada = pptx.addSlide();
-            portada.addText('Aeropuerto Internacional\n“Felipe Ángeles”',
-                { x: 0.5, y: 2.4, w: 9, h: 1.6, align: 'center', fontSize: 30, bold: true, color: VINO });
-            portada.addText(`${MESES[mes - 1].charAt(0)}${MESES[mes - 1].slice(1).toLowerCase()} ${anio}`,
-                { x: 0.5, y: 4.1, w: 9, h: 0.5, align: 'center', fontSize: 18, color: DORADO });
-
-            const resumen = pptx.addSlide();
-            resumen.addText('Operaciones en la Terminal de Carga',
-                { x: 0.4, y: 0.3, w: 9.2, h: 0.5, fontSize: 20, bold: true, color: VINO });
-            resumen.addText(`01 Ene. al ${fechaLarga(fechaIso).slice(0, 2)} ${MES_CORTO[mes - 1]} ${anio}`,
-                { x: 0.4, y: 0.8, w: 9.2, h: 0.35, fontSize: 13, color: '444444' });
-            resumen.addTable([
-                [{ text: '', options: { fill: VINO } },
-                 { text: 'OPERACIONES', options: { bold: true, color: 'FFFFFF', fill: VINO } },
-                 { text: 'TONELADAS', options: { bold: true, color: 'FFFFFF', fill: VINO } }],
-                ...r.anios.map(x => [x.etiqueta, entero(x.ops), dosDec(x.ton)]),
-                [r.delDia.etiqueta, entero(r.delDia.ops), dosDec(r.delDia.ton)],
-                [{ text: r.acumulado.etiqueta, options: { bold: true } },
-                 { text: entero(r.acumulado.ops), options: { bold: true } },
-                 { text: dosDec(r.acumulado.ton), options: { bold: true } }]
-            ], { x: 0.5, y: 1.5, w: 9, fontSize: 12, border: { pt: 1, color: 'BFBFBF' } });
-            resumen.addText(
-                `OPERANDO ACTUALMENTE · ${CATALOGO.regular.length} carga regular · `
-                + `${CATALOGO.fletamento.length} fletamento · ${CATALOGO.mixtas.length} carga mixta`,
-                { x: 0.5, y: 5.6, w: 9, h: 0.4, fontSize: 12, color: DORADO, bold: true });
-
-            const modalidades = [
-                ['Aerolíneas que operan con un contrato de Servicios Aeroportuarios:', CATALOGO.regular],
-                ['Aerolíneas que operan en la modalidad de fletamento de carga:', CATALOGO.fletamento],
-                ['Aerolíneas que realizan operaciones mixtas (carga y pasajeros):', CATALOGO.mixtas]
-            ];
-            const porNombre = new Map(filas.map(f => [normaliza(f.aerolinea), f]));
-            const cifras = nombre => porNombre.get(normaliza(nombreAerolinea(nombre))) || { ops: 0, ton: 0 };
-
-            for (const [titulo, lista] of modalidades) {
-                const s = pptx.addSlide();
-                s.addText(titulo, { x: 0.4, y: 0.3, w: 9.2, h: 0.5, fontSize: 16, bold: true, color: VINO });
-                s.addTable([
-                    [{ text: 'Aerolínea', options: { bold: true, color: 'FFFFFF', fill: VINO } },
-                     { text: 'No. de operaciones', options: { bold: true, color: 'FFFFFF', fill: VINO } },
-                     { text: 'Total de carga en Tn.', options: { bold: true, color: 'FFFFFF', fill: VINO } }],
-                    ...lista.map(n => { const c = cifras(n); return [n, entero(c.ops), dosDec(c.ton)]; })
-                ], { x: 0.4, y: 0.95, w: 9.2, fontSize: 9, border: { pt: 1, color: 'BFBFBF' } });
-            }
-
-            const totales_ = pptx.addSlide();
-            totales_.addText('Cifras acumuladas desde el inicio de operaciones de la Terminal de Carga:',
-                { x: 0.4, y: 0.5, w: 9.2, h: 0.6, fontSize: 16, bold: true, color: VINO });
-            totales_.addTable([
-                ['Total de operaciones', entero(r.acumulado.ops)],
-                ['Total de carga transportada (tons.)', dosDec(r.acumulado.ton)]
-            ], { x: 1.5, y: 2.2, w: 7, fontSize: 16, border: { pt: 1, color: 'BFBFBF' } });
-
-            const gracias = pptx.addSlide();
-            gracias.addText('GRACIAS', { x: 0.5, y: 3, w: 9, h: 1, align: 'center', fontSize: 40, bold: true, color: VINO });
-
-            await pptx.writeFile({ fileName: nombreArchivo(`PRESENTACION CARGA ${fechaLarga(fechaIso)}.pptx`) });
-            estado('Presentación descargada.');
+            a.href = url;
+            a.download = nombreArchivo(`PRESENTACION CARGA ${fechaIso.slice(8, 10)} ${MESES[mes - 1]} ${anio}.pptx`);
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+            estado(modelo.sinCatalogo.length
+                ? `Presentación descargada · ${modelo.sinCatalogo.length} aerolínea(s) fuera del catálogo`
+                : 'Presentación descargada.');
         } catch (e) {
             console.error('[Reportes Carga] descarga', e);
             error(`No se pudo generar la presentación: ${e.message || e}`);
@@ -999,7 +1013,7 @@
     window.conciReportesCarga = {
         generar, agregar, mostrar, imprimir,
         descargar: descargarPptx,
-        filasHoja1, totales, toneladas, repartirEnteros, resumenPresentacion,
-        aIso, nombreAerolinea, CATALOGO, BASE_HISTORICA
+        filasHoja1, totales, toneladas, repartirEnteros, modeloPresentacion,
+        aIso, nombreAerolinea
     };
 })();

@@ -14,6 +14,9 @@
  *   · En el oficio, nacional + internacional tiene que cuadrar con el total
  *     redondeado: es el renglón "REDONDEO" que allá se ajusta a mano.
  *   · El Reporte de Carga no cuenta operaciones mixtas.
+ *
+ * El .pptx armado sobre la plantilla se prueba aparte, en Node, en
+ * conciliacion-presentacion-carga.test.js.
  */
 
 const fs = require('fs');
@@ -21,19 +24,22 @@ const path = require('path');
 
 const raiz = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(raiz, 'index.html'), 'utf8').replace(/\r\n/g, '\n');
-const modulo = fs.readFileSync(path.join(raiz, 'js', 'conci-reportes-carga.js'), 'utf8');
+const css = fs.readFileSync(path.join(raiz, 'style.css'), 'utf8').replace(/\r\n/g, '\n');
+const MODULOS = ['conci-carga-catalogo.js', 'conci-presentacion-carga.js', 'conci-reportes-carga.js']
+  .map(f => fs.readFileSync(path.join(raiz, 'js', f), 'utf8'));
 
+/** Carga los tres módulos quedándose solo con los arranques de esta evaluación. */
 function cargar() {
-  let arrancar;
+  const arranques = [];
   const registrar = document.addEventListener.bind(document);
   const espia = jest.spyOn(document, 'addEventListener')
     .mockImplementation((tipo, fn, opciones) => {
-      if (tipo === 'DOMContentLoaded') { arrancar = fn; return; }
+      if (tipo === 'DOMContentLoaded') { arranques.push(fn); return; }
       registrar(tipo, fn, opciones);
     });
-  new Function(modulo)();
+  for (const src of MODULOS) new Function(src)();
   espia.mockRestore();
-  if (arrancar) arrancar();
+  arranques.forEach(fn => fn());
   return window.conciReportesCarga;
 }
 
@@ -76,8 +82,30 @@ describe('el marcado', () => {
     });
   });
 
-  test('index.html carga el módulo', () => {
-    expect(html).toContain('js/conci-reportes-carga.js');
+  test('index.html carga el catálogo y el generador antes que el módulo', () => {
+    const cat = html.indexOf('js/conci-carga-catalogo.js');
+    const gen = html.indexOf('js/conci-presentacion-carga.js');
+    const mod = html.indexOf('js/conci-reportes-carga.js');
+    expect(cat).toBeGreaterThan(-1);
+    expect(gen).toBeGreaterThan(cat);
+    expect(mod).toBeGreaterThan(gen);
+  });
+
+  test('la plantilla y los recursos del template están en el repo', () => {
+    ['plantillas/presentacion-carga.pptx', 'images/presentacion-carga/fondo.svg',
+      'images/presentacion-carga/logo-defensa.svg', 'images/presentacion-carga/ilustracion.png']
+      .forEach(ruta => expect(fs.existsSync(path.join(raiz, ruta))).toBe(true));
+  });
+
+  test('los fondos SVG del template se estiran a su caja, como en PowerPoint', () => {
+    // Sin esto el navegador los encaja con su proporción propia (16:9 en una
+    // lámina 4:3) y la franja vino del fondo cae a media diapositiva.
+    const dir = path.join(raiz, 'images', 'presentacion-carga');
+    const svgs = fs.readdirSync(dir).filter(f => f.endsWith('.svg'));
+    expect(svgs.length).toBeGreaterThan(0);
+    svgs.forEach(f => {
+      expect(fs.readFileSync(path.join(dir, f), 'utf8').slice(0, 400)).toMatch(/<svg[^>]*preserveAspectRatio="none"/);
+    });
   });
 });
 
@@ -88,26 +116,17 @@ describe('agregación', () => {
     document.body.innerHTML = `
       <input type="date" id="conci-rep-carga-fecha" value="2026-08-31">
       <button id="btn-conci-rep-carga-generar"></button>
-      <button id="btn-conci-rep-carga-imprimir" class="d-none"></button>
-      <button id="btn-conci-rep-carga-descargar" class="d-none"></button>
-      <button data-conci-rep-carga="subsecretaria" class="active"></button>
-      <button data-conci-rep-carga="hoja1"></button>
-      <button data-conci-rep-carga="hoja2"></button>
-      <button data-conci-rep-carga="reportecarga"></button>
-      <button data-conci-rep-carga="presentacion"></button>
       <div id="conci-rep-carga-estado"></div>
       <div id="conci-rep-carga-error" class="d-none"></div>
       <div id="conci-rep-carga-salida"></div>
     `;
-    // Todo lo del fixture es carga salvo que la prueba diga otra cosa.
     window._conciRowIsCargo = () => true;
     api = cargar();
   });
 
   afterEach(() => { delete window._conciRowIsCargo; delete window._conciResolveAirlineMeta; });
 
-  const agregar = (filas, fecha = '2026-09-01') =>
-    api.agregar({ filas, columnas: COLUMNAS }, fecha);
+  const agregar = (filas, fecha = '2026-09-01') => api.agregar({ filas, columnas: COLUMNAS }, fecha);
 
   test('los cuatro campos del libro salen del cruce nacional/internacional × llegada/salida', () => {
     const r = agregar([
@@ -124,8 +143,6 @@ describe('agregación', () => {
   });
 
   test('una salida internacional con carga nacional cae del lado nacional', () => {
-    // Es el caso que rompe derivar los campos de TIPO DE OPERACIÓN: en el
-    // libro hay 137 filas así.
     const r = agregar([
       manifiesto({ fecha: '2026-08-31', cierre: '2026-09-01', tipo: 'SALIDA', operacion: 'INTERNACIONAL', nac: 4150 })
     ]);
@@ -136,9 +153,7 @@ describe('agregación', () => {
   });
 
   test('un manifiesto mixto aporta a los dos lados', () => {
-    const r = agregar([
-      manifiesto({ fecha: '2026-08-31', cierre: '2026-09-01', tipo: 'LLEGADA', nac: 1000, int: 5000 })
-    ]);
+    const r = agregar([manifiesto({ fecha: '2026-08-31', cierre: '2026-09-01', tipo: 'LLEGADA', nac: 1000, int: 5000 })]);
     expect(r.sub.actual.dia.LLEGADA.NACIONAL.kg).toBe(1000);
     expect(r.sub.actual.dia.LLEGADA.INTERNACIONAL.kg).toBe(5000);
   });
@@ -181,6 +196,13 @@ describe('agregación', () => {
     expect(r.retrocedido).toBe(true);
     expect(r.cierres.actual).toBe('2026-08-01');
   });
+
+  test('cada aerolínea guarda el IATA que le conoce el catálogo de la tabla', () => {
+    window._conciResolveAirlineMeta = v => (String(v) === 'M7' ? { name: 'MAS Air', iata: 'M7' } : null);
+    api = cargar();
+    const r = api.agregar({ filas: [manifiesto({ fecha: '2026-08-31', aerolinea: 'M7', int: 10 })], columnas: COLUMNAS }, '2026-08-31');
+    expect(r.porAerolinea.get('MAS AIR')).toMatchObject({ ops: 1, iata: 'M7' });
+  });
 });
 
 describe('toneladas y redondeo', () => {
@@ -193,7 +215,6 @@ describe('toneladas y redondeo', () => {
   afterEach(() => { delete window._conciRowIsCargo; });
 
   test('nacional + internacional siempre cuadra con el total redondeado', () => {
-    // Es el renglón "REDONDEO" que en el libro se ajusta a mano.
     const casos = [[56.85, 640.03], [0.5, 0.5], [10.4, 10.4], [0, 0], [1.6, 2.6]];
     for (const [nac, int] of casos) {
       const r = api.repartirEnteros(nac, int);
@@ -203,18 +224,15 @@ describe('toneladas y redondeo', () => {
   });
 
   test('el sobrante se le da al lado con la fracción mayor', () => {
-    const r = api.repartirEnteros(1.2, 2.9);   // total 4, enteros 1 + 2 = 3
-    expect(r).toEqual({ nacional: 1, internacional: 3, total: 4 });
+    expect(api.repartirEnteros(1.2, 2.9)).toEqual({ nacional: 1, internacional: 3, total: 4 });
   });
 
   test('las toneladas de la Hoja 1 se truncan, no se redondean', () => {
     const r = api.agregar({
-      // 1,239 kg = 1.239 ton → 1.23, no 1.24
       filas: [manifiesto({ fecha: '2026-08-31', cierre: '2026-09-01', int: 1239, aerolinea: 'ESTAFETA' })],
       columnas: COLUMNAS
     }, '2026-09-01');
-    const filas = api.filasHoja1(r);
-    expect(filas[0].ton).toBe(1.23);
+    expect(api.filasHoja1(r)[0].ton).toBe(1.23);
   });
 });
 
@@ -254,7 +272,7 @@ describe('Reporte de Carga', () => {
   });
 });
 
-describe('la presentación', () => {
+describe('Hoja 2 y la presentación, con el template', () => {
   let api;
   let datos;
 
@@ -264,7 +282,9 @@ describe('la presentación', () => {
       <button id="btn-conci-rep-carga-descargar" class="d-none"></button>
       <button data-conci-rep-carga="subsecretaria" class="active"></button>
       <button data-conci-rep-carga="hoja1"></button>
+      <button data-conci-rep-carga="hoja2"></button>
       <button data-conci-rep-carga="presentacion"></button>
+      <div id="conci-rep-carga-estado"></div>
       <div id="conci-rep-carga-error" class="d-none"></div>
       <div id="conci-rep-carga-salida"></div>
     `;
@@ -276,31 +296,50 @@ describe('la presentación', () => {
     }, '2026-08-31');
   });
 
-  afterEach(() => { delete window._conciRowIsCargo; delete window.print; });
+  afterEach(() => { delete window._conciRowIsCargo; delete window.print; delete window.getAirlineLogoCandidates; });
 
-  test('el catálogo reproduce los conteos de la baraja original', () => {
-    expect(api.CATALOGO.regular).toHaveLength(18);      // 18 CARGA REGULAR
-    expect(api.CATALOGO.fletamento).toHaveLength(35);   // 35 FLETAMENTO
-    expect(api.CATALOGO.mixtas).toHaveLength(5);        // 5 CARGA MIXTA
-  });
-
-  test('el acumulado suma la línea base de los años anteriores', () => {
-    const r = api.resumenPresentacion(datos);
-    const baseOps = api.BASE_HISTORICA.reduce((a, b) => a + b.ops, 0);
-    expect(r.acumulado.ops).toBe(baseOps + datos.anioActual.ops + datos.delDia.ops);
-    expect(r.anios).toHaveLength(api.BASE_HISTORICA.length + 1);
-  });
-
-  test('se dibuja como una baraja de diapositivas', () => {
+  const pintar = clave => {
     api.mostrar(datos);
-    document.querySelector('[data-conci-rep-carga="presentacion"]').click();
-    const salida = document.getElementById('conci-rep-carga-salida').innerHTML;
-    expect(salida).toContain('conci-ppt-slide');
-    expect(salida).toContain('Felipe Ángeles');
-    expect(salida).toContain('Operaciones en la Terminal de Carga');
-    expect(salida).toContain('GRACIAS');
-    // 9 diapositivas: portada, resumen, 3 de tarjetas, totales, 2 catálogos y gracias.
-    expect((salida.match(/conci-ppt-slide/g) || []).length).toBe(9);
+    document.querySelector(`[data-conci-rep-carga="${clave}"]`).click();
+    return document.getElementById('conci-rep-carga-salida');
+  };
+
+  test('la presentación son las diez diapositivas de la baraja, con sus piezas', () => {
+    const salida = pintar('presentacion');
+    expect(salida.querySelectorAll('.cp-slide')).toHaveLength(10);
+    const h = salida.innerHTML;
+    ['fondo.svg', 'encabezado.svg', 'logo-defensa.svg', 'ilustracion.png', 'avion.jpg', 'logos/estafeta.png']
+      .forEach(pieza => expect(h).toContain(`images/presentacion-carga/${pieza}`));
+    expect(h).toContain('Agosto 2026');
+    expect(h).toContain('GRACIAS');
+  });
+
+  test('las tarjetas de la baraja llevan un logotipo cada una', () => {
+    const salida = pintar('presentacion');
+    expect(salida.querySelectorAll('.cp-card')).toHaveLength(58);
+    expect(salida.querySelectorAll('.cp-logo img')).toHaveLength(58);
+  });
+
+  test('Hoja 2 son las mismas tarjetas, en los cuatro grupos, con logotipo', () => {
+    const salida = pintar('hoja2');
+    expect(salida.querySelectorAll('.cc-grupo')).toHaveLength(4);
+    expect(salida.querySelectorAll('.cc-tarjeta')).toHaveLength(58);
+    const estafeta = [...salida.querySelectorAll('.cc-tarjeta')].find(t => t.title === 'ESTAFETA');
+    expect(estafeta.querySelector('img').getAttribute('src')).toBe('images/presentacion-carga/logos/estafeta.png');
+    expect(estafeta.textContent).toContain('1,709.34');
+  });
+
+  test('una aerolínea fuera del catálogo va aparte, con el logotipo de la app', () => {
+    window.getAirlineLogoCandidates = () => ['images/airlines/logo_nueva.png', 'images/airlines/logo_nueva.jpg'];
+    datos = api.agregar({
+      filas: [manifiesto({ fecha: '2026-08-31', int: 500, aerolinea: 'CARGUERA NUEVA' })],
+      columnas: COLUMNAS
+    }, '2026-08-31');
+    const salida = pintar('hoja2');
+    expect(salida.querySelectorAll('.cc-grupo')).toHaveLength(5);
+    expect(salida.innerHTML).toContain('images/airlines/logo_nueva.png');
+    // En la presentación se avisa: cuenta en totales pero no tiene tarjeta.
+    expect(pintar('presentacion').innerHTML).toContain('CARGUERA NUEVA');
   });
 
   test('imprimir y descargar solo aparecen en la presentación', () => {
@@ -314,7 +353,7 @@ describe('la presentación', () => {
     expect(descargar.classList.contains('d-none')).toBe(true);
   });
 
-  test('imprimir marca el body y llama a print', () => {
+  test('imprimir marca el body, llama a print y limpia al terminar', () => {
     window.print = jest.fn();
     api.mostrar(datos);
     document.getElementById('btn-conci-rep-carga-imprimir').click();
@@ -329,5 +368,13 @@ describe('la presentación', () => {
     api.imprimir();
     expect(window.print).not.toHaveBeenCalled();
     expect(document.getElementById('conci-rep-carga-error').classList.contains('d-none')).toBe(false);
+  });
+
+  test('al imprimir, la baraja se ve y sale una diapositiva por hoja apaisada', () => {
+    const impresion = css.slice(css.indexOf('@page diapositiva'));
+    expect(impresion).toMatch(/size:\s*11in 8\.5in/);
+    expect(impresion).toContain('body.conci-rep-imprimiendo .cp-baraja *');
+    expect(impresion).toContain('visibility: visible');
+    expect(impresion).toContain('page: diapositiva');
   });
 });

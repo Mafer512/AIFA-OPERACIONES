@@ -21420,12 +21420,15 @@ body.dark-mode .conci-rep-hoja {
 
 /* ==========================================================================
    Reportes > Carga
-   Reutiliza el marco de hoja de los reportes de pasajeros y añade lo suyo:
-   las tarjetas por aerolinea y la baraja de la presentacion, con los colores
-   institucionales de la original (ppt/theme de la baraja de carga):
+   La Hoja 2 y la presentacion usan el template de la baraja original: sus
+   fondos, su encabezado, el logotipo de Defensa, la ilustracion de portada y
+   los logotipos de las aerolineas, recortados de sus propias tarjetas. Las
+   piezas viven en images/presentacion-carga/.
 
-     #691B32  vino    titulos y encabezados
-     #BC945A  dorado  acentos
+     #691B32  vino       titulos
+     #FFF2CC  crema      recuadro de cada tarjeta
+     #385723  verde      marco de los totales
+     #F5EDE0  arena      fondo de las cifras acumuladas
    ========================================================================== */
 .conci-rep-aclaracion {
    font-size: .72rem;
@@ -21433,269 +21436,297 @@ body.dark-mode .conci-rep-hoja {
    margin: .9rem 0 0;
 }
 
-/* ── tarjetas por aerolinea (Hoja 2 y presentacion) ────────────────────── */
+/* ── Hoja 2: tarjetas con logotipo, agrupadas como en la baraja ─────────── */
 
-.conci-carga-tarjetas {
+.cc-grupo {
+   margin: 1.4rem 0 0;
+}
+
+.cc-grupo:first-of-type {
+   margin-top: .4rem;
+}
+
+.cc-grupo-titulo {
+   font-family: Patria, "Noto Sans", "Segoe UI", system-ui, sans-serif;
+   color: #691B32;
+   font-weight: 700;
+   font-size: .95rem;
+   margin: 0 0 .7rem;
+}
+
+.cc-tarjetas {
    display: grid;
    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-   gap: .6rem;
+   gap: 1rem .9rem;
 }
 
-.conci-carga-tarjeta {
-   border: 1px solid #d7c9b4;
-   border-top: 3px solid #691B32;
-   border-radius: 4px;
-   background: #fff;
-   padding: .5rem .6rem;
+.cc-tarjeta {
+   display: flex;
+   flex-direction: column;
+   break-inside: avoid;
 }
 
-.conci-carga-tarjeta-nombre {
-   font-size: .72rem;
+.cc-logo {
+   height: 58px;
+   display: flex;
+   align-items: flex-end;
+   justify-content: center;
+   margin-bottom: .25rem;
+}
+
+.cc-logo img {
+   max-width: 100%;
+   max-height: 100%;
+   object-fit: contain;
+}
+
+.cc-logo span {
    font-weight: 700;
+   font-size: .75rem;
    color: #691B32;
-   margin: 0 0 .35rem;
-   line-height: 1.25;
-   min-height: 2.1em;
+   text-align: center;
 }
 
-.conci-carga-tarjeta dl {
+.cc-cifras {
    display: grid;
    grid-template-columns: 1fr auto;
-   gap: .1rem .5rem;
+   align-items: center;
+   gap: .15rem .6rem;
    margin: 0;
-   font-size: .7rem;
-}
-
-.conci-carga-tarjeta dt {
-   font-weight: 400;
-   color: #5a6a85;
-}
-
-.conci-carga-tarjeta dd {
-   margin: 0;
+   padding: .4rem .6rem;
+   background: #FFF2CC;
+   font-family: "Noto Sans", "Segoe UI", system-ui, sans-serif;
+   font-size: .74rem;
    font-weight: 700;
-   text-align: right;
+   color: #000;
+}
+
+.cc-cifras dt {
+   font-weight: 700;
+}
+
+.cc-cifras dd {
+   margin: 0;
+   min-width: 5.5em;
+   text-align: center;
    font-variant-numeric: tabular-nums;
 }
 
-/* ── la presentacion ───────────────────────────────────────────────────── */
+/* ── La presentacion: cada diapositiva es un lienzo de 10 x 7.5 in ──────── */
 
-.conci-ppt {
+.cp-baraja {
    display: flex;
    flex-direction: column;
-   gap: 1.4rem;
    align-items: center;
+   gap: 1.4rem;
 }
 
-/* Cada diapositiva conserva la proporcion 4:3 de la baraja original. */
-.conci-ppt-slide {
+.cp-slide {
+   position: relative;
    width: 100%;
-   max-width: 960px;
+   max-width: 980px;
    aspect-ratio: 4 / 3;
+   overflow: hidden;
    background: #fff;
    border: 1px solid #e3e8ef;
-   border-radius: 6px;
+   border-radius: 4px;
    box-shadow: 0 2px 10px rgba(15, 23, 42, .08);
-   padding: 1.6rem 1.9rem;
-   overflow: hidden;
+   container-type: inline-size;
+   font-family: Patria, "Noto Sans", "Segoe UI", system-ui, sans-serif;
+   color: #691B32;
+   line-height: 1.15;
+}
+
+.cp-img,
+.cp-txt,
+.cp-abs,
+.cp-logo,
+.cp-card,
+.cp-marco,
+.cp-cifra {
+   position: absolute;
+}
+
+.cp-img {
+   display: block;
+   object-fit: fill;
+}
+
+.cp-txt {
+   display: flex;
+   flex-direction: column;
+   justify-content: center;
+}
+
+.cp-txt-in {
+   display: block;
+}
+
+/* La tabla de las 58 aerolineas llena la diapositiva: sin interlineado de sobra. */
+.cp-t3 td,
+.cp-t3 th {
+   line-height: 1;
+}
+
+.cp-logo {
+   display: flex;
+   align-items: flex-end;
+   justify-content: center;
+}
+
+.cp-logo img {
+   max-width: 100%;
+   max-height: 100%;
+   object-fit: contain;
+}
+
+/* Recuadro crema: la etiqueta a la izquierda y la cifra centrada en el 38 % derecho. */
+.cp-card {
+   display: grid;
+   grid-template-columns: 62% 38%;
+   align-content: center;
+   row-gap: .35em;
+   padding-left: 1%;
+   background: #FFF2CC;
+   font-family: "Noto Sans", "Segoe UI", system-ui, sans-serif;
+   font-weight: 700;
+   color: #000;
+   white-space: nowrap;
+}
+
+.cp-card b {
+   text-align: center;
+   font-variant-numeric: tabular-nums;
+}
+
+.cp-marco {
+   border: .25cqw solid #385723;
+   border-radius: 2.2cqw;
+   background: rgba(255, 255, 255, .55);
+}
+
+.cp-cifra {
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   border-radius: 1.6cqw;
+   background: #F5EDE0;
+   color: #235B4E;
+   font-weight: 700;
+   font-variant-numeric: tabular-nums;
+}
+
+.cp-tabla {
+   width: 100%;
+   border-collapse: collapse;
+   table-layout: fixed;
    font-family: "Noto Sans", "Segoe UI", system-ui, sans-serif;
    color: #000;
-   display: flex;
-   flex-direction: column;
+   line-height: 1.2;
 }
 
-.conci-ppt-slide h2 {
-   color: #691B32;
-   font-weight: 800;
+.cp-tabla th,
+.cp-tabla td {
+   padding: 0 .3em;
    text-align: center;
-   line-height: 1.25;
+   white-space: nowrap;
+   overflow: hidden;
 }
 
-.conci-ppt-slide h3 {
-   color: #691B32;
-   font-weight: 700;
-   font-size: 1rem;
-   margin: 0 0 .8rem;
+.cp-t1 td,
+.cp-t9 td,
+.cp-t19 td,
+.cp-t3 td,
+.cp-t3 th {
+   border: 1px solid #7f7f7f;
 }
 
-.conci-ppt-portada {
-   align-items: center;
-   justify-content: center;
-   gap: 1.1rem;
-   border-top: 6px solid #691B32;
-}
-
-.conci-ppt-logo {
-   height: 74px;
-   width: auto;
-}
-
-.conci-ppt-fecha {
-   color: #BC945A;
-   font-weight: 700;
-   font-size: 1.05rem;
-   margin: 0;
-}
-
-.conci-ppt-periodo {
-   font-size: .82rem;
-   color: #444;
-   margin: -.5rem 0 1rem;
-}
-
-.conci-ppt-resumen-rejilla {
-   display: grid;
-   grid-template-columns: 1fr 1fr;
-   gap: 1.6rem;
-   align-items: start;
-}
-
-.conci-ppt-etiqueta {
-   font-size: .68rem;
-   font-weight: 700;
-   color: #691B32;
-   letter-spacing: .02em;
-   margin: .9rem 0 .35rem;
-   line-height: 1.3;
-}
-
-.conci-ppt-etiqueta:first-child {
-   margin-top: 0;
-}
-
-.conci-ppt-mini,
-.conci-ppt-cifras,
-.conci-ppt-catalogo {
-   border-collapse: collapse;
-   width: 100%;
-   font-size: .72rem;
-}
-
-.conci-ppt-mini td,
-.conci-ppt-mini th,
-.conci-ppt-cifras td,
-.conci-ppt-cifras th,
-.conci-ppt-catalogo td,
-.conci-ppt-catalogo th {
-   border: 1px solid #cbb99f;
-   padding: .18rem .45rem;
-}
-
-.conci-ppt-mini th,
-.conci-ppt-cifras thead th,
-.conci-ppt-catalogo thead th {
-   background: #691B32;
+.cp-t9 .cp-etq {
    color: #fff;
    font-weight: 700;
-   text-align: center;
+   text-align: left;
 }
 
-.conci-ppt-mini .num,
-.conci-ppt-cifras .num,
-.conci-ppt-catalogo .num {
-   text-align: right;
-   font-variant-numeric: tabular-nums;
-}
-
-.conci-ppt-cifras .conci-ppt-dia td {
-   background: #FFE699;
-   font-weight: 600;
-}
-
-.conci-ppt-cifras .conci-ppt-acumulado td {
-   background: #C6E0B4;
+.cp-t9 .cp-acum td,
+.cp-t3 .cp-acum td {
    font-weight: 700;
 }
 
-.conci-ppt-tarjetas .conci-carga-tarjetas-ppt {
-   grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-   gap: .4rem;
-   overflow: auto;
+.cp-t19 tr:nth-child(2) th {
+   background: #002060;
+   color: #fff;
 }
 
-.conci-ppt-tarjetas .conci-carga-tarjeta {
-   padding: .35rem .45rem;
+.cp-t19 td {
+   background: #DDEBF7;
 }
 
-.conci-ppt-tarjetas .conci-carga-tarjeta-nombre {
-   font-size: .64rem;
-   min-height: 2.4em;
+.cp-t19 .cp-titulo-tabla {
+   font-weight: 400;
+   white-space: normal;
 }
 
-.conci-ppt-tarjetas .conci-carga-tarjeta dl {
-   font-size: .62rem;
+.cp-t3 th {
+   background: #E7E6E6;
 }
 
-.conci-ppt-totales {
-   justify-content: center;
+.cp-t3 td {
+   padding: 0 .2em;
 }
 
-.conci-ppt-total-caja {
-   display: flex;
-   flex-direction: column;
-   gap: 1rem;
-   max-width: 620px;
-   margin: 0 auto;
+.cp-catalogo th,
+.cp-catalogo td {
+   border: 1px dotted #595959;
 }
 
-.conci-ppt-total-caja p {
-   display: flex;
-   justify-content: space-between;
-   align-items: baseline;
-   gap: 1.4rem;
-   border: 1px solid #cbb99f;
-   border-left: 5px solid #691B32;
-   border-radius: 4px;
-   padding: .7rem 1rem;
-   margin: 0;
-   font-size: .9rem;
+.cp-catalogo th {
+   background: #F2F2F2;
 }
 
-.conci-ppt-total-caja strong {
-   font-size: 1.5rem;
-   color: #691B32;
-   font-variant-numeric: tabular-nums;
+.cp-catalogo td[rowspan] {
+   white-space: normal;
+   background: #fff;
 }
 
-.conci-ppt-catalogo-slide .conci-ppt-catalogo {
-   font-size: .58rem;
+/* En papel: una diapositiva por hoja, apaisada, con sus colores. */
+@page diapositiva {
+   size: 11in 8.5in;
+   margin: .3in;
 }
 
-.conci-ppt-catalogo-slide {
-   overflow: auto;
-}
-
-.conci-ppt-gracias {
-   align-items: center;
-   justify-content: center;
-   border-top: 6px solid #691B32;
-}
-
-.conci-ppt-gracias h2 {
-   font-size: 2.6rem;
-   letter-spacing: .1em;
-}
-
-/* En papel cada diapositiva es una hoja. */
 @media print {
-   body.conci-rep-imprimiendo .conci-ppt-slide {
-      page-break-after: always;
-      break-after: page;
-      box-shadow: none;
-      border: 0;
-      max-width: none;
+   body.conci-rep-imprimiendo .cp-baraja,
+   body.conci-rep-imprimiendo .cp-baraja * {
+      visibility: visible;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
    }
 
-   body.conci-rep-imprimiendo .conci-ppt-slide:last-child {
-      page-break-after: auto;
+   body.conci-rep-imprimiendo .cp-baraja {
+      position: absolute;
+      inset: 0 auto auto 0;
+      width: 100%;
+      gap: 0;
+   }
+
+   body.conci-rep-imprimiendo .cp-slide {
+      page: diapositiva;
+      break-after: page;
+      max-width: none;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+   }
+
+   body.conci-rep-imprimiendo .cp-slide:last-child {
       break-after: auto;
    }
 }
 
-body.dark-mode .conci-ppt-slide,
-body.dark-mode .conci-carga-tarjeta {
-   background: #fff;
-   color: #000;
+/* La baraja es un documento: no se repinta en modo oscuro. */
+body.dark-mode .cp-slide,
+body.dark-mode .cc-cifras {
+   background-color: #fff;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
