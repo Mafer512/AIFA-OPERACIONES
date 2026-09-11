@@ -87,9 +87,8 @@ En el sistema el ajuste es automático: se toma la parte entera de cada lado y
 el sobrante se le da al que arrastra la fracción mayor, de modo que
 `nacional + internacional = round(total)` siempre.
 
-Igual que el de pasajeros, el oficio **va por mes**: se pide con el día 1 y
-lleva dos columnas, el cierre del último día del mes anterior y el del día 1 del
-mes pedido.
+Igual que el de pasajeros, el oficio lleva dos columnas: el cierre del día
+pedido y el del día anterior, que puede caer en el mes previo.
 
 ## Reporte 2 — Hoja 1
 
@@ -190,7 +189,7 @@ Tamaño de diapositiva: `9144000 × 6858000` EMU = 10 × 7.5 pulgadas, proporci�
 
 | Reporte | Fecha que agrupa | Agrupación | Carga | Operaciones |
 |---|---|---|---|---|
-| Subsecretaría | `Cierre Subsecretaria`, por mes | manifiesto × operación | toneladas enteras con reparto | `COUNT(AEROLINEA)` |
+| Subsecretaría | `Cierre Subsecretaria`: el día pedido y el anterior | manifiesto × operación | toneladas enteras con reparto | `COUNT(AEROLINEA)` |
 | Hoja 1 | `FECHA`, año a la fecha | `AEROLINEA` | `TRUNC(kg/1000, 2)` | `COUNT(AEROLINEA)` |
 | Hoja 2 | igual que Hoja 1 | `AEROLINEA` | igual | igual |
 | Reporte de Carga | `FECHA`, por mes | mes × manifiesto | kg internacionales | `COUNT` internacionales |

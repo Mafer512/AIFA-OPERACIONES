@@ -12,11 +12,9 @@
                      operaciones = cuenta de AEROLINEA. Debajo, el acumulado
                      del mes, del año y desde el inicio de operaciones, que en
                      el libro son la recurrencia "acumulado previo + hoy".
-                     Va por MES: se pide con el día 1 y lleva dos columnas, el
-                     cierre del último día del mes anterior y el del día 1 del
-                     mes pedido, cada una con sus propios acumulados contados
-                     hasta su fecha de cierre. Si el día 1 aún no está
-                     capturado, se entrega el mes anterior y se avisa.
+                     Lleva dos columnas: el cierre del día pedido y el del día
+                     anterior, que puede caer en el mes previo; cada una con
+                     sus propios acumulados contados hasta su fecha de cierre.
 
      PLANTILLA 1     filtra por FECHA; agrupa por AEROLINEA. Pasajeros = suma
                      de TOTAL PAX; operaciones = cuenta de TIPO DE OPERACIÓN.
@@ -119,15 +117,11 @@
 
     const dosDigitos = n => String(n).padStart(2, '0');
 
-    /** AAAA-MM-01 del mes dado. */
-    function primerDia(anio, mes) { return `${anio}-${dosDigitos(mes)}-01`; }
-
-    /** AAAA-MM-DD del último día del mes dado. */
-    function ultimoDia(anio, mes) { return `${anio}-${dosDigitos(mes)}-${dosDigitos(diasDelMes(anio, mes))}`; }
-
-    /** El mes anterior, cruzando el cambio de año. */
-    function mesAnterior(anio, mes) {
-        return mes === 1 ? { anio: anio - 1, mes: 12 } : { anio, mes: mes - 1 };
+    /** AAAA-MM-DD del día anterior, cruzando mes y año. */
+    function diaAnterior(iso) {
+        const [a, m, d] = iso.split('-').map(Number);
+        const f = new Date(a, m - 1, d - 1);
+        return `${f.getFullYear()}-${dosDigitos(f.getMonth() + 1)}-${dosDigitos(f.getDate())}`;
     }
 
     /* ── columnas ───────────────────────────────────────────────────────── */
@@ -204,34 +198,12 @@
         const prefijoMes = fechaIso.slice(0, 7);
         const prefijoAnio = fechaIso.slice(0, 4);
 
-        // El oficio a la Subsecretaría se arma por MES, no por día suelto: se
-        // pide siempre con el día 1 del mes y lleva dos columnas, el cierre del
-        // último día del mes anterior y el del día 1 del mes pedido. Da igual
-        // qué día traiga fechaIso; de ahí solo se toma el mes.
-        const cierresPresentes = new Set();
-        if (columnas.cierre) {
-            for (const fila of filas) {
-                const c = aIso(fila[columnas.cierre]);
-                if (c) cierresPresentes.add(c);
-            }
-        }
-
-        let mesSub = mes;
-        let anioSub = anio;
-        // Si el día 1 del mes pedido aún no tiene cierre capturado, se entrega
-        // el mes pasado completo en vez de un oficio en ceros.
-        let retrocedido = false;
-        if (!cierresPresentes.has(primerDia(anioSub, mesSub))) {
-            const previo = mesAnterior(anioSub, mesSub);
-            anioSub = previo.anio;
-            mesSub = previo.mes;
-            retrocedido = true;
-        }
-        const previoASub = mesAnterior(anioSub, mesSub);
-        const cierres = {
-            anterior: ultimoDia(previoASub.anio, previoASub.mes),
-            actual: primerDia(anioSub, mesSub)
-        };
+        // El oficio a la Subsecretaría compara dos cierres: el del día pedido y
+        // el del día anterior, que puede caer en el mes previo (1 de septiembre
+        // contra 31 de agosto). Cada columna trae sus acumulados hasta su fecha.
+        const anioSub = anio;
+        const mesSub = mes;
+        const cierres = { anterior: diaAnterior(fechaIso), actual: fechaIso };
 
         // Subsecretaría: por columna, LLEGADA/SALIDA × NACIONAL/INTERNACIONAL
         // en cada alcance.
@@ -342,7 +314,7 @@
         }
 
         return {
-            sub, cierres, retrocedido, anioSub, mesSub,
+            sub, cierres, anioSub, mesSub,
             porAerolinea, porDia, anioPlantillas,
             anio, mes, fechaIso, descartadosCarga, totalFilas: filas.length
         };
@@ -404,14 +376,17 @@
     /* ── Reporte a la Subsecretaría ─────────────────────────────────────── */
 
     function renderSubsecretaria(datos) {
-        const { sub, cierres, retrocedido, anioSub, mesSub } = datos;
+        const { sub, cierres, anioSub, mesSub } = datos;
         const dia = sub.actual.dia;
         const totalDia = totalesSub(dia);
-        const mesCorto = MESES[mesSub - 1].charAt(0) + MESES[mesSub - 1].slice(1, 3).toLowerCase();
-        const previo = mesAnterior(anioSub, mesSub);
-        const mesCortoPrevio = MESES[previo.mes - 1].charAt(0) + MESES[previo.mes - 1].slice(1, 3).toLowerCase();
+        // El acumulado del mes nombra un mes o los dos, según caigan las columnas.
+        const corto = iso => { const m = MESES[Number(iso.slice(5, 7)) - 1]; return `${m.charAt(0)}${m.slice(1, 3).toLowerCase()}.`; };
+        const mesesDelOficio = corto(cierres.anterior) === corto(cierres.actual)
+            ? corto(cierres.actual) : `${corto(cierres.anterior)} / ${corto(cierres.actual)}`;
+        const aniosDelOficio = cierres.anterior.slice(0, 4) === cierres.actual.slice(0, 4)
+            ? cierres.actual.slice(0, 4) : `${cierres.anterior.slice(0, 4)} / ${cierres.actual.slice(0, 4)}`;
 
-        // Las dos dinámicas de la izquierda reflejan el cierre del mes pedido.
+        // Las dos dinámicas de la izquierda reflejan el cierre del día pedido.
         const dinamica = (titulo, campo) => `
             <table class="conci-rep-pivote">
                 <thead>
@@ -445,8 +420,8 @@
         ];
 
         const etiquetaApartado = (base, alcance) => {
-            if (alcance === 'mes') return `${base} ${mesCortoPrevio}. / ${mesCorto}. :`;
-            if (alcance === 'anio') return `${base} ${previo.anio === anioSub ? anioSub : `${previo.anio} / ${anioSub}`}:`;
+            if (alcance === 'mes') return `${base} ${mesesDelOficio}:`;
+            if (alcance === 'anio') return `${base} ${aniosDelOficio}:`;
             return base;
         };
 
@@ -479,9 +454,9 @@
             </table>`;
         };
 
-        const aviso = retrocedido
-            ? `<p class="conci-rep-aviso">El mes solicitado aún no tiene cierre capturado en el día 1.
-                 Se entrega el mes anterior completo: ${escapar(MESES[mesSub - 1])} ${anioSub}.</p>`
+        const aviso = totalDia.total.pax + totalDia.total.ops === 0
+            ? `<p class="conci-rep-aviso">No hay manifiestos de pasajeros con CIERRE SUBSECRETARIA del
+                 ${fechaLarga(cierres.actual)}. Revisa que la captura de ese día esté cerrada.</p>`
             : '';
 
         const cuerpo = `
