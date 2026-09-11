@@ -120,6 +120,73 @@
         return salida;
     }
 
+    /* ── marcatextos de la vista previa ─────────────────────────────────── */
+
+    const esHex = v => /^[0-9A-F]{6}$/i.test(String(v || ''));
+    const LINEAS_CELDA = /^(?:\s*<a:(lnL|lnR|lnT|lnB|lnTlToBr|lnBlToTr)\b(?:[^>]*\/>|[\s\S]*?<\/a:\1>))*/;
+    const RELLENO_CELDA = /^\s*<a:(noFill|solidFill|gradFill|blipFill|pattFill|grpFill)\b(?:[^>]*\/>|[\s\S]*?<\/a:\1>)/;
+
+    /** Pinta el fondo de una celda de tabla (a:tc), respetando el orden del esquema. */
+    function rellenarCelda(tc, hex) {
+        const relleno = `<a:solidFill><a:srgbClr val="${hex}"/></a:solidFill>`;
+        const m = tc.match(/<a:tcPr\b([^>]*?)(?:\/>|>([\s\S]*?)<\/a:tcPr>)/);
+        if (!m) return tc.replace(/<\/a:tc>$/, () => `<a:tcPr>${relleno}</a:tcPr></a:tc>`);
+        const contenido = m[2] || '';
+        // tcPr: bordes, luego cell3D, luego el relleno. El relleno de antes se quita.
+        const lineas = contenido.match(LINEAS_CELDA)[0];
+        let resto = contenido.slice(lineas.length);
+        const cell3D = (resto.match(/^\s*<a:cell3D\b(?:[^>]*\/>|[\s\S]*?<\/a:cell3D>)/) || [''])[0];
+        resto = resto.slice(cell3D.length).replace(RELLENO_CELDA, '');
+        return tc.replace(m[0], () => `<a:tcPr${m[1]}>${lineas}${cell3D}${relleno}${resto}</a:tcPr>`);
+    }
+
+    /** Resalta un tramo de texto (a:r) con el marcatextos de PowerPoint. */
+    function resaltarTramo(tramo, hex) {
+        const resaltado = `<a:highlight><a:srgbClr val="${hex}"/></a:highlight>`;
+        const cerrado = tramo.match(/<a:rPr\b([^>]*?)\/>/);
+        if (cerrado) return tramo.replace(cerrado[0], () => `<a:rPr${cerrado[1]}>${resaltado}</a:rPr>`);
+        const m = tramo.match(/<a:rPr\b([^>]*)>([\s\S]*?)<\/a:rPr>/);
+        if (!m) return tramo.replace('<a:r>', () => `<a:r><a:rPr>${resaltado}</a:rPr>`);
+        let contenido = m[2].replace(/<a:highlight\b[\s\S]*?<\/a:highlight>/, '');
+        // El esquema lo pide después de línea, relleno y efectos, y antes de las fuentes.
+        const i = contenido.search(/<a:(uLnTx|uLn|uFillTx|uFill|latin|ea|cs|sym|hlinkClick|hlinkMouseOver|rtl|extLst)\b/);
+        contenido = i < 0 ? contenido + resaltado : contenido.slice(0, i) + resaltado + contenido.slice(i);
+        return tramo.replace(m[0], () => `<a:rPr${m[1]}>${contenido}</a:rPr>`);
+    }
+
+    /**
+     * Aplica los marcatextos de la vista previa a una diapositiva, antes de
+     * sustituir los marcadores: `marcas` es { MARCADOR: 'RRGGBB' }. En una tabla
+     * se pinta la celda completa, como se ve en pantalla; en un cuadro de texto
+     * se resalta la cifra.
+     */
+    function marcar(xml, marcas) {
+        for (const [clave, hex] of Object.entries(marcas || {})) {
+            if (!esHex(hex) || !/^[A-Z0-9_]+$/.test(clave)) continue;
+            const color = hex.toUpperCase();
+            const marcador = `{{${clave}}}`;
+            let desde = 0;
+            for (let i = xml.indexOf(marcador, desde); i >= 0; i = xml.indexOf(marcador, desde)) {
+                const abreCelda = Math.max(xml.lastIndexOf('<a:tc>', i), xml.lastIndexOf('<a:tc ', i));
+                if (abreCelda > xml.lastIndexOf('</a:tc>', i)) {
+                    const fin = xml.indexOf('</a:tc>', i) + '</a:tc>'.length;
+                    const nueva = rellenarCelda(xml.slice(abreCelda, fin), color);
+                    xml = xml.slice(0, abreCelda) + nueva + xml.slice(fin);
+                    desde = abreCelda + nueva.length;
+                    continue;
+                }
+                const abre = xml.lastIndexOf('<a:r>', i);
+                const cierre = xml.indexOf('</a:r>', i);
+                if (abre < 0 || cierre < 0) { desde = i + marcador.length; continue; }
+                const fin = cierre + '</a:r>'.length;
+                const nuevo = resaltarTramo(xml.slice(abre, fin), color);
+                xml = xml.slice(0, abre) + nuevo + xml.slice(fin);
+                desde = abre + nuevo.length;
+            }
+        }
+        return xml;
+    }
+
     /**
      * La plantilla trae cuatro renglones de años (2023 a 2026). Si el periodo
      * pide más, se clona el último; si pide menos, se quitan los sobrantes.
@@ -184,7 +251,9 @@
             }
 
             formas.push(forma({
-                id: ++id, nombre: `Tarjeta ${t.nombre}`, x, y, w: cuad.ancho, h: cuad.alto, relleno: CREMA,
+                // Una tarjeta marcada con el marcatextos lleva ese color en vez del crema.
+                id: ++id, nombre: `Tarjeta ${t.nombre}`, x, y, w: cuad.ancho, h: cuad.alto,
+                relleno: esHex(t.marca) ? String(t.marca).toUpperCase() : CREMA,
                 texto: ['No. de operaciones', 'Total de carga en Tn.'], puntos: cuad.puntos, margen: 0.1
             }));
             // Las cifras centradas en el último 38 % del recuadro, como en la original.
@@ -210,7 +279,11 @@
             const ruta = `ppt/slides/slide${n}.xml`;
             let xml = await zip.file(ruta).async('string');
             if (n === 2) xml = ajustarAnios(xml, modelo.anios);
-            zip.file(ruta, sustituir(xml, modelo.texto, `la diapositiva ${n}`));
+            // Lo corregido a mano en la vista previa, diapositiva por diapositiva.
+            const extra = modelo.porLamina || {};
+            xml = marcar(xml, (extra.marcas && extra.marcas[n]) || {});
+            const valores = { ...modelo.texto, ...((extra.texto && extra.texto[n]) || {}) };
+            zip.file(ruta, sustituir(xml, valores, `la diapositiva ${n}`));
         }
 
         const medios = new Map();
@@ -226,5 +299,5 @@
         });
     }
 
-    window.ConciPresentacionCarga = { construir, CUADRICULAS, PLANTILLA, dimensionesImagen, posicion };
+    window.ConciPresentacionCarga = { construir, marcar, CUADRICULAS, PLANTILLA, dimensionesImagen, posicion };
 })();
