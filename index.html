@@ -23311,6 +23311,20 @@ FF
                                                         <select class="form-select form-select-sm" id="est-exp-dim3" style="width:auto"></select>
                                                     </div>
                                                     <button class="btn btn-sm btn-primary" id="est-exp-consultar" type="button"><i class="fas fa-play me-1"></i>Consultar</button>
+                                                </div>
+                                                <!-- Filtro adicional por CUALQUIER dimensión, sin recargar la barra
+                                                     superior con un desplegable por campo. -->
+                                                <div class="d-flex align-items-end gap-2 flex-wrap mb-3">
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-exp-filtro-campo">Filtrar además por</label>
+                                                        <select class="form-select form-select-sm" id="est-exp-filtro-campo" style="width:auto"></select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-exp-filtro-valor">Valor</label>
+                                                        <select class="form-select form-select-sm" id="est-exp-filtro-valor" style="width:auto;max-width:16rem"><option value="">Todos</option></select>
+                                                    </div>
+                                                    <span class="text-muted" id="est-exp-filtro-nota" style="font-size:.72rem"></span>
+                                                    <span class="flex-grow-1"></span>
                                                     <button class="btn btn-sm btn-outline-success" id="est-exp-csv" type="button"><i class="fas fa-file-csv me-1"></i>CSV</button>
                                                     <button class="btn btn-sm btn-outline-success" id="est-exp-excel" type="button"><i class="fas fa-file-excel me-1"></i>Excel</button>
                                                     <span class="text-muted" id="est-exp-conteo" style="font-size:.75rem"></span>
@@ -23363,6 +23377,7 @@ FF
 
                                             <!-- G · AERONAVES -->
                                             <div class="tab-pane fade" id="est-pane-aeronaves" role="tabpanel">
+                                                <div class="airline-stats-summary mb-3" id="est-aeronaves-tarjetas"></div>
                                                 <h6 class="fw-semibold text-primary mb-2"><i class="fas fa-jet-fighter-up me-2"></i>Por tipo de aeronave</h6>
                                                 <div class="table-responsive mb-4"><table class="table table-sm table-bordered align-middle mb-0" id="est-aeronaves-tipo"><thead></thead><tbody></tbody></table></div>
                                                 <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-id-card me-2"></i>Por matrícula</h6>

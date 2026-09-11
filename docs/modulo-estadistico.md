@@ -13,7 +13,7 @@ public.vw_maestra_operaciones          ← fuente principal (manda el conjunto d
         └─ JOIN public.maestra_operaciones mo ON mo.id = v.id
                                        ← columnas operacionales crudas
                     ↓
-public.mv_estadistica_operaciones      ← una fila por MOVIMIENTO, ya resuelta (038)
+public.mv_estadistica_operaciones      ← una fila por MOVIMIENTO, ya resuelta (040)
                     ↓
 public.estadistica_agregado(...)       ← el único motor de métricas
                     ↓
@@ -38,7 +38,7 @@ antes de crear nada.
 
 ## 2. Definiciones canónicas de las métricas
 
-Todas viven en `public.estadistica_agregado` (migración 038). Ninguna se vuelve a escribir en
+Todas viven en `public.estadistica_agregado` (migración 040). Ninguna se vuelve a escribir en
 JavaScript: Resumen, Explorador, Comparador, Descargas y cada área piden lo mismo a la misma
 función.
 
@@ -51,12 +51,18 @@ función.
 | Carga descargada / embarcada | columna capturada si existe; si no, transportada − tránsito |
 | Carga en tránsito | `sum(transito_contable_kg)` — atribuida **una vez por rotación** |
 | Factor de ocupación | `100 · sum(pax) / sum(capacidad)` sobre las filas con **ambas** cifras |
-| Puntualidad | operaciones con ≤ 15 min de diferencia ÷ operaciones evaluables |
-| Demora | `minutos_demora` capturado, o `hora_real − hora_programada` |
+| Cumple ventana de slot | ANTES + EN TIEMPO + DESPUÉS ÷ operaciones evaluables |
+| Desviación contra slot | `hora_operacion − slot_vigente`, en minutos |
+| Demora operacional | `minutos_demora` capturado, o `hora_real − hora_programada` |
+| Tiempo en tierra | salida − llegada de la misma rotación, atribuido a la salida |
+| Pernocta | `hora_termino_pernocta − hora_inicio_pernocta` |
 
 ### Cancelaciones
 
-Se excluyen de **toda** métrica operacional. Dos señales, ninguna inventada:
+Se excluyen de **toda** métrica operacional. La bandera `cancelado` de la operación es la
+señal principal; los dos criterios de texto quedan como respaldo, porque la columna nace en
+`false` y las filas históricas pueden no haberse marcado nunca. La columna
+`cancelado_origen` dice de cuál de las tres salió cada cancelación.
 
 - `estatus_vuelo` (el `Status` del AODB) contra `cancel|not.?oper|no.?opera|cnx|nop\y` —
   el mismo patrón, letra por letra, que `_EXCLUDED_STATUS_RE` en
@@ -66,6 +72,44 @@ Se excluyen de **toda** métrica operacional. Dos señales, ninguna inventada:
 
 Se implementan como `FILTER (WHERE NOT m.es_cancelada)` en cada agregado, no como un `WHERE`
 global, para poder seguir informando cuántas hubo.
+
+### Puntualidad: se mide contra el SLOT, no contra la hora programada
+
+```
+slot_vigente = coalesce(slot_coordinado, slot_asignado)
+diferencia   = hora_operacion − slot_vigente
+
+  < -15 min   ANTICIPADO   ─ fuera de ventana
+  -15 a -1    ANTES        ┐
+   0          EN TIEMPO    ├ cumple la ventana del slot
+  +1 a +15    DESPUÉS      ┘
+  > +15       DEMORA       ─ fuera de ventana
+```
+
+`slot_coordinado` es un cambio posterior **ya autorizado**: en cuanto existe, es la
+referencia válida; `slot_asignado` es el permiso inicial de la aerolínea. `hora_programada`
+**no** sustituye al slot para esta clasificación.
+
+ANTICIPADO queda **fuera de ventana** igual que DEMORA: el slot es una ventana, no un techo.
+
+La **demora operacional** (`minutos_demora`) es un concepto distinto y se conserva aparte:
+mide el retraso del vuelo, no el cumplimiento del permiso. Confundirlas sería el error de
+fondo. Cuando no hay slot o no hay hora de operación, se toma el dictamen ya calculado en
+`estado_puntualidad`, que la fuente llena con este mismo vocabulario.
+
+### Nacional / Internacional: manda lo declarado
+
+`tipo_operacion` es el campo que la fuente llena con NACIONAL / INTERNACIONAL, así que es la
+declaración oficial y tiene prioridad. Sólo si no viene se deriva del catálogo de aeropuertos
+(un código OACI mexicano `MMxx` es nacional aunque el catálogo no lo tenga). Si ninguna de las
+dos resuelve, queda en `NULL` — no se supone «nacional». `nacint_origen` dice cuál de las dos
+se usó.
+
+### El nombre del origen/destino no se pierde
+
+El IATA **no reemplaza** al nombre: `destino_origen = "CANCÚN"` convive con
+`destino_iata = "CUN"`. Cuando el aeropuerto no se pudo identificar de forma inequívoca,
+`endpoint_codigo` queda `NULL` y `endpoint_nombre` conserva lo que entregó la fuente.
 
 ### Factor de ocupación
 
@@ -77,8 +121,14 @@ Numerador y denominador se calculan sobre **el mismo conjunto de filas** (`ocupa
 operación sale del cálculo, no entra con cero. La pantalla acompaña el indicador con su
 **cobertura** (`1,245 de 1,310 · 95.0 %`) para que se vea qué tan representativo es.
 
-La capacidad viene de `matriculas_manifiestos.pasajeros` (migración 006), que es el modelo
-maestro. El módulo estadístico **no** mantiene una capacidad propia.
+La capacidad viene de `maestra_operaciones.capacidad_max_pax` — la configuración real de ese
+vuelo — y, a falta de ella, de `matriculas_manifiestos.pasajeros` (migración 006), que es por
+matrícula, es decir por aeronave concreta y no por modelo. `capacidad_origen` dice cuál de las
+dos se usó. El módulo estadístico **no** mantiene una capacidad propia.
+
+La columna `ocupacion` de la operación (ya calculada por fila) **no** se usa para el
+indicador: promediar porcentajes por fila da otro número. Se publica como
+`ocupacion_reportada` para poder contrastarla y detectar capturas incoherentes.
 
 ---
 
@@ -156,7 +206,14 @@ se capturó», distinto de `0` («se capturó y no hubo»).
 Las mismas 30 toneladas que llegan a bordo y siguen a bordo aparecen en la llegada **y** en la
 salida. Contarlas dos veces duplicaría la estadística.
 
-**Rotación.** Se usa `aodb_legacy_id`, que ya está en el modelo desde la migración 023: una fila
+**Rotación.** Tres niveles, en orden de confianza: `rotacion_key` (la clave explícita),
+`movimiento_relacionado_id` (el vuelo relacionado por FK a la propia tabla) y, como último
+recurso, `aodb_legacy_id`. Con `movimiento_relacionado_id` la clave es el par ordenado
+`{menor, mayor}`, para que los dos lados caigan en la misma partición apunte quien apunte a
+quién. Poder emparejar la rotación es además lo que hace medible el **tiempo en tierra**
+(turnaround), que se atribuye a la **salida** para no contarlo dos veces.
+
+El respaldo `aodb_legacy_id` ya estaba en el modelo desde la migración 023: una fila
 del AODB (`itinerario_vuelos_editable`) es un vuelo-día ancho con lado de llegada y lado de
 salida, y los dos movimientos que produce comparten ese id. Eso *es* la rotación. No se emparejan
 movimientos por matrícula + hora, que confunde dos rotaciones de la misma matrícula el mismo día.
@@ -297,6 +354,16 @@ entonces, tocarlo sería arriesgar un documento autorizado.
 
 ---
 
+## 10 bis. Cuando una pantalla sale vacía
+
+Un «sin datos» mudo no dice nada: puede ser que no haya operaciones en ese periodo, que la
+materialización esté vieja o que el filtro no alcance nada. `estadistica_diagnostico()`
+devuelve cuántos movimientos hay, entre qué fechas, cuánto está clasificado y cuándo se
+refrescó, y el panel lo usa para escribir un aviso concreto en lugar de dejar la tabla en
+blanco.
+
+---
+
 ## 11. Pruebas
 
 - `__tests__/estadistica-motor.test.js` — núcleo puro: nulos, unidades, factor de ocupación,
@@ -322,16 +389,34 @@ En este orden, cada uno primero con `ROLLBACK` para revisar la verificación y d
 2. `supabase/migrations/037_estadistica_carga_transito.sql`
 3. `supabase/migrations/038_estadistica_motor.sql`
 4. `supabase/migrations/039_estadistica_reglas_semilla.sql` *(opcional pero recomendada)*
-5. Refrescar, con la sentencia directa (desde el editor SQL `auth.uid()` es NULL y
-   `refrescar_estadistica()` exigiría un usuario autenticado):
+5. El motor v2 va **repartido en seis archivos**, en orden y cada uno con `COMMIT` antes de
+   pasar al siguiente:
 
-   ```sql
-   REFRESH MATERIALIZED VIEW CONCURRENTLY public.mv_estadistica_operaciones;
-   UPDATE public.estadistica_refresco SET refrescado_at = now() WHERE id = 1;
-   ```
+   | Archivo | Qué hace |
+   |---|---|
+   | `040_estadistica_v2_preparacion.sql` | Freno de bloqueos, pausa del refresco automático, contrato de columnas y demolición |
+   | `041_estadistica_v2_reglas.sql` | Criterio de aerolínea en las reglas + resolvedor de clasificación |
+   | `042_estadistica_v2_vista.sql` | Vista materializada **vacía** + los ocho índices |
+   | `043_estadistica_v2_agregado.sql` | `estadistica_agregado`, el motor |
+   | `044_estadistica_v2_funciones.sql` | Consulta, exportación y diagnóstico |
+   | `045_estadistica_v2_poblar.sql` | Llenado, reanudación del refresco y verificación de datos |
 
-   Desde la aplicación basta el botón **Actualizar** de la barra de filtros, que sí llama al
-   RPC con el usuario autenticado.
+   **Por qué seis y no uno.** El editor SQL de Supabase corta la petición HTTP si una sola
+   tarda demasiado, y como el trabajo va dentro de una transacción, al cortarse el cliente se
+   deshace entera: `Failed to fetch` y ni un objeto creado. Dos causas concretas lo
+   provocaban: el contrato de columnas lanzaba **84 consultas separadas** contra
+   `information_schema.columns` (ahora es una sola sobre `pg_attribute`), y el job de pg_cron
+   de la 038 refrescaba la vista cada 15 minutos, de modo que el `DROP` se quedaba esperando
+   el bloqueo — con `statement_timeout = 0`, para siempre. Ahora el 040 **pausa** ese job y
+   pone `lock_timeout`, así que un bloqueo devuelve un error legible en 15 segundos en lugar
+   de colgarse.
+
+   **Entre el 040 y el 044 el módulo queda abajo.** Son minutos; el Informe oficial y el
+   resto de la aplicación siguen funcionando.
+
+6. El paso 3 del 045 (`¿Ya quedó?`) es el que desmiente un `Failed to fetch` durante el
+   llenado: si dice `poblada = true`, el servidor terminó aunque el navegador se rindiera.
+   **No relances el REFRESH sin mirar eso primero.**
 
 Las migraciones 032–035 (estructura, migración de datos, históricos y verificación de la
 maestra) son **anteriores a este módulo** y no forman parte de esta entrega; si todavía no se

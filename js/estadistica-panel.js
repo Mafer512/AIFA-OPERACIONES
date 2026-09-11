@@ -45,8 +45,10 @@
         graficas: {},             // una instancia de Chart por canvas
         areaActiva: 'resumen',
         opcionesCargadas: false,
+        opcionesPorCampo: {},
         ultimoExplorador: null,
         ultimoComparador: null,
+        diagnostico: null,
         iniciado: false
     };
 
@@ -269,6 +271,9 @@
             (data || []).forEach((fila) => {
                 (porCampo[fila.campo] = porCampo[fila.campo] || []).push(fila);
             });
+            // Se conservan todas: la barra superior usa unas cuantas y el
+            // filtro adicional del Explorador puede pedir cualquiera.
+            state.opcionesPorCampo = porCampo;
             const llenar = (id, campo, etiquetaVacia) => {
                 const sel = $(id);
                 if (!sel) return;
@@ -289,6 +294,65 @@
         }
     }
 
+    // ── Diagnóstico: por qué una pantalla sale vacía ────────────────────────
+    //
+    // Un "sin datos" mudo no dice nada: puede ser que no haya operaciones en
+    // ese periodo, que la materialización esté vieja, o que el filtro no
+    // alcance nada. Esto lo contesta con las cifras reales.
+    async function cargarDiagnostico() {
+        if (state.diagnostico) return state.diagnostico;
+        try {
+            const client = await getClient();
+            const { data, error } = await client.rpc('estadistica_diagnostico', {});
+            if (error) throw error;
+            state.diagnostico = Array.isArray(data) ? (data[0] || null) : (data || null);
+        } catch (error) {
+            console.warn('No se pudo obtener el diagnóstico del módulo estadístico:', error);
+            state.diagnostico = null;
+        }
+        return state.diagnostico;
+    }
+
+    // Devuelve un aviso explicando el vacío, o null si sí hubo operaciones.
+    async function avisoDeVacio(total) {
+        if (total && total.operaciones > 0) return null;
+        const d = await cargarDiagnostico();
+        const periodo = Motor.etiquetaRango(desde(), hasta());
+
+        if (!d || Number(d.movimientos || 0) === 0) {
+            return {
+                nivel: 'error',
+                clave: 'vacio_total',
+                mensaje: 'La estadística no tiene ningún movimiento cargado. Falta aplicar las '
+                    + 'migraciones del módulo o refrescar la vista materializada '
+                    + '(REFRESH MATERIALIZED VIEW public.mv_estadistica_operaciones).'
+            };
+        }
+
+        const filtros = Motor.filtrosActivos(state.filtros);
+        const rango = d.primera_fecha && d.ultima_fecha
+            ? `Hay ${Motor.fmtEntero(d.movimientos)} movimientos entre ${d.primera_fecha} y ${d.ultima_fecha}.`
+            : `Hay ${Motor.fmtEntero(d.movimientos)} movimientos cargados.`;
+        const frescura = d.refrescado_at
+            ? ` Última actualización de la estadística: ${new Date(d.refrescado_at).toLocaleString('es-MX')}.`
+            : '';
+        return {
+            nivel: 'aviso',
+            clave: 'vacio_periodo',
+            mensaje: `Sin operaciones en ${periodo}`
+                + (filtros ? ` con los ${filtros} filtro(s) aplicados` : '')
+                + `. ${rango}${frescura}`
+        };
+    }
+
+    // Envuelve el pintado de avisos de cada área: agrega el de vacío cuando
+    // corresponde, para que ninguna sección se quede muda.
+    async function pintarAvisosDe(total) {
+        const avisos = Motor.validar(total);
+        const vacio = await avisoDeVacio(total);
+        pintarAvisos(vacio ? [vacio].concat(avisos) : avisos);
+    }
+
     async function mostrarFrescura() {
         const el = $('est-frescura');
         if (!el) return;
@@ -300,6 +364,14 @@
             }
         } catch (_) { /* la etiqueta es informativa: si falla, no estorba */ }
     }
+
+    // Las canceladas ya no salen de una sola señal: la bandera 'cancelado' de
+    // la operación manda, y el texto del AODB y del manifiesto quedan como
+    // respaldo. Decir cuántas vienen de cada una ayuda a saber si la captura
+    // de la bandera va al día.
+    const cancelPorOrigen = (total) => total.operacionesCanceladas > 0
+        ? 'No cuentan en ninguna métrica'
+        : 'Sin cancelaciones en el periodo';
 
     // ── A · Resumen ejecutivo ────────────────────────────────────────────────
     async function pintarResumen() {
@@ -342,7 +414,7 @@
                     ${esc(c.etiqueta)}: ${esc(c.texto)}</span>`;
             }).join('') + '</div>';
 
-        pintarAvisos(Motor.validar(total));
+        await pintarAvisosDe(total);
 
         const etiquetas = mensual.map((f) => f.d1);
         pintarGrafica('est-resumen-chart', {
@@ -397,9 +469,60 @@
         { titulo: 'Pasajeros', clave: 'paxTotal', tipo: 'numero' },
         { titulo: 'Carga', clave: 'cargaTotalKg', tipo: 'carga' },
         { titulo: 'F. ocupación', clave: 'factorOcupacion', tipo: 'porcentaje' },
-        { titulo: 'Puntualidad', clave: 'puntualidadPorcentaje', tipo: 'porcentaje' },
+        { titulo: 'Cumple slot', clave: 'puntualidadPorcentaje', tipo: 'porcentaje' },
+        { titulo: 'Rotaciones', clave: 'rotaciones', tipo: 'numero' },
+        { titulo: 'T. en tierra (min)', clave: 'turnaroundPromedioMin', tipo: 'decimal' },
         { titulo: 'Canceladas', clave: 'operacionesCanceladas', tipo: 'numero' }
     ];
+
+    // Campos por los que se puede filtrar además de la barra superior. Son
+    // los mismos que entiende el RPC en p_filtros; se llenan con los valores
+    // que de verdad existen en el periodo.
+    const CAMPOS_FILTRO_EXTRA = Object.freeze({
+        posicion: 'Posición',
+        puerta: 'Puerta',
+        banda: 'Banda de equipaje',
+        tipo_operacion: 'Tipo de operación (origen)',
+        motivo_operativo: 'Motivo operativo',
+        codigo_demora: 'Código de demora',
+        fuente: 'Fuente del dato'
+    });
+
+    function llenarFiltroExtra() {
+        const campo = $('est-exp-filtro-campo');
+        if (campo && !campo.options.length) {
+            campo.innerHTML = '<option value="">— ninguno —</option>'
+                + Object.entries(CAMPOS_FILTRO_EXTRA)
+                    .map(([k, v]) => `<option value="${esc(k)}">${esc(v)}</option>`).join('');
+        }
+        const valor = $('est-exp-filtro-valor');
+        const nota = $('est-exp-filtro-nota');
+        const elegido = campo?.value || '';
+        if (!valor) return;
+        if (!elegido) {
+            valor.innerHTML = '<option value="">Todos</option>';
+            valor.disabled = true;
+            if (nota) nota.textContent = '';
+            return;
+        }
+        valor.disabled = false;
+        const opciones = (state.opcionesPorCampo || {})[elegido] || [];
+        const previo = valor.value;
+        valor.innerHTML = '<option value="">Todos</option>'
+            + opciones.map((o) => `<option value="${esc(o.valor)}">${esc(o.etiqueta)}</option>`).join('');
+        if (previo) valor.value = previo;
+        if (nota) {
+            nota.textContent = opciones.length
+                ? `${opciones.length} valor(es) en el periodo`
+                : 'Sin valores capturados en el periodo';
+        }
+    }
+
+    function filtroExtra() {
+        const campo = $('est-exp-filtro-campo')?.value;
+        const valor = $('est-exp-filtro-valor')?.value;
+        return campo && valor ? { [campo]: [valor] } : null;
+    }
 
     function llenarSelectDimensiones() {
         const opciones = (incluirVacio) => (incluirVacio ? '<option value="">— sin agrupar —</option>' : '')
@@ -416,9 +539,11 @@
         llenarSelectDimensiones();
         const dims = [$('est-exp-dim1')?.value, $('est-exp-dim2')?.value, $('est-exp-dim3')?.value]
             .filter(Boolean);
-        const filas = await agregado(desde(), hasta(), dims, null, 5000);
+        llenarFiltroExtra();
+        const extra = filtroExtra();
+        const filas = await agregado(desde(), hasta(), dims, extra, 5000);
         const total = totalDe(filas);
-        state.ultimoExplorador = { dims, filas, total };
+        state.ultimoExplorador = { dims, filas, total, extra };
 
         const columnasDim = dims.map((d, i) => ({
             titulo: Motor.DIMENSIONES[d] || d,
@@ -451,7 +576,7 @@
                 options: opcionesGrafica()
             });
         }
-        pintarAvisos(Motor.validar(total));
+        await pintarAvisosDe(total);
     }
 
     // ── C · Operaciones ──────────────────────────────────────────────────────
@@ -468,7 +593,12 @@
             tarjeta('Salidas', Motor.fmtEntero(total.operacionesSalida), ''),
             tarjeta('Nacional / Internacional',
                 `${Motor.fmtEntero(total.operacionesNacional)} / ${Motor.fmtEntero(total.operacionesInternacional)}`, ''),
-            tarjeta('Canceladas', Motor.fmtEntero(total.operacionesCanceladas), 'No cuentan en ninguna métrica')
+            tarjeta('Canceladas', Motor.fmtEntero(total.operacionesCanceladas),
+                cancelPorOrigen(total)),
+            tarjeta('Rotaciones', Motor.fmtEntero(total.rotaciones),
+                total.turnaroundPromedioMin === null
+                    ? 'Sin tiempo en tierra medible'
+                    : `Tiempo en tierra promedio ${Motor.fmtDecimal(total.turnaroundPromedioMin)} min`)
         ].join('');
 
         pintarGrafica('est-ops-chart', {
@@ -503,7 +633,7 @@
             { titulo: 'Participación', valor: (f) => total.operaciones > 0 ? (f.operaciones / total.operaciones) * 100 : null, tipo: 'porcentaje' }
         ], clasif, { total, etiquetaTotal: 'TOTAL' });
 
-        pintarAvisos(Motor.validar(total));
+        await pintarAvisosDe(total);
     }
 
     // ── D · Pasajeros ────────────────────────────────────────────────────────
@@ -525,7 +655,19 @@
                 `Calculado con ${cobOcup.texto} de las operaciones`),
             tarjeta('Promedio por operación',
                 total.operacionesConPax > 0 ? Motor.fmtEntero((total.paxTotal || 0) / total.operacionesConPax) : '—',
-                `${Motor.fmtEntero(total.operacionesConPax)} operaciones con dato de pasajeros`)
+                `${Motor.fmtEntero(total.operacionesConPax)} operaciones con dato de pasajeros`),
+            tarjeta('Programados vs no abordados',
+                `${Motor.fmtEntero(total.paxProgramados)} / ${Motor.fmtEntero(total.paxNoAbordados)}`,
+                total.tasaNoAbordados === null
+                    ? 'Sin pasajeros programados capturados'
+                    : `Tasa de no abordaje ${Motor.fmtPorcentaje(total.tasaNoAbordados)}`),
+            tarjeta('Tránsitos y conexiones',
+                `${Motor.fmtEntero(total.paxTransitos)} / ${Motor.fmtEntero(total.paxConexiones)}`,
+                'Pasajeros que no inician ni terminan viaje en AIFA'),
+            tarjeta('Pagan TUA', Motor.fmtEntero(total.paxPaganTua),
+                `Exentos ${Motor.fmtEntero(total.paxExentos)}`),
+            tarjeta('Inadmitidos y repatriados',
+                `${Motor.fmtEntero(total.paxInadmitidos)} / ${Motor.fmtEntero(total.paxRepatriados)}`, '')
         ].join('');
 
         pintarGrafica('est-pax-chart', {
@@ -548,6 +690,11 @@
             { titulo: 'Pax total', clave: 'paxTotal', tipo: 'numero' },
             { titulo: 'Nacional', clave: 'paxNacional', tipo: 'numero' },
             { titulo: 'Internacional', clave: 'paxInternacional', tipo: 'numero' },
+            { titulo: 'Programados', clave: 'paxProgramados', tipo: 'numero' },
+            { titulo: 'No abordados', clave: 'paxNoAbordados', tipo: 'numero' },
+            { titulo: 'Tránsitos', clave: 'paxTransitos', tipo: 'numero' },
+            { titulo: 'Conexiones', clave: 'paxConexiones', tipo: 'numero' },
+            { titulo: 'Pagan TUA', clave: 'paxPaganTua', tipo: 'numero' },
             { titulo: 'F. ocupación', clave: 'factorOcupacion', tipo: 'porcentaje' }
         ], mensual, { total, etiquetaTotal: 'TOTAL' });
 
@@ -563,7 +710,7 @@
             { titulo: 'Cobertura', valor: (f) => Motor.cobertura(f.operacionesConOcupacion, f.operaciones).texto }
         ], conOcupacion, { vacio: 'Ninguna operación del periodo tiene a la vez pasajeros y capacidad de matrícula.' });
 
-        pintarAvisos(Motor.validar(total));
+        await pintarAvisosDe(total);
     }
 
     // ── E · Aerolíneas ───────────────────────────────────────────────────────
@@ -615,7 +762,8 @@
             { titulo: 'Crecimiento anual', clave: 'crecimiento', html: (f) => chipVariacion(f.crecimiento, '') }
         ], filas, { total: totalDe(actual), etiquetaTotal: 'TOTAL' });
 
-        const avisos = Motor.validar(totalDe(actual));
+        const totalAerolineas = totalDe(actual);
+        const avisos = Motor.validar(totalAerolineas);
         if (!repartoOps.cuadra && repartoOps.total > 0) {
             avisos.push({
                 nivel: 'aviso',
@@ -623,7 +771,8 @@
                 mensaje: `Las participaciones por aerolínea suman ${Motor.fmtPorcentaje(repartoOps.sumaParticipacion)} en vez de 100 %.`
             });
         }
-        pintarAvisos(avisos);
+        const vacio = await avisoDeVacio(totalAerolineas);
+        pintarAvisos(vacio ? [vacio].concat(avisos) : avisos);
     }
 
     // ── F · Rutas y destinos ─────────────────────────────────────────────────
@@ -672,6 +821,8 @@
             { titulo: 'Carga', clave: 'cargaTotalKg', tipo: 'carga' },
             { titulo: 'Crecimiento anual', clave: 'crecimiento', html: (f) => chipVariacion(f.crecimiento, '') }
         ], filas, { total, etiquetaTotal: 'TOTAL' });
+
+        await pintarAvisosDe(total);
     }
 
     // ── G · Aeronaves ────────────────────────────────────────────────────────
@@ -681,6 +832,21 @@
             agregado(desde(), hasta(), ['matricula'], null, 3000),
             totalPeriodo(desde(), hasta())
         ]);
+
+        $('est-aeronaves-tarjetas').innerHTML = [
+            tarjeta('Rotaciones', Motor.fmtEntero(total.rotaciones),
+                Motor.cobertura(total.operacionesConTurnaround, total.operacionesSalida).texto
+                + ' con tiempo en tierra medible'),
+            tarjeta('Tiempo en tierra promedio',
+                total.turnaroundPromedioMin === null ? '—' : `${Motor.fmtDecimal(total.turnaroundPromedioMin)} min`,
+                total.turnaroundMinimoMin === null ? 'Sin rotaciones emparejadas'
+                    : `Entre ${Motor.fmtEntero(total.turnaroundMinimoMin)} y ${Motor.fmtEntero(total.turnaroundMaximoMin)} min`),
+            tarjeta('Pernoctas', Motor.fmtEntero(total.operacionesPernocta),
+                total.pernoctaPromedioMin === null ? 'Sin pernoctas capturadas'
+                    : `Promedio ${Motor.fmtDecimal(total.pernoctaPromedioMin / 60)} h`),
+            tarjeta('Asientos ofrecidos', Motor.fmtEntero(total.ocupacionCapacidad),
+                `Factor de ocupación ${Motor.fmtPorcentaje(total.factorOcupacion)}`)
+        ].join('');
 
         const columnas = (etiqueta) => [
             { titulo: etiqueta, clave: 'd1' },
@@ -693,6 +859,8 @@
                 tipo: 'numero'
             },
             { titulo: 'F. ocupación', clave: 'factorOcupacion', tipo: 'porcentaje' },
+            { titulo: 'Rotaciones', clave: 'rotaciones', tipo: 'numero' },
+            { titulo: 'T. en tierra (min)', clave: 'turnaroundPromedioMin', tipo: 'decimal' },
             { titulo: 'Carga', clave: 'cargaTotalKg', tipo: 'carga' }
         ];
 
@@ -700,6 +868,8 @@
             porTipo.slice().sort((a, b) => b.operaciones - a.operaciones), { total, etiquetaTotal: 'TOTAL' });
         pintarTabla('est-aeronaves-matricula', columnas('Matrícula'),
             porMatricula.slice().sort((a, b) => b.operaciones - a.operaciones), { total, etiquetaTotal: 'TOTAL' });
+
+        await pintarAvisosDe(total);
     }
 
     // ── H · Carga ────────────────────────────────────────────────────────────
@@ -717,7 +887,13 @@
             tarjeta('Embarcada en AIFA', Motor.fmtToneladas(total.cargaEmbarcadaKg), 'Movimientos de salida'),
             tarjeta('En tránsito', Motor.fmtToneladas(total.cargaTransitoKg),
                 'Contabilizada una sola vez por rotación'),
-            tarjeta('Correo', Motor.fmtToneladas(total.correoKg), '')
+            tarjeta('Correo', Motor.fmtToneladas(total.correoKg), ''),
+            // Importación/exportación es OTRA dimensión: una carga de
+            // importación es además internacional y puede ir en tránsito.
+            tarjeta('Importación / Exportación',
+                `${Motor.fmtToneladas(total.cargaImportacionKg)} / ${Motor.fmtToneladas(total.cargaExportacionKg)}`,
+                'Régimen aduanal, independiente de nacional/internacional'),
+            tarjeta('Equipaje', Motor.fmtToneladas(total.equipajeKg), 'No forma parte de la carga transportada')
         ].join('');
 
         // Aviso honesto: mientras nadie capture el desglose, "descargada" y
@@ -760,7 +936,9 @@
             { titulo: 'Descargada', clave: 'cargaDescargadaKg', tipo: 'carga' },
             { titulo: 'Embarcada', clave: 'cargaEmbarcadaKg', tipo: 'carga' },
             { titulo: 'En tránsito', clave: 'cargaTransitoKg', tipo: 'carga' },
-            { titulo: 'Correo', clave: 'correoKg', tipo: 'carga' }
+            { titulo: 'Correo', clave: 'correoKg', tipo: 'carga' },
+            { titulo: 'Importación', clave: 'cargaImportacionKg', tipo: 'carga' },
+            { titulo: 'Exportación', clave: 'cargaExportacionKg', tipo: 'carga' }
         ];
 
         pintarTabla('est-carga-tabla',
@@ -775,7 +953,7 @@
             porAerolinea.filter((f) => (f.cargaTotalKg || 0) > 0).sort((a, b) => (b.cargaTotalKg || 0) - (a.cargaTotalKg || 0)),
             { total, etiquetaTotal: 'TOTAL', vacio: 'Ninguna operación del periodo reporta carga.' });
 
-        pintarAvisos(Motor.validar(total));
+        await pintarAvisosDe(total);
     }
 
     // ── I · Puntualidad y demoras ────────────────────────────────────────────
@@ -789,14 +967,22 @@
 
         const cob = Motor.cobertura(total.operacionesEvaluablesPuntualidad, total.operaciones);
         $('est-punt-tarjetas').innerHTML = [
-            tarjeta('Puntualidad', Motor.fmtPorcentaje(total.puntualidadPorcentaje),
-                `Evaluada sobre ${cob.texto} de las operaciones`),
-            tarjeta('A tiempo', Motor.fmtEntero(total.operacionesPuntuales), 'Hasta 15 minutos de diferencia'),
-            tarjeta('Demoradas', Motor.fmtEntero(total.operacionesDemoradas), 'Más de 15 minutos'),
-            tarjeta('Demora promedio', total.demoraPromedio === null ? '—' : `${Motor.fmtDecimal(total.demoraPromedio)} min`, ''),
-            tarjeta('Máxima / mínima',
-                `${total.demoraMaxima === null ? '—' : Motor.fmtEntero(total.demoraMaxima)} / ${total.demoraMinima === null ? '—' : Motor.fmtEntero(total.demoraMinima)} min`,
-                'Minutos contra la hora programada')
+            // La medición oficial es contra el SLOT VIGENTE
+            // (coalesce(slot_coordinado, slot_asignado)), no contra la hora
+            // programada. Cumplir la ventana es ANTES, EN TIEMPO o DESPUÉS.
+            tarjeta('Cumple la ventana del slot', Motor.fmtPorcentaje(total.puntualidadPorcentaje),
+                `ANTES + EN TIEMPO + DESPUÉS, sobre ${cob.texto} de las operaciones`),
+            tarjeta('En tiempo', Motor.fmtEntero(total.operacionesEnTiempo),
+                `Antes ${Motor.fmtEntero(total.operacionesAntes)} · Después ${Motor.fmtEntero(total.operacionesDespues)}`),
+            tarjeta('Fuera de ventana',
+                `${Motor.fmtEntero(total.operacionesAnticipadas)} / ${Motor.fmtEntero(total.operacionesDemoradas)}`,
+                'Anticipadas / con demora (más de 15 min)'),
+            tarjeta('Desviación media contra el slot',
+                total.minutosVsSlotPromedio === null ? '—' : `${Motor.fmtDecimal(total.minutosVsSlotPromedio)} min`,
+                'Positivo = después del slot'),
+            tarjeta('Demora operacional',
+                total.demoraPromedio === null ? '—' : `${Motor.fmtDecimal(total.demoraPromedio)} min`,
+                'Concepto distinto: retraso del vuelo, no cumplimiento del permiso')
         ].join('');
 
         pintarGrafica('est-punt-chart', {
@@ -804,7 +990,7 @@
             data: {
                 labels: mensual.map((f) => f.d1),
                 datasets: [
-                    { label: 'Puntualidad (%)', data: mensual.map((f) => f.puntualidadPorcentaje), borderColor: COLORES[1], backgroundColor: COLORES[1], tension: 0.25 },
+                    { label: 'Cumple slot (%)', data: mensual.map((f) => f.puntualidadPorcentaje), borderColor: COLORES[1], backgroundColor: COLORES[1], tension: 0.25 },
                     { label: 'Demora promedio (min)', data: mensual.map((f) => f.demoraPromedio), borderColor: COLORES[2], backgroundColor: COLORES[2], tension: 0.25, yAxisID: 'y1' }
                 ]
             },
@@ -817,20 +1003,22 @@
         });
 
         const columnasPunt = [
-            { titulo: 'A tiempo', clave: 'operacionesPuntuales', tipo: 'numero' },
-            { titulo: 'Demoradas', clave: 'operacionesDemoradas', tipo: 'numero' },
+            { titulo: 'Anticipadas', clave: 'operacionesAnticipadas', tipo: 'numero' },
+            { titulo: 'Antes', clave: 'operacionesAntes', tipo: 'numero' },
+            { titulo: 'En tiempo', clave: 'operacionesEnTiempo', tipo: 'numero' },
+            { titulo: 'Después', clave: 'operacionesDespues', tipo: 'numero' },
+            { titulo: 'Demora', clave: 'operacionesDemoradas', tipo: 'numero' },
             { titulo: 'Evaluables', clave: 'operacionesEvaluablesPuntualidad', tipo: 'numero' },
-            { titulo: 'Puntualidad', clave: 'puntualidadPorcentaje', tipo: 'porcentaje' },
-            { titulo: 'Demora prom. (min)', clave: 'demoraPromedio', tipo: 'decimal' },
-            { titulo: 'Máx (min)', clave: 'demoraMaxima', tipo: 'numero' },
-            { titulo: 'Mín (min)', clave: 'demoraMinima', tipo: 'numero' }
+            { titulo: 'Cumple slot', clave: 'puntualidadPorcentaje', tipo: 'porcentaje' },
+            { titulo: 'Desv. vs slot (min)', clave: 'minutosVsSlotPromedio', tipo: 'decimal' },
+            { titulo: 'Demora oper. prom. (min)', clave: 'demoraPromedio', tipo: 'decimal' }
         ];
 
         pintarTabla('est-punt-aerolinea',
             [{ titulo: 'Aerolínea', clave: 'd1' }, { titulo: 'Operaciones', clave: 'operaciones', tipo: 'numero' }].concat(columnasPunt),
             porAerolinea.filter((f) => f.operacionesEvaluablesPuntualidad > 0)
                 .sort((a, b) => b.operaciones - a.operaciones),
-            { total, etiquetaTotal: 'TOTAL', vacio: 'Ninguna operación del periodo tiene hora real ni dictamen de puntualidad.' });
+            { total, etiquetaTotal: 'TOTAL', vacio: 'Ninguna operación del periodo tiene slot ni dictamen de puntualidad con qué evaluarse.' });
 
         pintarTabla('est-punt-causas', [
             { titulo: 'Código', clave: 'd1' },
@@ -842,7 +1030,7 @@
         ], porCausa.filter((f) => f.d1 || f.d2).sort((a, b) => b.operacionesDemoradas - a.operacionesDemoradas),
             { vacio: 'No hay códigos ni causas de demora capturados en el periodo.' });
 
-        pintarAvisos(Motor.validar(total));
+        await pintarAvisosDe(total);
     }
 
     // ── J · Comparador ───────────────────────────────────────────────────────
@@ -1087,6 +1275,14 @@
             { titulo: 'Pax internacional', clave: 'paxInternacional', tipo: 'numero' },
             { titulo: 'Asientos ofrecidos', clave: 'ocupacionCapacidad', tipo: 'numero' },
             { titulo: 'Factor de ocupación (%)', clave: 'factorOcupacion', tipo: 'porcentaje' },
+            { titulo: 'Pax programados', clave: 'paxProgramados', tipo: 'numero' },
+            { titulo: 'Pax no abordados', clave: 'paxNoAbordados', tipo: 'numero' },
+            { titulo: 'Pax en transito', clave: 'paxTransitos', tipo: 'numero' },
+            { titulo: 'Pax en conexion', clave: 'paxConexiones', tipo: 'numero' },
+            { titulo: 'Pax que pagan TUA', clave: 'paxPaganTua', tipo: 'numero' },
+            { titulo: 'Pax exentos', clave: 'paxExentos', tipo: 'numero' },
+            { titulo: 'Pax inadmitidos', clave: 'paxInadmitidos', tipo: 'numero' },
+            { titulo: 'Pax repatriados', clave: 'paxRepatriados', tipo: 'numero' },
             { titulo: 'Operaciones con dato de pax', clave: 'operacionesConPax', tipo: 'numero' }
         ],
         carga: [
@@ -1098,16 +1294,24 @@
             { titulo: 'Embarcada (kg)', clave: 'cargaEmbarcadaKg', tipo: 'carga' },
             { titulo: 'En tránsito (kg)', clave: 'cargaTransitoKg', tipo: 'carga' },
             { titulo: 'Correo (kg)', clave: 'correoKg', tipo: 'carga' },
+            { titulo: 'Importacion (kg)', clave: 'cargaImportacionKg', tipo: 'carga' },
+            { titulo: 'Exportacion (kg)', clave: 'cargaExportacionKg', tipo: 'carga' },
+            { titulo: 'Equipaje (kg)', clave: 'equipajeKg', tipo: 'carga' },
             { titulo: 'Operaciones con carga', clave: 'operacionesConCarga', tipo: 'numero' },
             { titulo: 'Con desglose capturado', clave: 'operacionesConDesgloseCarga', tipo: 'numero' }
         ],
         puntualidad: [
             { titulo: 'Periodo', clave: 'd1' },
             { titulo: 'Operaciones', clave: 'operaciones', tipo: 'numero' },
-            { titulo: 'A tiempo', clave: 'operacionesPuntuales', tipo: 'numero' },
-            { titulo: 'Demoradas', clave: 'operacionesDemoradas', tipo: 'numero' },
+            { titulo: 'Anticipadas', clave: 'operacionesAnticipadas', tipo: 'numero' },
+            { titulo: 'Antes', clave: 'operacionesAntes', tipo: 'numero' },
+            { titulo: 'En tiempo', clave: 'operacionesEnTiempo', tipo: 'numero' },
+            { titulo: 'Despues', clave: 'operacionesDespues', tipo: 'numero' },
+            { titulo: 'Con demora', clave: 'operacionesDemoradas', tipo: 'numero' },
             { titulo: 'Evaluables', clave: 'operacionesEvaluablesPuntualidad', tipo: 'numero' },
-            { titulo: 'Puntualidad (%)', clave: 'puntualidadPorcentaje', tipo: 'porcentaje' },
+            { titulo: 'Cumple ventana de slot (%)', clave: 'puntualidadPorcentaje', tipo: 'porcentaje' },
+            { titulo: 'Desviacion media vs slot (min)', clave: 'minutosVsSlotPromedio', tipo: 'decimal' },
+            { titulo: 'Operaciones con slot', clave: 'operacionesConSlot', tipo: 'numero' },
             { titulo: 'Minutos de demora', clave: 'minutosDemoraTotal', tipo: 'numero' },
             { titulo: 'Demora promedio (min)', clave: 'demoraPromedio', tipo: 'decimal' },
             { titulo: 'Demora máxima (min)', clave: 'demoraMaxima', tipo: 'numero' },
@@ -1122,13 +1326,14 @@
         { titulo: 'Aerolínea', clave: 'aerolinea' },
         { titulo: 'Matrícula', clave: 'matricula' },
         { titulo: 'Tipo aeronave', clave: 'tipo_aeronave' },
-        { titulo: 'Capacidad', clave: 'capacidad_pasajeros', tipo: 'numero' },
         { titulo: 'Tipo servicio', clave: 'tipo_servicio' },
         { titulo: 'Descripción servicio', clave: 'tipo_servicio_descripcion' },
         { titulo: 'Origen', clave: 'origen_codigo' },
         { titulo: 'Destino', clave: 'destino_codigo' },
         { titulo: 'Ciudad', clave: 'endpoint_ciudad' },
         { titulo: 'Nacional/Internacional', clave: 'nacional_internacional' },
+        { titulo: 'Origen nacional/internacional', clave: 'nacint_origen' },
+        { titulo: 'Nombre original del extremo', clave: 'endpoint_nombre' },
         { titulo: 'Segmento', clave: 'segmento_aviacion' },
         { titulo: 'Naturaleza', clave: 'naturaleza_operacion' },
         { titulo: 'Cancelada', valor: (f) => f.es_cancelada ? 'Sí' : 'No' },
@@ -1141,12 +1346,42 @@
         { titulo: 'Tránsito capturado (kg)', clave: 'carga_transito_kg', tipo: 'carga' },
         { titulo: 'Tránsito contable (kg)', clave: 'transito_contable_kg', tipo: 'carga' },
         { titulo: 'Correo (kg)', clave: 'correo_kg', tipo: 'carga' },
+        { titulo: 'Slot asignado', clave: 'slot_asignado' },
+        { titulo: 'Slot coordinado', clave: 'slot_coordinado' },
+        { titulo: 'Slot vigente', clave: 'slot_vigente' },
+        { titulo: 'Origen del slot', clave: 'slot_origen' },
+        { titulo: 'Hora de operacion', clave: 'hora_operacion' },
+        { titulo: 'Minutos vs slot', clave: 'minutos_vs_slot', tipo: 'numero' },
+        { titulo: 'Adherencia al slot', clave: 'clasificacion_slot' },
         { titulo: 'Minutos de demora', clave: 'minutos_demora', tipo: 'numero' },
-        { titulo: 'Puntual', valor: (f) => f.es_puntual === null || f.es_puntual === undefined ? '' : (f.es_puntual ? 'Sí' : 'No') },
         { titulo: 'Código demora', clave: 'codigo_demora' },
         { titulo: 'Causa demora', clave: 'causa_demora' },
-        { titulo: 'Rotación', clave: 'rotacion_id' },
-        { titulo: 'Conciliado', valor: (f) => f.capturado ? 'Sí' : 'No' },
+        { titulo: 'Pax programados', clave: 'pax_programados', tipo: 'numero' },
+        { titulo: 'Pax no abordados', clave: 'pax_no_abordados', tipo: 'numero' },
+        { titulo: 'Pax en transito', clave: 'pax_transitos', tipo: 'numero' },
+        { titulo: 'Pax en conexion', clave: 'pax_conexiones', tipo: 'numero' },
+        { titulo: 'Pax pagan TUA', clave: 'pax_pagan_tua_reportados', tipo: 'numero' },
+        { titulo: 'Pax inadmitidos', clave: 'pax_inadmitidos', tipo: 'numero' },
+        { titulo: 'Pax repatriados', clave: 'pax_repatriados', tipo: 'numero' },
+        { titulo: 'Capacidad', clave: 'capacidad_pasajeros', tipo: 'numero' },
+        { titulo: 'Origen de la capacidad', clave: 'capacidad_origen' },
+        { titulo: 'Carga importacion (kg)', clave: 'carga_importacion_kg', tipo: 'carga' },
+        { titulo: 'Carga exportacion (kg)', clave: 'carga_exportacion_kg', tipo: 'carga' },
+        { titulo: 'Equipaje (kg)', clave: 'equipaje_kg', tipo: 'carga' },
+        { titulo: 'Posicion', clave: 'posicion' },
+        { titulo: 'Puerta', clave: 'puerta' },
+        { titulo: 'Banda', clave: 'banda' },
+        { titulo: 'Escala', clave: 'escala_codigo' },
+        { titulo: 'Estatus matricula', clave: 'estatus_matricula' },
+        { titulo: 'Codigo AFAC', clave: 'codigo_afac' },
+        { titulo: 'Motivo operativo', clave: 'motivo_operativo' },
+        { titulo: 'Senal de cancelacion', clave: 'cancelado_origen' },
+        { titulo: 'Rotacion', clave: 'rotacion_clave' },
+        { titulo: 'Origen de la rotacion', clave: 'rotacion_origen' },
+        { titulo: 'Tiempo en tierra (min)', clave: 'turnaround_min', tipo: 'numero' },
+        { titulo: 'Pernocta (min)', clave: 'minutos_pernocta', tipo: 'numero' },
+        { titulo: 'Conciliado', valor: (f) => f.conciliado ? 'Si' : 'No' },
+        { titulo: 'Validado', valor: (f) => f.validado ? 'Si' : 'No' },
         { titulo: 'Fuente', clave: 'fuente_principal' }
     ];
 
@@ -1328,6 +1563,7 @@
 
     function invalidar() {
         state.cargadas.clear();
+        state.diagnostico = null;
         window.EstadisticaClasificacion?.invalidar?.();
     }
 
@@ -1385,6 +1621,11 @@
         });
 
         $('est-exp-consultar')?.addEventListener('click', () => mostrarArea('explorador', true));
+        $('est-exp-filtro-campo')?.addEventListener('change', () => {
+            if ($('est-exp-filtro-valor')) $('est-exp-filtro-valor').value = '';
+            llenarFiltroExtra();
+        });
+        $('est-exp-filtro-valor')?.addEventListener('change', () => mostrarArea('explorador', true));
         $('est-exp-csv')?.addEventListener('click', () => {
             if (!state.ultimoExplorador) return;
             const { dims, filas } = state.ultimoExplorador;

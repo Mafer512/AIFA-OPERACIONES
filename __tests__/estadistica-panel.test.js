@@ -46,6 +46,7 @@ function crearStub(nivel) {
   const llamadas = [];
   const client = {
     llamadas,
+    vacio: false,
     rpc: jest.fn(async (nombre, params) => {
       llamadas.push({ nombre, params });
       if (nombre === 'estadistica_access_level') return { data: nivel, error: null };
@@ -57,13 +58,20 @@ function crearStub(nivel) {
             { campo: 'tipo_aeronave', valor: 'A320', etiqueta: 'A320', operaciones: 90 },
             { campo: 'endpoint', valor: 'CUN', etiqueta: 'CUN — Cancún', operaciones: 30 },
             { campo: 'tipo_servicio', valor: 'J', etiqueta: 'J — Servicio Normal', operaciones: 100 },
-            { campo: 'matricula', valor: 'XA-VRZ', etiqueta: 'XA-VRZ', operaciones: 12 }
+            { campo: 'matricula', valor: 'XA-VRZ', etiqueta: 'XA-VRZ', operaciones: 12 },
+            { campo: 'posicion', valor: 'A12', etiqueta: 'A12', operaciones: 55 },
+            { campo: 'puerta', valor: '7', etiqueta: '7', operaciones: 40 }
           ],
           error: null
         };
       }
       if (nombre === 'estadistica_agregado') {
         const dims = params.p_dimensiones || [];
+        // vacio=true simula un periodo sin operaciones, que es el caso que
+        // tiene que explicarse en pantalla en vez de quedarse mudo.
+        if (client.vacio) {
+          return { data: [respuestaAgregado({ operaciones: 0, operaciones_llegada: 0, operaciones_salida: 0 })], error: null };
+        }
         if (!dims.length) return { data: [respuestaAgregado()], error: null };
         return {
           data: [
@@ -84,6 +92,18 @@ function crearStub(nivel) {
         return { data: [{ id: 999999, fecha_operacion: '2026-01-02' }], error: null };
       }
       if (nombre === 'estadistica_sin_clasificar') return { data: [], error: null };
+      if (nombre === 'estadistica_diagnostico') {
+        return {
+          data: [{
+            movimientos: 3676, canceladas: 12, clasificadas: 3600, sin_clasificar: 76,
+            con_pax: 3400, con_capacidad: 3100, con_carga: 210, con_rotacion: 2900,
+            conciliadas: 10, primera_fecha: '2026-07-01', ultima_fecha: '2026-08-31',
+            refrescado_at: '2026-09-08T12:00:00.000Z', reglas_activas: 24,
+            por_anio: { '2026': 3676 }, por_fuente: { MAESTRA_OPERACIONES: 3676 }
+          }],
+          error: null
+        };
+      }
       if (nombre === 'refrescar_estadistica') return { data: new Date().toISOString(), error: null };
       return { data: null, error: null };
     }),
@@ -437,6 +457,85 @@ describe('Panel estadístico · centro de descargas', () => {
     await reposar(20);
     const detalle = client.llamadas.find((l) => l.nombre === 'estadistica_detalle');
     expect(detalle.params.p_filtros.aerolinea).toEqual(['VOLARIS']);
+  });
+});
+
+describe('Panel estadístico · por qué una pantalla sale vacía', () => {
+  test('un periodo sin operaciones se explica con las cifras reales, no con un silencio', async () => {
+    const { client } = await montar('admin');
+    client.vacio = true;
+    client.llamadas.length = 0;
+    document.getElementById('est-btn-aplicar').dispatchEvent(new window.Event('click'));
+    await reposar();
+
+    expect(client.llamadas.some((l) => l.nombre === 'estadistica_diagnostico')).toBe(true);
+    const avisos = document.getElementById('est-avisos');
+    expect(avisos.classList.contains('d-none')).toBe(false);
+    // Dice el rango que SÍ tiene datos y cuándo se actualizó la estadística.
+    expect(avisos.textContent).toMatch(/Sin operaciones/i);
+    expect(avisos.textContent).toMatch(/2026-07-01/);
+    expect(avisos.textContent).toMatch(/2026-08-31/);
+    expect(avisos.textContent).toMatch(/3,676/);
+  });
+
+  test('con datos no aparece el aviso de vacío', async () => {
+    await montar('admin');
+    const avisos = document.getElementById('est-avisos').textContent;
+    expect(avisos).not.toMatch(/Sin operaciones en/i);
+  });
+});
+
+describe('Panel estadístico · esquema nuevo', () => {
+  test('el resumen muestra las métricas que trajo el esquema real', async () => {
+    await montar('admin');
+    document.getElementById('est-tab-pasajeros').dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+    const tarjetas = document.getElementById('est-pax-tarjetas').textContent;
+    expect(tarjetas).toMatch(/Programados vs no abordados/);
+    expect(tarjetas).toMatch(/Tránsitos y conexiones/);
+    expect(tarjetas).toMatch(/Pagan TUA/);
+  });
+
+  test('aeronaves reporta rotaciones, tiempo en tierra y pernocta', async () => {
+    await montar('admin');
+    document.getElementById('est-tab-aeronaves').dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+    const tarjetas = document.getElementById('est-aeronaves-tarjetas').textContent;
+    expect(tarjetas).toMatch(/Rotaciones/);
+    expect(tarjetas).toMatch(/Tiempo en tierra promedio/);
+    expect(tarjetas).toMatch(/Pernoctas/);
+  });
+
+  test('carga separa importación y exportación del desglose territorial', async () => {
+    await montar('admin');
+    document.getElementById('est-tab-carga').dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+    const tarjetas = document.getElementById('est-carga-tarjetas').textContent;
+    expect(tarjetas).toMatch(/Importación \/ Exportación/);
+    expect(tarjetas).toMatch(/En tránsito/);
+    expect(tarjetas).toMatch(/Nacional/);
+  });
+
+  test('el explorador filtra por cualquier dimensión sin recargar la barra superior', async () => {
+    const { client } = await montar('admin');
+    document.getElementById('est-tab-explorador').dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+
+    const campo = document.getElementById('est-exp-filtro-campo');
+    expect(Array.from(campo.options).map((o) => o.value)).toEqual(
+      expect.arrayContaining(['posicion', 'puerta', 'banda', 'motivo_operativo']));
+
+    campo.value = 'posicion';
+    campo.dispatchEvent(new window.Event('change'));
+    await reposar();
+    const valor = document.getElementById('est-exp-filtro-valor');
+    valor.value = 'A12';
+    client.llamadas.length = 0;
+    valor.dispatchEvent(new window.Event('change'));
+    await reposar();
+
+    const ultima = llamadasAgregado(client).pop();
+    expect(ultima.params.p_filtros.posicion).toEqual(['A12']);
   });
 });
 

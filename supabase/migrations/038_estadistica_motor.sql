@@ -1,6 +1,22 @@
 -- =============================================================================
 -- 038 — Motor de agregación estadística
 --
+-- >>> SUPERADA POR 040_estadistica_motor_v2.sql <<<
+--
+-- Este archivo se escribió reconstruyendo el esquema de maestra_operaciones a
+-- partir de los INSERT de las migraciones 023-034, porque la tabla se creó a
+-- mano en Supabase y su DDL no estaba en el repositorio. Con el DDL real a la
+-- vista aparecieron 26 columnas que este motor no usaba, cuatro de ellas
+-- corrigiendo decisiones que aquí hubo que inferir (cancelado, rotacion_key,
+-- movimiento_relacionado_id y capacidad_max_pax).
+--
+-- La 040 reemplaza la vista materializada y las cuatro funciones de aquí.
+-- Lo único que sigue viniendo de este archivo es estadistica_refresco y
+-- refrescar_estadistica(), que la 040 no toca.
+--
+-- Si vas a aplicar todo desde cero: correr esta y luego la 040. Si ya la
+-- aplicaste, basta con correr la 040.
+--
 -- REQUISITOS (en este orden, ya con COMMIT):
 --   036_estadistica_clasificacion_reglas.sql
 --   037_estadistica_carga_transito.sql

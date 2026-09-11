@@ -64,7 +64,25 @@
         ciudad: 'Ciudad',
         ruta: 'Ruta',
         codigo_demora: 'Código de demora',
-        causa_demora: 'Causa de demora'
+        causa_demora: 'Causa de demora',
+        motivo_operativo: 'Motivo operativo',
+        clasificacion_slot: 'Adherencia al slot',
+        slot_origen: 'Origen del slot',
+        nacint_origen: 'Origen de nacional/internacional',
+        trimestre: 'Trimestre',
+        aerolinea_codigo: 'Código de aerolínea',
+        estatus_matricula: 'Estatus de matrícula',
+        tipo_operacion: 'Tipo de operación (origen)',
+        codigo_afac: 'Código AFAC',
+        escala: 'Escala',
+        posicion: 'Posición',
+        puerta: 'Puerta',
+        banda: 'Banda de equipaje',
+        fuente: 'Fuente del dato',
+        capacidad_origen: 'Origen de la capacidad',
+        rotacion_origen: 'Origen de la rotación',
+        conciliado: 'Conciliada / sin conciliar',
+        cancelado_origen: 'Señal de cancelación'
     });
 
     const DIAS_SEMANA = Object.freeze(['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']);
@@ -267,13 +285,61 @@
 
             operacionesClasificadas: suma(f.operaciones_clasificadas),
             operacionesSinClasificar: suma(f.operaciones_sin_clasificar),
-            operacionesCapturadas: suma(f.operaciones_capturadas)
+            operacionesCapturadas: suma(f.operaciones_capturadas),
+
+            // ── v2: columnas que aparecieron con el esquema real ──────────
+            cargaImportacionKg: toNumero(f.carga_importacion_kg),
+            cargaExportacionKg: toNumero(f.carga_exportacion_kg),
+            equipajeKg: toNumero(f.equipaje_kg),
+
+            paxProgramados: toNumero(f.pax_programados),
+            paxNoAbordados: toNumero(f.pax_no_abordados),
+            paxInadmitidos: toNumero(f.pax_inadmitidos),
+            paxRepatriados: toNumero(f.pax_repatriados),
+            paxTransitos: toNumero(f.pax_transitos),
+            paxConexiones: toNumero(f.pax_conexiones),
+            paxExentos: toNumero(f.pax_exentos),
+            paxPaganTua: toNumero(f.pax_pagan_tua),
+            operacionesConPaxProgramados: suma(f.operaciones_con_pax_programados),
+
+            operacionesPernocta: suma(f.operaciones_pernocta),
+            minutosPernoctaTotal: toNumero(f.minutos_pernocta_total),
+
+            turnaroundPromedioMin: toNumero(f.turnaround_promedio_min),
+            turnaroundMinimoMin: toNumero(f.turnaround_minimo_min),
+            turnaroundMaximoMin: toNumero(f.turnaround_maximo_min),
+            operacionesConTurnaround: suma(f.operaciones_con_turnaround),
+
+            rotaciones: suma(f.rotaciones),
+            operacionesConciliadas: suma(f.operaciones_conciliadas),
+            operacionesValidadas: suma(f.operaciones_validadas),
+
+            // Adherencia al slot, con el vocabulario oficial completo.
+            operacionesAnticipadas: suma(f.operaciones_anticipadas),
+            operacionesAntes: suma(f.operaciones_antes),
+            operacionesEnTiempo: suma(f.operaciones_en_tiempo),
+            operacionesDespues: suma(f.operaciones_despues),
+            operacionesConSlot: suma(f.operaciones_con_slot),
+            minutosVsSlotPromedio: toNumero(f.minutos_vs_slot_promedio)
         };
 
+        // "Puntualidad" en este módulo es CUMPLIMIENTO DE LA VENTANA DEL SLOT:
+        // ANTES + EN TIEMPO + DESPUÉS sobre las operaciones que sí se pudieron
+        // evaluar. ANTICIPADO queda fuera de ventana igual que DEMORA: el slot
+        // es una ventana, no un techo.
         salida.puntualidadPorcentaje = salida.operacionesEvaluablesPuntualidad > 0
             ? (salida.operacionesPuntuales / salida.operacionesEvaluablesPuntualidad) * 100
             : null;
         salida.cargaTotalToneladas = kgAToneladas(salida.cargaTotalKg);
+        salida.pernoctaPromedioMin = salida.operacionesPernocta > 0 && salida.minutosPernoctaTotal !== null
+            ? salida.minutosPernoctaTotal / salida.operacionesPernocta
+            : null;
+        // Tasa de no presentación: de los que tenían boleto, cuántos no
+        // abordaron. Sólo tiene sentido si se capturaron los programados.
+        salida.tasaNoAbordados = (salida.paxProgramados !== null && salida.paxProgramados > 0
+                                  && salida.paxNoAbordados !== null)
+            ? (salida.paxNoAbordados / salida.paxProgramados) * 100
+            : null;
 
         return salida;
     }
@@ -292,7 +358,11 @@
             'operacionesNacional', 'operacionesInternacional', 'operacionesConPax',
             'operacionesConCarga', 'operacionesConDesgloseCarga', 'operacionesConOcupacion',
             'operacionesPuntuales', 'operacionesDemoradas', 'operacionesEvaluablesPuntualidad',
-            'operacionesClasificadas', 'operacionesSinClasificar', 'operacionesCapturadas'
+            'operacionesClasificadas', 'operacionesSinClasificar', 'operacionesCapturadas',
+            'operacionesConPaxProgramados', 'operacionesPernocta', 'operacionesConTurnaround',
+            'rotaciones', 'operacionesConciliadas', 'operacionesValidadas',
+            'operacionesAnticipadas', 'operacionesAntes', 'operacionesEnTiempo',
+            'operacionesDespues', 'operacionesConSlot'
         ];
         // Estos pueden ser null legítimamente: sólo se suman los que traen dato,
         // y si NINGUNO lo trae el total queda null, no 0.
@@ -300,7 +370,11 @@
             'paxTotal', 'paxLlegada', 'paxSalida', 'paxNacional', 'paxInternacional',
             'cargaTotalKg', 'cargaNacionalKg', 'cargaInternacionalKg',
             'cargaDescargadaKg', 'cargaEmbarcadaKg', 'cargaTransitoKg', 'correoKg',
-            'ocupacionPax', 'ocupacionCapacidad', 'minutosDemoraTotal'
+            'ocupacionPax', 'ocupacionCapacidad', 'minutosDemoraTotal',
+            'cargaImportacionKg', 'cargaExportacionKg', 'equipajeKg',
+            'paxProgramados', 'paxNoAbordados', 'paxInadmitidos', 'paxRepatriados',
+            'paxTransitos', 'paxConexiones', 'paxExentos', 'paxPaganTua',
+            'minutosPernoctaTotal'
         ];
 
         const total = normalizarFila({});
@@ -325,6 +399,36 @@
             ? total.minutosDemoraTotal / total.operacionesEvaluablesPuntualidad
             : null;
 
+        total.pernoctaPromedioMin = total.operacionesPernocta > 0 && total.minutosPernoctaTotal !== null
+            ? total.minutosPernoctaTotal / total.operacionesPernocta
+            : null;
+        total.tasaNoAbordados = (total.paxProgramados !== null && total.paxProgramados > 0
+                                 && total.paxNoAbordados !== null)
+            ? (total.paxNoAbordados / total.paxProgramados) * 100
+            : null;
+
+        // El turnaround promedio se recompone PONDERANDO por cuántas
+        // operaciones lo aportaron. Promediar los promedios de doce meses
+        // daría otro número, porque cada mes tiene distinto número de
+        // rotaciones medibles. El servidor no devuelve la suma de minutos
+        // (sería una columna más para una sola métrica), así que se
+        // reconstruye aquí: sum(promedio_i × n_i) / sum(n_i) es exacto.
+        const conTurnaround = lista.filter((f) => f.turnaroundPromedioMin !== null && f.operacionesConTurnaround > 0);
+        const minutosTurnaround = conTurnaround.reduce((acc, f) => acc + f.turnaroundPromedioMin * f.operacionesConTurnaround, 0);
+        const nTurnaround = conTurnaround.reduce((acc, f) => acc + f.operacionesConTurnaround, 0);
+        total.turnaroundPromedioMin = nTurnaround > 0 ? minutosTurnaround / nTurnaround : null;
+        const turnMin = lista.map((f) => f.turnaroundMinimoMin).filter((v) => v !== null);
+        const turnMax = lista.map((f) => f.turnaroundMaximoMin).filter((v) => v !== null);
+        total.turnaroundMinimoMin = turnMin.length ? Math.min(...turnMin) : null;
+        total.turnaroundMaximoMin = turnMax.length ? Math.max(...turnMax) : null;
+
+        // Los minutos contra el slot se ponderan igual: cada renglón aporta
+        // tantas operaciones como haya evaluado.
+        const conSlot = lista.filter((f) => f.minutosVsSlotPromedio !== null && f.operacionesEvaluablesPuntualidad > 0);
+        const minutosSlot = conSlot.reduce((acc, f) => acc + f.minutosVsSlotPromedio * f.operacionesEvaluablesPuntualidad, 0);
+        const nSlot = conSlot.reduce((acc, f) => acc + f.operacionesEvaluablesPuntualidad, 0);
+        total.minutosVsSlotPromedio = nSlot > 0 ? minutosSlot / nSlot : null;
+
         total.d1 = null; total.d2 = null; total.d3 = null; total.d4 = null;
         return total;
     }
@@ -342,7 +446,14 @@
                 clave: 'desglose_carga',
                 etiqueta: 'Desglose de carga capturado',
                 ...cobertura(t.operacionesConDesgloseCarga, t.operacionesConCarga)
-            }
+            },
+            // El turnaround y el tránsito dependen de poder emparejar los dos
+            // lados de la rotación: sin eso no se calculan, y conviene que se
+            // vea por qué.
+            { clave: 'rotacion', etiqueta: 'Con rotación identificada', ...cobertura(t.operacionesConTurnaround, t.operacionesSalida) },
+            { clave: 'pax_programados', etiqueta: 'Cobertura de pasajeros programados', ...cobertura(t.operacionesConPaxProgramados, t.operaciones) },
+            { clave: 'validado', etiqueta: 'Operaciones validadas', ...cobertura(t.operacionesValidadas, t.operaciones) },
+            { clave: 'slot', etiqueta: 'Operaciones con slot', ...cobertura(t.operacionesConSlot, t.operaciones) }
         ];
     }
 
@@ -640,7 +751,22 @@
         { clave: 'cargaTransitoKg', etiqueta: 'Carga en tránsito', tipo: 'carga' },
         { clave: 'factorOcupacion', etiqueta: 'Factor de ocupación', tipo: 'porcentaje' },
         { clave: 'puntualidadPorcentaje', etiqueta: 'Puntualidad', tipo: 'porcentaje' },
-        { clave: 'demoraPromedio', etiqueta: 'Demora promedio (min)', tipo: 'decimal' }
+        { clave: 'demoraPromedio', etiqueta: 'Demora promedio (min)', tipo: 'decimal' },
+        { clave: 'cargaImportacionKg', etiqueta: 'Carga de importación', tipo: 'carga' },
+        { clave: 'cargaExportacionKg', etiqueta: 'Carga de exportación', tipo: 'carga' },
+        { clave: 'equipajeKg', etiqueta: 'Equipaje', tipo: 'carga' },
+        { clave: 'paxProgramados', etiqueta: 'Pasajeros programados', tipo: 'numero' },
+        { clave: 'paxNoAbordados', etiqueta: 'Pasajeros no abordados', tipo: 'numero' },
+        { clave: 'tasaNoAbordados', etiqueta: 'Tasa de no abordaje', tipo: 'porcentaje' },
+        { clave: 'paxPaganTua', etiqueta: 'Pasajeros que pagan TUA', tipo: 'numero' },
+        { clave: 'paxTransitos', etiqueta: 'Pasajeros en tránsito', tipo: 'numero' },
+        { clave: 'paxConexiones', etiqueta: 'Pasajeros en conexión', tipo: 'numero' },
+        { clave: 'rotaciones', etiqueta: 'Rotaciones', tipo: 'numero' },
+        { clave: 'turnaroundPromedioMin', etiqueta: 'Tiempo en tierra promedio (min)', tipo: 'decimal' },
+        { clave: 'pernoctaPromedioMin', etiqueta: 'Pernocta promedio (min)', tipo: 'decimal' },
+        { clave: 'operacionesEnTiempo', etiqueta: 'Operaciones en tiempo', tipo: 'numero' },
+        { clave: 'operacionesAnticipadas', etiqueta: 'Operaciones anticipadas', tipo: 'numero' },
+        { clave: 'minutosVsSlotPromedio', etiqueta: 'Desviación media contra slot (min)', tipo: 'decimal' }
     ]);
 
     function comparar(totalA, totalB, etiquetaA, etiquetaB) {

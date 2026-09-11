@@ -1,7 +1,11 @@
 -- =============================================================================
 -- 039 — Semilla de reglas de clasificación  (OPCIONAL, pero recomendada)
 --
--- REQUISITO: 036 y 038 ya aplicadas (con COMMIT).
+-- REQUISITO: 036, 037 y el motor v2 (040 a 044) aplicados, con COMMIT.
+--
+-- CORRERLA ANTES DE LA 045. Así el único llenado de la vista ya sale
+-- clasificado y no hace falta refrescar dos veces. Es idempotente: si ya se
+-- había aplicado antes, volver a correrla no duplica nada.
 --
 -- POR QUÉ ES OPCIONAL
 --
@@ -55,12 +59,11 @@
 -- MODO DE USO
 --   1) Correr completo (termina en ROLLBACK) y revisar la VERIFICACIÓN.
 --   2) Cambiar ROLLBACK por COMMIT y volver a correr.
---   3) Refrescar la estadística para que la clasificación se aplique. Desde el
---      editor SQL va la sentencia directa (refrescar_estadistica() exige un
---      usuario autenticado y ahí auth.uid() es NULL):
+--   3) Seguir con la 045, que llena la vista ya con estas reglas.
+--      Si esta semilla se aplica DESPUÉS de la 045, las reglas no se ven hasta
+--      refrescar: botón "Actualizar" de la barra de filtros, o desde el editor
+--      SQL, seleccionada sola:
 --        REFRESH MATERIALIZED VIEW CONCURRENTLY public.mv_estadistica_operaciones;
---        UPDATE public.estadistica_refresco SET refrescado_at = now() WHERE id = 1;
---      Desde la aplicación basta el botón "Actualizar" de la barra de filtros.
 -- =============================================================================
 
 BEGIN;
@@ -110,6 +113,7 @@ WHERE NOT EXISTS (
       FROM public.estadistica_reglas_clasificacion r
      WHERE r.tipo_servicio = t.codigo
        AND r.aerolinea_id IS NULL
+       AND r.aerolinea_codigo IS NULL
        AND r.aerolinea_texto IS NULL
        AND r.tipo_aeronave IS NULL
 );
@@ -153,6 +157,7 @@ WHERE ca.active
          AND r.tipo_servicio IS NULL
          AND r.tipo_aeronave IS NULL
          AND r.aerolinea_texto IS NULL
+         AND r.aerolinea_codigo IS NULL
   );
 
 
@@ -182,25 +187,36 @@ SELECT r.tipo_servicio, f.categoria, f.tipo_operacion, f.descripcion,
  WHERE r.observaciones LIKE '[semilla-039]%'
  ORDER BY r.tipo_servicio;
 
--- 3) Efecto sobre la clasificación. OJO: la vista materializada todavía trae la
---    foto anterior; este conteo usa el resolvedor en vivo sobre una muestra.
+-- 3) Efecto sobre la clasificación, con el resolvedor en vivo sobre una
+--    muestra de la maestra.
+--
+--    NO se lee la vista materializada: antes de la 045 está vacía y
+--    consultarla aborta con 55000. Y se usa la firma de SEIS argumentos del
+--    motor v2 (con el código de aerolínea del catálogo principal); la de
+--    cinco ya no existe.
 SELECT
     count(*)                                          AS muestra,
     count(*) FILTER (WHERE cl.regla_id IS NOT NULL)   AS se_clasificarian,
     count(*) FILTER (WHERE cl.regla_id IS NULL)       AS seguirian_sin_clasificar
   FROM (
-      SELECT * FROM public.mv_estadistica_operaciones
-       WHERE NOT es_cancelada
-       ORDER BY fecha_operacion DESC
+      SELECT mo.fecha_operacion,
+             mo.aerolinea_conciliacion_id,
+             mo.aerolinea_id,
+             mo.aerolinea_origen,
+             NULLIF(btrim(mo.tipo_aeronave_codigo), '') AS tipo_aeronave,
+             upper(NULLIF(btrim(coalesce(mo.tipo_servicio_codigo, mo.tipo_servicio_origen)), '')) AS tipo_servicio
+        FROM public.maestra_operaciones mo
+       WHERE NOT coalesce(mo.cancelado, false)
+       ORDER BY mo.fecha_operacion DESC
        LIMIT 5000
   ) m
   LEFT JOIN LATERAL public.estadistica_resolver_clasificacion(
-      m.fecha_operacion, m.aerolinea_conciliacion_id, m.aerolinea, m.tipo_aeronave, m.tipo_servicio
+      m.fecha_operacion, m.aerolinea_conciliacion_id, m.aerolinea_id,
+      m.aerolinea_origen, m.tipo_aeronave, m.tipo_servicio
   ) cl ON true;
 
 -- -----------------------------------------------------------------------------
--- Cambiar por COMMIT cuando la verificación se vea bien. Después, refrescar:
---   REFRESH MATERIALIZED VIEW CONCURRENTLY public.mv_estadistica_operaciones;
---   UPDATE public.estadistica_refresco SET refrescado_at = now() WHERE id = 1;
+-- Cambiar por COMMIT cuando la verificación se vea bien. Después seguir con
+-- 045_estadistica_v2_poblar.sql, que llena la vista ya con estas reglas.
 -- -----------------------------------------------------------------------------
 ROLLBACK;

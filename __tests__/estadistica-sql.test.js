@@ -15,13 +15,32 @@ const fs = require('fs');
 const path = require('path');
 
 const dir = path.resolve(__dirname, '..', 'supabase', 'migrations');
-const leer = (archivo) => fs.readFileSync(path.join(dir, archivo), 'utf8');
+// Se normaliza el fin de línea al leer: git puede convertir estos archivos a
+// CRLF al pasarlos por el índice, y una prueba estructural no debería
+// depender de eso. Ya rompió una vez por un ciclo de stash/pop.
+const leer = (archivo) => fs.readFileSync(path.join(dir, archivo), 'utf8').replace(/\r\n/g, '\n');
 
 const reglas = leer('036_estadistica_clasificacion_reglas.sql');
 const carga = leer('037_estadistica_carga_transito.sql');
-const motor = leer('038_estadistica_motor.sql');
+const motorV1 = leer('038_estadistica_motor.sql');
 const semilla = leer('039_estadistica_reglas_semilla.sql');
-const todas = [reglas, carga, motor, semilla];
+// El motor VIGENTE es la 040: reescribe la 038 contra el esquema real de
+// maestra_operaciones. Las invariantes se comprueban sobre él.
+// El motor v2 va REPARTIDO EN SEIS ARCHIVOS porque el editor SQL de Supabase
+// corta la petición HTTP si una sola tarda demasiado, y al ir dentro de una
+// transacción se deshace entera. Para las invariantes de CONTENIDO da igual en
+// cuál de los cinco primeros esté cada cosa, así que se concatenan; el orden
+// de la concatenación es el orden de ejecución, que es lo que importa para las
+// pruebas de orden de borrado.
+const prep      = leer('040_estadistica_v2_preparacion.sql');
+const reglasV2  = leer('041_estadistica_v2_reglas.sql');
+const vista     = leer('042_estadistica_v2_vista.sql');
+const agregado  = leer('043_estadistica_v2_agregado.sql');
+const funciones = leer('044_estadistica_v2_funciones.sql');
+const poblar    = leer('045_estadistica_v2_poblar.sql');
+const partesV2  = [prep, reglasV2, vista, agregado, funciones];
+const motor     = partesV2.join('\n');
+const todas     = [reglas, carga, motorV1, semilla].concat(partesV2, [poblar]);
 
 // Varias de estas comprobaciones miran la ESTRUCTURA del SQL, y los archivos de
 // este proyecto llevan más comentario que código. Sin quitarlos, un regex
@@ -32,10 +51,15 @@ const sinComentarios = (sql) => sql
   .map((linea) => linea.replace(/--.*$/, ''))
   .join('\n');
 
+// El SQL se lee con los saltos ya normalizados a \n (ver `leer`).
+const nlSQL = '\n';
+
 const motorSC = sinComentarios(motor);
+const motorV1SC = sinComentarios(motorV1);
 const cargaSC = sinComentarios(carga);
 const reglasSC = sinComentarios(reglas);
 const semillaSC = sinComentarios(semilla);
+const poblarSC = sinComentarios(poblar);
 
 // Recorta el cuerpo de una función desde su CREATE hasta el $$; que la cierra.
 function cuerpoFuncion(sql, nombre) {
@@ -49,20 +73,128 @@ describe('Numeración y forma de las migraciones', () => {
   test('siguen la secuencia real del repositorio sin pisar ninguna existente', () => {
     const archivos = fs.readdirSync(dir).filter((f) => /^\d{3}_.*\.sql$/.test(f));
     const nuevos = ['036_estadistica_clasificacion_reglas.sql', '037_estadistica_carga_transito.sql',
-      '038_estadistica_motor.sql', '039_estadistica_reglas_semilla.sql'];
+      '038_estadistica_motor.sql', '039_estadistica_reglas_semilla.sql',
+      '040_estadistica_v2_preparacion.sql', '041_estadistica_v2_reglas.sql',
+      '042_estadistica_v2_vista.sql', '043_estadistica_v2_agregado.sql',
+      '044_estadistica_v2_funciones.sql', '045_estadistica_v2_poblar.sql'];
     nuevos.forEach((f) => expect(archivos).toContain(f));
     // 035 era la última antes de esta entrega; no existe ninguna 036-039 previa
     // con otro nombre que estas cuatro estarían duplicando.
-    ['036', '037', '038', '039'].forEach((n) => {
+    ['036', '037', '038', '039', '040', '041', '042', '043', '044', '045'].forEach((n) => {
       expect(archivos.filter((f) => f.startsWith(`${n}_`))).toHaveLength(1);
     });
   });
 
-  test('las tres que escriben terminan en ROLLBACK, para poder revisarlas antes de aplicarlas', () => {
-    [reglas, carga, semilla, motor].forEach((sql) => {
+  test('las que escriben terminan en ROLLBACK, para poder revisarlas antes de aplicarlas', () => {
+    [reglas, carga, semilla, motorV1].concat(partesV2).forEach((sql) => {
       expect(sql.trimEnd().endsWith('ROLLBACK;')).toBe(true);
       expect(sql).toMatch(/BEGIN;/);
     });
+  });
+
+  test('ninguna parte del motor v2 concentra demasiado trabajo en una petición', () => {
+    // Dos corridas terminaron en "Failed to fetch": el editor de Supabase corta
+    // la petición HTTP y, al ir el trabajo en una transacción, se deshace todo.
+    // La defensa es que cada archivo haga UNA cosa y ninguno se acerque al
+    // tamaño del monolito anterior (más de 1,500 líneas).
+    partesV2.forEach((sql) => {
+      expect(sql.split(/\r?\n/).length).toBeLessThan(700);
+    });
+  });
+
+  test('cada parte del motor v2 pone un freno de espera por bloqueos', () => {
+    // Sin lock_timeout, un DROP que choca con el refresco de pg_cron espera
+    // indefinidamente y el navegador se rinde con un error que no dice nada.
+    partesV2.forEach((sql) => {
+      expect(sinComentarios(sql)).toMatch(/SET LOCAL lock_timeout/);
+      expect(sinComentarios(sql)).not.toMatch(/statement_timeout\s*=\s*0/);
+    });
+  });
+
+  test('el contrato de columnas se resuelve en UNA consulta, no una por columna', () => {
+    const contrato = sinComentarios(prep).slice(
+      sinComentarios(prep).indexOf('DO $contrato$'),
+      sinComentarios(prep).indexOf('$contrato$;'));
+    // 84 consultas separadas contra information_schema.columns eran una parte
+    // considerable de por qué la migración no llegaba a terminar.
+    expect(contrato).not.toMatch(/FOREACH/);
+    expect(contrato).not.toMatch(/information_schema/);
+    expect(contrato).toMatch(/FROM pg_attribute a/);
+    // Y sigue exigiendo las columnas que de verdad usa el motor.
+    ['cancelado', 'rotacion_key', 'movimiento_relacionado_id', 'capacidad_max_pax',
+      'slot_asignado', 'slot_coordinado', 'hora_operacion', 'ocupacion']
+      .forEach((col) => expect(contrato).toContain(`'${col}'`));
+  });
+
+  test('el refresco automático se pausa antes de reconstruir y se reanuda al final', () => {
+    // El job de pg_cron de la 038 refresca la vista cada 15 minutos. Si arranca
+    // en medio de la reconstrucción se queda con el bloqueo y la migración no
+    // puede seguir.
+    expect(sinComentarios(prep)).toMatch(/cron\.unschedule\('refrescar_estadistica'\)/);
+    expect(sinComentarios(prep)).not.toMatch(/cron\.schedule\(/);
+    expect(poblarSC).toMatch(/cron\.schedule\(/);
+  });
+
+  test('la pausa del refresco va FUERA de la transacción, o el ROLLBACK la deshace', () => {
+    // Éste fue el error real: con la pausa dentro del BEGIN...ROLLBACK, la
+    // primera pasada de revisión la deshacía y el job seguía despertando cada
+    // 15 minutos justo encima de la migración. Suelta, confirma en el acto.
+    const sc = sinComentarios(prep);
+    expect(sc.indexOf("cron.unschedule('refrescar_estadistica')"))
+      .toBeLessThan(sc.indexOf('BEGIN;'));
+  });
+
+  test('en la 040, lo suelto queda confirmado antes del BEGIN aunque se corra completo', () => {
+    // Un BEGIN en medio de un mensaje con varias sentencias absorbe
+    // retroactivamente las anteriores en su transacción: el ROLLBACK final
+    // desharía la pausa del cron. El COMMIT previo cierra ese bloque implícito.
+    const sc = sinComentarios(prep);
+    expect(sc.slice(0, sc.indexOf('BEGIN;'))).toMatch(/COMMIT;\s*$/);
+  });
+
+  test('la pausa del cron se puede confirmar a la vista, no sólo con un NOTICE', () => {
+    // El editor de Supabase no muestra los RAISE NOTICE.
+    expect(sinComentarios(prep)).toMatch(/FROM cron\.job\s+WHERE jobname = 'refrescar_estadistica'/);
+  });
+
+  test('el llenado tiene un plan B por pg_cron, comentado por omisión', () => {
+    expect(poblar).toMatch(/poblar_estadistica_una_vez/);
+    expect(poblarSC).not.toMatch(/poblar_estadistica_una_vez/);
+  });
+
+  test('la preparación empieza diagnosticando quién tiene el candado', () => {
+    // Antes de intentar demoler hay que SABER qué bloquea, no suponerlo: es lo
+    // que faltó en los dos intentos que terminaron en "Failed to fetch".
+    const sc = sinComentarios(prep);
+    expect(sc).toMatch(/FROM pg_stat_activity a/);
+    expect(sc).toMatch(/FROM pg_locks l/);
+    // Y el diagnóstico va primero, antes de tocar nada.
+    expect(sc.indexOf('pg_stat_activity')).toBeLessThan(sc.indexOf('BEGIN;'));
+  });
+
+  test('terminar sesiones ajenas queda comentado: no se hace a ciegas', () => {
+    // pg_terminate_backend corta trabajo en curso. Puede hacer falta, pero es
+    // decisión de quien aplica la migración, no del archivo.
+    expect(prep).toMatch(/pg_terminate_backend/);
+    expect(sinComentarios(prep)).not.toMatch(/pg_terminate_backend/);
+    expect(sinComentarios(prep)).not.toMatch(/pg_cancel_backend/);
+  });
+
+  test('el llenado (045) va SIN transacción, para que cada sentencia confirme sola', () => {
+    // Si el REFRESH fuera dentro de una transacción y el editor SQL cortara
+    // la petición HTTP —que es lo que pasó: "Failed to fetch"— se desharía
+    // todo el trabajo. Suelto, el servidor termina aunque el navegador se
+    // rinda.
+    expect(poblarSC).not.toMatch(/\bBEGIN;/);
+    // Sin ROLLBACK: aquí no hay nada que revisar antes de confirmar.
+    expect(poblarSC).not.toMatch(/\bROLLBACK;/);
+    // Y con COMMIT justo después del REFRESH. El editor de Supabase manda lo
+    // que se ejecuta junto en UN mensaje, y Postgres corre un mensaje con
+    // varias sentencias como una sola transacción implícita: sin este COMMIT,
+    // correr el archivo completo haría que un fallo en las verificaciones de
+    // abajo deshiciera el llenado.
+    expect(poblarSC).toMatch(/REFRESH MATERIALIZED VIEW public\.mv_estadistica_operaciones;\s*COMMIT;/);
+    expect(poblarSC).toMatch(/REFRESH MATERIALIZED VIEW public\.mv_estadistica_operaciones;/);
   });
 
   test('no hay DROP destructivo sobre nada que ya existiera', () => {
@@ -102,7 +234,7 @@ describe('Fuente de datos', () => {
 
   test('comprueba el contrato de columnas antes de crear nada, y falla nombrando lo que falta', () => {
     const contrato = motorSC.slice(motorSC.indexOf('DO $contrato$'), motorSC.indexOf('$contrato$;') + 11);
-    expect(contrato).toMatch(/information_schema\.columns/);
+    expect(contrato).toMatch(/FROM pg_attribute a/);
     expect(contrato).toMatch(/RAISE EXCEPTION/);
     expect(contrato).toMatch(/array_to_string\(v_faltan/);
     // El contrato aparece ANTES de la primera creación de objetos.
@@ -147,7 +279,7 @@ describe('Cancelaciones', () => {
   });
 
   test('las canceladas tampoco donan carga en tránsito', () => {
-    expect(motor).toMatch(/PARTITION BY c\.aodb_legacy_id[\s\S]*?c\.es_cancelada ASC/);
+    expect(motor).toMatch(/PARTITION BY c\.rotacion_clave[\s\S]*?c\.es_cancelada ASC/);
   });
 });
 
@@ -224,6 +356,21 @@ describe('Clasificación', () => {
   });
 });
 
+describe('Semilla de reglas sobre el motor v2', () => {
+  test('la verificación usa el resolvedor de SEIS argumentos y no lee la vista vacía', () => {
+    const v = sinComentarios(semilla.slice(semilla.lastIndexOf('-- VERIFICACIÓN')));
+    // Antes de la 045 la vista está vacía: consultarla aborta con 55000.
+    expect(v).not.toMatch(/FROM public\.mv_estadistica_operaciones/);
+    expect(v).toMatch(/estadistica_resolver_clasificacion\(\s*m\.fecha_operacion, m\.aerolinea_conciliacion_id, m\.aerolinea_id,/);
+  });
+
+  test('una regla con código de aerolínea no se confunde con una de tipo de servicio', () => {
+    // Sin esto, la semilla podría saltarse una regla creada a mano que sólo
+    // tuviera aerolinea_codigo, o duplicar la suya al lado.
+    expect(sinComentarios(semilla).match(/r\.aerolinea_codigo IS NULL/g) || []).toHaveLength(2);
+  });
+});
+
 describe('Carga y tránsito', () => {
   test('las tres columnas nuevas son nullable: NULL es "no capturado", no cero', () => {
     expect(carga).toMatch(/ADD COLUMN IF NOT EXISTS carga_descargada_kg numeric,/);
@@ -233,19 +380,26 @@ describe('Carga y tránsito', () => {
     expect(carga).not.toMatch(/carga_(descargada|embarcada|transito)_kg\s+numeric\s+DEFAULT\s+0/);
   });
 
-  test('la rotación usa el vínculo que ya existe (aodb_legacy_id), no matrícula + hora', () => {
-    expect(motor).toMatch(/c\.aodb_legacy_id AS rotacion_id/);
-    expect(motor).toMatch(/PARTITION BY c\.aodb_legacy_id/);
+  test('la rotación usa los vínculos que ya existen, no matrícula + hora', () => {
+    // Tres niveles, en orden de confianza: la clave explícita, el vuelo
+    // relacionado por FK y, como último recurso, la fila del AODB.
+    expect(motor).toMatch(/b\.rotacion_key,/);
+    expect(motor).toMatch(/b\.movimiento_relacionado_id IS NOT NULL/);
+    expect(motor).toMatch(/'aodb:' \|\| b\.aodb_legacy_id::text/);
+    expect(motor).toMatch(/PARTITION BY c\.rotacion_clave/);
+    // El par se ordena {menor, mayor} para que los dos lados caigan en la
+    // misma partición apunte quien apunte a quién.
+    expect(motor).toMatch(/least\(b\.id, b\.movimiento_relacionado_id\)/);
+    expect(motor).toMatch(/greatest\(b\.id, b\.movimiento_relacionado_id\)/);
     // No se empareja por matrícula ni por cercanía de horas.
-    const bloque = motor.slice(motor.indexOf('AS rotacion_id') - 2500, motor.indexOf('AS transito_contable_kg'));
-    expect(bloque).not.toMatch(/PARTITION BY[^)]*matricula/i);
+    expect(motor).not.toMatch(/PARTITION BY[^)]*matricula/i);
   });
 
   test('el tránsito se atribuye UNA sola vez por rotación', () => {
-    const bloque = motor.slice(motor.indexOf('CASE\n        WHEN c.carga_transito_kg IS NULL THEN NULL'),
+    const bloque = motor.slice(motor.indexOf('WHEN c.carga_transito_kg IS NULL THEN NULL'),
       motor.indexOf('AS transito_contable_kg'));
     // Sin rotación conocida se cuenta tal cual (es una sola fila).
-    expect(bloque).toMatch(/WHEN c\.aodb_legacy_id IS NULL THEN c\.carga_transito_kg/);
+    expect(bloque).toMatch(/WHEN c\.rotacion_clave IS NULL THEN c\.carga_transito_kg/);
     // Con rotación, sólo la fila ganadora aporta; el otro lado va en 0.
     expect(bloque).toMatch(/row_number\(\) OVER \(/);
     expect(bloque).toMatch(/\) = 1 THEN c\.carga_transito_kg/);
@@ -260,14 +414,29 @@ describe('Carga y tránsito', () => {
   test('nacional/internacional y tránsito son dimensiones distintas, no excluyentes', () => {
     // El tránsito vive en su propia columna, nunca como un valor más de la
     // clasificación territorial.
-    expect(motor).toMatch(/nacional_internacional/);
-    const nacInt = motor.match(/END AS nacional_internacional/);
-    expect(nacInt).not.toBeNull();
-    const bloque = motor.slice(motor.indexOf('WHEN u.endpoint_codigo IS NULL THEN NULL'),
-      motor.indexOf('END AS nacional_internacional'));
+    const bloque = motor.slice(motor.indexOf('coalesce(' + nlSQL + '            CASE public._estadistica_norm(u.tipo_operacion)'),
+      motor.indexOf(') AS nacional_internacional'));
+    expect(bloque.length).toBeGreaterThan(0);
     expect(bloque).not.toMatch(/transito/i);
     expect(bloque).toMatch(/'Nacional'/);
     expect(bloque).toMatch(/'Internacional'/);
+  });
+
+  test('lo DECLARADO en tipo_operacion manda sobre la derivación por catálogo', () => {
+    // La fuente llena tipo_operacion con NACIONAL / INTERNACIONAL: es la
+    // declaración oficial. El catálogo de aeropuertos queda de respaldo, y se
+    // publica de cuál de los dos salió cada fila.
+    const bloque = motor.slice(motor.indexOf('CASE public._estadistica_norm(u.tipo_operacion)'),
+      motor.indexOf('AS nacint_origen'));
+    expect(bloque.indexOf("WHEN 'NACIONAL' THEN 'Nacional'"))
+      .toBeLessThan(bloque.indexOf('left(u.endpoint_codigo, 2)'));
+    expect(motor).toMatch(/AS nacint_origen/);
+  });
+
+  test('el nombre original del origen/destino no se pierde ni se reemplaza por el IATA', () => {
+    expect(motor).toMatch(/AS endpoint_nombre/);
+    // Y la etiqueta cae al nombre original cuando no hubo IATA que resolver.
+    expect(motor).toMatch(/coalesce\(c\.endpoint_ciudad, c\.endpoint_codigo,[\s\S]*?AS endpoint_ciudad/);
   });
 
   test('la identidad contable transportada = descargada/embarcada + tránsito queda protegida', () => {
@@ -291,8 +460,21 @@ describe('Factor de ocupación y valores nulos', () => {
   });
 
   test('capacidad NULL o <= 0 se trata como desconocida, no como cero', () => {
-    expect(motor).toMatch(/CASE WHEN mm\.pasajeros IS NOT NULL AND mm\.pasajeros > 0 THEN mm\.pasajeros END AS capacidad_pasajeros/);
-    expect(motor).toMatch(/\(c\.pax IS NOT NULL AND c\.capacidad_pasajeros IS NOT NULL\) AS ocupacion_evaluable/);
+    // La capacidad del vuelo manda; la de la matrícula es el respaldo.
+    expect(motor).toMatch(/mo\.capacidad_max_pax IS NOT NULL AND mo\.capacidad_max_pax > 0/);
+    expect(motor).toMatch(/CASE WHEN mm\.pasajeros IS NOT NULL AND mm\.pasajeros > 0 THEN mm\.pasajeros END AS capacidad_matricula/);
+    expect(motor).toMatch(/coalesce\(c\.capacidad_operacion, c\.capacidad_matricula\) AS capacidad_pasajeros/);
+    expect(motor).toMatch(/AS ocupacion_evaluable/);
+    // Y se publica de cuál de las dos salió, para poder auditarlo.
+    expect(motor).toMatch(/AS capacidad_origen/);
+  });
+
+  test('la ocupación ya capturada NO se usa para calcular el factor', () => {
+    // Promediar el porcentaje por fila da otro número que
+    // SUM(pax)/SUM(capacidad). Se publica sólo para poder contrastarla.
+    expect(motor).toMatch(/mo\.ocupacion\s+AS ocupacion_reportada/);
+    const cuerpo = motorSC.slice(motorSC.indexOf('v_sql := format('), motorSC.indexOf('RETURN QUERY EXECUTE v_sql'));
+    expect(cuerpo).not.toMatch(/ocupacion_reportada/);
   });
 
   test('nunca se divide entre cero', () => {
@@ -313,6 +495,187 @@ describe('Factor de ocupación y valores nulos', () => {
   });
 });
 
+describe('Esquema real de maestra_operaciones', () => {
+  test('la cancelación usa la bandera de la tabla, con el texto como respaldo', () => {
+    // cancelado es LA columna. Los dos criterios de texto se conservan
+    // porque la bandera nace en false y el histórico puede no traerla.
+    expect(motor).toMatch(/coalesce\(mo\.cancelado, false\)/);
+    expect(motor).toMatch(/AS cancelado_origen/);
+    const jsSource = fs.readFileSync(
+      path.resolve(__dirname, '..', 'js', 'parte-ops-flights.js'), 'utf8');
+    const enJs = jsSource.match(/_EXCLUDED_STATUS_RE\s*=\s*\/([^/]+)\//);
+    expect(motor).toContain(enJs[1].replace(/\\b/g, '\\y'));
+  });
+
+  test('el turnaround se atribuye a la salida: nunca se cuenta dos veces', () => {
+    expect(motor).toMatch(/AS turnaround_min/);
+    const bloque = motor.slice(motor.indexOf('WHEN c.direccion = \'D\' AND c.rot_llegada'),
+      motor.indexOf('AS turnaround_min'));
+    expect(bloque).toMatch(/c\.direccion = 'D'/);
+    // Y la rotación se cuenta una sola vez, en su primer movimiento.
+    expect(motor).toMatch(/AS es_cabeza_rotacion/);
+    expect(motor).toMatch(/count\(\*\) FILTER \(WHERE NOT m\.es_cancelada AND m\.es_cabeza_rotacion\)/);
+  });
+
+  test('las columnas nuevas del esquema sí se usan', () => {
+    ['capacidad_max_pax', 'pax_programados', 'pax_no_abordados', 'pax_inadmitidos',
+      'pax_repatriados', 'carga_importacion_kg', 'carga_exportacion_kg',
+      'hora_inicio_pernocta', 'hora_termino_pernocta', 'motivo_operativo',
+      'codigo_afac_aifa', 'posicion', 'puertas', 'bandas_equipaje',
+      'estatus_matricula', 'conciliado', 'validado', 'aerolinea_id', 'escala_iata']
+      .forEach((col) => expect(motor).toMatch(new RegExp(`mo\\.${col}\\b`)));
+  });
+
+  test('el diagnóstico existe para poder explicar una pantalla vacía', () => {
+    expect(motor).toMatch(/CREATE OR REPLACE FUNCTION public\.estadistica_diagnostico\(\)/);
+    expect(motor).toMatch(/primera_fecha\s+date/);
+    expect(motor).toMatch(/refrescado_at\s+timestamptz/);
+  });
+});
+
+describe('El DDL y el llenado van separados', () => {
+  test('la 042 crea la vista materializada VACÍA', () => {
+    // Poblarla dentro del DDL obliga a resolver la clasificación por cada
+    // fila de la maestra en la misma petición HTTP, y el editor la corta.
+    expect(motorSC).toMatch(/CREATE MATERIALIZED VIEW public\.mv_estadistica_operaciones AS/);
+    expect(motorSC).toMatch(/WITH NO DATA;/);
+    // Y no se refresca desde el DDL.
+    expect(motorSC).not.toMatch(/REFRESH MATERIALIZED VIEW/);
+  });
+
+  test('la verificación de la 042 no consulta la vista: todavía no es consultable', () => {
+    const marca = vista.lastIndexOf('-- VERIFICACIÓN');
+    expect(marca).toBeGreaterThan(-1);
+    const verificacion = sinComentarios(vista.slice(marca));
+    // Una materializada WITH NO DATA es "unscannable": consultarla aquí
+    // abortaría con 55000.
+    expect(verificacion).not.toMatch(/FROM public\.mv_estadistica_operaciones/);
+    // Lo que sí hace es comprobar el catálogo.
+    expect(verificacion).toMatch(/relispopulated/);
+    expect(verificacion).toMatch(/pg_indexes/);
+  });
+
+  test('la 045 llena, deja constancia de la hora y verifica los datos', () => {
+    expect(poblarSC).toMatch(/REFRESH MATERIALIZED VIEW public\.mv_estadistica_operaciones;/);
+    expect(poblarSC).toMatch(/UPDATE public\.estadistica_refresco SET refrescado_at = now\(\)/);
+    expect(poblarSC).toMatch(/FROM public\.mv_estadistica_operaciones/);
+    // El primer REFRESH va sin CONCURRENTLY: la vista está vacía y
+    // CONCURRENTLY exige que ya tenga datos. (El que SÍ lo lleva es el comando
+    // que se reprograma en pg_cron, que corre después, con la vista ya poblada.)
+    expect(poblarSC).toMatch(/^REFRESH MATERIALIZED VIEW public\.mv_estadistica_operaciones;/m);
+    const antesDelCron = poblarSC.slice(0, poblarSC.indexOf('cron.schedule('));
+    expect(antesDelCron).not.toMatch(/REFRESH MATERIALIZED VIEW CONCURRENTLY/);
+  });
+
+  test('la 045 comprueba el tamaño ANTES de lanzar el trabajo caro', () => {
+    expect(poblarSC.indexOf('FROM public.maestra_operaciones'))
+      .toBeLessThan(poblarSC.indexOf('REFRESH MATERIALIZED VIEW'));
+  });
+});
+
+describe('Orden de borrado', () => {
+  // Postgres se niega a borrar una función de la que cuelga una vista
+  // materializada, y a borrar una materializada de cuyo TIPO cuelga una
+  // función (error 2BP01). El orden correcto va de arriba hacia abajo, y no
+  // es algo que el parser de SQL pueda detectar: sólo aparece al ejecutar.
+  const pos = (frag) => {
+    const i = motorSC.indexOf(frag);
+    expect(i).toBeGreaterThan(-1);
+    return i;
+  };
+
+  test('las funciones que usan el TIPO de la materializada se borran antes que ella', () => {
+    // estadistica_detalle devuelve SETOF mv_estadistica_operaciones.
+    expect(pos('DROP FUNCTION IF EXISTS public.estadistica_detalle('))
+      .toBeLessThan(pos('DROP MATERIALIZED VIEW IF EXISTS public.mv_estadistica_operaciones'));
+  });
+
+  test('la vista pública se borra antes que la materializada de la que cuelga', () => {
+    expect(pos('DROP VIEW IF EXISTS public.v_estadistica_operaciones'))
+      .toBeLessThan(pos('DROP MATERIALIZED VIEW IF EXISTS public.mv_estadistica_operaciones'));
+  });
+
+  test('el resolvedor se borra DESPUÉS de la materializada que lo usa', () => {
+    // Éste fue el error real: borrarlo primero aborta con 2BP01.
+    expect(pos('DROP MATERIALIZED VIEW IF EXISTS public.mv_estadistica_operaciones'))
+      .toBeLessThan(pos('DROP FUNCTION IF EXISTS public.estadistica_resolver_clasificacion(date, bigint, text, text, text);'));
+  });
+
+  test('se borran las DOS firmas del resolvedor, para que re-correr el archivo funcione', () => {
+    expect(motorSC).toContain('DROP FUNCTION IF EXISTS public.estadistica_resolver_clasificacion(date, bigint, text, text, text);');
+    expect(motorSC).toContain('DROP FUNCTION IF EXISTS public.estadistica_resolver_clasificacion(date, bigint, text, text, text, text);');
+  });
+
+  test('cada objeto se borra antes de volver a crearse', () => {
+    [
+      ['DROP MATERIALIZED VIEW IF EXISTS public.mv_estadistica_operaciones',
+       'CREATE MATERIALIZED VIEW public.mv_estadistica_operaciones'],
+      ['DROP FUNCTION IF EXISTS public.estadistica_resolver_clasificacion(date, bigint, text, text, text, text);',
+       'CREATE OR REPLACE FUNCTION public.estadistica_resolver_clasificacion('],
+      ['DROP FUNCTION IF EXISTS public.estadistica_agregado(',
+       'CREATE OR REPLACE FUNCTION public.estadistica_agregado('],
+      ['DROP FUNCTION IF EXISTS public.estadistica_detalle(',
+       'CREATE OR REPLACE FUNCTION public.estadistica_detalle('],
+      ['DROP FUNCTION IF EXISTS public.estadistica_sin_clasificar(',
+       'CREATE OR REPLACE FUNCTION public.estadistica_sin_clasificar('],
+      ['DROP FUNCTION IF EXISTS public.estadistica_opciones_filtro(',
+       'CREATE OR REPLACE FUNCTION public.estadistica_opciones_filtro(']
+    ].forEach(([drop, create]) => {
+      expect(pos(drop)).toBeLessThan(pos(create));
+    });
+  });
+
+  test('no se usa CASCADE sobre la materializada: un dependiente desconocido debe fallar en voz alta', () => {
+    // CASCADE se llevaría por delante cualquier objeto que alguien más haya
+    // construido encima, y sin decir cuál. Es preferible que la migración
+    // aborte nombrándolo.
+    expect(motorSC).not.toMatch(/DROP MATERIALIZED VIEW[^;]*CASCADE/);
+  });
+});
+
+describe('Puntualidad contra el slot', () => {
+  test('el slot vigente es el coordinado y, si no hay, el asignado', () => {
+    expect(motor).toMatch(/coalesce\(mo\.slot_coordinado, mo\.slot_asignado\)\s+AS slot_vigente/);
+    expect(motor).toMatch(/AS slot_origen/);
+  });
+
+  test('la desviación se mide hora_operacion − slot_vigente, NO contra la hora programada', () => {
+    const bloque = motor.slice(motor.indexOf('CASE' + nlSQL + '            WHEN u.slot_vigente IS NOT NULL'),
+      motor.indexOf('END AS minutos_vs_slot'));
+    expect(bloque).toMatch(/u\.hora_operacion - u\.slot_vigente/);
+    expect(bloque).not.toMatch(/hora_programada/);
+  });
+
+  test('los cinco tramos oficiales están completos y con los cortes correctos', () => {
+    const bloque = motor.slice(motor.indexOf('WHEN c.minutos_vs_slot IS NULL THEN NULL'),
+      motor.indexOf('AS clasificacion_slot'));
+    expect(bloque).toMatch(/c\.minutos_vs_slot < -15 THEN 'ANTICIPADO'/);
+    expect(bloque).toMatch(/c\.minutos_vs_slot <= -1 THEN 'ANTES'/);
+    expect(bloque).toMatch(/c\.minutos_vs_slot = 0\s+THEN 'EN TIEMPO'/);
+    expect(bloque).toMatch(/c\.minutos_vs_slot <= 15 THEN 'DESPUÉS'/);
+    expect(bloque).toMatch(/ELSE 'DEMORA'/);
+  });
+
+  test('cumplir la ventana es ANTES + EN TIEMPO + DESPUÉS: ANTICIPADO queda fuera', () => {
+    const cuerpo = motorSC.slice(motorSC.indexOf('v_sql := format('), motorSC.indexOf('RETURN QUERY EXECUTE v_sql'));
+    expect(cuerpo).toMatch(/m\.clasificacion_slot IN \('ANTES', 'EN TIEMPO', 'DESPUÉS'\)/);
+    // Y los cinco tramos se reportan por separado, para poder auditarlo.
+    ['ANTICIPADO', 'ANTES', 'EN TIEMPO', 'DESPUÉS', 'DEMORA'].forEach((t) => {
+      expect(cuerpo).toContain(`m.clasificacion_slot = '${t}'`);
+    });
+  });
+
+  test('la demora operacional sigue siendo una métrica aparte', () => {
+    // minutos_demora mide el retraso del vuelo; minutos_vs_slot mide el
+    // cumplimiento del permiso. Confundirlas sería el error de fondo.
+    expect(motor).toMatch(/AS minutos_demora_calc/);
+    expect(motor).toMatch(/c\.minutos_demora_calc AS minutos_demora/);
+    const cuerpo = motorSC.slice(motorSC.indexOf('v_sql := format('), motorSC.indexOf('RETURN QUERY EXECUTE v_sql'));
+    expect(cuerpo).toMatch(/avg\(m\.minutos_demora\)/);
+    expect(cuerpo).toMatch(/avg\(m\.minutos_vs_slot\)/);
+  });
+});
+
 describe('Rendimiento y seguridad', () => {
   test('los cálculos pesados quedan en PostgreSQL, en una vista materializada indexada', () => {
     expect(motor).toMatch(/CREATE MATERIALIZED VIEW public\.mv_estadistica_operaciones/);
@@ -320,7 +683,9 @@ describe('Rendimiento y seguridad', () => {
     expect(indices.length).toBeGreaterThanOrEqual(6);
     // El UNIQUE es obligatorio para poder refrescar sin bloquear la lectura.
     expect(motor).toMatch(/CREATE UNIQUE INDEX idx_mv_estadistica_id/);
-    expect(motor).toMatch(/REFRESH MATERIALIZED VIEW CONCURRENTLY/);
+    // refrescar_estadistica se define en la 038 y la 040 no lo toca: la
+    // vista cambia de forma, no de mecanismo de refresco.
+    expect(motorV1).toMatch(/REFRESH MATERIALIZED VIEW CONCURRENTLY/);
   });
 
   test('los índices propuestos no repiten los que ya existían', () => {
@@ -357,7 +722,7 @@ describe('Rendimiento y seguridad', () => {
     // Esto se escapó una vez y sólo apareció al correr la migración, porque el
     // trozo afectado vivía dentro de format($q$...$q$): Postgres no revisa esa
     // cadena al crear la función, sólo al ejecutarla.
-    [reglasSC, cargaSC, motorSC, semillaSC].forEach((sql) => {
+    [reglasSC, cargaSC, motorSC, motorV1SC, semillaSC].forEach((sql) => {
       const malos = sql.match(/\w+\s*\([^()]*\)\s*::\s*\w+\s+FILTER\s*\(/gi) || [];
       expect(malos).toEqual([]);
     });
@@ -377,20 +742,23 @@ describe('Rendimiento y seguridad', () => {
       .filter(Boolean);
     // d1..d4 vienen en una sola línea separados por comas, así que el conteo
     // por comas es exacto para esta declaración.
-    expect(columnas.length).toBe(39);
+    // No se fija un número a mano: crecer el motor es normal, lo que no puede
+    // pasar es que la declaración y el SELECT dejen de coincidir.
+    expect(columnas.length).toBeGreaterThanOrEqual(39);
 
     // Expresiones del SELECT de la plantilla: el %s de las dimensiones aporta
     // 4 (d1..d4) y el resto son los agregados, uno por línea.
     const plantilla = fn.slice(fn.indexOf('format($q$'), fn.indexOf('$q$, v_select, v_group)'));
     const seleccion = plantilla.slice(plantilla.indexOf('SELECT %s,'), plantilla.indexOf('FROM public.mv_estadistica_operaciones'));
     const lineas = seleccion.split(/\r?\n/)
-      .filter((l) => /^\s+(count|sum|min|max|round|CASE|END)/.test(l))
+      .filter((l) => /^\s+\(?(count|sum|min|max|round|avg|CASE|END)/.test(l))
       .filter((l) => !/^\s+(WHEN|THEN|100\.0|\/ )/.test(l));
     // El factor de ocupación ocupa dos líneas (CASE … END) pero es UNA columna.
     const paresCaseEnd = lineas.filter((l) => /^\s+CASE\s*$/.test(l)).length;
     const columnasAgregadas = lineas.length - paresCaseEnd;
-    expect(columnasAgregadas).toBe(35);        // 35 métricas
-    expect(columnasAgregadas + 4).toBe(columnas.length); // + d1..d4 = 39
+    // d1..d4 más una expresión por métrica tienen que dar exactamente lo que
+    // declara RETURNS TABLE, o PL/pgSQL falla en tiempo de ejecución.
+    expect(columnasAgregadas + 4).toBe(columnas.length);
   });
 
   test('las funciones de consulta son SECURITY INVOKER y comprueban el permiso', () => {
@@ -433,7 +801,7 @@ describe('Rendimiento y seguridad', () => {
     // verificación consulta la vista materializada directamente.
     // El rótulo "VERIFICACIÓN" vive en un comentario, así que se localiza sobre
     // el SQL original y sólo después se quitan los comentarios del recorte.
-    [motor, semilla].forEach((sql) => {
+    [vista, funciones, semilla, poblar].forEach((sql) => {
       const marca = sql.lastIndexOf('-- VERIFICACIÓN');
       expect(marca).toBeGreaterThan(-1);
       const verificacion = sinComentarios(sql.slice(marca));
@@ -446,7 +814,8 @@ describe('Rendimiento y seguridad', () => {
   });
 
   test('refrescar la materialización exige nivel de escritura', () => {
-    const fn = cuerpoFuncion(motorSC, 'refrescar_estadistica');
+    // Sigue viviendo en la 038: la 040 no la redefine.
+    const fn = cuerpoFuncion(motorV1SC, 'refrescar_estadistica');
     expect(fn).toMatch(/estadistica_access_level\(auth\.uid\(\)\) NOT IN \('admin', 'edit'\)/);
     expect(fn).toMatch(/pg_try_advisory_xact_lock/);
   });
@@ -460,7 +829,7 @@ describe('Convivencia con el Informe Estadístico existente', () => {
       'mv_informe_estadistico_resumen', 'mv_informe_estadistico_aerolinea',
       'informe_estadistico_aprobaciones', 'refrescar_informe_estadistico'
     ];
-    [reglasSC, cargaSC, motorSC, semillaSC].forEach((sql) => {
+    [reglasSC, cargaSC, motorSC, motorV1SC, semillaSC].forEach((sql) => {
       objetos027y028.forEach((obj) => {
         expect(sql).not.toMatch(new RegExp(`(CREATE|DROP|ALTER)[^;]*${obj}`, 'i'));
       });
@@ -468,7 +837,9 @@ describe('Convivencia con el Informe Estadístico existente', () => {
   });
 
   test('la función de refresco del módulo nuevo no comparte nombre con la del informe', () => {
-    expect(motor).toMatch(/FUNCTION public\.refrescar_estadistica\(/);
-    expect(motor).not.toMatch(/FUNCTION public\.refrescar_informe_estadistico\(/);
+    expect(motorV1).toMatch(/FUNCTION public\.refrescar_estadistica\(/);
+    [motorV1, motor].forEach((sql) => {
+      expect(sql).not.toMatch(/FUNCTION public\.refrescar_informe_estadistico\(/);
+    });
   });
 });
