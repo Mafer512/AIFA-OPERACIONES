@@ -181,20 +181,20 @@ describe('agregación', () => {
     expect(r.sub.actual.dia.LLEGADA.INTERNACIONAL.kg).toBe(5000);
   });
 
-  test('el oficio va por mes, como el de pasajeros', () => {
+  test('el oficio compara el día pedido con el anterior, como el de pasajeros', () => {
     const r = agregar([
-      manifiesto({ fecha: '2026-08-30', cierre: '2026-08-31', int: 500 }),
-      manifiesto({ fecha: '2026-08-31', cierre: '2026-09-01', int: 300 })
+      manifiesto({ fecha: '2026-09-13', cierre: '2026-09-14', int: 500 }),
+      manifiesto({ fecha: '2026-09-14', cierre: '2026-09-15', int: 300 })
     ], '2026-09-15');
-    expect(r.cierres).toEqual({ anterior: '2026-08-31', actual: '2026-09-01' });
+    expect(r.cierres).toEqual({ anterior: '2026-09-14', actual: '2026-09-15' });
     expect(r.sub.anterior.dia.LLEGADA.INTERNACIONAL.kg).toBe(500);
     expect(r.sub.actual.dia.LLEGADA.INTERNACIONAL.kg).toBe(300);
   });
 
-  test('si el día 1 no tiene cierre, retrocede un mes', () => {
-    const r = agregar([manifiesto({ fecha: '2026-07-31', cierre: '2026-08-01', int: 700 })], '2026-09-01');
-    expect(r.retrocedido).toBe(true);
-    expect(r.cierres.actual).toBe('2026-08-01');
+  test('el día 1 se compara con el último del mes anterior', () => {
+    const r = agregar([manifiesto({ fecha: '2026-07-31', cierre: '2026-08-01', int: 700 })], '2026-08-01');
+    expect(r.cierres).toEqual({ anterior: '2026-07-31', actual: '2026-08-01' });
+    expect(r.sub.actual.dia.LLEGADA.INTERNACIONAL.kg).toBe(700);
   });
 
   test('cada aerolínea guarda el IATA que le conoce el catálogo de la tabla', () => {

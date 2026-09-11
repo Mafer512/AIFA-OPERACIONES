@@ -159,67 +159,46 @@ describe('agregación', () => {
     expect(r.sub.actual.dia.LLEGADA.NACIONAL.ops).toBe(1);
   });
 
-  describe('el oficio va por mes, no por día suelto', () => {
-    const mesCompleto = [
-      manifiesto({ fecha: '2026-03-30', cierre: '2026-03-31', pax: 500 }),  // último día de marzo
-      manifiesto({ fecha: '2026-03-31', cierre: '2026-04-01', pax: 300 }),  // día 1 de abril
-      manifiesto({ fecha: '2026-04-10', cierre: '2026-04-11', pax: 999 })   // un cierre intermedio
+  describe('el oficio compara el día pedido con el anterior', () => {
+    const filas = [
+      manifiesto({ fecha: '2026-03-30', cierre: '2026-03-31', pax: 500 }),
+      manifiesto({ fecha: '2026-03-31', cierre: '2026-04-01', pax: 300 }),
+      manifiesto({ fecha: '2026-04-14', cierre: '2026-04-15', pax: 150 }),
+      manifiesto({ fecha: '2026-04-15', cierre: '2026-04-16', pax: 90 })
     ];
 
-    test('las columnas son el último día del mes anterior y el día 1 del pedido', () => {
-      const r = agregar(mesCompleto, '2026-04-01');
+    test('a media mes, las columnas son el día pedido y el anterior', () => {
+      const r = agregar(filas, '2026-04-16');
+      expect(r.cierres).toEqual({ anterior: '2026-04-15', actual: '2026-04-16' });
+      expect(r.sub.anterior.dia.LLEGADA.NACIONAL.pax).toBe(150);
+      expect(r.sub.actual.dia.LLEGADA.NACIONAL.pax).toBe(90);
+      // Cada columna acumula el mes hasta su propia fecha de cierre.
+      expect(r.sub.anterior.mes.LLEGADA.NACIONAL.pax).toBe(450);
+      expect(r.sub.actual.mes.LLEGADA.NACIONAL.pax).toBe(540);
+    });
+
+    test('el día 1 se compara con el último del mes anterior', () => {
+      const r = agregar(filas, '2026-04-01');
       expect(r.cierres).toEqual({ anterior: '2026-03-31', actual: '2026-04-01' });
-      expect(r.sub.anterior.dia.LLEGADA.NACIONAL.pax).toBe(500);
-      expect(r.sub.actual.dia.LLEGADA.NACIONAL.pax).toBe(300);
-    });
-
-    test('el día que se pida da igual: manda el mes', () => {
-      const porElUno = agregar(mesCompleto, '2026-04-01');
-      const porElQuince = agregar(mesCompleto, '2026-04-15');
-      expect(porElQuince.cierres).toEqual(porElUno.cierres);
-      expect(porElQuince.sub.actual.dia).toEqual(porElUno.sub.actual.dia);
-    });
-
-    test('un cierre intermedio no aparece como columna, pero sí acumula', () => {
-      const r = agregar(mesCompleto, '2026-05-01');
-      // Mayo no tiene cierre del día 1, así que retrocede a abril.
-      expect(r.cierres.actual).toBe('2026-04-01');
-      // El del 11 de abril es posterior al corte: no entra en esa columna.
-      expect(r.sub.actual.historico.LLEGADA.NACIONAL.pax).toBe(800);
+      expect(r.sub.anterior.mes.LLEGADA.NACIONAL.pax).toBe(500);
+      expect(r.sub.actual.mes.LLEGADA.NACIONAL.pax).toBe(300);
     });
 
     test('el cruce de año se resuelve bien', () => {
       const r = agregar([manifiesto({ fecha: '2025-12-31', cierre: '2026-01-01', pax: 77 })], '2026-01-01');
       expect(r.cierres).toEqual({ anterior: '2025-12-31', actual: '2026-01-01' });
-      expect(r.sub.actual.dia.LLEGADA.NACIONAL.pax).toBe(77);
-      // Enero de 2026: el vuelo de diciembre no entra en el acumulado del año.
       expect(r.sub.actual.anio.LLEGADA.NACIONAL.pax).toBe(77);
     });
 
-    test('febrero bisiesto: el último día del mes anterior es el 29', () => {
-      const r = agregar([manifiesto({ fecha: '2024-02-29', cierre: '2024-03-01', pax: 5 })], '2024-03-01');
-      expect(r.cierres.anterior).toBe('2024-02-29');
-    });
-  });
-
-  describe('cuando el día 1 aún no tiene cierre', () => {
-    const soloMarzo = [
-      manifiesto({ fecha: '2026-02-28', cierre: '2026-03-01', pax: 400 }),
-      manifiesto({ fecha: '2026-02-27', cierre: '2026-02-28', pax: 250 })
-    ];
-
-    test('retrocede un mes y lo avisa', () => {
-      const r = agregar(soloMarzo, '2026-04-01');
-      expect(r.retrocedido).toBe(true);
-      expect(r.cierres).toEqual({ anterior: '2026-02-28', actual: '2026-03-01' });
-      expect(r.sub.actual.dia.LLEGADA.NACIONAL.pax).toBe(400);
-      expect(r.sub.anterior.dia.LLEGADA.NACIONAL.pax).toBe(250);
+    test('febrero bisiesto: el día anterior al 1 de marzo es el 29', () => {
+      expect(agregar([], '2024-03-01').cierres.anterior).toBe('2024-02-29');
     });
 
-    test('si el mes pedido sí tiene cierre, no retrocede', () => {
-      const r = agregar(soloMarzo, '2026-03-01');
-      expect(r.retrocedido).toBe(false);
-      expect(r.cierres.actual).toBe('2026-03-01');
+    test('un día sin cierre no salta a otra fecha: se avisa', () => {
+      const r = agregar(filas, '2026-04-20');
+      expect(r.cierres.actual).toBe('2026-04-20');
+      api.mostrar(r);
+      expect(document.getElementById('conci-rep-pax-salida').innerHTML).toContain('No hay manifiestos de pasajeros');
     });
   });
 
