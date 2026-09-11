@@ -21294,10 +21294,15 @@ function _conciApplyQuickFlightSearch(term, options) {
     _conciApplyPillFilter();
 
     if (!value) return;
-    const visible = _conciVisibleBodyRows().length;
-    // Enter/↓ siempre saltan a la captura; al escribir, solo cuando el filtro
-    // ya dejó un único vuelo (no tiene caso robar el foco con varios resultados).
-    if (opts.focusFirst || visible === 1) {
+    // Solo Enter/↓ saltan a la captura (igual que dice el título del buscador).
+    // Antes también saltaba solo por escribir, en cuanto el filtro dejaba un
+    // único vuelo visible — con vuelos como "AC 7249", ya el primer dígito
+    // podía ser ese único match, y el foco brincaba a media palabra a la
+    // primera celda capturable (CIERRE SUBSECRETARIA) sin que el usuario
+    // tecleara Enter ni ↓. Lo que seguía escribiendo para terminar de buscar
+    // cala entonces en esa celda real, no en el buscador: eso es lo que se
+    // reportaba como "se filtran letras a CIERRE SUBSECRETARIA".
+    if (opts.focusFirst) {
         requestAnimationFrame(() => _conciFocusFirstCaptureCell());
     }
 }
