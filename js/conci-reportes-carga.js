@@ -995,6 +995,11 @@
             const hoy = new Date();
             campo.value = `${hoy.getFullYear()}-${dosDigitos(hoy.getMonth() + 1)}-${dosDigitos(hoy.getDate())}`;
         }
+        // Se ve dd/mm/aaaa aunque el navegador esté en inglés. La máscara es
+        // idempotente, así que no importa si la tabla de Manifiestos ya la montó.
+        if (typeof window._conciInitCamposFecha === 'function') {
+            window._conciInitCamposFecha(el('conci-rep-carga-fecha')?.parentElement || document);
+        }
         el('btn-conci-rep-carga-generar')?.addEventListener('click', generar);
         el('btn-conci-rep-carga-imprimir')?.addEventListener('click', imprimir);
         el('btn-conci-rep-carga-descargar')?.addEventListener('click', descargarPptx);
