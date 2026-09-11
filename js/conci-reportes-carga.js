@@ -760,6 +760,9 @@
         const t = m.texto;
         const C = CAT();
         const P = window.ConciPresentacionCarga;
+        // data-ph: el marcador de la plantilla que lleva ese valor. Así lo que se
+        // corrija a mano aquí llega también al .pptx (aplicarEdicionesPresentacion).
+        const ph = clave => `<span data-ph="${clave}">${escapar(t[clave])}</span>`;
 
         const cabecera = `${img('fondo.svg', 0, 0, 10.04, 7.5)}${img('encabezado.svg', -0.02, 0, 10.04, 1.76)}`
             + `${img('avion.jpg', 4.90, 0.92, 5.10, 1.34)}${img('logo-defensa.svg', 7.18, 0.33, 2.29, 0.57)}`;
@@ -772,9 +775,9 @@
                 const y = cuad.tops[renglon];
                 return `<div class="cp-logo" style="${caja(x, y - cuad.logoAlto - 0.02, cuad.ancho, cuad.logoAlto)}">`
                     + `<img src="${escapar(c.logo)}" alt="${escapar(c.nombre)}" loading="lazy"></div>`
-                    + `<div class="cp-card" style="${caja(x, y, cuad.ancho, cuad.alto)};${pt(cuad.puntos)}">`
-                    + `<span>No. de operaciones</span><b>${escapar(c.ops)}</b>`
-                    + `<span>Total de carga en Tn.</span><b>${escapar(c.ton)}</b></div>`;
+                    + `<div class="cp-card" data-tj="${n}:${i}" style="${caja(x, y, cuad.ancho, cuad.alto)};${pt(cuad.puntos)}">`
+                    + `<span>No. de operaciones</span><b data-tj-campo="ops">${escapar(c.ops)}</b>`
+                    + `<span>Total de carga en Tn.</span><b data-tj-campo="ton">${escapar(c.ton)}</b></div>`;
             }).join('');
         };
         const laminaTarjetas = n => lamina(n, cabecera
@@ -798,24 +801,24 @@
                 + img('linea-dorada.png', 5.50, 3.74, 4.52, 0.05)
                 + img('logo-defensa.svg', 6.18, 4.67, 3.10, 0.77)
                 + img('recuadro-fecha.svg', 6.14, 6.30, 3.87, 0.68)
-                + txt(7.08, 6.42, 2.63, 0.44, escapar(t.MES_ANIO), `${pt(20)};text-align:right`)),
+                + txt(7.08, 6.42, 2.63, 0.44, ph('MES_ANIO'), `${pt(20)};text-align:right`)),
 
             lamina(2, img('fondo.svg', 0, 0.02, 10, 7.5)
-                + txt(0.28, 0.17, 4.50, 0.67, `<b>Operaciones en la Terminal de Carga</b><br>01 Ene. al ${escapar(t.DIA)} ${escapar(t.MES_CORTO_ANIO)}`,
+                + txt(0.28, 0.17, 4.50, 0.67, `<b>Operaciones en la Terminal de Carga</b><br>01 Ene. al ${ph('DIA')} ${ph('MES_CORTO_ANIO')}`,
                     `${pt(17)};text-align:center`)
                 + img('linea-dorada.png', 0.42, 0.81, 4.20, 0.06)
                 + `<div class="cp-abs" style="${caja(1.55, 1.17, 2.27, 0.92)}"><table class="cp-tabla cp-t1" style="${pt(12)}"><colgroup><col style="width:40%"><col style="width:60%"></colgroup>
                     <tr><th colspan="2">OPERANDO ACTUALMENTE</th></tr>
-                    <tr><td style="background:${COLOR_GRUPO.regular}">${t.N_REGULAR}</td><td><b>CARGA REGULAR</b></td></tr>
-                    <tr><td style="background:${COLOR_GRUPO.fletamento}">${t.N_FLETAMENTO}</td><td><b>FLETAMENTO</b></td></tr>
-                    <tr><td style="background:${COLOR_GRUPO.mixta}">${t.N_MIXTA}</td><td><b>CARGA MIXTA</b></td></tr>
+                    <tr><td style="background:${COLOR_GRUPO.regular}" data-ph="N_REGULAR">${t.N_REGULAR}</td><td><b>CARGA REGULAR</b></td></tr>
+                    <tr><td style="background:${COLOR_GRUPO.fletamento}" data-ph="N_FLETAMENTO">${t.N_FLETAMENTO}</td><td><b>FLETAMENTO</b></td></tr>
+                    <tr><td style="background:${COLOR_GRUPO.mixta}" data-ph="N_MIXTA">${t.N_MIXTA}</td><td><b>CARGA MIXTA</b></td></tr>
                 </table></div>`
                 + `<div class="cp-abs" style="${caja(0.70, 2.35, 4.36, 1.40)}"><table class="cp-tabla cp-t9" style="${pt(12)}"><colgroup><col style="width:36.5%"><col style="width:39.5%"><col style="width:24%"></colgroup>
                     <tr><th></th><th>OPERACIONES</th><th>TONELADAS</th></tr>
-                    ${m.resumen.anios.map((x, i) => `<tr><td class="cp-etq" style="background:${COLOR_ANIO[i % 3]}">${escapar(x.etiqueta)}</td>
-                        <td>${entero(x.ops)}</td><td>${dosDec(x.ton)}</td></tr>`).join('')}
-                    <tr><td class="cp-etq" style="background:#305496">Carga ${escapar(t.DIA_FECHA)}</td><td>${t.DIA_OPS}</td><td>${t.DIA_TON}</td></tr>
-                    <tr class="cp-acum"><td>ACUMULADO</td><td>${t.ACUM_OPS}</td><td>${t.ACUM_TON}</td></tr>
+                    ${m.resumen.anios.map((x, i) => `<tr><td class="cp-etq" style="background:${COLOR_ANIO[i % 3]}" data-ph="ANIO_${i + 1}_ETQ">${escapar(x.etiqueta)}</td>
+                        <td data-ph="ANIO_${i + 1}_OPS">${entero(x.ops)}</td><td data-ph="ANIO_${i + 1}_TON">${dosDec(x.ton)}</td></tr>`).join('')}
+                    <tr><td class="cp-etq" style="background:#305496">Carga ${ph('DIA_FECHA')}</td><td data-ph="DIA_OPS">${t.DIA_OPS}</td><td data-ph="DIA_TON">${t.DIA_TON}</td></tr>
+                    <tr class="cp-acum"><td>ACUMULADO</td><td data-ph="ACUM_OPS">${t.ACUM_OPS}</td><td data-ph="ACUM_TON">${t.ACUM_TON}</td></tr>
                 </table></div>`
                 + `<div class="cp-abs" style="${caja(0.83, 4.23, 3.90, 1.11)}"><table class="cp-tabla cp-t19" style="${pt(12)}"><colgroup><col style="width:52.3%"><col style="width:47.7%"></colgroup>
                     <tr><th colspan="2" class="cp-titulo-tabla">AEROLÍNEAS QUE OPERAN AERONAVES BAJO LA FIGURA DE ARRENDAMIENTO HÚMEDO <b>(WET LEASE)</b></th></tr>
@@ -825,9 +828,9 @@
                 + img('avion-frente.jpg', -0.03, 5.50, 5.43, 1.84)
                 + `<div class="cp-abs" style="${caja(5.40, 0.29, 4.33, 7.00)}"><table class="cp-tabla cp-t3" style="${pt(7)}"><colgroup><col style="width:39.8%"><col style="width:24.8%"><col style="width:35.4%"></colgroup>
                     <tr><th>AEROLÍNEA</th><th>OPERACIONES</th><th>CARGA EN TONELADAS</th></tr>
-                    ${m.filas.map(f => `<tr><td style="background:${COLOR_GRUPO[f.grupo]}">${escapar(f.nombre)}</td>
-                        <td>${escapar(f.ops)}</td><td>${escapar(f.ton)}</td></tr>`).join('')}
-                    <tr class="cp-acum"><td>TOTAL</td><td>${t.H1_OPS_TOTAL}</td><td>${t.H1_TON_TOTAL}</td></tr>
+                    ${m.filas.map((f, i) => `<tr><td style="background:${COLOR_GRUPO[f.grupo]}">${escapar(f.nombre)}</td>
+                        <td data-ph="H1_OPS_${i + 1}">${escapar(f.ops)}</td><td data-ph="H1_TON_${i + 1}">${escapar(f.ton)}</td></tr>`).join('')}
+                    <tr class="cp-acum"><td>TOTAL</td><td data-ph="H1_OPS_TOTAL">${t.H1_OPS_TOTAL}</td><td data-ph="H1_TON_TOTAL">${t.H1_TON_TOTAL}</td></tr>
                 </table></div>`),
 
             laminaTarjetas(3), laminaTarjetas(4), laminaTarjetas(5), laminaTarjetas(6),
@@ -841,8 +844,8 @@
                 + img('icono-carga.png', 7.11, 1.83, 1.02, 1.02)
                 + txt(0.87, 3.05, 3.10, 0.75, '<b>Total de operaciones</b>', `${pt(24)};text-align:center;color:#6F7271`)
                 + txt(6.03, 2.85, 3.10, 1.00, '<b>Total de carga transportada (tons.)</b>', `${pt(24)};text-align:center;color:#6F7271`)
-                + `<div class="cp-cifra" style="${caja(1.04, 3.93, 2.67, 0.79)};${pt(32)}">${t.ACUM_OPS}</div>`
-                + `<div class="cp-cifra" style="${caja(6.28, 3.93, 2.67, 0.79)};${pt(32)}">${t.ACUM_TON}</div>`
+                + `<div class="cp-cifra" data-ph="ACUM_OPS" style="${caja(1.04, 3.93, 2.67, 0.79)};${pt(32)}">${t.ACUM_OPS}</div>`
+                + `<div class="cp-cifra" data-ph="ACUM_TON" style="${caja(6.28, 3.93, 2.67, 0.79)};${pt(32)}">${t.ACUM_TON}</div>`
                 + txt(0.80, 0.22, 6.13, 0.91, '<b>Cifras acumuladas desde el inicio de operaciones de la Terminal de Carga:</b>', pt(24))),
 
             lamina(8, img('fondo.svg', 0, 0.02, 10, 7.5) + img('logo-defensa.svg', 7.18, 0.33, 2.29, 0.57)
@@ -871,6 +874,58 @@
         return `${aviso}<div class="cp-baraja" id="conci-rep-hoja">${slides.join('')}</div>`;
     }
 
+    /**
+     * Lleva al .pptx lo corregido a mano en la vista previa. Cada valor de la
+     * vista lleva el marcador de la plantilla que lo contiene (data-ph) o su
+     * tarjeta (data-tj); se compara con la misma pieza recién calculada y solo
+     * lo que cambió se sobrescribe, diapositiva por diapositiva. Los marcatextos
+     * viajan como color: celda pintada en las tablas, resaltado en los cuadros
+     * de texto y recuadro coloreado en las tarjetas. Los textos fijos de la
+     * plantilla (títulos, nombres de aerolínea) no tienen marcador: esos se
+     * ajustan en PowerPoint.
+     */
+    function aplicarEdicionesPresentacion(modelo, vista, calculado) {
+        const E = window.ConciReportesEdicion;
+        if (!E || !vista || !calculado) return modelo;
+        const texto = {};
+        const marcas = {};
+        const originales = calculado.querySelectorAll('.cp-slide');
+        vista.querySelectorAll('.cp-slide').forEach((lamina, k) => {
+            const n = k + 1;
+            const original = originales[k];
+            if (!original) return;
+            const vistos = new Map();
+            lamina.querySelectorAll('[data-ph]').forEach(nodo => {
+                const clave = nodo.getAttribute('data-ph');
+                if (!Object.prototype.hasOwnProperty.call(modelo.texto, clave)) return;
+                const i = vistos.get(clave) || 0;
+                vistos.set(clave, i + 1);
+                const antes = original.querySelectorAll(`[data-ph="${clave}"]`)[i];
+                const valor = E.textoDe(nodo);
+                if (antes && valor !== E.textoDe(antes)) (texto[n] = texto[n] || {})[clave] = valor;
+                const hex = E.marcaDe(nodo, lamina);
+                if (hex) (marcas[n] = marcas[n] || {})[clave] = hex;
+            });
+            lamina.querySelectorAll('[data-tj]').forEach(tarjeta => {
+                const clave = tarjeta.getAttribute('data-tj');
+                if (!/^\d+:\d+$/.test(clave)) return;
+                const [ln, i] = clave.split(':').map(Number);
+                const destino = modelo.tarjetas[ln] && modelo.tarjetas[ln][i];
+                if (!destino) return;
+                const antes = original.querySelector(`[data-tj="${clave}"]`);
+                for (const campo of ['ops', 'ton']) {
+                    const v = tarjeta.querySelector(`[data-tj-campo="${campo}"]`);
+                    const o = antes && antes.querySelector(`[data-tj-campo="${campo}"]`);
+                    if (v && o && E.textoDe(v) !== E.textoDe(o)) destino[campo] = E.textoDe(v);
+                }
+                const hex = E.marcaDe(tarjeta, lamina);
+                if (hex) destino.marca = hex;
+            });
+        });
+        modelo.porLamina = { texto, marcas };
+        return modelo;
+    }
+
     const RENDERS = {
         subsecretaria: renderSubsecretaria,
         hoja1: renderHoja1,
@@ -881,10 +936,16 @@
 
     /* ── orquestación ───────────────────────────────────────────────────── */
 
+    // Edición y marcatextos (js/conci-reportes-edicion.js); null si no cargó.
+    let edicion = null;
+
     function pintar() {
         const salida = el('conci-rep-carga-salida');
         if (!salida || !ultimo) return;
-        salida.innerHTML = (RENDERS[reporteActivo] || renderSubsecretaria)(ultimo);
+        const calcular = () => (RENDERS[reporteActivo] || renderSubsecretaria)(ultimo);
+        // Si el reporte de esa fecha se editó y guardó, se ve la versión editada.
+        if (edicion) edicion.pintar(reporteActivo, ultimo.fechaIso, calcular);
+        else salida.innerHTML = calcular();
     }
 
     function mostrar(datos) { ultimo = datos; pintar(); }
@@ -899,6 +960,7 @@
     }
 
     async function generar() {
+        if (edicion && !edicion.soltar()) return;
         const campo = el('conci-rep-carga-fecha');
         const fechaIso = campo && campo.value;
         if (!fechaIso) { error('Elige la fecha del reporte.'); return; }
@@ -912,6 +974,7 @@
             }
             const datos = await descargar(fechaIso, n => estado(`Leyendo manifiestos… ${entero(n)}`));
             ultimo = agregar(datos, fechaIso);
+            if (edicion) await edicion.cargar(fechaIso);
             pintar();
             const pax = ultimo.descartadosPax ? ` · ${entero(ultimo.descartadosPax)} de pasajeros descartados` : '';
             estado(`${entero(ultimo.totalFilas)} manifiestos leídos${pax}`);
@@ -925,6 +988,7 @@
     }
 
     function elegirReporte(clave, boton) {
+        if (edicion && !edicion.soltar()) return;
         reporteActivo = clave;
         document.querySelectorAll('[data-conci-rep-carga]')
             .forEach(b => b.classList.toggle('active', b === boton));
@@ -967,6 +1031,13 @@
         try {
             estado('Armando la presentación…');
             const modelo = modeloPresentacion(ultimo);
+            // Lo corregido a mano en pantalla y sus colores también van al .pptx.
+            const vista = el('conci-rep-carga-salida');
+            if (vista && vista.querySelector('.cp-slide')) {
+                const calculado = document.createElement('div');
+                calculado.innerHTML = renderPresentacion(ultimo);
+                aplicarEdicionesPresentacion(modelo, vista, calculado);
+            }
             const bytes = await P.construir({ JSZip: window.JSZip, cargar: leerDelSitio }, modelo);
             const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
             const url = URL.createObjectURL(blob);
@@ -1003,6 +1074,11 @@
         el('btn-conci-rep-carga-generar')?.addEventListener('click', generar);
         el('btn-conci-rep-carga-imprimir')?.addEventListener('click', imprimir);
         el('btn-conci-rep-carga-descargar')?.addEventListener('click', descargarPptx);
+        if (window.ConciReportesEdicion) {
+            edicion = window.ConciReportesEdicion.crear({
+                area: 'carga', prefijo: 'carga', alCambiar: pintar, avisar: estado, error
+            });
+        }
         campo?.addEventListener('change', () => { cache = null; });
         document.querySelectorAll('[data-conci-rep-carga]').forEach(boton => {
             boton.addEventListener('click', () => elegirReporte(boton.dataset.conciRepCarga, boton));
@@ -1013,6 +1089,7 @@
         generar, agregar, mostrar, imprimir,
         descargar: descargarPptx,
         filasHoja1, totales, toneladas, repartirEnteros, modeloPresentacion,
-        aIso, nombreAerolinea
+        aIso, nombreAerolinea, aplicarEdicionesPresentacion,
+        _edicion: () => edicion
     };
 })();

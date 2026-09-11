@@ -23761,12 +23761,20 @@ FF
                                                 title="Descargar la presentación en PowerPoint">
                                                 <i class="fas fa-file-powerpoint me-1"></i>Descargar
                                             </button>
+                                            <!-- Editar: cambiar celdas y marcarlas con colores. Se guarda solo en
+                                                 Reportes; los manifiestos no cambian. Aparece al generar. -->
+                                            <button class="btn btn-sm btn-outline-warning d-none" id="btn-conci-rep-carga-editar" type="button"
+                                                title="Editar el reporte: cambiar celdas y marcarlas con colores">
+                                                <i class="fas fa-pen-to-square me-1"></i>Editar
+                                            </button>
 
                                             <span class="flex-grow-1"></span>
                                             <span id="conci-rep-carga-estado" class="text-muted" style="font-size:.75rem"></span>
                                         </div>
 
                                         <div id="conci-rep-carga-error" class="alert alert-danger d-none" role="alert"></div>
+                                        <div id="conci-rep-carga-edicion" class="conci-rep-edicion d-none" role="toolbar" aria-label="Edición del reporte de Carga"></div>
+                                        <div id="conci-rep-carga-edicion-aviso" class="conci-rep-edicion-aviso d-none" role="status"></div>
 
                                         <div id="conci-rep-carga-salida">
                                             <div class="text-center text-muted py-5" id="conci-rep-carga-vacio">
@@ -23825,12 +23833,20 @@ FF
                                                 title="Descargar la plantilla en Excel">
                                                 <i class="fas fa-file-excel me-1"></i>Descargar
                                             </button>
+                                            <!-- Editar: cambiar celdas y marcarlas con colores. Se guarda solo en
+                                                 Reportes; los manifiestos no cambian. Aparece al generar. -->
+                                            <button class="btn btn-sm btn-outline-warning d-none" id="btn-conci-rep-pax-editar" type="button"
+                                                title="Editar el reporte: cambiar celdas y marcarlas con colores">
+                                                <i class="fas fa-pen-to-square me-1"></i>Editar
+                                            </button>
 
                                             <span class="flex-grow-1"></span>
                                             <span id="conci-rep-pax-estado" class="text-muted" style="font-size:.75rem"></span>
                                         </div>
 
                                         <div id="conci-rep-pax-error" class="alert alert-danger d-none" role="alert"></div>
+                                        <div id="conci-rep-pax-edicion" class="conci-rep-edicion d-none" role="toolbar" aria-label="Edición del reporte de Pasajeros"></div>
+                                        <div id="conci-rep-pax-edicion-aviso" class="conci-rep-edicion-aviso d-none" role="status"></div>
 
                                         <div id="conci-rep-pax-salida">
                                             <div class="text-center text-muted py-5" id="conci-rep-pax-vacio">
@@ -39513,10 +39529,11 @@ FF
 <script src="js/conci-manifiestos-historial.js?v=20260727-insert-chips" defer></script>
 <!-- Reportes de Conciliación (Carga / Pasajeros) -->
 <script src="js/conci-reportes.js?v=20260909-v1" defer></script>
-<script src="js/conci-reportes-pasajeros.js?v=20260909-v1" defer></script>
+<script src="js/conci-reportes-edicion.js?v=20260911-v1" defer></script>
+<script src="js/conci-reportes-pasajeros.js?v=20260911-v1" defer></script>
 <script src="js/conci-carga-catalogo.js?v=20260910-v1" defer></script>
-<script src="js/conci-presentacion-carga.js?v=20260910-v1" defer></script>
-<script src="js/conci-reportes-carga.js?v=20260910-v2" defer></script>
+<script src="js/conci-presentacion-carga.js?v=20260911-v1" defer></script>
+<script src="js/conci-reportes-carga.js?v=20260911-v1" defer></script>
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
 <script src="js/estadistico-informe-core.js?v=20260821-v6" defer></script>
 <script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>

@@ -21758,6 +21758,133 @@ body.dark-mode .cc-cifras {
    background-color: #fff;
 }
 
+/* ── Reportes: edición y marcatextos ──────────────────────────────────── */
+
+.conci-rep-edicion {
+   position: sticky;
+   top: 0;
+   z-index: 5;
+   display: flex;
+   align-items: center;
+   flex-wrap: wrap;
+   gap: .45rem;
+   margin-bottom: .75rem;
+   padding: .5rem .75rem;
+   border: 1px solid #f3d27a;
+   border-radius: .6rem;
+   background: #fff8e1;
+   box-shadow: 0 2px 6px rgba(0, 0, 0, .06);
+   font-size: .8rem;
+}
+
+.conci-rep-edicion-titulo {
+   font-weight: 700;
+   color: #8a5a00;
+}
+
+.conci-rep-edicion-sep {
+   align-self: stretch;
+   width: 1px;
+   background: rgba(0, 0, 0, .12);
+}
+
+.conci-rep-edicion-etiqueta {
+   font-weight: 600;
+   color: #6b7280;
+}
+
+.conci-rep-edicion .btn.conci-rep-herramienta.active {
+   box-shadow: 0 0 0 2px #1f2937;
+}
+
+.conci-rep-color {
+   width: 1.65rem;
+   height: 1.65rem;
+   padding: 0;
+   border: 2px solid rgba(0, 0, 0, .18);
+   border-radius: 50%;
+   background: var(--marca);
+   cursor: pointer;
+}
+
+.conci-rep-color.active {
+   box-shadow: 0 0 0 2px #fff, 0 0 0 4px #1f2937;
+}
+
+.conci-rep-edicion-aviso {
+   display: flex;
+   align-items: center;
+   flex-wrap: wrap;
+   gap: .5rem;
+   margin-bottom: .75rem;
+   padding: .45rem .75rem;
+   border: 1px solid #bfdbfe;
+   border-radius: .6rem;
+   background: #eff6ff;
+   color: #1e3a8a;
+   font-size: .8rem;
+}
+
+.conci-rep-edicion-aviso .btn {
+   font-size: .75rem;
+}
+
+.conci-rep-edicion-local {
+   font-weight: 600;
+   color: #b45309;
+}
+
+/* El color del marcatextos gana a los fondos de la hoja (aerolíneas, grupos,
+   recuadros crema) y sale igual en papel. */
+#conci-reportes-section [data-marca="rojo"] { background-color: #FF8A80 !important; }
+#conci-reportes-section [data-marca="verde"] { background-color: #9CE6A5 !important; }
+#conci-reportes-section [data-marca="amarillo"] { background-color: #FFF176 !important; }
+#conci-reportes-section [data-marca="azul"] { background-color: #8FD3FE !important; }
+#conci-reportes-section [data-marca="morado"] { background-color: #D6A8F5 !important; }
+
+#conci-reportes-section [data-marca] {
+   -webkit-print-color-adjust: exact;
+   print-color-adjust: exact;
+}
+
+/* Solo en pantalla: al imprimir no salen los contornos de edición. */
+@media screen {
+   .conci-rep-editando [contenteditable="true"] {
+      cursor: text;
+   }
+
+   .conci-rep-editando [contenteditable="true"]:hover {
+      outline: 1px dashed #f59e0b;
+      outline-offset: -1px;
+   }
+
+   .conci-rep-editando [contenteditable="true"]:focus {
+      outline: 2px solid #f59e0b;
+      outline-offset: -2px;
+   }
+
+   .conci-rep-pintando #conci-rep-hoja,
+   .conci-rep-pintando #conci-rep-hoja * {
+      cursor: cell !important;
+   }
+}
+
+body.dark-mode .conci-rep-edicion {
+   border-color: #806a2e;
+   background: #3b3220;
+   color: #f5e6c8;
+}
+
+body.dark-mode .conci-rep-edicion-titulo {
+   color: #f5c451;
+}
+
+body.dark-mode .conci-rep-edicion-aviso {
+   border-color: #334155;
+   background: #1e293b;
+   color: #cbd5e1;
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    PASADA MÓVIL — TELÉFONOS
    Las medidas de tableta (≥ 576 px) ya estaban resueltas y no se tocan: todo
