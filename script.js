@@ -21572,7 +21572,15 @@ function _showConciExcelFilter(col, triggerEl) {
         const checked = !activeSet || activeSet.has(v);
         const label = v === '' ? '(Vac\u00edo)' : (_isAirlineFilterCol ? airlineLabelFor(v) : esc2(v));
         const safeVal = esc2(v);
-        return `<div class="conci-ef-item d-flex align-items-center gap-2" style="padding:2px 4px;cursor:pointer;" data-value="${safeVal}">
+        // El buscador de este panel debe encontrar tanto el codigo IATA crudo
+        // (p.ej. "E7") como el nombre comercial que la etiqueta realmente
+        // muestra (p.ej. "Estafeta"); antes solo comparaba contra el valor
+        // crudo, asi que escribir "estafeta" no encontraba las filas guardadas
+        // con el codigo y esas quedaban invisibles al usar "Seleccionar todo"
+        // despues de buscar.
+        const airlineSearchMeta = _isAirlineFilterCol ? _conciResolveAirlineMeta(v) : null;
+        const searchKey = ((airlineSearchMeta && airlineSearchMeta.name) ? `${v} ${airlineSearchMeta.name}` : v).toLowerCase();
+        return `<div class="conci-ef-item d-flex align-items-center gap-2" style="padding:2px 4px;cursor:pointer;" data-value="${safeVal}" data-search="${esc2(searchKey)}">
                     <input class="form-check-input conci-ef-chk" type="checkbox" id="conci-ef-${i}" value="${safeVal}" ${checked ? 'checked' : ''}>
                     <label class="conci-ef-label flex-grow-1" data-value="${safeVal}" title="click: solo este valor" style="cursor:pointer;margin:0;">${label}</label>
                 </div>`;
@@ -21592,7 +21600,8 @@ function _showConciExcelFilter(col, triggerEl) {
         const txt = searchBox.value.trim().toLowerCase();
         const items = [...listEl.querySelectorAll('.conci-ef-item')];
         items.forEach(item => {
-            item.style.display = item.dataset.value.toLowerCase().includes(txt) ? '' : 'none';
+            const haystack = item.dataset.search || item.dataset.value.toLowerCase();
+            item.style.display = haystack.includes(txt) ? '' : 'none';
         });
         // Reordena los elementos existentes (sin recrearlos) para que las
         // coincidencias más relevantes queden arriba; esto preserva el estado
