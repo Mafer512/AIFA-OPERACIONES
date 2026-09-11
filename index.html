@@ -23737,8 +23737,17 @@ FF
 
                                             <span class="text-muted" style="opacity:.25">│</span>
 
-                                            <label class="text-muted fw-semibold mb-0" for="conci-rep-carga-fecha" style="font-size:.78rem">Fecha del reporte</label>
-                                            <input type="date" class="form-control form-control-sm" id="conci-rep-carga-fecha" style="width:150px">
+                                            <label class="text-muted fw-semibold mb-0" for="conci-rep-carga-fecha-texto" style="font-size:.78rem">Fecha del reporte</label>
+                                            <!-- dd/mm/aaaa para todos, sin importar el idioma del navegador: la misma
+                                                 máscara de los filtros de Manifiestos, con el campo ISO real detrás. -->
+                                            <div class="input-group input-group-sm" style="width:auto">
+                                                <input type="text" class="form-control form-control-sm conci-fecha-mask" id="conci-rep-carga-fecha-texto" data-conci-fecha-para="conci-rep-carga-fecha"
+                                                    placeholder="dd/mm/aaaa" inputmode="numeric" maxlength="10" autocomplete="off" style="width:110px"
+                                                    title="Fecha del reporte (dd/mm/aaaa)" aria-label="Fecha del reporte (dd/mm/aaaa)">
+                                                <button class="btn btn-outline-secondary conci-fecha-calendario" type="button" data-conci-fecha-para="conci-rep-carga-fecha"
+                                                    title="Abrir calendario" aria-label="Abrir calendario de la fecha del reporte" tabindex="-1"><i class="far fa-calendar-alt"></i></button>
+                                                <input type="date" id="conci-rep-carga-fecha" class="conci-fecha-iso" tabindex="-1" aria-hidden="true">
+                                            </div>
                                             <button class="btn btn-sm btn-primary" id="btn-conci-rep-carga-generar" type="button">
                                                 <i class="fas fa-rotate me-1"></i>Generar
                                             </button>
@@ -23789,8 +23798,17 @@ FF
 
                                             <span class="text-muted" style="opacity:.25">│</span>
 
-                                            <label class="text-muted fw-semibold mb-0" for="conci-rep-pax-fecha" style="font-size:.78rem">Fecha del reporte</label>
-                                            <input type="date" class="form-control form-control-sm" id="conci-rep-pax-fecha" style="width:150px">
+                                            <label class="text-muted fw-semibold mb-0" for="conci-rep-pax-fecha-texto" style="font-size:.78rem">Fecha del reporte</label>
+                                            <!-- dd/mm/aaaa para todos, sin importar el idioma del navegador: la misma
+                                                 máscara de los filtros de Manifiestos, con el campo ISO real detrás. -->
+                                            <div class="input-group input-group-sm" style="width:auto">
+                                                <input type="text" class="form-control form-control-sm conci-fecha-mask" id="conci-rep-pax-fecha-texto" data-conci-fecha-para="conci-rep-pax-fecha"
+                                                    placeholder="dd/mm/aaaa" inputmode="numeric" maxlength="10" autocomplete="off" style="width:110px"
+                                                    title="Fecha del reporte (dd/mm/aaaa)" aria-label="Fecha del reporte (dd/mm/aaaa)">
+                                                <button class="btn btn-outline-secondary conci-fecha-calendario" type="button" data-conci-fecha-para="conci-rep-pax-fecha"
+                                                    title="Abrir calendario" aria-label="Abrir calendario de la fecha del reporte" tabindex="-1"><i class="far fa-calendar-alt"></i></button>
+                                                <input type="date" id="conci-rep-pax-fecha" class="conci-fecha-iso" tabindex="-1" aria-hidden="true">
+                                            </div>
                                             <button class="btn btn-sm btn-primary" id="btn-conci-rep-pax-generar" type="button">
                                                 <i class="fas fa-rotate me-1"></i>Generar
                                             </button>
