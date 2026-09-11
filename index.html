@@ -23068,6 +23068,9 @@ FF
                                                         <button class="btn btn-sm btn-outline-success shadow-sm" type="button" id="btn-conci-export-por-capturista" title="Descarga un Excel con los manifiestos ya capturados, organizados por capturista (una hoja por persona)" onclick="window.conciExportPorCapturista && window.conciExportPorCapturista(); return false;">
                                                             <i class="fas fa-user-tag me-1"></i>Exportar por capturista
                                                         </button>
+                                                        <button class="btn btn-sm btn-outline-success shadow-sm" type="button" id="btn-conci-manifiestos-capturados" title="Consulta los manifiestos capturados en una fecha, agrupados por capturista" onclick="window.conciAbrirManifiestosCapturados && window.conciAbrirManifiestosCapturados(); return false;">
+                                                            <i class="fas fa-calendar-check me-1"></i>Manifiestos capturados
+                                                        </button>
                                                         <div class="dropdown">
                                                             <button class="btn btn-sm btn-primary shadow-sm dropdown-toggle" type="button" id="dropdownCapturarManifiestos" data-bs-toggle="dropdown" aria-expanded="false">
                                                                 <i class="fas fa-plus me-1"></i>Capturar Manifiesto
@@ -38900,6 +38903,57 @@ FF
                     <!-- El botón de acción se configurará dinámicamente -->
                     <button type="button" class="btn btn-primary" id="btn-conci-action">
                         <i class="fas fa-sync-alt me-2"></i>Cambiar Estado
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Manifiestos capturados por fecha, agrupados por capturista -->
+    <div class="modal fade" id="modalConciManifiestosCapturados" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:95vw">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title"><i class="fas fa-calendar-check me-2"></i>Manifiestos capturados</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3 mb-3">
+                        <div class="col-auto">
+                            <label for="conci-mc-fecha" class="form-label fw-bold small text-uppercase text-muted">Día que capturó</label>
+                            <input type="date" class="form-control" id="conci-mc-fecha" style="max-width:220px">
+                        </div>
+                        <div class="col-auto">
+                            <label for="conci-mc-capturista" class="form-label fw-bold small text-uppercase text-muted">Quién capturó</label>
+                            <select class="form-select" id="conci-mc-capturista" style="max-width:260px">
+                                <option value="">Todos los capturistas</option>
+                            </select>
+                        </div>
+                        <div class="col-auto">
+                            <label for="conci-mc-aerolinea" class="form-label fw-bold small text-uppercase text-muted">Aerolínea</label>
+                            <select class="form-select" id="conci-mc-aerolinea" style="max-width:260px">
+                                <option value="">Todas las aerolíneas</option>
+                            </select>
+                        </div>
+                        <div class="col-auto">
+                            <label for="conci-mc-tipo" class="form-label fw-bold small text-uppercase text-muted">Carga o pasajeros</label>
+                            <select class="form-select" id="conci-mc-tipo" style="max-width:200px">
+                                <option value="">Todos</option>
+                                <option value="pax">Pasajeros</option>
+                                <option value="carga">Carga</option>
+                            </select>
+                        </div>
+                        <div class="col-auto flex-grow-1">
+                            <label for="conci-mc-buscar" class="form-label fw-bold small text-uppercase text-muted">Qué capturó</label>
+                            <input type="text" class="form-control" id="conci-mc-buscar" placeholder="Buscar por aerolínea, # de vuelo o tipo de manifiesto…" style="min-width:260px">
+                        </div>
+                    </div>
+                    <div id="conci-mc-resultado"></div>
+                </div>
+                <div class="modal-footer justify-content-between p-3 bg-light">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="button" class="btn btn-outline-success" id="conci-mc-exportar" title="Descarga un Excel con los manifiestos capturados en la fecha elegida, organizados por capturista">
+                        <i class="fas fa-file-excel me-2"></i>Exportar Excel
                     </button>
                 </div>
             </div>

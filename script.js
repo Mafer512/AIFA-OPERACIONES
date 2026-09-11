@@ -22227,6 +22227,257 @@ async function _conciExportPorCapturista() {
 }
 window.conciExportPorCapturista = _conciExportPorCapturista;
 
+// ─── "Manifiestos capturados" por fecha, agrupados por capturista ──────────
+// Misma fuente de datos, mismas columnas (_CONCI_EXPORT_CAPTURISTA_HIDDEN_COLS)
+// y mismo criterio de "capturado" (HR. DE RECEPCIÓN con valor) que ya usa
+// "Exportar por capturista" — aquí solo se agrega un selector de fecha: elegir
+// un día carga ese día en el propio dashboard (mismo mecanismo que el filtro
+// de fecha de la barra superior) y este panel lee lo que quedó cargado.
+function _conciRenderManifiestosCapturadosPanel() {
+    const cont = document.getElementById('conci-mc-resultado');
+    if (!cont) return;
+
+    const capturistaSel = document.getElementById('conci-mc-capturista');
+    const aerolineaSel = document.getElementById('conci-mc-aerolinea');
+    const tipoSel = document.getElementById('conci-mc-tipo');
+    const buscarInput = document.getElementById('conci-mc-buscar');
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+    const rows = _conciGetExportRows();
+    const allCols = (Array.isArray(_conciManifestosSummaryColumns) && _conciManifestosSummaryColumns.length)
+        ? _conciManifestosSummaryColumns
+        : Object.keys(rows[0] || {});
+    const cols = allCols.filter(c => !_CONCI_EXPORT_CAPTURISTA_HIDDEN_COLS.has(c));
+
+    const get = _conciExportGetField;
+    const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
+    const capturoCol = cols.find(c => /^captur[oó]$/i.test(c.trim())) || null;
+    const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
+    const optypeCol = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
+
+    const capturados = rows.filter(r => recepcionCol && String(get(r, [recepcionCol])).trim() !== '');
+
+    if (!capturados.length) {
+        if (capturistaSel) capturistaSel.innerHTML = '<option value="">Todos los capturistas</option>';
+        if (aerolineaSel) aerolineaSel.innerHTML = '<option value="">Todas las aerolíneas</option>';
+        cont.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>No hay manifiestos capturados en esta fecha.</div>';
+        return;
+    }
+
+    const grupos = new Map();
+    capturados.forEach(r => {
+        const nombre = String((capturoCol ? get(r, [capturoCol]) : '') || '').trim() || 'SIN CAPTURISTA IDENTIFICADO';
+        if (!grupos.has(nombre)) grupos.set(nombre, []);
+        grupos.get(nombre).push(r);
+    });
+    const nombresOrdenados = [...grupos.keys()].sort((a, b) => a.localeCompare(b, 'es'));
+
+    // Repuebla el combo de capturistas solo cuando cambia el conjunto de
+    // nombres (p.ej. al cargar otra fecha) — así no se pierde la selección
+    // del usuario cada vez que teclea en el buscador.
+    if (capturistaSel) {
+        const firma = nombresOrdenados.join('');
+        if (capturistaSel.dataset.firma !== firma) {
+            const previo = capturistaSel.value;
+            capturistaSel.innerHTML = '<option value="">Todos los capturistas</option>' +
+                nombresOrdenados.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+            capturistaSel.value = nombresOrdenados.includes(previo) ? previo : '';
+            capturistaSel.dataset.firma = firma;
+        }
+    }
+
+    // El combo de aerolínea solo ofrece las aerolíneas del tipo elegido en
+    // "Carga o pasajeros" — si ya se filtró a Pasajeros, no tiene sentido
+    // ofrecer una aerolínea de carga que de todos modos no aparecería.
+    const tipoFiltroPrevio = tipoSel ? tipoSel.value : '';
+    const capturadosParaAerolinea = tipoFiltroPrevio
+        ? capturados.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === (tipoFiltroPrevio === 'carga'))
+        : capturados;
+
+    // Todos los códigos del catálogo de aerolíneas (tabla `airlines`) que
+    // clasifican como el tipo pedido, aunque ninguno haya capturado nada
+    // todavía ese día — así se puede filtrar de una vez por una aerolínea de
+    // carga que sigue pendiente, sin esperar a que aparezca en los datos.
+    // Se reutiliza _conciRowIsCargo (no un filtro propio sobre "types") para
+    // que la división sea exclusiva: unas pocas aerolíneas están marcadas en
+    // el catálogo con AMBOS tipos (Air China, Cathay Pacific, China Southern,
+    // Emirates, Lufthansa, Turkish — transportan pasajeros y carga real), y
+    // _conciRowIsCargo ya sabe resolver ese empate igual que lo hace para
+    // cada fila real: sin un TIPO DE OPERACIÓN que lo desempate, cae siempre
+    // del mismo lado (pasajeros) en vez de aparecer en las dos listas.
+    const codigosDeCatalogoPorTipo = (tipo) => {
+        if (typeof _conciAirlineCodeMap === 'undefined' || !(_conciAirlineCodeMap instanceof Map)) return [];
+        return [..._conciAirlineCodeMap.keys()]
+            .filter(code => _conciRowIsCargo({ [airlineCol]: code }, null, airlineCol) === (tipo === 'carga'));
+    };
+    const codigosDeDatos = airlineCol
+        ? [...new Set(capturadosParaAerolinea.map(r => String(get(r, [airlineCol]) || '').trim()).filter(Boolean))]
+        : [];
+    // Combo de aerolinea: mismo formato "CODIGO - Nombre" que ya usa el
+    // filtro de columna AEROLINEA de la tabla principal (_conciResolveAirlineMeta,
+    // alimentado por el catalogo de aerolineas).
+    const codigosAerolinea = tipoFiltroPrevio
+        ? [...new Set([...codigosDeCatalogoPorTipo(tipoFiltroPrevio === 'carga' ? 'carga' : 'pasajeros'), ...codigosDeDatos])].sort((a, b) => a.localeCompare(b, 'es'))
+        : codigosDeDatos.sort((a, b) => a.localeCompare(b, 'es'));
+    if (aerolineaSel) {
+        const firmaAerolinea = tipoFiltroPrevio + '|' + codigosAerolinea.join('');
+        if (aerolineaSel.dataset.firma !== firmaAerolinea) {
+            const previo = aerolineaSel.value;
+            aerolineaSel.innerHTML = '<option value="">Todas las aerolíneas</option>' +
+                codigosAerolinea.map(cod => {
+                    const meta = _conciResolveAirlineMeta(cod);
+                    const label = meta && meta.name ? (cod + '—' + meta.name) : cod;
+                    return `<option value="${esc(cod)}">${esc(label)}</option>`;
+                }).join('');
+            aerolineaSel.value = codigosAerolinea.includes(previo) ? previo : '';
+            aerolineaSel.dataset.firma = firmaAerolinea;
+        }
+    }
+
+    // "Qué capturó": busca por aerolínea, # de vuelo o tipo de manifiesto —
+    // las mismas columnas con las que ya se identifica un manifiesto en
+    // "Exportar por capturista" — usando el mismo criterio de comparación
+    // (sin espacios/guiones/puntos) que el buscador rápido de vuelo.
+    const idCols = cols.filter(c => /aerol[ií]nea|^#\s*de\s*vuelo$|tipo de manifiesto/i.test(c));
+    const buscarTexto = buscarInput ? _conciCompactText(buscarInput.value.trim().toLowerCase()) : '';
+    const capturistaFiltro = capturistaSel ? capturistaSel.value : '';
+    const aerolineaFiltro = aerolineaSel ? aerolineaSel.value : '';
+    // "Carga o pasajeros": mismo criterio (_conciRowIsCargo) que ya usan los
+    // pills Pasajeros/Carga y el resumen KPI de la barra superior.
+    const tipoFiltro = tipoSel ? tipoSel.value : '';
+    const nombresVisibles = capturistaFiltro ? nombresOrdenados.filter(n => n === capturistaFiltro) : nombresOrdenados;
+
+    const headHtml = cols.map(c => `<th>${esc(c)}</th>`).join('');
+    // Dentro de cada capturista, los manifiestos se dividen en Pasajeros y
+    // Carga (mismo criterio _conciRowIsCargo, mismos colores que ya usan las
+    // píldoras "Pasajeros" #5e35b1 y "Carga" #e65100 de la barra superior).
+    const renderSubtabla = (subFilas, etiqueta, icono, color) => {
+        if (!subFilas.length) return '';
+        const bodyHtml = subFilas.map(row => {
+            const tds = cols.map(c => {
+                const val = _conciExportCapturistaCellValue(get(row, [c]));
+                const alignClass = typeof val === 'number' ? 'text-end' : (/observacion/i.test(c) ? 'text-start' : 'text-center');
+                return `<td class="${alignClass}">${esc(val)}</td>`;
+            }).join('');
+            return `<tr>${tds}</tr>`;
+        }).join('');
+        return `
+            <div class="mb-3">
+                <div class="d-flex align-items-center gap-2 mb-1 px-2 py-1 rounded" style="background:${color};color:#fff;font-size:.76rem;">
+                    <i class="fas ${icono}"></i>
+                    <span class="fw-bold text-uppercase">${etiqueta}</span>
+                    <span class="badge bg-light text-dark ms-auto">${subFilas.length}</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-striped mb-0" style="font-size:.78rem;">
+                        <thead><tr>${headHtml}</tr></thead>
+                        <tbody>${bodyHtml}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    };
+
+    const bloques = nombresVisibles.map(nombre => {
+        let filas = grupos.get(nombre) || [];
+        if (aerolineaFiltro) {
+            filas = filas.filter(row => String(get(row, [airlineCol]) || '').trim() === aerolineaFiltro);
+        }
+        if (buscarTexto) {
+            filas = filas.filter(row => idCols.some(c => _conciCompactText(String(get(row, [c]) || '').toLowerCase()).includes(buscarTexto)));
+        }
+        if (!filas.length) return '';
+
+        const filasPax = filas.filter(row => !_conciRowIsCargo(row, optypeCol, airlineCol));
+        const filasCarga = filas.filter(row => _conciRowIsCargo(row, optypeCol, airlineCol));
+        const mostrarPax = tipoFiltro !== 'carga' ? filasPax : [];
+        const mostrarCarga = tipoFiltro !== 'pax' ? filasCarga : [];
+        const total = mostrarPax.length + mostrarCarga.length;
+        if (!total) return '';
+
+        return `
+            <div class="mb-4">
+                <div class="d-flex align-items-center gap-2 mb-2 px-2 py-2 rounded" style="background:#15683f;color:#fff;">
+                    <i class="fas fa-user-tag"></i>
+                    <strong>${esc(nombre)}</strong>
+                    <span class="badge bg-light text-dark ms-auto">${total} manifiesto${total === 1 ? '' : 's'}</span>
+                </div>
+                ${renderSubtabla(mostrarPax, 'Pasajeros', 'fa-users', '#5e35b1')}
+                ${renderSubtabla(mostrarCarga, 'Carga', 'fa-box-open', '#e65100')}
+            </div>`;
+    }).filter(Boolean).join('');
+
+    cont.innerHTML = bloques || '<div class="text-center text-muted py-4">No hay manifiestos que coincidan con el filtro.</div>';
+}
+
+// Cambia la fecha del dashboard a la elegida en el modal (mismo mecanismo que
+// el filtro de fecha de la barra superior) y refresca el panel con lo que
+// quede cargado para ese día.
+async function _conciCargarFechaManifiestosCapturados() {
+    const fechaInput = document.getElementById('conci-mc-fecha');
+    const cont = document.getElementById('conci-mc-resultado');
+    const fecha = fechaInput && fechaInput.value;
+    if (!fecha) return;
+
+    const desdeEl = document.getElementById('filter-conci-fecha-desde');
+    const hastaEl = document.getElementById('filter-conci-fecha-hasta');
+    if (desdeEl) desdeEl.value = fecha;
+    if (hastaEl) hastaEl.value = '';
+
+    if (cont) {
+        cont.innerHTML = '<div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm text-success mb-2"></div><div>Cargando…</div></div>';
+    }
+
+    await loadConciliacionManifiestos({ forceRefresh: true });
+    _conciRenderManifiestosCapturadosPanel();
+}
+
+function _conciAbrirManifiestosCapturados() {
+    const modalEl = document.getElementById('modalConciManifiestosCapturados');
+    if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) return;
+
+    const fechaInput = document.getElementById('conci-mc-fecha');
+    const desdeEl = document.getElementById('filter-conci-fecha-desde');
+    if (fechaInput && !fechaInput.dataset.bound) {
+        fechaInput.dataset.bound = '1';
+        fechaInput.addEventListener('change', _conciCargarFechaManifiestosCapturados);
+    }
+    const exportBtn = document.getElementById('conci-mc-exportar');
+    if (exportBtn && !exportBtn.dataset.bound) {
+        exportBtn.dataset.bound = '1';
+        exportBtn.addEventListener('click', () => {
+            if (typeof window.conciExportPorCapturista === 'function') window.conciExportPorCapturista();
+        });
+    }
+    const capturistaSel = document.getElementById('conci-mc-capturista');
+    if (capturistaSel && !capturistaSel.dataset.bound) {
+        capturistaSel.dataset.bound = '1';
+        capturistaSel.addEventListener('change', _conciRenderManifiestosCapturadosPanel);
+    }
+    const aerolineaSel = document.getElementById('conci-mc-aerolinea');
+    if (aerolineaSel && !aerolineaSel.dataset.bound) {
+        aerolineaSel.dataset.bound = '1';
+        aerolineaSel.addEventListener('change', _conciRenderManifiestosCapturadosPanel);
+    }
+    const tipoSel = document.getElementById('conci-mc-tipo');
+    if (tipoSel && !tipoSel.dataset.bound) {
+        tipoSel.dataset.bound = '1';
+        tipoSel.addEventListener('change', _conciRenderManifiestosCapturadosPanel);
+    }
+    const buscarInput = document.getElementById('conci-mc-buscar');
+    if (buscarInput && !buscarInput.dataset.bound) {
+        buscarInput.dataset.bound = '1';
+        buscarInput.addEventListener('input', _conciRenderManifiestosCapturadosPanel);
+    }
+    // Se propone la fecha que ya está cargada en el dashboard, y se muestra
+    // de una vez lo que ya está en pantalla, sin esperar a que el usuario
+    // toque el calendario.
+    if (fechaInput) fechaInput.value = (desdeEl && desdeEl.value) || '';
+    _conciRenderManifiestosCapturadosPanel();
+
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+}
+window.conciAbrirManifiestosCapturados = _conciAbrirManifiestosCapturados;
+
 // ─── Importación de archivos para Conciliación Manifiestos ───────────────────
 // Cada manifiesto se identifica por Fecha + Tipo de manifiesto + Número de vuelo.
 // Esa llave permite sustituir una carga previa sin añadir filas duplicadas.
