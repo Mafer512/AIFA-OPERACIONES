@@ -364,13 +364,50 @@ blanco.
 
 ---
 
+## 10 ter. FBO · Aviación General
+
+Primera ventana con la visualización nueva, pensada para leerse sin instructivo: una frase que
+cuenta el periodo, seis tarjetas (las de conteo, con su variación contra el periodo anterior de
+la misma duración), destacados —mes pico, operador principal, aeronave más usada, origen/destino
+más frecuente—, la tendencia mensual con selector *Movimientos / Pasajeros* y su promedio,
+barras de composición, tres rankings y las matrículas más recurrentes.
+
+**De dónde salen las cifras.** De `aviacion_general_resumen()` (migración 046), la misma función
+que usa el módulo de Aviación General: las dos pantallas dan las mismas cifras y aquí no se
+recalcula ninguna métrica. El navegador sólo saca proporciones y el promedio mensual para
+pintar. El periodo anterior es un segundo viaje al mismo RPC; si falla, el tablero sale sin
+variaciones.
+
+**Filtros.** Se aplican el periodo, *Movimiento* (A → `LLEGADA`, D → `SALIDA`) y *Territorial*
+(→ `NACIONAL` / `INTERNACIONAL`). Los demás filtros de la barra toman sus opciones de la
+operación de las otras ventanas: en FBO no se aplican, y el tablero lo avisa.
+
+**Filtrar tocando.** Una barra de operadores, tipos de aeronave u orígenes/destinos, un destacado
+o una matrícula filtran todo el tablero por ese valor, uno a la vez. El chip de arriba lo quita,
+igual que *Limpiar*. El RPC compara por coincidencia parcial, como en el módulo de Aviación
+General.
+
+**Calidad del dato, a la vista.** Buena parte del histórico no trae origen/destino. Esa parte no
+entra a la gráfica, porque aplastaría a las demás barras: debajo se dice cuántos movimientos son
+y qué porcentaje, y un destacado lo anuncia arriba. Los nombres largos se abrevian en el eje y
+salen completos en el globo.
+
+**Lo que no aplica, fuera.** Los avisos de la operación del itinerario (operaciones sin
+clasificar, canceladas) se ocultan mientras FBO está abierta. Ejes y leyendas toman los colores
+del tema claro u oscuro, y las gráficas se repintan solas al cambiarlo, sin volver a consultar.
+
+**Periodo sin movimientos.** Lo dice con las fechas del histórico cargado y ofrece un botón para
+verlo completo. Si la base no tiene la función, el error nombra la migración 046.
+
+---
+
 ## 11. Pruebas
 
 - `__tests__/estadistica-motor.test.js` — núcleo puro: nulos, unidades, factor de ocupación,
   PAX total, comparaciones con base cero, fechas, filtros, exportación, validaciones.
 - `__tests__/estadistica-panel.test.js` — pantallas en jsdom con cliente simulado: origen de los
-  datos, filtros centralizados, permisos por nivel, carga perezosa, comparador, descargas y
-  convivencia con el Informe. El marcado se **recorta de `index.html`**, no se reescribe.
+  datos, filtros centralizados, permisos por nivel, carga perezosa, comparador, descargas, el
+  tablero FBO y convivencia con el Informe. El marcado se **recorta de `index.html`**, no se reescribe.
 - `__tests__/estadistica-sql.test.js` — invariantes del SQL: canceladas fuera de toda métrica,
   tránsito atribuido una sola vez, clasificación que no adivina, sin interpolación de valores en
   SQL dinámico, RLS de administración, y que no se toque nada de 027/028.
