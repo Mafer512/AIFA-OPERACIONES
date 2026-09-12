@@ -406,6 +406,30 @@ verlo completo. Si la base no tiene la función, el error nombra la migración 0
 
 ---
 
+## 10 quater. El diseño de FBO en todas las áreas
+
+Después de FBO, las demás áreas tomaron el mismo lenguaje, sin cambiar lo que consultan ni sus
+filtros: cada una abre con una **frase** que cuenta el periodo, **tarjetas** con icono y
+variación, **barras de composición** donde hay partes que repartir, **tendencias** mensuales con
+la línea del promedio y **rankings** horizontales con el valor al final de la barra. Las tablas
+siguen completas, dentro de su panel, con el encabezado fijo al desplazarse.
+
+| Área | Qué se agregó |
+|---|---|
+| Resumen | Frase, calidad del dato como destacados, composición y tendencia operaciones/pasajeros |
+| Explorador | Frase del resultado; tendencia si agrupa por mes, ranking si agrupa por otra dimensión |
+| Operaciones, Pasajeros, Carga | Tendencia apilada con promedio y composición; rankings de ocupación y de carga por aerolínea |
+| Aerolíneas, Rutas, Aeronaves | Rankings horizontales; tarjetas de concentración y composición por ámbito |
+| Puntualidad | Cumplimiento del slot contra demora, resultado contra el slot y ranking de causas |
+| Comparador | Una tarjeta por indicador con el valor de A, el de B y la variación |
+| Clasificación, Descargas | Cabecera, reglas en paneles y una ficha por documento |
+| Informe oficial | Tarjetas, barra y tablas con el mismo lenguaje; el contenido no cambia |
+
+Todo se arma con lo que ya devuelve el servidor: el navegador sólo reparte proporciones y saca el
+promedio que dibuja la línea punteada. Ejes y leyendas siguen el tema claro u oscuro.
+
+---
+
 ## 11. Pruebas
 
 - `__tests__/estadistica-motor.test.js` — núcleo puro: nulos, unidades, factor de ocupación,

@@ -857,3 +857,90 @@ describe('nombres del panel', () => {
     expect(repetidos).toEqual([]);
   });
 });
+
+describe('las áreas con el diseño de FBO', () => {
+  const ultimaDe = (graficas, id) => graficas.filter((g) => g.id === id).pop().config;
+
+  test('el resumen abre con su frase, tarjetas con icono y la calidad del dato como destacados', async () => {
+    const { graficas } = await montar('admin');
+    expect(document.getElementById('est-resumen-frase').textContent).toMatch(/operaciones/);
+    expect(document.querySelectorAll('#est-resumen-tarjetas .fbo-kpi')).toHaveLength(5);
+    expect(document.querySelectorAll('#est-resumen-calidad .fbo-destacado').length).toBeGreaterThan(0);
+    expect(document.querySelectorAll('#est-resumen-composicion .fbo-comp').length).toBeGreaterThanOrEqual(2);
+    expect(graficas.some((g) => g.id === 'est-resumen-chart')).toBe(true);
+  });
+
+  test.each([
+    ['operaciones', 'est-ops', 6],
+    ['pasajeros', 'est-pax', 9],
+    ['aerolineas', 'est-aero', 4],
+    ['rutas', 'est-rutas', 4],
+    ['aeronaves', 'est-aeronaves', 4],
+    ['carga', 'est-carga', 7],
+    ['puntualidad', 'est-punt', 5]
+  ])('%s: frase del periodo, tarjetas con icono y gráficas', async (area, prefijo, tarjetas) => {
+    const { graficas } = await montar('admin');
+    document.getElementById(`est-tab-${area}`).dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+    expect(document.getElementById(`${prefijo}-frase`).textContent.trim()).not.toBe('');
+    expect(document.getElementById(`${prefijo}-frase`).textContent).not.toMatch(/NaN|undefined/);
+    expect(document.querySelectorAll(`#${prefijo}-tarjetas .fbo-kpi`)).toHaveLength(tarjetas);
+    expect(graficas.some((g) => g.id && g.id.startsWith(`${prefijo}-`))).toBe(true);
+  });
+
+  test('las tendencias llevan la línea del promedio y los rankings escriben su valor', async () => {
+    const { graficas } = await montar('admin');
+    document.getElementById('est-tab-operaciones').dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+    const series = ultimaDe(graficas, 'est-ops-chart').data.datasets;
+    expect(series[series.length - 1].label).toMatch(/Promedio mensual/);
+    document.getElementById('est-tab-aerolineas').dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+    const ranking = ultimaDe(graficas, 'est-aero-chart');
+    expect(ranking.options.indexAxis).toBe('y');
+    expect(ranking.plugins.some((p) => p.id === 'tbEtiquetas')).toBe(true);
+  });
+
+  test('el explorador esconde el panel de la gráfica cuando cruza dos dimensiones', async () => {
+    await montar('admin');
+    document.getElementById('est-tab-explorador').dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+    const panel = document.getElementById('est-exp-chart').closest('.fbo-panel');
+    expect(panel.hidden).toBe(false);
+    document.getElementById('est-exp-dim2').value = 'aerolinea';
+    document.getElementById('est-exp-consultar').dispatchEvent(new window.Event('click'));
+    await reposar();
+    expect(panel.hidden).toBe(true);
+    expect(document.getElementById('est-exp-frase').textContent).toMatch(/renglones/);
+  });
+
+  test('el comparador resume cada indicador en una tarjeta con su variación', async () => {
+    await montar('admin');
+    document.getElementById('est-tab-comparador').dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+    expect(document.querySelectorAll('#est-cmp-tarjetas .fbo-kpi').length).toBeGreaterThanOrEqual(4);
+    expect(document.getElementById('est-cmp-frase').textContent).toMatch(/referencia/);
+    expect(document.getElementById('est-cmp-tarjetas').textContent).not.toMatch(/NaN|Infinity|undefined/);
+  });
+
+  test('descargas muestra una ficha por documento', async () => {
+    await montar('admin');
+    document.getElementById('est-tab-descargas').dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+    expect(document.querySelectorAll('#est-descargas-lista .tb-doc')).toHaveLength(12);
+  });
+
+  test('al cambiar a oscuro, el área abierta se vuelve a pintar con ejes legibles', async () => {
+    const { graficas } = await montar('admin');
+    document.getElementById('est-tab-operaciones').dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+    const claro = ultimaDe(graficas, 'est-ops-chart').options.scales.x.ticks.color;
+    document.body.classList.add('dark-mode');
+    await reposar();
+    const oscuro = ultimaDe(graficas, 'est-ops-chart').options.scales.x.ticks.color;
+    document.body.classList.remove('dark-mode');
+    await reposar();
+    expect(claro).toBe('#475569');
+    expect(oscuro).toBe('#cbd5e1');
+  });
+});
