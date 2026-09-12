@@ -104,3 +104,34 @@ describe('el estilo', () => {
     expect(css).toMatch(/\.est-cabecera \.nav-link\.active \{[^}]*background: linear-gradient/);
   });
 });
+
+describe('el acomodo pedido', () => {
+  test('siete ventanas por renglón y el segundo renglón centrado', () => {
+    expect(css).toMatch(/\.est-ventanas \{[^}]*--est-por-renglon: 7;[^}]*justify-content: center;/);
+    expect(css).toContain('flex: 0 0 calc((100% - (var(--est-por-renglon) - 1) * var(--est-separacion)) / var(--est-por-renglon));');
+  });
+
+  test('FBO y Puntualidad abren el segundo renglón: 7 arriba y 6 abajo', () => {
+    const ids = [...document.querySelectorAll('.est-ventanas > .est-ventana')].map(b => b.id);
+    expect(ids).toHaveLength(13);
+    expect(ids.indexOf('est-tab-fbo')).toBe(7);
+    expect(ids.indexOf('est-tab-puntualidad')).toBe(8);
+  });
+
+  test('los filtros ceden espacio para caber en un renglón', () => {
+    expect(css).toMatch(/\.est-cabecera #est-filtros \.card-body > \.d-flex > div \{\n\s*flex: 1 1 0;/);
+  });
+
+  test('la fecha de los datos va encima de Aplicar, limpiar y actualizar', () => {
+    const acciones = document.querySelector('#est-filtros .est-filtros-acciones');
+    expect(acciones.firstElementChild.id).toBe('est-frescura');
+    expect([...acciones.querySelectorAll('button')].map(b => b.id))
+      .toEqual(['est-btn-aplicar', 'est-btn-limpiar', 'est-btn-refrescar']);
+  });
+
+  test('un área que carga no se atenúa: lleva un indicador', () => {
+    const panel = fs.readFileSync(path.join(raiz, 'js', 'estadistica-panel.js'), 'utf8');
+    expect(panel).not.toContain("toggle('opacity-50'");
+    expect(css).toMatch(/\.est-cabecera \.nav-link\.est-cargando::after \{/);
+  });
+});

@@ -582,3 +582,18 @@ describe('la ventana FBO', () => {
     expect(document.getElementById('est-filtros').classList.contains('d-none')).toBe(false);
   });
 });
+
+describe('mientras carga un área', () => {
+  test('su botón muestra que carga, pero no se ve gris ni deshabilitado', async () => {
+    await montar('admin');
+    await reposar();
+    const boton = document.getElementById('est-tab-carga');
+    boton.dispatchEvent(new window.Event('shown.bs.tab'));
+    expect(boton.classList.contains('est-cargando')).toBe(true);
+    expect(boton.getAttribute('aria-busy')).toBe('true');
+    expect(boton.classList.contains('opacity-50')).toBe(false);
+    await reposar();
+    expect(boton.classList.contains('est-cargando')).toBe(false);
+    expect(boton.getAttribute('aria-busy')).toBe('false');
+  });
+});

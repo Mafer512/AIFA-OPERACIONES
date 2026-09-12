@@ -21299,7 +21299,7 @@ body.conci-estadistica-workspace .main-title {
    ========================================================================== */
 #est-subnav.est-cabecera {
    display: grid;
-   grid-template-columns: minmax(15rem, 19rem) minmax(0, 1fr);
+   grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr);
    grid-template-areas:
       "resumen filtros"
       "ventanas ventanas";
@@ -21317,11 +21317,21 @@ body.conci-estadistica-workspace .main-title {
    margin: 0;
 }
 
+/* Siete ventanas por renglón; el segundo renglón (seis) queda centrado. */
 .est-ventanas {
+   --est-por-renglon: 7;
+   --est-separacion: .6rem;
    grid-area: ventanas;
-   display: grid;
-   grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
-   gap: .6rem;
+   display: flex;
+   flex-wrap: wrap;
+   justify-content: center;
+   gap: var(--est-separacion);
+}
+
+.est-ventanas > .est-ventana {
+   flex: 0 0 calc((100% - (var(--est-por-renglon) - 1) * var(--est-separacion)) / var(--est-por-renglon));
+   min-width: 0;
+   min-height: 4.3rem;
 }
 
 .est-cabecera .nav-link {
@@ -21330,7 +21340,7 @@ body.conci-estadistica-workspace .main-title {
    align-items: center;
    gap: .7rem;
    width: 100%;
-   padding: .65rem .8rem;
+   padding: .75rem .9rem;
    border: 1px solid rgba(14, 55, 99, .12);
    border-radius: .8rem;
    background: #fff;
@@ -21394,23 +21404,23 @@ body.conci-estadistica-workspace .main-title {
 
 /* "Estadisticas": el recuadro grande de arriba, que abre el Resumen. */
 .est-cabecera .est-resumen {
-   padding: 1rem 1.1rem;
+   padding: .5rem .9rem;
 }
 
 .est-resumen .est-ventana-icono {
-   width: 3.1rem;
-   height: 3.1rem;
-   border-radius: .8rem;
-   font-size: 1.45rem;
+   width: 2.5rem;
+   height: 2.5rem;
+   border-radius: .7rem;
+   font-size: 1.2rem;
 }
 
 .est-resumen .est-ventana-texto b {
-   font-size: 1.4rem;
+   font-size: 1.2rem;
    font-weight: 800;
 }
 
 .est-resumen .est-ventana-texto small {
-   font-size: .78rem;
+   font-size: .72rem;
 }
 
 /* El area abierta va en azul, como en el tablero de diseno. */
@@ -21455,9 +21465,105 @@ body.dark-mode .est-cabecera .nav-link:not(.active) .est-ventana-texto small {
    }
 }
 
-@media (max-width: 576px) {
+@media (max-width: 1199.98px) {
    .est-ventanas {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      --est-por-renglon: 4;
+   }
+}
+
+@media (max-width: 767.98px) {
+   .est-ventanas {
+      --est-por-renglon: 2;
+   }
+}
+
+/* Filtros en un solo renglón: cada campo cede espacio antes de saltar de
+   línea; solo si la pantalla no alcanza pasan a un segundo renglón. */
+.est-cabecera #est-filtros .card-body {
+   padding: .45rem .75rem !important;
+}
+
+.est-cabecera #est-filtros .card-body > .d-flex {
+   gap: .45rem !important;
+}
+
+.est-cabecera #est-filtros .card-body > .d-flex > div {
+   flex: 1 1 0;
+   min-width: 5.4rem;
+}
+
+/* Las fechas necesitan más ancho que un desplegable. */
+.est-cabecera #est-filtros .card-body > .d-flex > div:nth-child(-n + 2) {
+   flex-grow: 1.4;
+   min-width: 7.9rem;
+}
+
+.est-cabecera #est-filtros .card-body > .d-flex > .est-filtros-acciones {
+   flex: 0 0 auto;
+   min-width: 0;
+}
+
+.est-cabecera #est-filtros .form-label {
+   display: block;
+   overflow: hidden;
+   font-size: .68rem !important;
+   white-space: nowrap;
+   text-overflow: ellipsis;
+}
+
+.est-cabecera #est-filtros .form-control,
+.est-cabecera #est-filtros .form-select {
+   width: 100% !important;
+   max-width: none !important;
+   font-size: .8rem;
+}
+
+.est-cabecera #est-filtros .form-select {
+   padding-right: 1.7rem;
+   background-position: right .45rem center;
+}
+
+.est-filtros-acciones {
+   display: flex;
+   flex-direction: column;
+   align-items: flex-end;
+}
+
+.est-filtros-acciones #est-frescura {
+   font-size: .62rem;
+   line-height: 1.65;
+   white-space: nowrap;
+}
+
+/* Un área que está cargando lleva un indicador que gira; no se atenúa,
+   porque un botón gris parece deshabilitado. */
+.est-cabecera .nav-link.est-cargando::after {
+   content: "";
+   position: absolute;
+   top: .45rem;
+   right: .45rem;
+   width: .75rem;
+   height: .75rem;
+   border: 2px solid rgba(13, 110, 253, .25);
+   border-top-color: #0d6efd;
+   border-radius: 50%;
+   animation: est-girar .8s linear infinite;
+}
+
+.est-cabecera .nav-link.active.est-cargando::after {
+   border-color: rgba(255, 255, 255, .35);
+   border-top-color: #fff;
+}
+
+@keyframes est-girar {
+   to {
+      transform: rotate(360deg);
+   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .est-cabecera .nav-link.est-cargando::after {
+      animation: none;
    }
 }
 

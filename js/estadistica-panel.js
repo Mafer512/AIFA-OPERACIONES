@@ -134,7 +134,12 @@
 
     function ocupado(area, activo) {
         const boton = document.querySelector(`#est-subnav [data-est-area="${area}"]`);
-        if (boton) boton.classList.toggle('opacity-50', !!activo);
+        // Se marca con un indicador que gira, no atenuado: un botón gris parece
+        // deshabilitado, y el área sí se puede abrir mientras carga.
+        if (boton) {
+            boton.classList.toggle('est-cargando', !!activo);
+            boton.setAttribute('aria-busy', activo ? 'true' : 'false');
+        }
     }
 
     // ── Tarjetas y tablas ────────────────────────────────────────────────────

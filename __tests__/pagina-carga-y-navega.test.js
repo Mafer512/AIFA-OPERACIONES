@@ -256,13 +256,18 @@ describe('Conciliación · el modo hoja de cálculo se apaga fuera de sus pesta�
       .filter(([, selector]) => selector.includes('body.conci-estadistica-workspace'));
     expect(reglas.length).toBeGreaterThan(0);
     // El encabezado del aeropuerto se ve (compacto): ninguna regla del modo lo oculta.
-    const ocultaEncabezado = reglas.some(([selector, cuerpo]) => /display:\s*none/.test(cuerpo)
+    const ocultaEncabezado = reglas.some(([, selector, cuerpo]) => /display:\s*none/.test(cuerpo)
       && selector.split(',').some(s => /\.header$/.test(s.trim())));
     expect(ocultaEncabezado).toBe(false);
     // El Menú flotante de abajo sí se oculta: arriba ya está el de las pestañas.
     const oculta = reglas.find(([selector]) => /body\.conci-estadistica-workspace #navdeck-back\b/.test(selector));
     expect(oculta && oculta[2]).toMatch(/display:\s*none\s*!important/);
-    for (const [, , cuerpo] of reglas) {
+    // Lo que no puede pasar es que se bloquee el scroll de la PÁGINA: se revisan
+    // sus contenedores, no piezas como el título, que recorta su texto con "…".
+    const contenedor = /body\.conci-estadistica-workspace(\s*>?\s*(#main-app|\.app-body|\.main-content|#conciliacion-section\S*|\.conci-workspace-shell))?\s*$/;
+    const deContenedor = reglas.filter(([, selector]) => selector.split(',').some(s => contenedor.test(s.trim())));
+    expect(deContenedor.length).toBeGreaterThan(0);
+    for (const [, , cuerpo] of deContenedor) {
       expect(cuerpo).not.toMatch(/height:\s*100vh/);
       expect(cuerpo).not.toMatch(/overflow:\s*hidden/);
     }
