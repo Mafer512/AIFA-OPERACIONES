@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20260912-estadistica-encabezado">
+    <link rel="stylesheet" href="style.css?v=20260912-encabezado-compacto">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -1694,6 +1694,8 @@ FF
                             <i class="fas fa-bars"></i>
                         </button>
                         <img src="images/aifa-logo.png" alt="Logo AIFA" class="aifa-logo" loading="eager" decoding="async" />
+                        <!-- Nombre junto a las alas: solo en el encabezado compacto de Estadística. -->
+                        <span class="header-brand-text" aria-hidden="true">AEROPUERTO INTERNACIONAL<b>FELIPE ÁNGELES</b></span>
                     </div>
                     <div class="text-center header-center-content">
                         <div class="d-flex align-items-center justify-content-between gap-3 header-title-row">
@@ -1708,7 +1710,14 @@ FF
                     </div>
                     <div class="d-flex align-items-center gap-3 header-right-content">
                         <div class="clocks-wrapper d-flex gap-2 align-items-center">
+                            <!-- Ficha "Hoy": solo en el encabezado compacto de Estadística. -->
+                            <div class="header-hoy-chip" aria-label="Fecha de hoy">
+                                <i class="far fa-calendar header-chip-icon" aria-hidden="true"></i>
+                                <div class="clock-label">Hoy</div>
+                                <div class="header-hoy-fecha" id="header-hoy-fecha"></div>
+                            </div>
                             <div class="formal-clock-container">
+                                <i class="far fa-clock header-chip-icon" aria-hidden="true"></i>
                                 <div class="clock-label">HORA LOCAL</div>
                                 <div class="formal-clock" id="formal-clock">00:00:00</div>
                             </div>
@@ -38273,7 +38282,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260912-estadistica-encabezado" defer></script>
+    <script src="script.js?v=20260912-encabezado-compacto" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>
