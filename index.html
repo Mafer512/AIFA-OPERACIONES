@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20260912-encabezado-compacto">
+    <link rel="stylesheet" href="style.css?v=20260912-lienzo-1">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -1700,7 +1700,7 @@ FF
                     <div class="text-center header-center-content">
                         <div class="d-flex align-items-center justify-content-between gap-3 header-title-row">
                             <img src="images/nlu-operacion.png" alt="Logo de Operación NLU" class="header-logo" loading="eager" decoding="async" />
-                            <h1 class="main-title">AEROPUERTO INTERNACIONAL FELIPE ÁNGELES</h1>
+                            <h1 class="main-title"><span class="main-title-app">AEROPUERTO INTERNACIONAL FELIPE ÁNGELES</span><span class="main-title-est">Consulta y analiza la operación del aeropuerto en tiempo real</span></h1>
                             <img src="images/emblema-aviacion.png" alt="Logo de Aviación" class="header-logo" loading="eager" decoding="async" />
                         </div>
                         <div class="header-subtext">
@@ -23126,171 +23126,177 @@ FF
                                              js/estadistica-panel.js (pantallas) y
                                              js/estadistica-clasificacion.js (reglas).
                                              ─────────────────────────────────────────────────────────── -->
-                                        <ul class="nav nav-pills gap-1 mb-3 flex-wrap" id="est-subnav" role="tablist">
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link btn-sm active" id="est-tab-resumen" data-bs-toggle="pill" data-bs-target="#est-pane-resumen" type="button" role="tab" data-est-area="resumen">
-                                                    <i class="fas fa-gauge-high me-1"></i>Resumen
-                                                </button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link btn-sm" id="est-tab-explorador" data-bs-toggle="pill" data-bs-target="#est-pane-explorador" type="button" role="tab" data-est-area="explorador">
-                                                    <i class="fas fa-magnifying-glass-chart me-1"></i>Explorador
-                                                </button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link btn-sm" id="est-tab-operaciones" data-bs-toggle="pill" data-bs-target="#est-pane-operaciones" type="button" role="tab" data-est-area="operaciones">
-                                                    <i class="fas fa-plane-departure me-1"></i>Operaciones
-                                                </button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link btn-sm" id="est-tab-pasajeros" data-bs-toggle="pill" data-bs-target="#est-pane-pasajeros" type="button" role="tab" data-est-area="pasajeros">
-                                                    <i class="fas fa-users me-1"></i>Pasajeros
-                                                </button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link btn-sm" id="est-tab-aerolineas" data-bs-toggle="pill" data-bs-target="#est-pane-aerolineas" type="button" role="tab" data-est-area="aerolineas">
-                                                    <i class="fas fa-plane me-1"></i>Aerolíneas
-                                                </button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link btn-sm" id="est-tab-rutas" data-bs-toggle="pill" data-bs-target="#est-pane-rutas" type="button" role="tab" data-est-area="rutas">
-                                                    <i class="fas fa-route me-1"></i>Rutas y destinos
-                                                </button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link btn-sm" id="est-tab-aeronaves" data-bs-toggle="pill" data-bs-target="#est-pane-aeronaves" type="button" role="tab" data-est-area="aeronaves">
-                                                    <i class="fas fa-jet-fighter-up me-1"></i>Aeronaves
-                                                </button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link btn-sm" id="est-tab-carga" data-bs-toggle="pill" data-bs-target="#est-pane-carga" type="button" role="tab" data-est-area="carga">
-                                                    <i class="fas fa-box me-1"></i>Carga
-                                                </button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link btn-sm" id="est-tab-puntualidad" data-bs-toggle="pill" data-bs-target="#est-pane-puntualidad" type="button" role="tab" data-est-area="puntualidad">
-                                                    <i class="fas fa-clock me-1"></i>Puntualidad
-                                                </button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link btn-sm" id="est-tab-comparador" data-bs-toggle="pill" data-bs-target="#est-pane-comparador" type="button" role="tab" data-est-area="comparador">
-                                                    <i class="fas fa-scale-balanced me-1"></i>Comparador
-                                                </button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link btn-sm" id="est-tab-clasificacion" data-bs-toggle="pill" data-bs-target="#est-pane-clasificacion" type="button" role="tab" data-est-area="clasificacion">
-                                                    <i class="fas fa-sitemap me-1"></i>Clasificación
-                                                </button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link btn-sm" id="est-tab-descargas" data-bs-toggle="pill" data-bs-target="#est-pane-descargas" type="button" role="tab" data-est-area="descargas">
-                                                    <i class="fas fa-download me-1"></i>Descargas
-                                                </button>
-                                            </li>
-                                            <li class="nav-item" role="presentation">
-                                                <button class="nav-link btn-sm" id="est-tab-informe" data-bs-toggle="pill" data-bs-target="#est-pane-informe" type="button" role="tab" data-est-area="informe">
-                                                    <i class="fas fa-file-pdf me-1"></i>Informe oficial
-                                                </button>
-                                            </li>
-                                        </ul>
+                                        <!-- Cabecera del módulo: "Estadísticas" (es el botón del Resumen) y los
+                                             filtros arriba; debajo, una ventana por área. Todos los botones de
+                                             área viven dentro de #est-subnav: Bootstrap alterna las pestañas de
+                                             un mismo .nav y estadistica-panel.js las busca ahí. -->
+                                        <div class="nav est-cabecera" id="est-subnav" role="tablist">
+                                            <button class="nav-link est-resumen active" id="est-tab-resumen" data-bs-toggle="pill" data-bs-target="#est-pane-resumen" type="button" role="tab" data-est-area="resumen" aria-selected="true">
+                                                <span class="est-ventana-icono"><i class="fas fa-chart-pie"></i></span>
+                                                <span class="est-ventana-texto"><b>Estadísticas</b><small>Resumen general de la operación</small></span>
+                                            </button>
 
-                                        <!-- Filtros comunes a todo el módulo. Un solo estado; ninguna
-                                             sección define los suyos por su cuenta. -->
-                                        <div class="card border-0 shadow-sm mb-3" id="est-filtros">
-                                            <div class="card-body py-2 px-3">
-                                                <div class="d-flex align-items-end gap-2 flex-wrap">
-                                                    <div>
-                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-desde">Desde</label>
-                                                        <input type="date" class="form-control form-control-sm" id="est-f-desde" style="width:9.5rem">
+                                            <!-- Filtros comunes a todo el módulo. Un solo estado; ninguna
+                                                 sección define los suyos por su cuenta. -->
+                                            <div class="card border-0 shadow-sm" id="est-filtros">
+                                                <div class="card-body py-2 px-3">
+                                                    <div class="d-flex align-items-end gap-2 flex-wrap">
+                                                        <div>
+                                                            <label class="form-label mb-0" style="font-size:.72rem" for="est-f-desde">Desde</label>
+                                                            <input type="date" class="form-control form-control-sm" id="est-f-desde" style="width:9.5rem">
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label mb-0" style="font-size:.72rem" for="est-f-hasta">Hasta</label>
+                                                            <input type="date" class="form-control form-control-sm" id="est-f-hasta" style="width:9.5rem">
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label mb-0" style="font-size:.72rem" for="est-f-preset">Periodo</label>
+                                                            <select class="form-select form-select-sm" id="est-f-preset" style="width:auto">
+                                                                <option value="">Personalizado</option>
+                                                                <option value="mes_actual">Mes actual</option>
+                                                                <option value="mes_anterior">Mes anterior</option>
+                                                                <option value="anio_actual" selected>Año actual</option>
+                                                                <option value="anio_anterior">Año anterior</option>
+                                                                <option value="ultimos_30">Últimos 30 días</option>
+                                                                <option value="ultimos_90">Últimos 90 días</option>
+                                                                <option value="ultimos_12m">Últimos 12 meses</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label mb-0" style="font-size:.72rem" for="est-f-aerolinea">Aerolínea</label>
+                                                            <select class="form-select form-select-sm" id="est-f-aerolinea" style="width:auto;max-width:12rem"><option value="">Todas</option></select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label mb-0" style="font-size:.72rem" for="est-f-tipo-aeronave">Tipo aeronave</label>
+                                                            <select class="form-select form-select-sm" id="est-f-tipo-aeronave" style="width:auto;max-width:9rem"><option value="">Todos</option></select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label mb-0" style="font-size:.72rem" for="est-f-matricula">Matrícula</label>
+                                                            <select class="form-select form-select-sm" id="est-f-matricula" style="width:auto;max-width:9rem"><option value="">Todas</option></select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label mb-0" style="font-size:.72rem" for="est-f-endpoint">Origen / destino</label>
+                                                            <select class="form-select form-select-sm" id="est-f-endpoint" style="width:auto;max-width:12rem"><option value="">Todos</option></select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label mb-0" style="font-size:.72rem" for="est-f-direccion">Movimiento</label>
+                                                            <select class="form-select form-select-sm" id="est-f-direccion" style="width:auto">
+                                                                <option value="">Ambos</option>
+                                                                <option value="A">Llegadas</option>
+                                                                <option value="D">Salidas</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label mb-0" style="font-size:.72rem" for="est-f-nacint">Territorial</label>
+                                                            <select class="form-select form-select-sm" id="est-f-nacint" style="width:auto">
+                                                                <option value="">Todas</option>
+                                                                <option value="Nacional">Nacional</option>
+                                                                <option value="Internacional">Internacional</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label mb-0" style="font-size:.72rem" for="est-f-segmento">Segmento</label>
+                                                            <select class="form-select form-select-sm" id="est-f-segmento" style="width:auto">
+                                                                <option value="">Todos</option>
+                                                                <option value="COMERCIAL">Comercial</option>
+                                                                <option value="GENERAL">General</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label mb-0" style="font-size:.72rem" for="est-f-naturaleza">Naturaleza</label>
+                                                            <select class="form-select form-select-sm" id="est-f-naturaleza" style="width:auto">
+                                                                <option value="">Todas</option>
+                                                                <option value="PASAJEROS">Pasajeros</option>
+                                                                <option value="CARGA">Carga</option>
+                                                                <option value="MIXTA">Mixta</option>
+                                                                <option value="OTRA">Otra</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label class="form-label mb-0" style="font-size:.72rem" for="est-f-servicio">Tipo servicio</label>
+                                                            <select class="form-select form-select-sm" id="est-f-servicio" style="width:auto;max-width:11rem"><option value="">Todos</option></select>
+                                                        </div>
+                                                        <!-- Aplicar, limpiar y actualizar; encima, la fecha de los datos, en el
+                                                             renglón de las etiquetas: así los filtros caben en una sola línea. -->
+                                                        <div class="est-filtros-acciones">
+                                                            <span class="text-muted" id="est-frescura"></span>
+                                                            <div class="d-flex gap-2">
+                                                                <button class="btn btn-sm btn-primary" id="est-btn-aplicar" type="button">
+                                                                    <i class="fas fa-filter me-1"></i>Aplicar
+                                                                </button>
+                                                                <button class="btn btn-sm btn-outline-secondary" id="est-btn-limpiar" type="button" title="Quitar todos los filtros">
+                                                                    <i class="fas fa-eraser"></i>
+                                                                </button>
+                                                                <button class="btn btn-sm btn-outline-secondary" id="est-btn-refrescar" type="button" title="Recalcular la estadística en la base">
+                                                                    <i class="fas fa-sync-alt"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-hasta">Hasta</label>
-                                                        <input type="date" class="form-control form-control-sm" id="est-f-hasta" style="width:9.5rem">
-                                                    </div>
-                                                    <div>
-                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-preset">Periodo</label>
-                                                        <select class="form-select form-select-sm" id="est-f-preset" style="width:auto">
-                                                            <option value="">Personalizado</option>
-                                                            <option value="mes_actual">Mes actual</option>
-                                                            <option value="mes_anterior">Mes anterior</option>
-                                                            <option value="anio_actual" selected>Año actual</option>
-                                                            <option value="anio_anterior">Año anterior</option>
-                                                            <option value="ultimos_30">Últimos 30 días</option>
-                                                            <option value="ultimos_90">Últimos 90 días</option>
-                                                            <option value="ultimos_12m">Últimos 12 meses</option>
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-aerolinea">Aerolínea</label>
-                                                        <select class="form-select form-select-sm" id="est-f-aerolinea" style="width:auto;max-width:12rem"><option value="">Todas</option></select>
-                                                    </div>
-                                                    <div>
-                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-tipo-aeronave">Tipo aeronave</label>
-                                                        <select class="form-select form-select-sm" id="est-f-tipo-aeronave" style="width:auto;max-width:9rem"><option value="">Todos</option></select>
-                                                    </div>
-                                                    <div>
-                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-matricula">Matrícula</label>
-                                                        <select class="form-select form-select-sm" id="est-f-matricula" style="width:auto;max-width:9rem"><option value="">Todas</option></select>
-                                                    </div>
-                                                    <div>
-                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-endpoint">Origen / destino</label>
-                                                        <select class="form-select form-select-sm" id="est-f-endpoint" style="width:auto;max-width:12rem"><option value="">Todos</option></select>
-                                                    </div>
-                                                    <div>
-                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-direccion">Movimiento</label>
-                                                        <select class="form-select form-select-sm" id="est-f-direccion" style="width:auto">
-                                                            <option value="">Ambos</option>
-                                                            <option value="A">Llegadas</option>
-                                                            <option value="D">Salidas</option>
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-nacint">Territorial</label>
-                                                        <select class="form-select form-select-sm" id="est-f-nacint" style="width:auto">
-                                                            <option value="">Todas</option>
-                                                            <option value="Nacional">Nacional</option>
-                                                            <option value="Internacional">Internacional</option>
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-segmento">Segmento</label>
-                                                        <select class="form-select form-select-sm" id="est-f-segmento" style="width:auto">
-                                                            <option value="">Todos</option>
-                                                            <option value="COMERCIAL">Comercial</option>
-                                                            <option value="GENERAL">General</option>
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-naturaleza">Naturaleza</label>
-                                                        <select class="form-select form-select-sm" id="est-f-naturaleza" style="width:auto">
-                                                            <option value="">Todas</option>
-                                                            <option value="PASAJEROS">Pasajeros</option>
-                                                            <option value="CARGA">Carga</option>
-                                                            <option value="MIXTA">Mixta</option>
-                                                            <option value="OTRA">Otra</option>
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <label class="form-label mb-0" style="font-size:.72rem" for="est-f-servicio">Tipo servicio</label>
-                                                        <select class="form-select form-select-sm" id="est-f-servicio" style="width:auto;max-width:11rem"><option value="">Todos</option></select>
-                                                    </div>
-                                                    <button class="btn btn-sm btn-primary" id="est-btn-aplicar" type="button">
-                                                        <i class="fas fa-filter me-1"></i>Aplicar
-                                                    </button>
-                                                    <button class="btn btn-sm btn-outline-secondary" id="est-btn-limpiar" type="button" title="Quitar todos los filtros">
-                                                        <i class="fas fa-eraser"></i>
-                                                    </button>
-                                                    <button class="btn btn-sm btn-outline-secondary" id="est-btn-refrescar" type="button" title="Recalcular la estadística en la base">
-                                                        <i class="fas fa-sync-alt"></i>
-                                                    </button>
-                                                    <span class="flex-grow-1"></span>
-                                                    <span class="text-muted" id="est-frescura" style="font-size:.72rem;white-space:nowrap"></span>
                                                 </div>
+                                            </div>
+
+                                            <!-- Una ventana por área. Descargas va primero: en pantalla ancha es la cuadrada
+                                                 de la izquierda y las otras doce van seis y seis. FBO todavía no muestra nada. -->
+                                            <div class="est-ventanas">
+                                                <button class="nav-link est-ventana" id="est-tab-descargas" data-bs-toggle="pill" data-bs-target="#est-pane-descargas" type="button" role="tab" data-est-area="descargas">
+                                                    <span class="est-ventana-icono"><i class="fas fa-download"></i></span>
+                                                    <span class="est-ventana-texto"><b>Descargas</b><small>Archivos del periodo</small></span>
+                                                </button>
+                                                <button class="nav-link est-ventana" id="est-tab-explorador" data-bs-toggle="pill" data-bs-target="#est-pane-explorador" type="button" role="tab" data-est-area="explorador">
+                                                    <span class="est-ventana-icono"><i class="fas fa-magnifying-glass-chart"></i></span>
+                                                    <span class="est-ventana-texto"><b>Explorador</b><small>Consulta libre por dimensiones</small></span>
+                                                </button>
+                                                <button class="nav-link est-ventana" id="est-tab-operaciones" data-bs-toggle="pill" data-bs-target="#est-pane-operaciones" type="button" role="tab" data-est-area="operaciones">
+                                                    <span class="est-ventana-icono"><i class="fas fa-plane-departure"></i></span>
+                                                    <span class="est-ventana-texto"><b>Operaciones</b><small>Movimientos por mes y segmento</small></span>
+                                                </button>
+                                                <button class="nav-link est-ventana" id="est-tab-pasajeros" data-bs-toggle="pill" data-bs-target="#est-pane-pasajeros" type="button" role="tab" data-est-area="pasajeros">
+                                                    <span class="est-ventana-icono"><i class="fas fa-users"></i></span>
+                                                    <span class="est-ventana-texto"><b>Pasajeros</b><small>Por mes y factor de ocupación</small></span>
+                                                </button>
+                                                <button class="nav-link est-ventana" id="est-tab-aerolineas" data-bs-toggle="pill" data-bs-target="#est-pane-aerolineas" type="button" role="tab" data-est-area="aerolineas">
+                                                    <span class="est-ventana-icono"><i class="fas fa-plane"></i></span>
+                                                    <span class="est-ventana-texto"><b>Aerolíneas</b><small>Participación por operaciones</small></span>
+                                                </button>
+                                                <button class="nav-link est-ventana" id="est-tab-rutas" data-bs-toggle="pill" data-bs-target="#est-pane-rutas" type="button" role="tab" data-est-area="rutas">
+                                                    <span class="est-ventana-icono"><i class="fas fa-route"></i></span>
+                                                    <span class="est-ventana-texto"><b>Rutas y destinos</b><small>Principales destinos y orígenes</small></span>
+                                                </button>
+                                                <button class="nav-link est-ventana" id="est-tab-aeronaves" data-bs-toggle="pill" data-bs-target="#est-pane-aeronaves" type="button" role="tab" data-est-area="aeronaves">
+                                                    <span class="est-ventana-icono"><i class="fas fa-jet-fighter-up"></i></span>
+                                                    <span class="est-ventana-texto"><b>Aeronaves</b><small>Por tipo y matrícula</small></span>
+                                                </button>
+                                                <button class="nav-link est-ventana" id="est-tab-carga" data-bs-toggle="pill" data-bs-target="#est-pane-carga" type="button" role="tab" data-est-area="carga">
+                                                    <span class="est-ventana-icono"><i class="fas fa-box"></i></span>
+                                                    <span class="est-ventana-texto"><b>Carga</b><small>Por mes y por aerolínea</small></span>
+                                                </button>
+                                                <button class="nav-link est-ventana" id="est-tab-fbo" data-bs-toggle="pill" data-bs-target="#est-pane-fbo" type="button" role="tab" data-est-area="fbo">
+                                                    <span class="est-ventana-icono"><i class="fas fa-plane-circle-check"></i></span>
+                                                    <span class="est-ventana-texto"><b>FBO</b><small>Servicios FBO y aviación ejecutiva</small></span>
+                                                    <span class="est-ventana-nuevo">Nuevo</span>
+                                                </button>
+                                                <button class="nav-link est-ventana" id="est-tab-puntualidad" data-bs-toggle="pill" data-bs-target="#est-pane-puntualidad" type="button" role="tab" data-est-area="puntualidad">
+                                                    <span class="est-ventana-icono"><i class="fas fa-clock"></i></span>
+                                                    <span class="est-ventana-texto"><b>Puntualidad</b><small>A tiempo, demoras y sus causas</small></span>
+                                                </button>
+                                                <button class="nav-link est-ventana" id="est-tab-comparador" data-bs-toggle="pill" data-bs-target="#est-pane-comparador" type="button" role="tab" data-est-area="comparador">
+                                                    <span class="est-ventana-icono"><i class="fas fa-scale-balanced"></i></span>
+                                                    <span class="est-ventana-texto"><b>Comparador</b><small>Compara periodos</small></span>
+                                                </button>
+                                                <button class="nav-link est-ventana" id="est-tab-clasificacion" data-bs-toggle="pill" data-bs-target="#est-pane-clasificacion" type="button" role="tab" data-est-area="clasificacion">
+                                                    <span class="est-ventana-icono"><i class="fas fa-sitemap"></i></span>
+                                                    <span class="est-ventana-texto"><b>Clasificación</b><small>Segmento y naturaleza</small></span>
+                                                </button>
+                                                <button class="nav-link est-ventana" id="est-tab-informe" data-bs-toggle="pill" data-bs-target="#est-pane-informe" type="button" role="tab" data-est-area="informe">
+                                                    <span class="est-ventana-icono"><i class="fas fa-file-pdf"></i></span>
+                                                    <span class="est-ventana-texto"><b>Informe oficial</b><small>Los PDF oficiales</small></span>
+                                                </button>
                                             </div>
                                         </div>
 
                                         <div class="alert alert-danger d-none" id="est-error"></div>
-                                        <div class="d-none mb-3" id="est-avisos"></div>
+                                        <div class="d-none" id="est-avisos"></div>
 
                                         <div class="tab-content" id="est-subcontent">
 
@@ -23501,6 +23507,65 @@ FF
                                                     no con la página visible en pantalla.
                                                 </p>
                                                 <div class="row g-3" id="est-descargas-lista"></div>
+                                            </div>
+
+                                            <!-- FBO · Aviación General: primer tablero con la visualización nueva. Las
+                                                 cifras salen ya sumadas de aviacion_general_resumen (migración 046),
+                                                 la misma función que usa el módulo de Aviación General. -->
+                                            <div class="tab-pane fade" id="est-pane-fbo" role="tabpanel" aria-labelledby="est-tab-fbo">
+                                                <div class="fbo-tablero">
+                                                    <div class="fbo-cabeza">
+                                                        <div class="fbo-cabeza-texto">
+                                                            <h5 class="fbo-titulo"><i class="fas fa-plane-circle-check me-2" aria-hidden="true"></i>Aviación General · FBO</h5>
+                                                            <p class="fbo-frase" id="est-fbo-frase"></p>
+                                                        </div>
+                                                        <div class="fbo-filtro-activo" id="est-fbo-filtro" aria-live="polite"></div>
+                                                    </div>
+                                                    <p class="fbo-nota d-none" id="est-fbo-nota"></p>
+                                                    <div class="fbo-vacio d-none" id="est-fbo-vacio" role="status"></div>
+                                                    <div class="fbo-contenido" id="est-fbo-contenido">
+                                                        <div class="fbo-kpis" id="est-fbo-kpis"></div>
+                                                        <div class="fbo-destacados" id="est-fbo-destacados"></div>
+                                                        <div class="fbo-rejilla">
+                                                            <section class="fbo-panel fbo-panel-tendencia" aria-labelledby="est-fbo-t-mes">
+                                                                <header class="fbo-panel-cabeza">
+                                                                    <div>
+                                                                        <h6 id="est-fbo-t-mes">Movimientos por mes</h6>
+                                                                        <p>Cada barra es un mes; la línea punteada es el promedio del periodo.</p>
+                                                                    </div>
+                                                                    <div class="btn-group btn-group-sm" role="group" aria-label="Qué mostrar por mes">
+                                                                        <button type="button" class="btn btn-outline-primary active" data-fbo-metrica="movimientos" aria-pressed="true">Movimientos</button>
+                                                                        <button type="button" class="btn btn-outline-primary" data-fbo-metrica="pax" aria-pressed="false">Pasajeros</button>
+                                                                    </div>
+                                                                </header>
+                                                                <div class="fbo-grafica fbo-grafica-alta"><canvas id="est-fbo-mes" role="img" aria-label="Movimientos de aviación general por mes"></canvas></div>
+                                                            </section>
+                                                            <section class="fbo-panel" aria-labelledby="est-fbo-t-comp">
+                                                                <header class="fbo-panel-cabeza"><div><h6 id="est-fbo-t-comp">Composición</h6><p>Cómo se reparten movimientos, pasajeros y validación.</p></div></header>
+                                                                <div id="est-fbo-composicion"></div>
+                                                            </section>
+                                                            <section class="fbo-panel" aria-labelledby="est-fbo-t-op">
+                                                                <header class="fbo-panel-cabeza"><div><h6 id="est-fbo-t-op">Operadores más frecuentes</h6><p>Toca una barra para ver solo ese operador.</p></div></header>
+                                                                <div class="fbo-grafica"><canvas id="est-fbo-operadores" role="img" aria-label="Operadores con más movimientos"></canvas></div>
+                                                                <p class="fbo-sin-dato" id="est-fbo-operadores-sin" hidden></p>
+                                                            </section>
+                                                            <section class="fbo-panel" aria-labelledby="est-fbo-t-aer">
+                                                                <header class="fbo-panel-cabeza"><div><h6 id="est-fbo-t-aer">Tipos de aeronave</h6><p>Toca una barra para ver solo ese tipo.</p></div></header>
+                                                                <div class="fbo-grafica"><canvas id="est-fbo-aeronaves" role="img" aria-label="Tipos de aeronave con más movimientos"></canvas></div>
+                                                                <p class="fbo-sin-dato" id="est-fbo-aeronaves-sin" hidden></p>
+                                                            </section>
+                                                            <section class="fbo-panel" aria-labelledby="est-fbo-t-apt">
+                                                                <header class="fbo-panel-cabeza"><div><h6 id="est-fbo-t-apt">Orígenes y destinos</h6><p>En una llegada es el origen; en una salida, el destino.</p></div></header>
+                                                                <div class="fbo-grafica"><canvas id="est-fbo-aeropuertos" role="img" aria-label="Aeropuertos de origen y destino más frecuentes"></canvas></div>
+                                                                <p class="fbo-sin-dato" id="est-fbo-aeropuertos-sin" hidden></p>
+                                                            </section>
+                                                            <section class="fbo-panel fbo-panel-matriculas" aria-labelledby="est-fbo-t-mat">
+                                                                <header class="fbo-panel-cabeza"><div><h6 id="est-fbo-t-mat">Aeronaves más recurrentes</h6><p>Toca una matrícula para ver solo sus movimientos.</p></div></header>
+                                                                <div id="est-fbo-matriculas"></div>
+                                                            </section>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             <!-- INFORME OFICIAL — contenido original, sin cambios -->
@@ -38303,7 +38368,7 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260912-encabezado-compacto" defer></script>
+    <script src="script.js?v=20260912-tablero-ventanas-2" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>
@@ -39580,12 +39645,12 @@ FF
 <script src="js/conci-presentacion-carga.js?v=20260911-v1" defer></script>
 <script src="js/conci-reportes-carga.js?v=20260911-v1" defer></script>
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
-<script src="js/estadistico-informe-core.js?v=20260821-v6" defer></script>
+<script src="js/estadistico-informe-core.js?v=20260912-ag-directorio" defer></script>
 <script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>
-<script src="js/estadistico-informe.js?v=20260821-v6" defer></script>
+<script src="js/estadistico-informe.js?v=20260912-ag-directorio" defer></script>
 <!-- Modulo estadistico de operaciones (pestana Estadistica de Conciliacion) -->
 <script src="js/estadistica-motor.js?v=20260908-v1" defer></script>
-<script src="js/estadistica-panel.js?v=20260908-v1" defer></script>
+<script src="js/estadistica-panel.js?v=20260912-lienzo-1" defer></script>
 <script src="js/estadistica-clasificacion.js?v=20260908-v1" defer></script>
 
 <!-- ═══ Aviación General · FBO (GAG · Servicios Conexos) ═══

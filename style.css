@@ -21252,6 +21252,1086 @@ body.dark-mode.conci-estadistica-workspace .formal-clock-container {
    }
 }
 
+/* Título del encabezado en Estadística: la frase del tablero de diseño. */
+.main-title-est {
+   display: none;
+}
+
+body.conci-estadistica-workspace .main-title-app {
+   display: none;
+}
+
+body.conci-estadistica-workspace .main-title-est {
+   display: inline;
+}
+
+body.conci-estadistica-workspace .main-title {
+   text-transform: none;
+}
+
+/* La frase es larga: el renglón cede antes de encimarse con las fichas. */
+body.conci-estadistica-workspace .header-center-content,
+body.conci-estadistica-workspace .header-center-content .header-title-row {
+   min-width: 0;
+}
+
+body.conci-estadistica-workspace .main-title {
+   overflow: hidden;
+   text-overflow: ellipsis;
+}
+
+/* Hasta 1500 px no caben el nombre junto a las alas y la frase completa:
+   se quedan las alas y la frase, un poco más chica. */
+@media (max-width: 1500px) {
+   body.conci-estadistica-workspace .header-brand-text {
+      display: none;
+   }
+
+   body.conci-estadistica-workspace .main-title {
+      font-size: 1.05rem;
+   }
+}
+
+/* ==========================================================================
+   Estadistica: cabecera con "Estadisticas" (boton del Resumen) y los filtros
+   arriba, y una ventana por area debajo. Todos los botones viven en
+   #est-subnav para que Bootstrap alterne las pestanas entre ellos.
+   ========================================================================== */
+#est-subnav.est-cabecera {
+   display: grid;
+   grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr);
+   grid-template-areas:
+      "resumen filtros"
+      "ventanas ventanas";
+   align-items: stretch;
+   gap: .75rem;
+   margin-bottom: 1rem;
+}
+
+.est-cabecera > .est-resumen {
+   grid-area: resumen;
+}
+
+.est-cabecera > #est-filtros {
+   grid-area: filtros;
+   margin: 0;
+}
+
+/* Ventanas en renglones parejos y centrados. En pantalla ancha (abajo),
+   Descargas cuadrada a la izquierda y las otras doce en dos renglones de seis. */
+.est-ventanas {
+   --est-por-renglon: 4;
+   --est-separacion: .6rem;
+   grid-area: ventanas;
+   display: flex;
+   flex-wrap: wrap;
+   justify-content: center;
+   gap: var(--est-separacion);
+}
+
+.est-ventanas > .est-ventana {
+   flex: 0 0 calc((100% - (var(--est-por-renglon) - 1) * var(--est-separacion)) / var(--est-por-renglon));
+   min-width: 0;
+   min-height: 4.3rem;
+}
+
+.est-cabecera .nav-link {
+   position: relative;
+   display: flex;
+   align-items: center;
+   gap: .7rem;
+   width: 100%;
+   padding: .75rem .9rem;
+   border: 1px solid rgba(14, 55, 99, .12);
+   border-radius: .8rem;
+   background: #fff;
+   color: #1a2f55;
+   text-align: left;
+   box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+   transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.est-cabecera .nav-link:hover {
+   border-color: #93b8f5;
+   box-shadow: 0 6px 16px -10px rgba(13, 110, 253, .45);
+   color: #1a2f55;
+}
+
+.est-cabecera .nav-link:focus-visible {
+   outline: 2px solid #0d6efd;
+   outline-offset: 2px;
+}
+
+.est-ventana-icono {
+   flex: 0 0 auto;
+   display: grid;
+   place-items: center;
+   width: 2.4rem;
+   height: 2.4rem;
+   border-radius: .65rem;
+   background: #e8f0fe;
+   color: #0d6efd;
+   font-size: 1.05rem;
+}
+
+.est-ventana-texto {
+   display: flex;
+   flex-direction: column;
+   min-width: 0;
+   line-height: 1.2;
+}
+
+.est-ventana-texto b {
+   font-size: .86rem;
+   font-weight: 700;
+}
+
+.est-ventana-texto small {
+   font-size: .7rem;
+   color: #6b7280;
+}
+
+.est-ventana-nuevo {
+   position: absolute;
+   top: .35rem;
+   right: .45rem;
+   padding: .05rem .45rem;
+   border-radius: 999px;
+   background: #ede9fe;
+   color: #6d28d9;
+   font-size: .6rem;
+   font-weight: 700;
+}
+
+/* "Estadisticas": el recuadro grande de arriba, que abre el Resumen. */
+.est-cabecera .est-resumen {
+   padding: .5rem .9rem;
+}
+
+.est-resumen .est-ventana-icono {
+   width: 2.5rem;
+   height: 2.5rem;
+   border-radius: .7rem;
+   font-size: 1.2rem;
+}
+
+.est-resumen .est-ventana-texto b {
+   font-size: 1.2rem;
+   font-weight: 800;
+}
+
+.est-resumen .est-ventana-texto small {
+   font-size: .72rem;
+}
+
+/* El area abierta va en azul, como en el tablero de diseno. */
+.est-cabecera .nav-link.active {
+   border-color: transparent;
+   background: linear-gradient(135deg, #1a6ef0, #0b4fc4);
+   color: #fff;
+   box-shadow: 0 8px 18px -10px rgba(11, 79, 196, .7);
+}
+
+.est-cabecera .nav-link.active .est-ventana-icono {
+   background: rgba(255, 255, 255, .18);
+   color: #fff;
+}
+
+.est-cabecera .nav-link.active .est-ventana-texto small {
+   color: rgba(255, 255, 255, .85);
+}
+
+body.dark-mode .est-cabecera .nav-link:not(.active) {
+   border-color: rgba(255, 255, 255, .1);
+   background: #1e293b;
+   color: #e2e8f0;
+}
+
+body.dark-mode .est-cabecera .nav-link:not(.active) .est-ventana-icono {
+   background: rgba(59, 130, 246, .16);
+   color: #93c5fd;
+}
+
+body.dark-mode .est-cabecera .nav-link:not(.active) .est-ventana-texto small {
+   color: #94a3b8;
+}
+
+@media (max-width: 991.98px) {
+   #est-subnav.est-cabecera {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+         "resumen"
+         "filtros"
+         "ventanas";
+   }
+}
+
+@media (min-width: 1200px) {
+   .est-ventanas {
+      display: grid;
+      grid-template-columns: 9.2rem repeat(6, minmax(0, 1fr));
+      grid-auto-rows: minmax(4.3rem, auto);
+   }
+
+   .est-ventanas > .est-ventana {
+      flex: none;
+   }
+
+   /* Descargas: cuadrada, del alto de los dos renglones. */
+   .est-ventanas > #est-tab-descargas {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+      flex-direction: column;
+      justify-content: center;
+      gap: .5rem;
+      text-align: center;
+   }
+
+   .est-ventanas > #est-tab-descargas .est-ventana-icono {
+      width: 3rem;
+      height: 3rem;
+      border-radius: .8rem;
+      font-size: 1.35rem;
+   }
+
+   .est-ventanas > #est-tab-descargas .est-ventana-texto {
+      align-items: center;
+   }
+}
+
+@media (max-width: 767.98px) {
+   .est-ventanas {
+      --est-por-renglon: 2;
+   }
+}
+
+/* Filtros en un solo renglón: cada campo cede espacio antes de saltar de
+   línea; solo si la pantalla no alcanza pasan a un segundo renglón. */
+.est-cabecera #est-filtros .card-body {
+   padding: .45rem .75rem !important;
+}
+
+.est-cabecera #est-filtros .card-body > .d-flex {
+   gap: .45rem !important;
+}
+
+.est-cabecera #est-filtros .card-body > .d-flex > div {
+   flex: 1 1 0;
+   min-width: 5.4rem;
+}
+
+/* Las fechas necesitan más ancho que un desplegable. */
+.est-cabecera #est-filtros .card-body > .d-flex > div:nth-child(-n + 2) {
+   flex-grow: 1.4;
+   min-width: 7.9rem;
+}
+
+.est-cabecera #est-filtros .card-body > .d-flex > .est-filtros-acciones {
+   flex: 0 0 auto;
+   min-width: 0;
+}
+
+.est-cabecera #est-filtros .form-label {
+   display: block;
+   overflow: hidden;
+   font-size: .68rem !important;
+   white-space: nowrap;
+   text-overflow: ellipsis;
+}
+
+.est-cabecera #est-filtros .form-control,
+.est-cabecera #est-filtros .form-select {
+   width: 100% !important;
+   max-width: none !important;
+   font-size: .8rem;
+}
+
+.est-cabecera #est-filtros .form-select {
+   padding-right: 1.7rem;
+   background-position: right .45rem center;
+}
+
+.est-filtros-acciones {
+   display: flex;
+   flex-direction: column;
+   align-items: flex-end;
+}
+
+.est-filtros-acciones #est-frescura {
+   font-size: .62rem;
+   line-height: 1.65;
+   white-space: nowrap;
+}
+
+/* Un área que está cargando lleva un indicador que gira; no se atenúa,
+   porque un botón gris parece deshabilitado. */
+.est-cabecera .nav-link.est-cargando::after {
+   content: "";
+   position: absolute;
+   top: .45rem;
+   right: .45rem;
+   width: .75rem;
+   height: .75rem;
+   border: 2px solid rgba(13, 110, 253, .25);
+   border-top-color: #0d6efd;
+   border-radius: 50%;
+   animation: est-girar .8s linear infinite;
+}
+
+.est-cabecera .nav-link.active.est-cargando::after {
+   border-color: rgba(255, 255, 255, .35);
+   border-top-color: #fff;
+}
+
+@keyframes est-girar {
+   to {
+      transform: rotate(360deg);
+   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .est-cabecera .nav-link.est-cargando::after {
+      animation: none;
+   }
+}
+
+/* Aviso mientras se arma el reporte de un área: ocupa el lugar del contenido
+   (que se oculta hasta que llegan los datos) con un mensaje y su avance. */
+/* Mientras carga, lo que el área ya tenía queda detrás, difuminado, y el
+   aviso flota encima sin contorno. */
+.est-pane-cargando {
+   position: relative;
+   min-height: 18rem;
+}
+
+.est-pane-cargando > :not(.est-carga) {
+   filter: blur(6px);
+   opacity: .55;
+   pointer-events: none;
+   user-select: none;
+}
+
+.est-carga {
+   position: absolute;
+   top: 2.5rem;
+   left: 50%;
+   z-index: 5;
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   gap: .35rem;
+   width: min(30rem, calc(100% - 2rem));
+   padding: 1.75rem 1.5rem;
+   border: 0;
+   border-radius: 1rem;
+   background: rgba(255, 255, 255, .72);
+   -webkit-backdrop-filter: blur(14px);
+   backdrop-filter: blur(14px);
+   box-shadow: 0 24px 60px -30px rgba(15, 23, 42, .35);
+   transform: translateX(-50%);
+   text-align: center;
+}
+
+.est-carga-icono {
+   display: grid;
+   place-items: center;
+   width: 3.2rem;
+   height: 3.2rem;
+   margin-bottom: .35rem;
+   border-radius: .9rem;
+   background: #e8f0fe;
+   color: #0d6efd;
+   font-size: 1.4rem;
+   animation: est-latido 1.6s ease-in-out infinite;
+}
+
+.est-carga-titulo {
+   margin: 0;
+   font-size: 1.05rem;
+   font-weight: 700;
+   color: #1a2f55;
+}
+
+.est-carga-mensaje {
+   min-height: 1.2em;
+   margin: 0;
+   font-size: .82rem;
+   color: #6b7280;
+}
+
+.est-carga-barra {
+   width: 100%;
+   height: .5rem;
+   margin-top: .6rem;
+   overflow: hidden;
+   border-radius: 999px;
+   background: #e5edf8;
+}
+
+.est-carga-relleno {
+   width: 0;
+   height: 100%;
+   border-radius: inherit;
+   background: linear-gradient(90deg, #1a6ef0, #3b9bff);
+   transition: width .3s ease;
+}
+
+.est-carga-porcentaje {
+   margin: .15rem 0 0;
+   font-size: .78rem;
+   font-weight: 700;
+   color: #0d6efd;
+   font-variant-numeric: tabular-nums;
+}
+
+@keyframes est-latido {
+   0%,
+   100% {
+      transform: scale(1);
+   }
+
+   50% {
+      transform: scale(1.08);
+   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .est-carga-icono {
+      animation: none;
+   }
+
+   .est-carga-relleno {
+      transition: none;
+   }
+}
+
+body.dark-mode .est-carga {
+   background: rgba(30, 41, 59, .72);
+}
+
+body.dark-mode .est-carga-titulo {
+   color: #e2e8f0;
+}
+
+body.dark-mode .est-carga-mensaje {
+   color: #94a3b8;
+}
+
+body.dark-mode .est-carga-barra {
+   background: rgba(255, 255, 255, .1);
+}
+
+/* ==========================================================================
+   Estadistica: el lienzo completo en blanco, sin franja gris debajo, y los
+   avisos del periodo al pie de la pagina, en blanco como el fondo.
+   ========================================================================== */
+body.conci-estadistica-workspace {
+   background-color: #fff;
+}
+
+body.dark-mode.conci-estadistica-workspace {
+   background-color: var(--card-bg);
+}
+
+body.conci-estadistica-workspace .conci-workspace-shell {
+   border-color: transparent;
+   box-shadow: none !important;
+}
+
+/* El área llena el alto de la ventana: si el contenido es corto, los
+   avisos quedan abajo del todo y no asoma el fondo. */
+.tab-content > #pane-conci-estadistica.active {
+   display: flex;
+   flex-direction: column;
+   min-height: calc(100vh - 7.75rem);
+}
+
+#pane-conci-estadistica > * {
+   min-width: 0;
+}
+
+#pane-conci-estadistica > #est-subcontent {
+   order: 1;
+}
+
+#pane-conci-estadistica > #est-avisos {
+   order: 2;
+   margin-top: auto;
+   padding-top: 1rem;
+}
+
+.est-aviso {
+   display: flex;
+   align-items: flex-start;
+   gap: .5rem;
+   margin: 0;
+   padding: .3rem 0;
+   background: transparent;
+   color: #475569;
+   font-size: .78rem;
+   line-height: 1.45;
+}
+
+.est-aviso i {
+   margin-top: .15rem;
+}
+
+.est-aviso-aviso i {
+   color: #d97706;
+}
+
+.est-aviso-error {
+   color: #b42318;
+}
+
+.est-aviso-error i {
+   color: #dc2626;
+}
+
+.est-aviso-info i {
+   color: #94a3b8;
+}
+
+body.dark-mode .est-aviso {
+   color: #cbd5e1;
+}
+
+body.dark-mode .est-aviso-error {
+   color: #fca5a5;
+}
+
+/* ==========================================================================
+   Estadistica > FBO · Aviacion General: el primer tablero con la
+   visualizacion nueva. Frase que cuenta el periodo, tarjetas con su
+   variacion, destacados que se pueden tocar, tendencia con selector, barras
+   de composicion y rankings que filtran todo el tablero.
+   ========================================================================== */
+.fbo-tablero {
+   display: flex;
+   flex-direction: column;
+   gap: 1rem;
+}
+
+.fbo-contenido {
+   display: flex;
+   flex-direction: column;
+   gap: 1rem;
+}
+
+.fbo-cabeza {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: .75rem 1.5rem;
+}
+
+.fbo-titulo {
+   margin: 0 0 .3rem;
+   font-weight: 800;
+   color: #1a2f55;
+}
+
+.fbo-titulo i {
+   color: #0d6efd;
+}
+
+.fbo-frase {
+   max-width: 64rem;
+   margin: 0;
+   font-size: .92rem;
+   line-height: 1.55;
+   color: #334155;
+}
+
+.fbo-frase b {
+   color: #0b4fc4;
+}
+
+.fbo-filtro-activo {
+   flex: 0 0 auto;
+   padding-top: .2rem;
+}
+
+.fbo-pista {
+   font-size: .78rem;
+   color: #64748b;
+}
+
+.fbo-pista i {
+   margin-right: .4rem;
+   color: #0d6efd;
+}
+
+.fbo-chip {
+   display: inline-flex;
+   align-items: center;
+   gap: .45rem;
+   padding: .35rem .45rem .35rem .8rem;
+   border-radius: 999px;
+   background: #e8f0fe;
+   color: #0b4fc4;
+   font-size: .82rem;
+}
+
+.fbo-chip-quitar {
+   display: grid;
+   place-items: center;
+   width: 1.45rem;
+   height: 1.45rem;
+   padding: 0;
+   border: 0;
+   border-radius: 50%;
+   background: #0d6efd;
+   color: #fff;
+   font-size: 1rem;
+   line-height: 1;
+   cursor: pointer;
+}
+
+.fbo-nota {
+   margin: 0;
+   padding: .45rem .75rem;
+   border-radius: .6rem;
+   background: #f1f5f9;
+   color: #475569;
+   font-size: .8rem;
+}
+
+.fbo-kpis {
+   display: grid;
+   grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
+   gap: .75rem;
+}
+
+.fbo-kpi {
+   display: flex;
+   gap: .75rem;
+   padding: .9rem 1rem;
+   border: 1px solid rgba(14, 55, 99, .1);
+   border-left: 4px solid var(--fbo-color, #0d6efd);
+   border-radius: .9rem;
+   background: #fff;
+   box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
+
+.fbo-kpi-icono {
+   flex: 0 0 auto;
+   display: grid;
+   place-items: center;
+   width: 2.4rem;
+   height: 2.4rem;
+   border-radius: .7rem;
+   background: #eef2ff;
+   background: color-mix(in srgb, var(--fbo-color, #0d6efd) 14%, transparent);
+   color: var(--fbo-color, #0d6efd);
+   font-size: 1.05rem;
+}
+
+.fbo-kpi-texto {
+   display: flex;
+   flex-direction: column;
+   min-width: 0;
+   line-height: 1.25;
+}
+
+.fbo-kpi-titulo {
+   font-size: .72rem;
+   font-weight: 700;
+   letter-spacing: .03em;
+   text-transform: uppercase;
+   color: #64748b;
+}
+
+.fbo-kpi-valor {
+   font-size: 1.55rem;
+   font-weight: 800;
+   color: #0f172a;
+   font-variant-numeric: tabular-nums;
+}
+
+.fbo-kpi-detalle {
+   font-size: .74rem;
+   color: #64748b;
+}
+
+.fbo-destacados {
+   display: flex;
+   flex-wrap: wrap;
+   gap: .5rem;
+}
+
+.fbo-destacados:empty {
+   display: none;
+}
+
+.fbo-destacado {
+   display: inline-flex;
+   align-items: center;
+   gap: .6rem;
+   padding: .45rem .85rem;
+   border: 1px solid rgba(14, 55, 99, .12);
+   border-radius: .8rem;
+   background: #fff;
+   color: #1a2f55;
+   font-size: .8rem;
+   text-align: left;
+}
+
+.fbo-destacado i {
+   color: #0d6efd;
+}
+
+.fbo-destacado > span {
+   display: flex;
+   flex-direction: column;
+   line-height: 1.2;
+}
+
+.fbo-destacado small {
+   font-size: .68rem;
+   color: #64748b;
+}
+
+button.fbo-destacado {
+   cursor: pointer;
+   transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+button.fbo-destacado:hover,
+button.fbo-destacado:focus-visible {
+   border-color: #93b8f5;
+   box-shadow: 0 6px 16px -10px rgba(13, 110, 253, .45);
+}
+
+.fbo-destacado-aviso {
+   border-color: #fcd34d;
+   background: #fffbeb;
+}
+
+.fbo-destacado-aviso i {
+   color: #b45309;
+}
+
+.fbo-rejilla {
+   display: grid;
+   grid-template-columns: repeat(3, minmax(0, 1fr));
+   gap: .9rem;
+}
+
+.fbo-panel {
+   display: flex;
+   flex-direction: column;
+   gap: .6rem;
+   min-width: 0;
+   padding: .9rem 1rem 1rem;
+   border: 1px solid rgba(14, 55, 99, .1);
+   border-radius: .9rem;
+   background: #fff;
+   box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
+
+.fbo-panel-tendencia {
+   grid-column: span 2;
+}
+
+.fbo-panel-matriculas {
+   grid-column: 1 / -1;
+}
+
+.fbo-panel-cabeza {
+   display: flex;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: .75rem;
+}
+
+.fbo-panel-cabeza h6 {
+   margin: 0;
+   font-weight: 700;
+   color: #1a2f55;
+}
+
+.fbo-panel-cabeza p {
+   margin: .1rem 0 0;
+   font-size: .74rem;
+   color: #64748b;
+}
+
+.fbo-grafica {
+   position: relative;
+   height: 18rem;
+}
+
+.fbo-grafica-alta {
+   height: 20rem;
+}
+
+.fbo-comp {
+   margin-bottom: .9rem;
+}
+
+.fbo-comp:last-child {
+   margin-bottom: 0;
+}
+
+.fbo-comp-titulo {
+   margin-bottom: .3rem;
+   font-size: .72rem;
+   font-weight: 700;
+   letter-spacing: .03em;
+   text-transform: uppercase;
+   color: #475569;
+}
+
+.fbo-comp-barra {
+   display: flex;
+   height: .8rem;
+   overflow: hidden;
+   border-radius: 999px;
+   background: #e5edf8;
+}
+
+.fbo-comp-barra span {
+   height: 100%;
+}
+
+.fbo-comp-leyenda {
+   display: flex;
+   flex-wrap: wrap;
+   gap: .25rem .9rem;
+   margin-top: .35rem;
+   font-size: .76rem;
+   color: #334155;
+}
+
+.fbo-comp-leyenda i {
+   display: inline-block;
+   width: .6rem;
+   height: .6rem;
+   margin-right: .3rem;
+   border-radius: 2px;
+}
+
+.fbo-comp-leyenda small {
+   color: #94a3b8;
+}
+
+.fbo-lista {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: .5rem 2rem;
+   margin: 0;
+   padding: 0;
+   list-style: none;
+}
+
+.fbo-lista li {
+   display: grid;
+   grid-template-columns: 1.5rem auto minmax(0, 1fr) 5rem 2.8rem;
+   align-items: center;
+   gap: .55rem;
+   font-size: .8rem;
+}
+
+.fbo-lista-pos {
+   display: grid;
+   place-items: center;
+   width: 1.5rem;
+   height: 1.5rem;
+   border-radius: 50%;
+   background: #eef2ff;
+   color: #4338ca;
+   font-size: .7rem;
+   font-weight: 700;
+}
+
+.fbo-lista-clave {
+   padding: .1rem .5rem;
+   border: 1px solid rgba(14, 55, 99, .15);
+   border-radius: .4rem;
+   background: #fff;
+   color: #0b4fc4;
+   font-family: inherit;
+   font-size: .78rem;
+   font-weight: 700;
+   cursor: pointer;
+}
+
+.fbo-lista-clave:hover,
+.fbo-lista-clave:focus-visible {
+   border-color: #93b8f5;
+   background: #e8f0fe;
+}
+
+.fbo-lista-detalle {
+   overflow: hidden;
+   color: #64748b;
+   white-space: nowrap;
+   text-overflow: ellipsis;
+}
+
+.fbo-lista-barra {
+   height: .45rem;
+   overflow: hidden;
+   border-radius: 999px;
+   background: #eef2f7;
+}
+
+.fbo-lista-barra span {
+   display: block;
+   height: 100%;
+   border-radius: inherit;
+   background: #6f42c1;
+}
+
+.fbo-lista-valor {
+   text-align: right;
+   font-variant-numeric: tabular-nums;
+}
+
+.fbo-vacio {
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   gap: .45rem;
+   padding: 2.5rem 1rem;
+   border: 1px dashed rgba(14, 55, 99, .2);
+   border-radius: 1rem;
+   background: #fff;
+   color: #475569;
+   text-align: center;
+}
+
+.fbo-vacio > i {
+   font-size: 2rem;
+   color: #94a3b8;
+}
+
+.fbo-vacio p {
+   margin: 0;
+}
+
+.fbo-vacio-titulo {
+   font-weight: 700;
+   color: #1a2f55;
+}
+
+.fbo-sin-dato {
+   display: flex;
+   align-items: flex-start;
+   gap: .45rem;
+   margin: 0;
+   font-size: .74rem;
+   line-height: 1.4;
+   color: #64748b;
+}
+
+.fbo-sin-dato[hidden] {
+   display: none;
+}
+
+.fbo-sin-dato i {
+   margin-top: .15rem;
+   color: #b45309;
+}
+
+@media (max-width: 1199.98px) {
+   .fbo-rejilla {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+}
+
+@media (max-width: 767.98px) {
+   .fbo-rejilla,
+   .fbo-lista {
+      grid-template-columns: minmax(0, 1fr);
+   }
+
+   .fbo-panel-tendencia {
+      grid-column: auto;
+   }
+
+   /* El selector baja debajo del título, completo y en fila. */
+   .fbo-panel-cabeza {
+      flex-wrap: wrap;
+   }
+
+   .fbo-panel-cabeza .btn-group {
+      flex-direction: row;
+      flex-wrap: nowrap;
+   }
+}
+
+body.dark-mode .fbo-kpi,
+body.dark-mode .fbo-panel,
+body.dark-mode .fbo-destacado,
+body.dark-mode .fbo-vacio,
+body.dark-mode .fbo-lista-clave {
+   border-color: rgba(255, 255, 255, .1);
+   background: #1e293b;
+}
+
+body.dark-mode .fbo-titulo,
+body.dark-mode .fbo-kpi-valor,
+body.dark-mode .fbo-panel-cabeza h6,
+body.dark-mode .fbo-destacado,
+body.dark-mode .fbo-vacio-titulo {
+   color: #e2e8f0;
+}
+
+body.dark-mode .fbo-frase,
+body.dark-mode .fbo-comp-leyenda {
+   color: #cbd5e1;
+}
+
+body.dark-mode .fbo-nota {
+   background: rgba(255, 255, 255, .06);
+   color: #cbd5e1;
+}
+
+body.dark-mode .fbo-comp-barra,
+body.dark-mode .fbo-lista-barra {
+   background: rgba(255, 255, 255, .1);
+}
+
+body.dark-mode .fbo-destacado-aviso {
+   border-color: #b45309;
+   background: rgba(245, 158, 11, .12);
+}
+
+/* En oscuro, el azul marino de las cifras y las matrículas no se lee. */
+body.dark-mode .fbo-frase b,
+body.dark-mode .fbo-lista-clave {
+   color: #93c5fd;
+}
+
+body.dark-mode .fbo-lista-clave:hover,
+body.dark-mode .fbo-lista-clave:focus-visible {
+   background: rgba(13, 110, 253, .2);
+}
+
+body.dark-mode .fbo-chip {
+   background: rgba(13, 110, 253, .2);
+   color: #bfdbfe;
+}
+
+body.dark-mode .fbo-lista-pos {
+   background: rgba(99, 102, 241, .22);
+   color: #c7d2fe;
+}
+
+body.dark-mode .fbo-kpi-titulo,
+body.dark-mode .fbo-kpi-detalle,
+body.dark-mode .fbo-comp-titulo,
+body.dark-mode .fbo-panel-cabeza p,
+body.dark-mode .fbo-destacado small,
+body.dark-mode .fbo-lista-detalle,
+body.dark-mode .fbo-pista,
+body.dark-mode .fbo-sin-dato {
+   color: #94a3b8;
+}
+
 /* ==========================================================================
    Reportes > Pasajeros
    Los tres reportes se imprimen tal cual, asi que la hoja imita la plantilla

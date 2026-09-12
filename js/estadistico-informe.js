@@ -121,16 +121,33 @@
         return client;
     }
 
+    // Aviación General sale del directorio de la Gerencia, la misma fuente del
+    // tablero FBO (aviacion_general_resumen, migración 046). Si la función no
+    // existe o falla, devuelve null y el informe se queda con monthly_operations.
+    async function resumenAviacionGeneral(client, filtros) {
+        if (!client || typeof client.rpc !== 'function') return null;
+        try {
+            const { data, error } = await client.rpc('aviacion_general_resumen', { p_filtros: filtros || {} });
+            if (error) throw error;
+            return data && typeof data === 'object' ? data : null;
+        } catch (error) {
+            console.info('[Informe Estadístico] Aviación General sin directorio; queda la tabla mensual:', error?.message || error);
+            return null;
+        }
+    }
+
     async function loadCore(client) {
-        const [resumenRows, monthlyRows, annualRows, aeropuertos] = await Promise.all([
+        const [resumenRows, monthlyRows, annualRows, aeropuertos, , directorioAg] = await Promise.all([
             fetchAllRows(client, 'v_informe_estadistico_resumen', COLUMNAS_RESUMEN),
             fetchAllRows(client, 'monthly_operations', '*'),
             fetchAllRows(client, 'annual_operations', '*'),
             loadAeropuertos(client),
-            loadFrescura(client)
+            loadFrescura(client),
+            resumenAviacionGeneral(client, {})
         ]);
 
         const aggregated = Core.mergeOficiales(Core.aggregateResumen(resumenRows), monthlyRows, annualRows);
+        state.generalDirectorio = Core.aplicarAviacionGeneral(aggregated, directorioAg && directorioAg.por_mes);
         state.aggregated = aggregated;
         state.acumulado = Core.buildAcumulado(aggregated);
         state.aeropuertos = aeropuertos;
@@ -195,6 +212,12 @@
             state.ocupacion = { rows: [], promedioGeneral: null };
             state.diaCorte = Core.aggregateDiaCorte([]);
             state.diaCorte.fecha = hasta;
+        }
+        // Aviación General: el corte del día también sale del directorio.
+        if (state.generalDirectorio) {
+            const dia = await resumenAviacionGeneral(client, { fecha_desde: hasta, fecha_hasta: hasta });
+            const general = Core.contadorAviacionGeneral(dia && dia.totales);
+            if (general) state.diaCorte.general = general;
         }
     }
 
@@ -609,9 +632,11 @@
         host.innerHTML = `
             <div class="airline-stat-card">
                 <span>Cifras del día (${escapeHtml(d.fecha || state.corteIso || todayIso())})</span>
-                <strong>${fmt(d.comercial.ops + d.carga.ops)} ops.</strong>
+                <strong>${fmt(d.comercial.ops + (d.general ? d.general.ops : 0) + d.carga.ops)} ops.</strong>
                 <small>Comercial ${fmt(d.comercial.ops)} (${fmt(d.comercial.pax)} pax) · Carga ${fmt(d.carga.ops)} (${kgFormat.format((d.carga.kg || 0) / 1000)} t)</small>
-                <small class="text-muted">Aviación General: sin corte diario (fuente oficial mensual).</small>
+                ${d.general
+                    ? `<small>General ${fmt(d.general.ops)} (${fmt(d.general.pax)} pax) · directorio de Aviación General</small>`
+                    : '<small class="text-muted">Aviación General: sin corte diario (fuente oficial mensual).</small>'}
             </div>`;
     }
 
@@ -1262,7 +1287,7 @@
                     ${acumuladoBloqueHtml(a.totalPasajeros, 'pasajeros transportados', a.comercial.pax, a.general.pax)}
                 </div>
                 ${seccionTipoHtml('AVIACIÓN COMERCIAL', 'comercial', 'pax', d.comercial, corte)}
-                ${seccionTipoHtml('AVIACIÓN GENERAL', 'general', 'pax', null, corte)}
+                ${seccionTipoHtml('AVIACIÓN GENERAL', 'general', 'pax', d.general || null, corte)}
                 ${seccionTipoHtml('AVIACIÓN DE CARGA', 'carga', 'kg', d.carga, corte)}
                 <div style="font-size:5.1px;color:#333;margin-top:8px;line-height:1.5;">
                     <strong>Nota:</strong> Todas las cifras que se presentan son de carácter preliminar y susceptibles a ajustes, derivado de la conciliación de datos entre los registros de la Dirección de Operación y los Manifiestos de las Aerolíneas, realizada en tiempo vencido, ya que, de conformidad con su contrato, las líneas aéreas cuentan con un periodo de 30 horas para hacer entrega de su Manifiesto. Por lo anterior, los datos presentados no son definitivos y pueden variar en el futuro.
