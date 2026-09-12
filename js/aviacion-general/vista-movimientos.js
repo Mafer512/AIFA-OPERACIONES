@@ -43,11 +43,19 @@
         { campo: 'operador',                  titulo: 'Operador',   orden: 'operador' },
         { campo: 'matricula',                 titulo: 'Matrícula',  orden: 'matricula', clase: 'ag-mono' },
         { campo: 'tipo_aeronave',             titulo: 'Aeronave',   orden: 'tipo_aeronave' },
-        { campo: 'aeropuerto_origen_destino', titulo: 'Orig./Dest.', orden: 'aeropuerto_origen_destino', clase: 'ag-mono' },
+        // Sin `orden` a propósito: el origen vive en dos columnas según el año y
+        // ordenar sólo por una de ellas dejaría la mitad del histórico fuera del
+        // criterio, que es peor que no ofrecer el orden.
+        { campo: '__origen',                  titulo: 'Orig./Dest.', clase: 'ag-mono' },
         { campo: 'hora_programada',           titulo: 'Hr. prog.',  orden: 'hora_programada', clase: 'ag-num' },
         { campo: 'hora_real',                 titulo: 'Hr. real',   orden: 'hora_real', clase: 'ag-num' },
+        { campo: 'hora_aterrizaje',           titulo: 'Aterr.',     clase: 'ag-num' },
+        { campo: 'hora_entrada_posicion',     titulo: 'Ent. pos.',  clase: 'ag-num' },
+        { campo: 'hora_salida_posicion',      titulo: 'Sal. pos.',  clase: 'ag-num' },
+        { campo: 'hora_despegue',             titulo: 'Despegue',   clase: 'ag-num' },
         { campo: 'adultos',                   titulo: 'Ad.',        clase: 'ag-num' },
         { campo: 'infantes',                  titulo: 'Inf.',       clase: 'ag-num' },
+        { campo: 'pax_total_reportado',       titulo: 'Pax rep.',   clase: 'ag-num' },
         { campo: 'pax_ag',                    titulo: 'Pax A.G.',   clase: 'ag-num fw-bold' },
         { campo: 'estado_validacion',         titulo: 'Validación', orden: 'estado_validacion' },
         { campo: '__acciones',                titulo: '' }
@@ -82,8 +90,22 @@
             case 'fecha_operacion':   return esc(Core.fechaLarga(fila.fecha_operacion));
             case 'tipo_operacion':    return insigniaTipo(fila.tipo_operacion);
             case 'ambito_operacion':  return insigniaAmbito(fila.ambito_operacion);
-            case 'hora_programada':   return esc(Core.horaCorta(fila.hora_programada));
-            case 'hora_real':         return esc(Core.horaCorta(fila.hora_real));
+            case 'hora_programada':
+            case 'hora_real':
+            case 'hora_aterrizaje':
+            case 'hora_entrada_posicion':
+            case 'hora_salida_posicion':
+            case 'hora_despegue':
+                return esc(Core.horaCorta(fila[col.campo]));
+            case '__origen': {
+                // Hasta 2024 se anotó la ciudad; desde 2025, el código. Se
+                // muestra lo que haya y se distingue cuál de los dos es, porque
+                // "TOLUCA" y "MMTO" no se leen igual en un reporte.
+                const od = Core.origenDestino(fila);
+                if (!od.valor) return '—';
+                if (od.esCodigo) return esc(od.valor);
+                return `<span class="ag-od-ciudad" title="Capturado como ciudad, no como código de aeropuerto">${esc(od.valor)}</span>`;
+            }
             case 'estado_validacion': return insigniaValidacion(fila);
             case 'operador':
                 return `<span class="d-inline-block text-truncate" style="max-width:220px" title="${esc(fila.operador)}">${esc(fila.operador)}</span>`;
@@ -255,10 +277,19 @@
             'MATRÍCULA': f.matricula,
             'TIPO DE AERONAVE': f.tipo_aeronave,
             'DESTINO / ORIGEN': f.aeropuerto_origen_destino,
+            // Las seis que el diccionario no declara pero la tabla sí guarda.
+            // Omitirlas hacía que quien descargaba el histórico se llevara un
+            // archivo con 5,438 orígenes y 5,331 horas en blanco.
+            'CIUDAD ORIGEN / DESTINO': f.ciudad_origen_destino,
             'HR. PROG.': Core.horaCorta(f.hora_programada).replace('—', ''),
             'HR. REAL': Core.horaCorta(f.hora_real).replace('—', ''),
+            'HR. ATERRIZAJE': Core.horaCorta(f.hora_aterrizaje).replace('—', ''),
+            'HR. ENTRADA POSICIÓN': Core.horaCorta(f.hora_entrada_posicion).replace('—', ''),
+            'HR. SALIDA POSICIÓN': Core.horaCorta(f.hora_salida_posicion).replace('—', ''),
+            'HR. DESPEGUE': Core.horaCorta(f.hora_despegue).replace('—', ''),
             'ADULTOS': f.adultos,
             'INFANTES': f.infantes,
+            'PAX. TOTAL REPORTADO': f.pax_total_reportado,
             'PAX. A.G.': f.pax_ag,
             'PAX. O.D.': f.pax_od,
             'ESTADO': f.estado,

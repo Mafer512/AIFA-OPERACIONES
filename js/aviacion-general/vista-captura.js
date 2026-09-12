@@ -32,8 +32,11 @@
 
     const CAMPOS = [
         'folio_rotacion', 'fecha_operacion', 'tipo_operacion', 'ambito_operacion',
-        'operador', 'matricula', 'tipo_aeronave', 'aeropuerto_origen_destino',
-        'hora_programada', 'hora_real', 'adultos', 'infantes', 'pax_od',
+        'operador', 'matricula', 'tipo_aeronave',
+        'aeropuerto_origen_destino', 'ciudad_origen_destino',
+        'hora_programada', 'hora_real',
+        'hora_aterrizaje', 'hora_entrada_posicion', 'hora_salida_posicion', 'hora_despegue',
+        'adultos', 'infantes', 'pax_total_reportado', 'pax_od',
         'estado', 'pais', 'observaciones'
     ];
 
@@ -121,15 +124,44 @@
                         </div>
                     </div>
 
-                    <div class="col-6 col-md-4">
+                    <div class="col-12 col-md-4">
+                        <label class="form-label small fw-bold" for="${id('ciudad_origen_destino')}">Ciudad de origen / destino</label>
+                        <input type="text" class="form-control form-control-sm text-uppercase" id="${id('ciudad_origen_destino')}"
+                               placeholder="TOLUCA" maxlength="100">
+                        <div class="form-text" style="font-size:.7rem">
+                            Para cuando no se tiene el código. Así se capturó todo hasta 2024.
+                        </div>
+                    </div>
+
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small fw-bold" for="${id('estado')}">Estado</label>
+                        <input type="text" class="form-control form-control-sm" id="${id('estado')}" maxlength="100">
+                    </div>
+
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small fw-bold" for="${id('pais')}">País</label>
+                        <input type="text" class="form-control form-control-sm" id="${id('pais')}" maxlength="100">
+                    </div>
+
+                    <!-- Las seis horas juntas, en el orden en que ocurren. Las
+                         cuatro últimas son el paso por plataforma: el diccionario
+                         no las documenta, la tabla sí las guarda, y hasta ahora no
+                         se podían capturar desde el portal. -->
+                    <div class="col-6 col-md-2">
                         <label class="form-label small fw-bold" for="${id('hora_programada')}">Hora programada</label>
                         <input type="time" class="form-control form-control-sm" id="${id('hora_programada')}">
                     </div>
 
-                    <div class="col-6 col-md-4">
+                    <div class="col-6 col-md-2">
                         <label class="form-label small fw-bold" for="${id('hora_real')}">Hora real</label>
                         <input type="time" class="form-control form-control-sm" id="${id('hora_real')}">
                     </div>
+
+                    ${Core.HORAS_DETALLADAS.map((h) => `
+                    <div class="col-6 col-md-2">
+                        <label class="form-label small fw-bold" for="${id(h.campo)}">${esc(h.etiqueta)}</label>
+                        <input type="time" class="form-control form-control-sm" id="${id(h.campo)}">
+                    </div>`).join('')}
 
                     <div class="col-6 col-md-2">
                         <label class="form-label small fw-bold" for="${id('adultos')}">Adultos</label>
@@ -144,26 +176,25 @@
                     </div>
 
                     <div class="col-6 col-md-2">
+                        <label class="form-label small fw-bold" for="${id('pax_total_reportado')}">Pax total reportado</label>
+                        <input type="number" class="form-control form-control-sm" id="${id('pax_total_reportado')}"
+                               min="0" step="1" placeholder="—">
+                        <div class="form-text" style="font-size:.7rem">
+                            Cuando sólo se informa el total, sin separar por edad.
+                        </div>
+                    </div>
+
+                    <div class="col-6 col-md-4">
                         <label class="form-label small fw-bold" for="ag-cap-pax">Pax A.G.</label>
                         <input type="text" class="form-control form-control-sm bg-light fw-bold" id="ag-cap-pax" value="—" readonly tabindex="-1">
                         <div class="form-text" style="font-size:.7rem" id="ag-cap-pista-pax">
-                            Lo calcula la base. Déjalo vacío si no se anotó.
+                            Adultos + infantes + total reportado. Lo calcula la base.
                         </div>
                     </div>
 
                     <div class="col-6 col-md-2">
                         <label class="form-label small fw-bold" for="${id('pax_od')}">Pax O.D.</label>
                         <input type="number" class="form-control form-control-sm" id="${id('pax_od')}" min="0" step="1">
-                    </div>
-
-                    <div class="col-6 col-md-2">
-                        <label class="form-label small fw-bold" for="${id('estado')}">Estado</label>
-                        <input type="text" class="form-control form-control-sm" id="${id('estado')}" maxlength="100">
-                    </div>
-
-                    <div class="col-6 col-md-2">
-                        <label class="form-label small fw-bold" for="${id('pais')}">País</label>
-                        <input type="text" class="form-control form-control-sm" id="${id('pais')}" maxlength="100">
                     </div>
 
                     <div class="col-12">
@@ -214,10 +245,18 @@
             matricula:                 Core.normalizarMatricula(v('matricula')),
             tipo_aeronave:             Core.textoONulo(v('tipo_aeronave')) || '',
             aeropuerto_origen_destino: Core.textoONulo(v('aeropuerto_origen_destino')) || '',
+            ciudad_origen_destino:     Core.textoONulo(v('ciudad_origen_destino')),
             hora_programada:           Core.normalizarHora(v('hora_programada')),
             hora_real:                 Core.normalizarHora(v('hora_real')),
-            adultos:                   Core.normalizarEntero(v('adultos'), { porOmision: 0, minimo: 0 }),
-            infantes:                  Core.normalizarEntero(v('infantes'), { porOmision: 0, minimo: 0 }),
+            hora_aterrizaje:           Core.normalizarHora(v('hora_aterrizaje')),
+            hora_entrada_posicion:     Core.normalizarHora(v('hora_entrada_posicion')),
+            hora_salida_posicion:      Core.normalizarHora(v('hora_salida_posicion')),
+            hora_despegue:             Core.normalizarHora(v('hora_despegue')),
+            // Sin porOmision: vacío es "no se anotó", que es distinto de cero y
+            // es como están miles de filas del histórico.
+            adultos:                   Core.normalizarEntero(v('adultos')),
+            infantes:                  Core.normalizarEntero(v('infantes')),
+            pax_total_reportado:       Core.normalizarEntero(v('pax_total_reportado')),
             pax_od:                    Core.normalizarEntero(v('pax_od')),
             estado:                    Core.textoONulo(v('estado')),
             pais:                      Core.textoONulo(v('pais')),
@@ -231,7 +270,7 @@
             const el = document.getElementById(id(campo));
             if (!el) return;
             let valor = m[campo];
-            if (campo === 'hora_programada' || campo === 'hora_real') {
+            if (campo.startsWith('hora_')) {
                 // <input type="time"> quiere HH:MM; la base guarda HH:MM:SS.
                 valor = valor ? String(valor).slice(0, 5) : '';
             }
@@ -249,14 +288,17 @@
     }
 
     function actualizarPax() {
-        const textoA = document.getElementById(id('adultos'))?.value ?? '';
-        const textoI = document.getElementById(id('infantes'))?.value ?? '';
         const caja = document.getElementById('ag-cap-pax');
         if (!caja) return;
-        // Los dos vacíos = no se anotó nada. Mostrar 0 ahí sugeriría que el dato
-        // ya está capturado cuando no lo está.
-        if (textoA === '' && textoI === '') { caja.value = '—'; return; }
-        caja.value = Core.numero((Number(textoA) || 0) + (Number(textoI) || 0));
+        // Los TRES sumandos de la columna generada, no sólo adultos e infantes:
+        // en los años en que sólo se anotaba el total, el desglose va vacío y la
+        // cifra real vive en pax_total_reportado.
+        const textos = ['adultos', 'infantes', 'pax_total_reportado']
+            .map((campo) => document.getElementById(id(campo))?.value ?? '');
+        // Todos vacíos = no se anotó nada. Mostrar 0 sugeriría que el dato ya
+        // está capturado cuando no lo está.
+        if (textos.every((t) => t === '')) { caja.value = '—'; return; }
+        caja.value = Core.numero(textos.reduce((a, t) => a + (Number(t) || 0), 0));
     }
 
     function marcarCampos(errores) {
@@ -392,8 +434,8 @@
             });
             panel.querySelector('#ag-cap-cancelar').addEventListener('click', salirDeEdicion);
 
-            [id('adultos'), id('infantes')].forEach((campoId) => {
-                document.getElementById(campoId)?.addEventListener('input', actualizarPax);
+            ['adultos', 'infantes', 'pax_total_reportado'].forEach((campo) => {
+                document.getElementById(id(campo))?.addEventListener('input', actualizarPax);
             });
 
             // La pista cambia según el movimiento: en llegada ese aeropuerto es

@@ -45,6 +45,108 @@ No se dio nada por supuesto: se comprobó contra Supabase antes de escribir una 
 | Valores por omisión | `tipo_fuente=CAPTURA_MANUAL`, `estado_validacion=PENDIENTE`, `estatus_registro=ACTIVO`, `version=1` |
 | Columnas de auditoría | `id`, `registro_id`, `operacion`, `datos_anteriores`, `datos_nuevos`, `realizado_por`, `fecha_evento` |
 
+### La tabla tiene 43 columnas, no 37
+
+El diccionario documenta 37. La tabla real tiene **seis más**, y no son decorativas:
+
+| Columna | Filas con dato | Qué es |
+|---|---|---|
+| `pax_total_reportado` | 2,669 | Pasajeros capturados como total, sin separar por edad |
+| `ciudad_origen_destino` | 5,438 | El origen/destino escrito como ciudad (BROWARD) en vez de código |
+| `hora_aterrizaje` | 1,331 | Toma de pista |
+| `hora_entrada_posicion` | 1,333 | Llegada a posición |
+| `hora_salida_posicion` | 1,334 | Salida de posición |
+| `hora_despegue` | 1,333 | Despegue |
+
+### Dos convenciones de captura conviviendo
+
+Los pares se reparten el histórico **casi exactamente a mitades, y son excluyentes**:
+
+- `adultos`/`infantes` (7,726 filas) **o** `pax_total_reportado` (2,669) → 10,395 de 10,396.
+- `aeropuerto_origen_destino` (4,956) **o** `ciudad_origen_destino` (5,438) → 10,394.
+
+Es decir: unos años se capturó de una forma y otros de otra. Cualquier pantalla que lea sólo
+una de las dos enseña la mitad del histórico vacío.
+
+`pax_ag` es columna generada y las reconcilia:
+
+```
+pax_ag = COALESCE(adultos,0) + COALESCE(infantes,0) + COALESCE(pax_total_reportado,0)
+```
+
+Comprobado fila por fila contra los datos. De ahí sale, sin tocar la base, cuántos pasajeros
+del periodo vienen sin desglose: `pax_ag − adultos − infantes`. El KPI de pasajeros lo usa para
+decir «capturados como total, sin desglose por edad» en vez de mostrar un «0 adultos» que se
+lee como error.
+
+### Cómo las trata el módulo
+
+Las seis se leen, se muestran, se capturan, se importan y se exportan:
+
+| Dónde | Qué hace |
+|---|---|
+| **Movimientos** | La columna *Orig./Dest.* cae en la ciudad cuando no hay código, con subrayado punteado para distinguir la procedencia del dato. Cuatro columnas nuevas para el paso por plataforma y una para *Pax rep.* |
+| **Filtro de origen** | Buscar `MMTO` o `TOLUCA` encuentra lo mismo: consulta las dos columnas. Quien busca no tiene por qué saber en qué año cambió la convención |
+| **Captura** | Campos para la ciudad, el total reportado y las cuatro horas. *Pax A.G.* suma los tres sumandos en pantalla |
+| **Importación** | Alias de encabezado para las seis. `TOTAL PAX` sigue **ignorada** a propósito: `pax_ag` ya suma `pax_total_reportado`, y mapearla ahí contaría los pasajeros dos veces |
+| **Exportación** | Las seis van en el Excel. Antes se descargaba un archivo con 5,438 orígenes y 5,331 horas en blanco |
+
+La columna *Orig./Dest.* **dejó de ser ordenable**, a propósito: ordenar por una sola de las dos
+columnas dejaría fuera del criterio a la mitad del histórico, y eso es peor que no ofrecer el
+orden.
+
+### El conteo OFICIAL es por rotación (migración 047)
+
+El reporte de GAG *«Operaciones de Aviación General 2022 LA BUENA»* cierra 2022 con **458
+operaciones y 1,385 pasajeros**. El módulo, contando cada movimiento en la fecha en que
+ocurrió, daba 455. No faltaban datos: **son dos formas de contar, y reconcilian exacto.**
+
+El reporte cuenta por **rotación**: ancla la salida a la fecha de la llegada con la que forma
+pareja. Si una aeronave llega el 25 de diciembre y despega el 2 de enero, las dos operaciones
+cuentan en diciembre.
+
+Verificado contra los datos antes de escribir el SQL: anclando cada salida a su llegada,
+**nueve de los diez meses de 2022 cuadran al dígito** en las cuatro cifras del reporte.
+
+| | Reporte | Módulo (rotación) |
+|---|---|---|
+| Pasajeros | 1,385 | 1,385 ✓ |
+| Pax llegada / salida | 698 / 687 | 698 / 687 ✓ |
+| Llegadas | 229 | 229 ✓ |
+| Salidas | 229 | **228** |
+
+`aviacion_general_resumen(p_filtros, p_modo)` — `p_modo` por omisión es `'rotacion'`, el
+oficial. `'movimiento'` cuenta en la fecha real. El Resumen trae el interruptor; el listado de
+Movimientos siempre muestra la fecha real, porque ahí se consulta el movimiento, no el reporte.
+
+La ventana de anclaje es de **60 días** y no es decorativa: el folio de rotación **se reinicia
+cada año** (2022 usaba `202200046`; 2026 usa `977`, `95`), así que sin acotar por fecha una
+salida de 2026 podría engancharse a una llegada de 2025 con el mismo folio.
+
+#### La salida del GN-106 (migración 048)
+
+**GN-106 · GUARDIA NACIONAL · UH60L** llegó el 03/11/2022 y esa llegada era su **único
+movimiento en todo el histórico**. No fue un descuido de la carga: la propia fila lo dice en su
+campo de observaciones —*«La fila de origen no contiene movimiento de SALIDA.»*— y tiene vacías
+la hora de salida de posición y la de despegue. El Excel no registró la salida.
+
+GAG confirmó que la aeronave sí salió y pidió dejarla contemplada. La migración **048** la
+inserta, y es **la única del módulo que escribe un dato**. Entra marcada como lo que es:
+
+| Campo | Valor | Por qué |
+|---|---|---|
+| `tipo_fuente` | `MIGRACION` | No se capturó ni se importó: se reconstruyó del reporte |
+| `estado_validacion` | `OBSERVADO` | Queda contada **y** visible en la bandeja, con el motivo escrito |
+| `hora_programada` / `hora_real` | `NULL` | No constan. No se inventan |
+| `fecha_operacion` | 03/11/2022 | El mismo día de la llegada: es lo que menos supone |
+| `pax_total_reportado` | `0` | **Confirmado, no supuesto**: el reporte cierra noviembre con 237 pax de salida y el histórico ya los tenía con 53 salidas |
+
+Con eso 2022 cierra en **458 operaciones, 229 llegadas y 229 salidas**, idéntico al reporte, y
+los 1,385 pasajeros no se mueven.
+
+La migración es idempotente, aborta si la llegada dejó de ser la que se documentó, y trae
+escrito el `DELETE` para deshacerla.
+
 ### Tres cosas en que los datos reales desmintieron al diccionario
 
 Manda la tabla, no el documento. Las tres estaban mal implementadas en la
@@ -301,9 +403,9 @@ El cliente **avisa**; la base **autoriza**.
 ## 8. Pruebas
 
 ```
-__tests__/aviacion-general-core.test.js    37 pruebas — las reglas de normalización
-__tests__/aviacion-general-panel.test.js   22 pruebas — el cableado de las siete piezas
-__tests__/aviacion-general-sql.test.js     29 pruebas — las invariantes de la migración
+__tests__/aviacion-general-core.test.js    45 pruebas — las reglas de normalización
+__tests__/aviacion-general-panel.test.js   31 pruebas — el cableado de las siete piezas
+__tests__/aviacion-general-sql.test.js     45 pruebas — las invariantes de las migraciones
 ```
 
 `aviacion-general-sql.test.js` existe porque **no hay PostgreSQL en la batería**: no ejecuta el
@@ -319,7 +421,13 @@ que ya no existe.
 
 ## 9. SQL pendiente de ejecutar
 
-`supabase/migrations/046_aviacion_general_fbo.sql` — **aún no aplicado**.
+Las migraciones del módulo, en orden:
+
+- **046** — índices y las ocho funciones de servicio. *Aplicada.*
+- **047** — conteo oficial por rotación. *Aplicada.*
+- **048** — la salida reconstruida del GN-106. *Pendiente de aplicar.*
+
+Todas siguen la misma mecánica:
 
 1. Correr el archivo completo tal cual. Termina en `ROLLBACK`.
 2. Leer el bloque `VERIFICACIÓN` (cuenta índices, funciones y filas).

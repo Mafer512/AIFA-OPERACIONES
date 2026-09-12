@@ -43,11 +43,30 @@
     // Columnas que el cliente puede escribir. pax_ag NO está y no puede estar:
     // es columna generada y Postgres rechaza el INSERT completo si se la manda,
     // aunque el valor sea el correcto.
+    //
+    // Las seis últimas no aparecen en el diccionario de datos —que declara 37
+    // columnas cuando la tabla tiene 43— pero sí en los datos: entre ellas
+    // guardan 5,438 orígenes, 2,669 cuentas de pasajeros y 5,331 horas
+    // detalladas que el módulo ignoraba por completo.
     const CAMPOS_ESCRIBIBLES = Object.freeze([
         'folio_rotacion', 'fecha_operacion', 'tipo_operacion', 'ambito_operacion',
         'operador', 'matricula', 'tipo_aeronave', 'aeropuerto_origen_destino',
         'hora_programada', 'hora_real', 'adultos', 'infantes', 'pax_od',
-        'estado', 'pais', 'observaciones', 'movimiento_relacionado_id'
+        'estado', 'pais', 'observaciones', 'movimiento_relacionado_id',
+        // Fuera del diccionario, presentes en la tabla:
+        'ciudad_origen_destino', 'pax_total_reportado',
+        'hora_aterrizaje', 'hora_entrada_posicion', 'hora_salida_posicion', 'hora_despegue'
+    ]);
+
+    /**
+     * Las cuatro horas del paso por plataforma, en el orden en que ocurren.
+     * Se exponen juntas porque todas las pantallas las tratan igual.
+     */
+    const HORAS_DETALLADAS = Object.freeze([
+        { campo: 'hora_aterrizaje',       etiqueta: 'Aterrizaje',     corta: 'Aterr.' },
+        { campo: 'hora_entrada_posicion', etiqueta: 'Entrada a posición', corta: 'Ent. pos.' },
+        { campo: 'hora_salida_posicion',  etiqueta: 'Salida de posición', corta: 'Sal. pos.' },
+        { campo: 'hora_despegue',         etiqueta: 'Despegue',       corta: 'Despegue' }
     ]);
 
     // Texto que en el Excel original significa "no hay dato". Sale del
@@ -351,11 +370,26 @@
         pax_od:                    ['PAXOD', 'PAXOD1', 'PASAJEROSOD'],
         estado:                    ['ESTADO', 'ENTIDAD'],
         pais:                      ['PAIS'],
-        observaciones:             ['OBSERVACIONES', 'OBSERVACION', 'NOTAS', 'NOTA', 'COMENTARIOS', 'COMENTARIO']
+        observaciones:             ['OBSERVACIONES', 'OBSERVACION', 'NOTAS', 'NOTA', 'COMENTARIOS', 'COMENTARIO'],
+        // ── Columnas ausentes del diccionario pero presentes en la tabla ────
+        ciudad_origen_destino:     ['CIUDAD', 'CIUDADORIGENDESTINO', 'CIUDADORIGEN', 'CIUDADDESTINO', 'CIUDADOD'],
+        pax_total_reportado:       ['PAXTOTALREPORTADO', 'PASAJEROS', 'PAXREPORTADO', 'TOTALPASAJEROS'],
+        hora_aterrizaje:           ['HRATERRIZAJE', 'HORAATERRIZAJE', 'ATERRIZAJE', 'HRATERRIZA'],
+        hora_entrada_posicion:     ['HRENTRADAPOSICION', 'ENTRADAPOSICION', 'HORAENTRADAPOSICION', 'ENTRADAAPOSICION', 'HRENTPOS'],
+        hora_salida_posicion:      ['HRSALIDAPOSICION', 'SALIDAPOSICION', 'HORASALIDAPOSICION', 'SALIDADEPOSICION', 'HRSALPOS'],
+        hora_despegue:             ['HRDESPEGUE', 'HORADESPEGUE', 'DESPEGUE']
     });
 
     // PAX. A.G. se reconoce para poder IGNORARLA explícitamente: es la columna
     // generada. Si se colara al INSERT, Postgres rechaza la fila entera.
+    //
+    // TOTALPAX y PAXTOTAL siguen aquí y NO se mapean a pax_total_reportado, a
+    // propósito. pax_ag suma adultos + infantes + pax_total_reportado, así que
+    // si una columna que en realidad es el total calculado entrara por ahí, los
+    // pasajeros se contarían dos veces. Mientras no se confirme cómo se llama
+    // exactamente en los archivos de GAG, se prefiere que aparezca en la lista
+    // de "no reconocidas" de la pantalla de importación —donde alguien la ve y
+    // pregunta— antes que adivinar y falsear las cifras en silencio.
     const COLUMNAS_IGNORADAS = Object.freeze(['PAXAG', 'PAXAG1', 'TOTALPAX', 'PAXTOTAL']);
 
     /** Quita acentos, signos y espacios para comparar encabezados. */
@@ -466,6 +500,13 @@
             estado:                    textoONulo(leer('estado')),
             pais:                      textoONulo(leer('pais')),
             observaciones:             normalizarObservacion(leer('observaciones')),
+            // Fuera del diccionario, dentro de la tabla.
+            ciudad_origen_destino:     textoONulo(leer('ciudad_origen_destino')),
+            pax_total_reportado:       normalizarEntero(leer('pax_total_reportado')),
+            hora_aterrizaje:           normalizarHora(leer('hora_aterrizaje')),
+            hora_entrada_posicion:     normalizarHora(leer('hora_entrada_posicion')),
+            hora_salida_posicion:      normalizarHora(leer('hora_salida_posicion')),
+            hora_despegue:             normalizarHora(leer('hora_despegue')),
             fila_origen:               filaOrigen
         };
 
@@ -554,14 +595,44 @@
     }
 
     /**
-     * adultos + infantes. Espejo de la columna generada, sólo para la vista
-     * previa de la importación y el formulario de captura: el valor que manda
-     * es SIEMPRE el que calcula la base.
+     * Espejo de la columna generada pax_ag, sólo para la vista previa de la
+     * importación y el formulario de captura: el valor que manda es SIEMPRE el
+     * que calcula la base.
+     *
+     * La fórmula está comprobada contra las 10,396 filas del histórico, sin un
+     * solo desajuste:
+     *
+     *     pax_ag = COALESCE(adultos,0) + COALESCE(infantes,0)
+     *            + COALESCE(pax_total_reportado,0)
+     *
+     * El tercer sumando es el que faltaba aquí. Sin él, un movimiento de los
+     * años en que sólo se anotaba el total aparecía con 0 pasajeros en la vista
+     * previa y con su cifra real después de guardar.
      */
     function paxTotal(mov) {
-        const a = Number(mov && mov.adultos) || 0;
-        const i = Number(mov && mov.infantes) || 0;
-        return a + i;
+        const m = mov || {};
+        return (Number(m.adultos) || 0)
+             + (Number(m.infantes) || 0)
+             + (Number(m.pax_total_reportado) || 0);
+    }
+
+    /**
+     * El origen o destino que se debe enseñar.
+     *
+     * El histórico usa DOS columnas excluyentes según el año: hasta 2024 se
+     * anotó la ciudad (BROWARD) y desde 2025 el código de aeropuerto (MMTO).
+     * Leer sólo una deja 5,438 de 10,396 movimientos con el campo en blanco.
+     *
+     * Devuelve { valor, esCodigo } para que la pantalla pueda distinguirlos sin
+     * volver a mirar las dos columnas.
+     */
+    function origenDestino(mov) {
+        const m = mov || {};
+        const codigo = textoONulo(m.aeropuerto_origen_destino);
+        if (codigo) return { valor: codigo, esCodigo: true };
+        const ciudad = textoONulo(m.ciudad_origen_destino);
+        if (ciudad) return { valor: ciudad, esCodigo: false };
+        return { valor: '', esCodigo: false };
     }
 
     // ── Formato para pantalla ───────────────────────────────────────────────
@@ -614,7 +685,7 @@
     return {
         // contrato
         TIPOS_OPERACION, AMBITOS, ESTADOS_VALIDACION, ESTATUS_REGISTRO, TIPOS_FUENTE,
-        CAMPOS_ESCRIBIBLES, ALIAS_COLUMNAS,
+        CAMPOS_ESCRIBIBLES, ALIAS_COLUMNAS, HORAS_DETALLADAS,
         // normalización
         normalizarTexto, textoONulo, normalizarObservacion, normalizarMatricula,
         normalizarFecha, normalizarHora, normalizarEntero,
@@ -623,7 +694,7 @@
         claveEncabezado, detectarColumnas, leerNotaSinEncabezado, normalizarFilaExcel,
         hashOrigen,
         // validación y salida
-        validarMovimiento, aPayload, paxTotal,
+        validarMovimiento, aPayload, paxTotal, origenDestino,
         // presentación
         horaCorta, fechaLarga, periodoLargo, numero,
         // filtros

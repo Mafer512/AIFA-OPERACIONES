@@ -50,8 +50,8 @@ function resumenDePrueba() {
             fecha_min: '2026-01-02', fecha_max: '2026-09-10'
         },
         por_mes: [
-            { periodo: '2026-01', anio: 2026, mes: 1, movimientos: 200, llegadas: 100, salidas: 100, pax: 600 },
-            { periodo: '2026-02', anio: 2026, mes: 2, movimientos: 180, llegadas: 92, salidas: 88, pax: 540 }
+            { periodo: '2026-01', anio: 2026, mes: 1, movimientos: 200, llegadas: 100, salidas: 100, pax: 600, pax_llegada: 310, pax_salida: 290 },
+            { periodo: '2026-02', anio: 2026, mes: 2, movimientos: 180, llegadas: 92, salidas: 88, pax: 540, pax_llegada: 280, pax_salida: 260 }
         ],
         por_ambito: [{ clave: 'NACIONAL', movimientos: 1700, pax: 4900 }],
         por_tipo_operacion: [{ clave: 'LLEGADA', movimientos: 950, pax: 2700 }],
@@ -62,13 +62,29 @@ function resumenDePrueba() {
     };
 }
 
+/**
+ * Dos filas que reproducen las DOS convenciones de captura del histórico:
+ *   par  -> años 2025-2026: código de aeropuerto y desglose adultos/infantes.
+ *   impar-> años 2022-2024: ciudad y sólo el total reportado.
+ * Si la pantalla lee una sola de las dos, la mitad sale en blanco.
+ */
 function filaDePrueba(id) {
+    const estiloViejo = id % 2 === 1;
     return {
         id, folio_rotacion: id, fecha_operacion: '2026-03-15',
         tipo_operacion: 'LLEGADA', ambito_operacion: 'NACIONAL',
         operador: 'AEROLÍNEAS EJECUTIVAS', matricula: 'XA-MAM', tipo_aeronave: 'G650',
-        aeropuerto_origen_destino: 'MMTO', hora_programada: '08:30:00', hora_real: '08:41:00',
-        adultos: 3, infantes: 0, pax_ag: 3, pax_od: null, estado: null, pais: null,
+        aeropuerto_origen_destino: estiloViejo ? null : 'MMTO',
+        ciudad_origen_destino: estiloViejo ? 'BROWARD' : null,
+        hora_programada: '08:30:00', hora_real: '08:41:00',
+        hora_aterrizaje: estiloViejo ? null : '19:44:00',
+        hora_entrada_posicion: estiloViejo ? null : '19:48:00',
+        hora_salida_posicion: null, hora_despegue: null,
+        adultos: estiloViejo ? null : 3,
+        infantes: estiloViejo ? null : 0,
+        pax_total_reportado: estiloViejo ? 15 : null,
+        pax_ag: estiloViejo ? 15 : 3,
+        pax_od: null, estado: null, pais: null,
         observaciones: null, movimiento_relacionado_id: null, tipo_fuente: 'IMPORTACION_EXCEL',
         archivo_origen: 'bitacora.xlsx', fila_origen: 7, estado_validacion: 'PENDIENTE',
         fecha_validacion: null, observacion_validacion: null, estatus_registro: 'ACTIVO',
@@ -82,7 +98,7 @@ function filaDePrueba(id) {
  * cada llamada para poder afirmar QUÉ se consultó y cuántas veces.
  */
 function clienteFalso() {
-    const llamadas = { rpc: [], tablas: [] };
+    const llamadas = { rpc: [], tablas: [], modos: [] };
 
     const respuestasRpc = {
         aviacion_general_resumen: () => resumenDePrueba(),
@@ -141,8 +157,11 @@ function clienteFalso() {
     return {
         llamadas,
         from: constructor,
-        rpc: async (nombre) => {
+        rpc: async (nombre, args) => {
             llamadas.rpc.push(nombre);
+            // Se guarda el modo con el que se pidió el resumen: de eso depende
+            // que el tablero enseñe la cifra oficial y no otra.
+            if (nombre === 'aviacion_general_resumen') llamadas.modos.push((args || {}).p_modo);
             const fn = respuestasRpc[nombre];
             return fn ? { data: fn(), error: null } : { data: null, error: { message: `RPC sin stub: ${nombre}` } };
         }
@@ -293,6 +312,112 @@ describe('carga perezosa y frescura de los datos', () => {
         expect(kpis).toContain('5,400');   // pax
     });
 
+    test('arranca con el conteo OFICIAL, el del reporte de GAG', async () => {
+        // El reporte oficial ancla cada salida a la fecha de su llegada. Si el
+        // tablero abriera en el otro conteo, la cifra del portal no cuadraría
+        // con la que la Gerencia reporta, que es justo lo que se pidió evitar.
+        const cliente = montarModulo();
+        document.getElementById('aviacion-general-section').classList.add('active');
+        await asentar();
+        await asentar();
+
+        expect(cliente.llamadas.modos[0]).toBe('rotacion');
+        expect(document.getElementById('ag-res-modo-rotacion').classList.contains('active')).toBe(true);
+        expect(document.getElementById('ag-res-modo-nota').textContent).toMatch(/oficial/i);
+    });
+
+    test('se puede cambiar a la fecha real del movimiento, y vuelve a consultar', async () => {
+        const cliente = montarModulo();
+        document.getElementById('aviacion-general-section').classList.add('active');
+        await asentar();
+        await asentar();
+
+        document.getElementById('ag-res-modo-movimiento').click();
+        await asentar();
+        await asentar();
+
+        expect(cliente.llamadas.modos).toContain('movimiento');
+        expect(document.getElementById('ag-res-modo-movimiento').classList.contains('active')).toBe(true);
+        expect(document.getElementById('ag-res-modo-nota').textContent).toMatch(/en que ocurrió/i);
+    });
+
+    test('la tabla mensual separa pasajeros de llegada y de salida, como el reporte', async () => {
+        montarModulo();
+        document.getElementById('aviacion-general-section').classList.add('active');
+        await asentar();
+        await asentar();
+
+        document.getElementById('ag-res-ver-tabla').click();
+        const tabla = document.getElementById('ag-res-tabla-mes').textContent;
+        expect(tabla).toContain('310');  // pax llegada de enero
+        expect(tabla).toContain('290');  // pax salida de enero
+        // Y los totales de las dos columnas.
+        expect(tabla).toContain('590');  // 310 + 280
+        expect(tabla).toContain('550');  // 290 + 260
+    });
+
+    test('los pasajeros tienen su propia gráfica, no una tercera línea en la de movimientos', async () => {
+        // 455 movimientos contra 1,385 pasajeros: en un mismo lienzo harían
+        // falta dos escalas, y dos ejes distintos hacen que dos series parezcan
+        // cruzarse donde no se cruzan.
+        montarModulo();
+        document.getElementById('aviacion-general-section').classList.add('active');
+        await asentar();
+        await asentar();
+
+        expect(document.getElementById('ag-res-pax')).not.toBeNull();
+        expect(document.getElementById('ag-res-pax-nota').textContent).toContain('5,400');
+    });
+
+    test('cuando el año se capturó sin desglose, lo dice en vez de mostrar "0 adultos"', async () => {
+        // Regresión: 2022 usa pax_total_reportado, así que adultos e infantes
+        // suman 0 bajo un total de 1,385. El KPI decía "0 adultos · 0 infantes",
+        // que no se lee como "se capturó de otra forma" sino como un error.
+        const cliente = clienteFalso();
+        window.supabaseClient = cliente;
+        window.ensureSupabaseClient = async () => cliente;
+        window.sectionLevel = () => 'admin';
+        window.showNotification = jest.fn();
+        window.Chart = function () { return { destroy() {}, resize() {} }; };
+        window.HTMLCanvasElement.prototype.getContext = () => ({});
+
+        const resumenSinDesglose = resumenDePrueba();
+        resumenSinDesglose.totales.adultos = 0;
+        resumenSinDesglose.totales.infantes = 0;
+        resumenSinDesglose.totales.pax = 1385;
+        cliente.rpc = async (nombre) => {
+            if (nombre === 'aviacion_general_resumen') return { data: resumenSinDesglose, error: null };
+            if (nombre === 'aviacion_general_opciones') return { data: {}, error: null };
+            return { data: null, error: null };
+        };
+
+        const marcado = indexSource.match(/<div id="aviacion-general-section" class="content-section"><\/div>/);
+        document.body.innerHTML = marcado[0];
+        window.AviacionGeneralCore = require('../js/aviacion-general/core.js');
+        ARCHIVOS_MODULO.forEach((archivo) => { new Function(fuente(archivo))(); });
+        document.getElementById('aviacion-general-section').classList.add('active');
+        await asentar();
+        await asentar();
+
+        const kpis = document.getElementById('ag-res-kpis').textContent;
+        expect(kpis).toContain('1,385');
+        expect(kpis).toContain('sin desglose');
+        expect(kpis).not.toContain('0 adultos');
+    });
+
+    test('con desglose parcial reporta las tres partes', async () => {
+        montarModulo();
+        document.getElementById('aviacion-general-section').classList.add('active');
+        await asentar();
+        await asentar();
+        // El resumen de prueba trae pax 5,400 con 5,100 adultos y 300 infantes:
+        // cuadra exacto, así que no debe inventar un "sin desglose".
+        const kpis = document.getElementById('ag-res-kpis').textContent;
+        expect(kpis).toContain('5,100 adultos');
+        expect(kpis).toContain('300 infantes');
+        expect(kpis).not.toContain('sin desglose');
+    });
+
     test('la serie mensual ofrece tabla además de gráfica', async () => {
         montarModulo();
         document.getElementById('aviacion-general-section').classList.add('active');
@@ -347,6 +472,40 @@ describe('pantalla de movimientos', () => {
         expect(cuerpo).toContain('15 Mar 2026');
         expect(document.getElementById('ag-mov-excel')).not.toBeNull();
         expect(document.getElementById('ag-mov-csv')).not.toBeNull();
+    });
+
+    test('muestra la ciudad cuando no hay código de aeropuerto', async () => {
+        // Regresión: la tabla leía sólo aeropuerto_origen_destino, así que
+        // 5,438 de los 10,396 movimientos salían con el origen en blanco.
+        montarModulo();
+        document.getElementById('aviacion-general-section').classList.add('active');
+        await asentar();
+        await asentar();
+        window.AviacionGeneral.abrirVista('movimientos');
+        await asentar();
+        await asentar();
+
+        const cuerpo = document.getElementById('ag-mov-tbody');
+        expect(cuerpo.textContent).toContain('MMTO');     // fila con código
+        expect(cuerpo.textContent).toContain('BROWARD');  // fila con ciudad
+        // La procedencia del dato se distingue sin colorearlo como si fuera error.
+        expect(cuerpo.querySelector('.ag-od-ciudad')).not.toBeNull();
+    });
+
+    test('las horas de plataforma y el pax reportado ya tienen columna', async () => {
+        montarModulo();
+        document.getElementById('aviacion-general-section').classList.add('active');
+        await asentar();
+        await asentar();
+        window.AviacionGeneral.abrirVista('movimientos');
+        await asentar();
+        await asentar();
+
+        const encabezados = document.getElementById('ag-mov-thead').textContent;
+        ['Aterr.', 'Ent. pos.', 'Sal. pos.', 'Despegue', 'Pax rep.']
+            .forEach((t) => expect(encabezados).toContain(t));
+        // Y el dato se pinta, no sólo la columna.
+        expect(document.getElementById('ag-mov-tbody').textContent).toContain('19:44');
     });
 
     test('el botón de nuevo movimiento no existe para un lector', async () => {
@@ -447,15 +606,25 @@ describe('formulario de captura', () => {
 
     test('Pax A.G. se calcula en pantalla en cuanto se teclea', async () => {
         await abrirCaptura();
-        const adultos = document.getElementById('ag-cap-adultos');
-        adultos.value = '3';
-        adultos.dispatchEvent(new window.Event('input', { bubbles: true }));
+        const teclear = (campo, valor) => {
+            const el = document.getElementById(`ag-cap-${campo}`);
+            el.value = valor;
+            el.dispatchEvent(new window.Event('input', { bubbles: true }));
+        };
+        teclear('adultos', '3');
         expect(document.getElementById('ag-cap-pax').value).toBe('3');
-
-        const infantes = document.getElementById('ag-cap-infantes');
-        infantes.value = '2';
-        infantes.dispatchEvent(new window.Event('input', { bubbles: true }));
+        teclear('infantes', '2');
         expect(document.getElementById('ag-cap-pax').value).toBe('5');
+        // El tercer sumando de la columna generada, que antes faltaba.
+        teclear('pax-total-reportado', '10');
+        expect(document.getElementById('ag-cap-pax').value).toBe('15');
+    });
+
+    test('se pueden capturar las seis columnas que el diccionario no declara', async () => {
+        await abrirCaptura();
+        ['ciudad-origen-destino', 'pax-total-reportado', 'hora-aterrizaje',
+         'hora-entrada-posicion', 'hora-salida-posicion', 'hora-despegue']
+            .forEach((campo) => expect(document.getElementById(`ag-cap-${campo}`)).not.toBeNull());
     });
 
     test('no guarda con campos obligatorios vacíos y señala cuáles', async () => {

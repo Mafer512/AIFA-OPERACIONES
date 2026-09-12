@@ -34,8 +34,13 @@
     // ninguna pantalla use.
     const COLUMNAS_LISTA = [
         'id', 'folio_rotacion', 'fecha_operacion', 'tipo_operacion', 'ambito_operacion',
-        'operador', 'matricula', 'tipo_aeronave', 'aeropuerto_origen_destino',
-        'hora_programada', 'hora_real', 'adultos', 'infantes', 'pax_ag', 'pax_od',
+        'operador', 'matricula', 'tipo_aeronave',
+        // Las dos del origen/destino: el histórico usa una u otra según el año.
+        'aeropuerto_origen_destino', 'ciudad_origen_destino',
+        'hora_programada', 'hora_real',
+        // El paso por plataforma, que antes no se pedía y por tanto no se veía.
+        'hora_aterrizaje', 'hora_entrada_posicion', 'hora_salida_posicion', 'hora_despegue',
+        'adultos', 'infantes', 'pax_total_reportado', 'pax_ag', 'pax_od',
         'estado', 'pais', 'observaciones', 'movimiento_relacionado_id',
         'tipo_fuente', 'archivo_origen', 'fila_origen',
         'estado_validacion', 'fecha_validacion', 'observacion_validacion',
@@ -104,13 +109,25 @@
         if (f.operador)      consulta = consulta.ilike('operador', `%${f.operador}%`);
         if (f.matricula)     consulta = consulta.ilike('matricula', `%${f.matricula}%`);
         if (f.tipo_aeronave) consulta = consulta.ilike('tipo_aeronave', `%${f.tipo_aeronave}%`);
-        if (f.aeropuerto)    consulta = consulta.ilike('aeropuerto_origen_destino', `%${f.aeropuerto}%`);
+
+        // Buscar "MMTO" o "TOLUCA" tiene que encontrar lo mismo: hasta 2024 el
+        // origen se anotó como ciudad y desde 2025 como código, y quien busca no
+        // tiene por qué saber en qué año cambió la convención.
+        if (f.aeropuerto) {
+            const a = String(f.aeropuerto).replace(/[(),]/g, ' ').trim();
+            if (a) {
+                consulta = consulta.or(
+                    `aeropuerto_origen_destino.ilike.%${a}%,ciudad_origen_destino.ilike.%${a}%`
+                );
+            }
+        }
 
         if (f.texto) {
             const t = String(f.texto).replace(/[(),]/g, ' ').trim();
             if (t) {
                 consulta = consulta.or(
-                    ['operador', 'matricula', 'tipo_aeronave', 'aeropuerto_origen_destino', 'observaciones']
+                    ['operador', 'matricula', 'tipo_aeronave',
+                     'aeropuerto_origen_destino', 'ciudad_origen_destino', 'observaciones']
                         .map((c) => `${c}.ilike.%${t}%`).join(',')
                 );
             }
@@ -237,10 +254,19 @@
             return data;
         },
 
-        /** Todas las cifras del tablero, ya sumadas por PostgreSQL. */
-        async resumen(filtros) {
+        /**
+         * Todas las cifras del tablero, ya sumadas por PostgreSQL.
+         *
+         * modo 'rotacion' (por omisión) es el conteo OFICIAL: el del reporte de
+         * GAG, que ancla cada salida a la fecha de su llegada. 'movimiento'
+         * cuenta cada operación en la fecha en que ocurrió.
+         */
+        async resumen(filtros, modo) {
             const c = await cliente();
-            const { data, error } = await c.rpc('aviacion_general_resumen', { p_filtros: filtros || {} });
+            const { data, error } = await c.rpc('aviacion_general_resumen', {
+                p_filtros: filtros || {},
+                p_modo: modo || 'rotacion'
+            });
             if (error) throw traducirError(error, 'No se pudo calcular el resumen');
             return data || {};
         },

@@ -182,6 +182,15 @@
 #aviacion-general-section .ag-tabla .ag-num { text-align: right; font-variant-numeric: tabular-nums; }
 #aviacion-general-section .ag-tabla .ag-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
+/* Origen capturado como ciudad y no como código de aeropuerto. Se distingue
+   con un subrayado punteado —no con color— porque la diferencia es de
+   procedencia del dato, no de estado: no es un error ni una alerta. */
+#aviacion-general-section .ag-tabla .ag-od-ciudad {
+    font-family: inherit;
+    border-bottom: 1px dotted #94a3b8;
+    cursor: help;
+}
+
 /* ── Distintivos de estado ──────────────────────────────────────────────── */
 
 #aviacion-general-section .ag-badge {

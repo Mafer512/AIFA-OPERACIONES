@@ -262,6 +262,118 @@ describe('funciones del módulo', () => {
     });
 });
 
+describe('047 — conteo oficial por rotación', () => {
+    /**
+     * El reporte oficial de GAG cuenta por rotación: ancla cada salida a la
+     * fecha de la llegada con la que forma pareja. Comprobado contra los datos
+     * de 2022, ese anclaje reproduce nueve de los diez meses al dígito.
+     */
+    const sql047 = fs.readFileSync(
+        path.resolve(__dirname, '..', 'supabase', 'migrations', '047_aviacion_general_conteo_oficial.sql'),
+        'utf8'
+    ).replace(/\r\n/g, '\n');
+    const vivo047 = sql047.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+
+    test('el modo por omisión es el OFICIAL', () => {
+        expect(vivo047).toMatch(/p_modo\s+text\s+DEFAULT\s+'rotacion'/);
+    });
+
+    test('la ventana de anclaje está acotada: el folio se reinicia cada año', () => {
+        // Sin acotar por fecha, una salida de 2026 con folio 95 podría
+        // engancharse a una llegada de 2025 con el mismo folio.
+        const ancla = vivo047.match(/FUNCTION public\.aviacion_general_ancla[\s\S]*?\$fn\$;/)[0];
+        expect(ancla).toMatch(/p_fecha\s*-\s*60/);
+        expect(ancla).toMatch(/l\.fecha_operacion\s*<=\s*p_fecha/);
+        expect(ancla).toMatch(/tipo_operacion\s*=\s*'LLEGADA'/);
+    });
+
+    test('el rango de fechas se aplica sobre la fecha de conteo, no sobre la del movimiento', () => {
+        // De eso depende que la salida del 2 de enero de 2023 aparezca al pedir
+        // diciembre de 2022, que es lo que hace el reporte oficial.
+        expect(vivo047).toMatch(/fecha_conteo\s*>=\s*\(p_filtros->>'fecha_desde'\)::date/);
+        expect(vivo047).toMatch(/fecha_conteo\s*<=\s*\(p_filtros->>'fecha_hasta'\)::date/);
+        // Y por eso las fechas se le quitan al filtro general antes de aplicarlo.
+        expect(vivo047).toMatch(/\(p_filtros - 'fecha_desde'\) - 'fecha_hasta'/);
+    });
+
+    test('las llegadas no se anclan a nada: son su propia fecha', () => {
+        expect(vivo047).toMatch(/WHEN o\.tipo_operacion = 'LLEGADA'\s+THEN o\.fecha_operacion/);
+    });
+
+    test('entrega los pasajeros separados por llegada y salida, como el reporte', () => {
+        ['pax_llegada', 'pax_salida'].forEach((c) => expect(vivo047).toContain(`'${c}'`));
+    });
+
+    test('no inventa el movimiento que falta: no inserta ni actualiza nada', () => {
+        expect(vivo047).not.toMatch(/\bINSERT\s+INTO\b/i);
+        expect(vivo047).not.toMatch(/\bUPDATE\s+public\./i);
+        expect(vivo047).not.toMatch(/\bDELETE\s+FROM\b/i);
+    });
+
+    test('el desglose de origen lee el código y, si no lo hay, la ciudad', () => {
+        expect(vivo047).toMatch(/COALESCE\(NULLIF\(aeropuerto_origen_destino, ''\),\s*\n?\s*NULLIF\(ciudad_origen_destino, ''\)/);
+    });
+
+    test('termina en ROLLBACK, como el resto de las migraciones', () => {
+        expect(sql047.trimEnd().endsWith('ROLLBACK;')).toBe(true);
+    });
+});
+
+describe('048 — la salida reconstruida del GN-106', () => {
+    /**
+     * Es la ÚNICA migración del módulo que inserta un dato. Lo que se vigila
+     * aquí es que ese dato entre MARCADO como lo que es —una reconstrucción a
+     * partir del reporte oficial— y no disfrazado de movimiento capturado.
+     */
+    const sql048 = fs.readFileSync(
+        path.resolve(__dirname, '..', 'supabase', 'migrations', '048_aviacion_general_salida_gn106.sql'),
+        'utf8'
+    ).replace(/\r\n/g, '\n');
+    const vivo048 = sql048.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+
+    test('entra como MIGRACION, no como captura ni como importación', () => {
+        expect(vivo048).toMatch(/'MIGRACION'/);
+        expect(vivo048).not.toMatch(/'CAPTURA_MANUAL'/);
+        expect(vivo048).not.toMatch(/'IMPORTACION_EXCEL'/);
+    });
+
+    test('queda OBSERVADO con el motivo, no PENDIENTE en silencio', () => {
+        expect(vivo048).toMatch(/'OBSERVADO'/);
+        expect(vivo048).toMatch(/observacion_validacion/);
+        expect(vivo048).toMatch(/Falta confirmar/);
+    });
+
+    test('no inventa horas: las deja nulas', () => {
+        const insert = vivo048.match(/INSERT INTO public\.aviacion_general_operaciones[\s\S]*?FROM public/)[0];
+        expect(insert).toMatch(/NULL,\s*--[^\n]*hora programada|NULL,\s*\n\s*NULL,\s*--/);
+        // Y no pone una hora inventada.
+        expect(insert).not.toMatch(/'\d{2}:\d{2}:\d{2}'/);
+    });
+
+    test('los pasajeros van en 0, que es lo que cuadra con el reporte', () => {
+        expect(vivo048).toMatch(/\n\s*0,\s*--/);
+    });
+
+    test('es idempotente: no duplica si ya existe la salida', () => {
+        expect(vivo048).toMatch(/AND NOT EXISTS \(/);
+        expect(vivo048).toMatch(/s\.tipo_operacion\s*=\s*'SALIDA'/);
+    });
+
+    test('aborta si la llegada que da origen al caso ya no es la misma', () => {
+        expect(vivo048).toMatch(/No se encontró la llegada de GN-106/);
+        expect(vivo048).toMatch(/folio 202200195/);
+    });
+
+    test('deja escrito cómo deshacerlo', () => {
+        expect(sql048).toMatch(/PARA DESHACERLO/);
+        expect(sql048).toMatch(/DELETE FROM public\.aviacion_general_operaciones/);
+    });
+
+    test('termina en ROLLBACK', () => {
+        expect(sql048.trimEnd().endsWith('ROLLBACK;')).toBe(true);
+    });
+});
+
 describe('convención de las migraciones del repositorio', () => {
     test('abre transacción y termina en ROLLBACK para poder revisarla antes de aplicar', () => {
         expect(sqlVivo).toMatch(/^\s*BEGIN;/m);

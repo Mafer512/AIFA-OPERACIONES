@@ -38,12 +38,22 @@
     const AZUL  = '#0d6efd';   // llegadas
     const VERDE = '#20c997';   // salidas
     const BARRA = '#0369a1';   // una sola serie
+    const MORADO = '#7c3aed';  // pasajeros
     const TINTA = '#0f172a';
     const GRIS  = '#64748b';
     const REJILLA = '#f1f5f9';
 
     const graficas = {};
     let ultimoResumen = null;
+
+    // Conteo con el que se pintan las cifras.
+    //
+    // 'rotacion' es el OFICIAL: el del reporte de GAG, que ancla cada salida a
+    // la fecha de la llegada con la que forma pareja. Arranca en ése porque lo
+    // que el portal debe enseñar de entrada es la cifra que la Gerencia
+    // reporta; 'movimiento' queda a un clic para quien necesite la fecha real
+    // de cada operación.
+    let modo = 'rotacion';
 
     /**
      * Escribe el valor al final de cada barra.
@@ -185,6 +195,87 @@
         });
     }
 
+    /**
+     * Pasajeros por mes, en su PROPIA gráfica y no como tercera línea de la de
+     * movimientos.
+     *
+     * En 2022 fueron 455 movimientos y 1,385 pasajeros: mezclarlos en un solo
+     * lienzo obligaría a dos escalas, y dos ejes con escalas distintas es la
+     * forma más rápida de hacer que dos series parezcan cruzarse donde no se
+     * cruzan. Separadas, cada una se lee contra su propio cero y siguen
+     * alineadas por mes, que es la comparación que de verdad interesa.
+     */
+    function serieMensualPax(canvas, filas) {
+        destruir('pax');
+        if (!canvas || typeof root.Chart === 'undefined') return;
+        graficas.pax = new root.Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: filas.map((f) => Core.periodoLargo(f.periodo)),
+                datasets: [{
+                    label: 'Pasajeros A.G.',
+                    data: filas.map((f) => Number(f.pax) || 0),
+                    backgroundColor: MORADO,
+                    borderRadius: 4,
+                    borderSkipped: 'bottom',
+                    categoryPercentage: 0.78,
+                    barPercentage: 0.82
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    // Una sola serie: el título de la tarjeta ya dice qué es.
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: { label: (ctx) => ` ${Core.numero(ctx.parsed.y)} pasajeros` }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: REJILLA, drawBorder: false },
+                        ticks: { color: GRIS, font: { size: 11 }, precision: 0 }
+                    },
+                    x: {
+                        grid: { display: false, drawBorder: false },
+                        ticks: { color: GRIS, font: { size: 11 }, maxRotation: 0, autoSkipPadding: 12 }
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * Cómo se capturaron los pasajeros del periodo.
+     *
+     * El histórico trae DOS convenciones que se reparten los años casi a
+     * mitades: unos movimientos traen el desglose (adultos e infantes) y otros
+     * sólo el total (pax_total_reportado). La columna generada pax_ag suma las
+     * tres, así que lo que no viene del desglose es, exactamente, lo que se
+     * capturó como total:
+     *
+     *     sin_desglose = pax_ag − adultos − infantes
+     *
+     * Decirlo importa: la versión anterior escribía "0 adultos · 0 infantes"
+     * bajo un total de 1,385 pasajeros, y eso no se lee como "este año se
+     * capturó de otra forma", se lee como "el módulo está mal".
+     */
+    function desglosePax(t) {
+        const pax = Number(t.pax) || 0;
+        const adultos = Number(t.adultos) || 0;
+        const infantes = Number(t.infantes) || 0;
+        const sinDesglose = Math.max(0, pax - adultos - infantes);
+
+        if (!pax) return 'Sin pasajeros registrados';
+        if (!adultos && !infantes) return 'Capturados como total, sin desglose por edad';
+
+        const partes = [`${Core.numero(adultos)} adultos`, `${Core.numero(infantes)} infantes`];
+        if (sinDesglose) partes.push(`${Core.numero(sinDesglose)} sin desglose`);
+        return partes.join(' · ');
+    }
+
     function kpi(etiqueta, valor, pie, color, icono) {
         return `
         <div class="col-6 col-lg-3">
@@ -198,28 +289,43 @@
 
     function tablaMensual(filas) {
         if (!filas.length) return vacio('Sin movimientos en el periodo', 'fa-calendar-xmark');
+        // Las columnas van en el mismo orden que el reporte oficial de GAG, y
+        // con los pasajeros separados por llegada y salida: así la tabla se
+        // contrasta renglón por renglón contra el PDF sin tener que sumar nada
+        // a mano.
         const cuerpo = filas.map((f) => `
             <tr>
                 <td>${esc(Core.periodoLargo(f.periodo))}</td>
-                <td class="ag-num">${Core.numero(f.llegadas)}</td>
                 <td class="ag-num">${Core.numero(f.salidas)}</td>
+                <td class="ag-num">${Core.numero(f.llegadas)}</td>
                 <td class="ag-num fw-bold">${Core.numero(f.movimientos)}</td>
-                <td class="ag-num">${Core.numero(f.pax)}</td>
+                <td class="ag-num">${Core.numero(f.pax_salida)}</td>
+                <td class="ag-num">${Core.numero(f.pax_llegada)}</td>
+                <td class="ag-num fw-bold">${Core.numero(f.pax)}</td>
             </tr>`).join('');
         const suma = (campo) => filas.reduce((a, f) => a + (Number(f[campo]) || 0), 0);
         return `
         <div class="table-responsive">
             <table class="table table-sm ag-tabla mb-0">
-                <thead><tr>
-                    <th>Periodo</th><th class="ag-num">Llegadas</th><th class="ag-num">Salidas</th>
-                    <th class="ag-num">Movimientos</th><th class="ag-num">Pax A.G.</th>
-                </tr></thead>
+                <thead>
+                    <tr>
+                        <th rowspan="2">Periodo</th>
+                        <th colspan="3" class="text-center">Operaciones</th>
+                        <th colspan="3" class="text-center">Pasajeros</th>
+                    </tr>
+                    <tr>
+                        <th class="ag-num">Salidas</th><th class="ag-num">Llegadas</th><th class="ag-num">Total</th>
+                        <th class="ag-num">Salida</th><th class="ag-num">Llegada</th><th class="ag-num">Total</th>
+                    </tr>
+                </thead>
                 <tbody>${cuerpo}</tbody>
                 <tfoot><tr class="fw-bold border-top">
                     <td>Total</td>
-                    <td class="ag-num">${Core.numero(suma('llegadas'))}</td>
                     <td class="ag-num">${Core.numero(suma('salidas'))}</td>
+                    <td class="ag-num">${Core.numero(suma('llegadas'))}</td>
                     <td class="ag-num">${Core.numero(suma('movimientos'))}</td>
+                    <td class="ag-num">${Core.numero(suma('pax_salida'))}</td>
+                    <td class="ag-num">${Core.numero(suma('pax_llegada'))}</td>
                     <td class="ag-num">${Core.numero(suma('pax'))}</td>
                 </tr></tfoot>
             </table>
@@ -228,6 +334,21 @@
 
     function plantilla() {
         return `
+        <div class="ag-card mb-3 d-flex flex-wrap align-items-center gap-2 ag-no-print">
+            <div>
+                <div class="fw-bold small">Conteo</div>
+                <div class="text-muted" style="font-size:.72rem" id="ag-res-modo-nota"></div>
+            </div>
+            <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="Forma de contar las operaciones">
+                <button type="button" class="btn btn-outline-info active" id="ag-res-modo-rotacion">
+                    <i class="fas fa-certificate me-1"></i>Oficial (por rotación)
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="ag-res-modo-movimiento">
+                    <i class="fas fa-calendar-day me-1"></i>Por fecha de movimiento
+                </button>
+            </div>
+        </div>
+
         <div class="row g-2 mb-3" id="ag-res-kpis"></div>
 
         <div class="row g-3">
@@ -248,6 +369,16 @@
                         <canvas id="ag-res-mes"></canvas>
                     </div>
                     <div id="ag-res-tabla-mes" hidden></div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="ag-card">
+                    <h6 class="mb-2">Pasajeros por mes</h6>
+                    <div class="ag-chart-box" id="ag-res-caja-pax">
+                        <canvas id="ag-res-pax"></canvas>
+                    </div>
+                    <div class="small text-muted mt-2" id="ag-res-pax-nota"></div>
                 </div>
             </div>
 
@@ -297,8 +428,7 @@
             kpi('Llegadas / Salidas',
                 `${Core.numero(t.llegadas)} / ${Core.numero(t.salidas)}`,
                 `${Core.numero(t.rotaciones)} rotaciones`, VERDE, 'fa-right-left'),
-            kpi('Pasajeros A.G.', Core.numero(t.pax),
-                `${Core.numero(t.adultos)} adultos · ${Core.numero(t.infantes)} infantes`, '#7c3aed', 'fa-users'),
+            kpi('Pasajeros A.G.', Core.numero(t.pax), esc(desglosePax(t)), MORADO, 'fa-users'),
             kpi('Por validar', Core.numero(t.pendientes),
                 `${Core.numero(t.validados)} validados · ${Core.numero(t.observados)} observados`,
                 pendientes ? '#f59e0b' : '#16a34a', 'fa-clipboard-check'),
@@ -312,6 +442,15 @@
 
         serieMensual(panel.querySelector('#ag-res-mes'), porMes);
         panel.querySelector('#ag-res-tabla-mes').innerHTML = tablaMensual(porMes);
+
+        serieMensualPax(panel.querySelector('#ag-res-pax'), porMes);
+        const nota = panel.querySelector('#ag-res-pax-nota');
+        if (nota) {
+            const pax = Number(t.pax) || 0;
+            nota.textContent = pax
+                ? `${Core.numero(pax)} pasajeros en el periodo · ${desglosePax(t)}`
+                : 'Sin pasajeros registrados en el periodo.';
+        }
 
         const serie = (lista) => ({
             etiquetas: (lista || []).map((x) => x.clave),
@@ -374,6 +513,34 @@
         async montar(panel) {
             panel.innerHTML = plantilla();
 
+            const bRot = panel.querySelector('#ag-res-modo-rotacion');
+            const bMov = panel.querySelector('#ag-res-modo-movimiento');
+            const nota = panel.querySelector('#ag-res-modo-nota');
+
+            const describirModo = () => {
+                nota.textContent = modo === 'rotacion'
+                    ? 'Cada salida cuenta en la fecha de su llegada, como el reporte oficial de GAG.'
+                    : 'Cada operación cuenta en la fecha en que ocurrió.';
+                bRot.classList.toggle('active', modo === 'rotacion');
+                bMov.classList.toggle('active', modo !== 'rotacion');
+            };
+
+            const cambiar = async (nuevo) => {
+                if (modo === nuevo) return;
+                modo = nuevo;
+                describirModo();
+                const kpis = panel.querySelector('#ag-res-kpis');
+                kpis.innerHTML = `<div class="col-12">${cargando('Recalculando…')}</div>`;
+                try {
+                    pintar(panel, await Datos.resumen(AG.filtros, modo));
+                } catch (error) {
+                    AG.pintarError(kpis, error);
+                }
+            };
+            bRot.addEventListener('click', () => cambiar('rotacion'));
+            bMov.addEventListener('click', () => cambiar('movimiento'));
+            describirModo();
+
             const caja = panel.querySelector('#ag-res-caja-mes');
             const tabla = panel.querySelector('#ag-res-tabla-mes');
             const bGraf = panel.querySelector('#ag-res-ver-grafica');
@@ -395,7 +562,7 @@
         async refrescar(panel) {
             const kpis = panel.querySelector('#ag-res-kpis');
             kpis.innerHTML = `<div class="col-12">${cargando('Calculando el resumen…')}</div>`;
-            const resumen = await Datos.resumen(AG.filtros);
+            const resumen = await Datos.resumen(AG.filtros, modo);
             pintar(panel, resumen);
         }
     });

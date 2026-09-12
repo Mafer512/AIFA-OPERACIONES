@@ -95,6 +95,15 @@ describe('matrícula', () => {
         expect(Core.normalizarMatricula('NA')).toBe('');
         expect(Core.normalizarMatricula('-')).toBe('');
     });
+
+    test('una "X" sola se toma como celda vacía, no como dato', () => {
+        // En las bitácoras de Excel la X se usa para marcar, no como valor. Se
+        // deja documentado aquí porque es una decisión discutible: si algún día
+        // apareciera un operador o una matrícula que de verdad sea "X", habría
+        // que sacarla de la lista VACIOS.
+        expect(Core.textoONulo('X')).toBeNull();
+        expect(Core.normalizarMatricula('X')).toBe('');
+    });
 });
 
 describe('catálogos con sinónimos', () => {
@@ -285,6 +294,95 @@ describe('payload hacia PostgREST', () => {
         const payload = Core.aPayload(mov, { tipo_fuente: 'IMPORTACION_EXCEL', archivo_origen: 'bitacora.xlsx' });
         expect(payload.tipo_fuente).toBe('IMPORTACION_EXCEL');
         expect(payload.archivo_origen).toBe('bitacora.xlsx');
+    });
+});
+
+describe('las seis columnas que el diccionario no declara', () => {
+    /**
+     * La tabla tiene 43 columnas, no 37. El módulo ignoraba seis, y entre ellas
+     * guardan 5,438 orígenes, 2,669 cuentas de pasajeros y 5,331 horas de
+     * plataforma. Estas pruebas fijan que ya no se pierdan.
+     */
+    test('son escribibles, para poder capturarlas e importarlas', () => {
+        ['ciudad_origen_destino', 'pax_total_reportado', 'hora_aterrizaje',
+         'hora_entrada_posicion', 'hora_salida_posicion', 'hora_despegue']
+            .forEach((campo) => expect(Core.CAMPOS_ESCRIBIBLES).toContain(campo));
+    });
+
+    test('pax_ag suma los TRES sumandos, no sólo adultos e infantes', () => {
+        // Comprobado contra las 10,396 filas del histórico: sin un desajuste.
+        expect(Core.paxTotal({ adultos: 3, infantes: 2, pax_total_reportado: null })).toBe(5);
+        expect(Core.paxTotal({ adultos: null, infantes: null, pax_total_reportado: 15 })).toBe(15);
+        expect(Core.paxTotal({ adultos: 2, infantes: 1, pax_total_reportado: 4 })).toBe(7);
+        expect(Core.paxTotal({})).toBe(0);
+    });
+
+    test('el origen cae en la ciudad cuando no hay código de aeropuerto', () => {
+        // Hasta 2024 se anotó la ciudad; desde 2025, el código.
+        expect(Core.origenDestino({ aeropuerto_origen_destino: 'MMTO', ciudad_origen_destino: null }))
+            .toEqual({ valor: 'MMTO', esCodigo: true });
+        expect(Core.origenDestino({ aeropuerto_origen_destino: null, ciudad_origen_destino: 'BROWARD' }))
+            .toEqual({ valor: 'BROWARD', esCodigo: false });
+        // El código manda cuando están los dos.
+        expect(Core.origenDestino({ aeropuerto_origen_destino: 'MMTO', ciudad_origen_destino: 'TOLUCA' }).valor)
+            .toBe('MMTO');
+        // Las 2 filas del histórico que no tienen ninguno no revientan.
+        expect(Core.origenDestino({}).valor).toBe('');
+    });
+
+    test('la importación las reconoce desde el Excel', () => {
+        const d = Core.detectarColumnas([
+            'No.', 'FECHA', 'TIPO DE OPERACIÓN', 'NACIONAL', 'NOMBRE DEL OPERADOR',
+            'MATRÍCULA', 'TIPO DE AERONAVE', 'DESTINO / ORIGEN', 'CIUDAD',
+            'HR. ATERRIZAJE', 'HR. ENTRADA POSICION', 'HR. SALIDA POSICION', 'HR. DESPEGUE'
+        ]);
+        expect(d.mapa.ciudad_origen_destino).toBe('CIUDAD');
+        expect(d.mapa.hora_aterrizaje).toBe('HR. ATERRIZAJE');
+        expect(d.mapa.hora_entrada_posicion).toBe('HR. ENTRADA POSICION');
+        expect(d.mapa.hora_salida_posicion).toBe('HR. SALIDA POSICION');
+        expect(d.mapa.hora_despegue).toBe('HR. DESPEGUE');
+    });
+
+    test('TOTAL PAX sigue ignorándose: mapearla duplicaría los pasajeros', () => {
+        // pax_ag ya suma pax_total_reportado. Si una columna que en realidad es
+        // el total calculado entrara por ahí, se contaría dos veces.
+        const d = Core.detectarColumnas(['No.', 'FECHA', 'TOTAL PAX', 'PAX. A.G.']);
+        expect(d.mapa.pax_total_reportado).toBeUndefined();
+        expect(d.ignoradas.map((c) => c.titulo)).toContain('TOTAL PAX');
+        expect(d.ignoradas.map((c) => c.titulo)).toContain('PAX. A.G.');
+    });
+
+    test('una fila del Excel las normaliza como el resto', () => {
+        const mapa = Core.detectarColumnas([
+            'No.', 'FECHA', 'TIPO DE OPERACIÓN', 'NACIONAL', 'NOMBRE DEL OPERADOR',
+            'MATRÍCULA', 'TIPO DE AERONAVE', 'CIUDAD', 'HR. ATERRIZAJE', 'PASAJEROS'
+        ]).mapa;
+        const { movimiento, errores } = Core.normalizarFilaExcel({
+            'No.': '7', 'FECHA': '15/03/2026', 'TIPO DE OPERACIÓN': 'llegada',
+            'NACIONAL': 'nal', 'NOMBRE DEL OPERADOR': 'STAM', 'MATRÍCULA': 'xa-a',
+            'TIPO DE AERONAVE': 'g650', 'CIUDAD': ' broward ',
+            'HR. ATERRIZAJE': '19:44', 'PASAJEROS': '15'
+        }, { mapa, filaOrigen: 3 });
+
+        expect(errores).toEqual([]);
+        expect(movimiento.ciudad_origen_destino).toBe('BROWARD');
+        expect(movimiento.hora_aterrizaje).toBe('19:44:00');
+        expect(movimiento.pax_total_reportado).toBe(15);
+        expect(Core.paxTotal(movimiento)).toBe(15);
+    });
+
+    test('viajan en el payload hacia PostgREST', () => {
+        const payload = Core.aPayload({
+            folio_rotacion: 1, fecha_operacion: '2026-03-15', tipo_operacion: 'LLEGADA',
+            ambito_operacion: 'NACIONAL', operador: 'X', matricula: 'XA-A', tipo_aeronave: 'C421',
+            ciudad_origen_destino: 'BROWARD', pax_total_reportado: 15,
+            hora_aterrizaje: '19:44:00', hora_entrada_posicion: '19:48:00',
+            hora_salida_posicion: null, hora_despegue: null
+        });
+        expect(payload.ciudad_origen_destino).toBe('BROWARD');
+        expect(payload.pax_total_reportado).toBe(15);
+        expect(payload.hora_aterrizaje).toBe('19:44:00');
+        expect(payload).not.toHaveProperty('pax_ag');
     });
 });
 
