@@ -21597,22 +21597,38 @@ body.dark-mode .est-cabecera .nav-link:not(.active) .est-ventana-texto small {
 
 /* Aviso mientras se arma el reporte de un área: ocupa el lugar del contenido
    (que se oculta hasta que llegan los datos) con un mensaje y su avance. */
+/* Mientras carga, lo que el área ya tenía queda detrás, difuminado, y el
+   aviso flota encima sin contorno. */
+.est-pane-cargando {
+   position: relative;
+   min-height: 18rem;
+}
+
 .est-pane-cargando > :not(.est-carga) {
-   display: none !important;
+   filter: blur(6px);
+   opacity: .55;
+   pointer-events: none;
+   user-select: none;
 }
 
 .est-carga {
+   position: absolute;
+   top: 2.5rem;
+   left: 50%;
+   z-index: 5;
    display: flex;
    flex-direction: column;
    align-items: center;
    gap: .35rem;
-   max-width: 30rem;
-   margin: 2.5rem auto;
+   width: min(30rem, calc(100% - 2rem));
    padding: 1.75rem 1.5rem;
-   border: 1px solid rgba(14, 55, 99, .1);
+   border: 0;
    border-radius: 1rem;
-   background: #fff;
-   box-shadow: 0 10px 30px -20px rgba(15, 23, 42, .35);
+   background: rgba(255, 255, 255, .72);
+   -webkit-backdrop-filter: blur(14px);
+   backdrop-filter: blur(14px);
+   box-shadow: 0 24px 60px -30px rgba(15, 23, 42, .35);
+   transform: translateX(-50%);
    text-align: center;
 }
 
@@ -21690,8 +21706,7 @@ body.dark-mode .est-cabecera .nav-link:not(.active) .est-ventana-texto small {
 }
 
 body.dark-mode .est-carga {
-   border-color: rgba(255, 255, 255, .1);
-   background: #1e293b;
+   background: rgba(30, 41, 59, .72);
 }
 
 body.dark-mode .est-carga-titulo {
@@ -21704,6 +21719,85 @@ body.dark-mode .est-carga-mensaje {
 
 body.dark-mode .est-carga-barra {
    background: rgba(255, 255, 255, .1);
+}
+
+/* ==========================================================================
+   Estadistica: el lienzo completo en blanco, sin franja gris debajo, y los
+   avisos del periodo al pie de la pagina, en blanco como el fondo.
+   ========================================================================== */
+body.conci-estadistica-workspace {
+   background-color: #fff;
+}
+
+body.dark-mode.conci-estadistica-workspace {
+   background-color: var(--card-bg);
+}
+
+body.conci-estadistica-workspace .conci-workspace-shell {
+   border-color: transparent;
+   box-shadow: none !important;
+}
+
+/* El área llena el alto de la ventana: si el contenido es corto, los
+   avisos quedan abajo del todo y no asoma el fondo. */
+.tab-content > #pane-conci-estadistica.active {
+   display: flex;
+   flex-direction: column;
+   min-height: calc(100vh - 7.75rem);
+}
+
+#pane-conci-estadistica > * {
+   min-width: 0;
+}
+
+#pane-conci-estadistica > #est-subcontent {
+   order: 1;
+}
+
+#pane-conci-estadistica > #est-avisos {
+   order: 2;
+   margin-top: auto;
+   padding-top: 1rem;
+}
+
+.est-aviso {
+   display: flex;
+   align-items: flex-start;
+   gap: .5rem;
+   margin: 0;
+   padding: .3rem 0;
+   background: transparent;
+   color: #475569;
+   font-size: .78rem;
+   line-height: 1.45;
+}
+
+.est-aviso i {
+   margin-top: .15rem;
+}
+
+.est-aviso-aviso i {
+   color: #d97706;
+}
+
+.est-aviso-error {
+   color: #b42318;
+}
+
+.est-aviso-error i {
+   color: #dc2626;
+}
+
+.est-aviso-info i {
+   color: #94a3b8;
+}
+
+body.dark-mode .est-aviso {
+   color: #cbd5e1;
+}
+
+body.dark-mode .est-aviso-error {
+   color: #fca5a5;
 }
 
 /* ==========================================================================

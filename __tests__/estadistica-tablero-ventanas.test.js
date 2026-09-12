@@ -143,8 +143,28 @@ describe('el acomodo pedido', () => {
 });
 
 describe('el aviso de carga', () => {
-  test('mientras carga, el contenido del área se oculta y se ve el aviso', () => {
-    expect(css).toMatch(/\.est-pane-cargando > :not\(\.est-carga\) \{\n\s*display: none !important;/);
+  test('mientras carga, lo que el área tenía queda detrás, difuminado', () => {
+    expect(css).toMatch(/\.est-pane-cargando > :not\(\.est-carga\) \{[^}]*filter: blur\(/);
+    expect(css).not.toMatch(/\.est-pane-cargando > :not\(\.est-carga\) \{\n\s*display: none !important;/);
     expect(css).toMatch(/\.est-carga-relleno \{[^}]*transition: width/);
+  });
+
+  test('el recuadro del aviso no lleva contorno y difumina lo que tiene detrás', () => {
+    const regla = css.match(/\n\.est-carga \{[^}]*\}/)[0];
+    expect(regla).toMatch(/border: 0;/);
+    expect(regla).toMatch(/backdrop-filter: blur\(/);
+  });
+});
+
+describe('el lienzo de Estadística', () => {
+  test('el fondo es blanco y el área llena el alto: no asoma una franja gris', () => {
+    expect(css).toMatch(/body\.conci-estadistica-workspace \{\n\s*background-color: #fff;/);
+    expect(css).toMatch(/\.tab-content > #pane-conci-estadistica\.active \{[^}]*min-height: calc\(100vh/);
+  });
+
+  test('los avisos van al pie de la página, en blanco como el fondo', () => {
+    expect(css).toMatch(/#pane-conci-estadistica > #est-avisos \{[^}]*order: 2;[^}]*margin-top: auto;/);
+    expect(css.match(/\n\.est-aviso \{[^}]*\}/)[0]).toMatch(/background: transparent;/);
+    expect($('est-avisos').classList.contains('mb-3')).toBe(false);
   });
 });

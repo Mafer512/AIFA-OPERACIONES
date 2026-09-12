@@ -362,6 +362,11 @@ devuelve cuántos movimientos hay, entre qué fechas, cuánto está clasificado 
 refrescó, y el panel lo usa para escribir un aviso concreto en lugar de dejar la tabla en
 blanco.
 
+Los avisos del periodo —este, las operaciones sin clasificar, las canceladas y los de
+consistencia— van al **pie de la página**, como texto sobre el fondo blanco: informan sin
+empujar el contenido hacia abajo. Mientras un área carga, lo que ya tenía queda detrás del
+aviso de avance, difuminado.
+
 ---
 
 ## 10 ter. FBO · Aviación General

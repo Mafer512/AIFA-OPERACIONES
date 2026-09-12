@@ -331,6 +331,9 @@ describe('Panel estadístico · áreas', () => {
     const avisos = document.getElementById('est-avisos').textContent;
     expect(avisos).toMatch(/canceladas/i);
     expect(avisos).toMatch(/sin clasificar/i);
+    // Van al pie, como texto sobre el fondo blanco: sin cajas de color.
+    expect(document.querySelector('#est-avisos .alert')).toBeNull();
+    expect(document.querySelectorAll('#est-avisos .est-aviso').length).toBeGreaterThanOrEqual(2);
   });
 
   test('la carga avisa cuando el desglose no está capturado del todo', async () => {
