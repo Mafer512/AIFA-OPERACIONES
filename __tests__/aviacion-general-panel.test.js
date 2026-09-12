@@ -312,33 +312,36 @@ describe('carga perezosa y frescura de los datos', () => {
         expect(kpis).toContain('5,400');   // pax
     });
 
-    test('arranca con el conteo OFICIAL, el del reporte de GAG', async () => {
-        // El reporte oficial ancla cada salida a la fecha de su llegada. Si el
-        // tablero abriera en el otro conteo, la cifra del portal no cuadraría
-        // con la que la Gerencia reporta, que es justo lo que se pidió evitar.
+    test('siempre pide el conteo OFICIAL, y no ofrece ningún otro en pantalla', async () => {
+        // El reporte de GAG es la cifra auténtica. Tener dos conteos a la vista
+        // invitaba a reportar el que no es, así que el módulo enseña uno solo.
         const cliente = montarModulo();
         document.getElementById('aviacion-general-section').classList.add('active');
         await asentar();
         await asentar();
 
-        expect(cliente.llamadas.modos[0]).toBe('rotacion');
-        expect(document.getElementById('ag-res-modo-rotacion').classList.contains('active')).toBe(true);
-        expect(document.getElementById('ag-res-modo-nota').textContent).toMatch(/oficial/i);
+        // El sondeo de instalación llama al RPC sin modo —le da igual, sólo
+        // comprueba que la función responda— y la base resuelve eso al oficial.
+        // Lo que se vigila es que NADA pida el otro conteo.
+        expect(cliente.llamadas.modos).toContain('rotacion');
+        expect(cliente.llamadas.modos).not.toContain('movimiento');
+        expect(document.getElementById('ag-res-modo-rotacion')).toBeNull();
+        expect(document.getElementById('ag-res-modo-movimiento')).toBeNull();
     });
 
-    test('se puede cambiar a la fecha real del movimiento, y vuelve a consultar', async () => {
+    test('sigue pidiendo el conteo oficial al cambiar los filtros', async () => {
         const cliente = montarModulo();
         document.getElementById('aviacion-general-section').classList.add('active');
         await asentar();
         await asentar();
 
-        document.getElementById('ag-res-modo-movimiento').click();
+        document.getElementById('ag-f-matricula').value = 'XA-MAM';
+        document.getElementById('ag-btn-aplicar').click();
         await asentar();
         await asentar();
 
-        expect(cliente.llamadas.modos).toContain('movimiento');
-        expect(document.getElementById('ag-res-modo-movimiento').classList.contains('active')).toBe(true);
-        expect(document.getElementById('ag-res-modo-nota').textContent).toMatch(/en que ocurrió/i);
+        expect(cliente.llamadas.modos.filter((m) => m === 'rotacion').length).toBeGreaterThan(1);
+        expect(cliente.llamadas.modos).not.toContain('movimiento');
     });
 
     test('la tabla mensual separa pasajeros de llegada y de salida, como el reporte', async () => {

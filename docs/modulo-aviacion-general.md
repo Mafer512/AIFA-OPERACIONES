@@ -115,9 +115,15 @@ Verificado contra los datos antes de escribir el SQL: anclando cada salida a su 
 | Llegadas | 229 | 229 ✓ |
 | Salidas | 229 | **228** |
 
-`aviacion_general_resumen(p_filtros, p_modo)` — `p_modo` por omisión es `'rotacion'`, el
-oficial. `'movimiento'` cuenta en la fecha real. El Resumen trae el interruptor; el listado de
-Movimientos siempre muestra la fecha real, porque ahí se consulta el movimiento, no el reporte.
+`aviacion_general_resumen(p_filtros, p_modo)` — `p_modo` por omisión es `'rotacion'`.
+
+**El módulo enseña ese conteo y ningún otro.** Llegó a tener un interruptor en el Resumen para
+ver también la fecha real del movimiento, y se quitó: el reporte de GAG es la cifra auténtica, y
+tener dos conteos a la vista invitaba a reportar el que no es.
+
+El parámetro `'movimiento'` sigue existiendo en la función para quien necesite consultarla
+directamente desde SQL, pero ninguna pantalla lo pide. El listado de Movimientos sí muestra la
+fecha real de cada operación, porque ahí se consulta el movimiento, no el reporte.
 
 La ventana de anclaje es de **60 días** y no es decorativa: el folio de rotación **se reinicia
 cada año** (2022 usaba `202200046`; 2026 usa `977`, `95`), así que sin acotar por fecha una

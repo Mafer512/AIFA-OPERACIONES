@@ -46,14 +46,13 @@
     const graficas = {};
     let ultimoResumen = null;
 
-    // Conteo con el que se pintan las cifras.
+    // Conteo con el que se pintan las cifras: SIEMPRE el oficial.
     //
-    // 'rotacion' es el OFICIAL: el del reporte de GAG, que ancla cada salida a
-    // la fecha de la llegada con la que forma pareja. Arranca en ése porque lo
-    // que el portal debe enseñar de entrada es la cifra que la Gerencia
-    // reporta; 'movimiento' queda a un clic para quien necesite la fecha real
-    // de cada operación.
-    let modo = 'rotacion';
+    // 'rotacion' ancla cada salida a la fecha de la llegada con la que forma
+    // pareja, que es como cuenta el reporte de GAG. Es la cifra auténtica y la
+    // única que este módulo enseña: ofrecer dos conteos en pantalla invitaba a
+    // reportar el que no es.
+    const MODO = 'rotacion';
 
     /**
      * Escribe el valor al final de cada barra.
@@ -334,21 +333,6 @@
 
     function plantilla() {
         return `
-        <div class="ag-card mb-3 d-flex flex-wrap align-items-center gap-2 ag-no-print">
-            <div>
-                <div class="fw-bold small">Conteo</div>
-                <div class="text-muted" style="font-size:.72rem" id="ag-res-modo-nota"></div>
-            </div>
-            <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="Forma de contar las operaciones">
-                <button type="button" class="btn btn-outline-info active" id="ag-res-modo-rotacion">
-                    <i class="fas fa-certificate me-1"></i>Oficial (por rotación)
-                </button>
-                <button type="button" class="btn btn-outline-secondary" id="ag-res-modo-movimiento">
-                    <i class="fas fa-calendar-day me-1"></i>Por fecha de movimiento
-                </button>
-            </div>
-        </div>
-
         <div class="row g-2 mb-3" id="ag-res-kpis"></div>
 
         <div class="row g-3">
@@ -513,34 +497,6 @@
         async montar(panel) {
             panel.innerHTML = plantilla();
 
-            const bRot = panel.querySelector('#ag-res-modo-rotacion');
-            const bMov = panel.querySelector('#ag-res-modo-movimiento');
-            const nota = panel.querySelector('#ag-res-modo-nota');
-
-            const describirModo = () => {
-                nota.textContent = modo === 'rotacion'
-                    ? 'Cada salida cuenta en la fecha de su llegada, como el reporte oficial de GAG.'
-                    : 'Cada operación cuenta en la fecha en que ocurrió.';
-                bRot.classList.toggle('active', modo === 'rotacion');
-                bMov.classList.toggle('active', modo !== 'rotacion');
-            };
-
-            const cambiar = async (nuevo) => {
-                if (modo === nuevo) return;
-                modo = nuevo;
-                describirModo();
-                const kpis = panel.querySelector('#ag-res-kpis');
-                kpis.innerHTML = `<div class="col-12">${cargando('Recalculando…')}</div>`;
-                try {
-                    pintar(panel, await Datos.resumen(AG.filtros, modo));
-                } catch (error) {
-                    AG.pintarError(kpis, error);
-                }
-            };
-            bRot.addEventListener('click', () => cambiar('rotacion'));
-            bMov.addEventListener('click', () => cambiar('movimiento'));
-            describirModo();
-
             const caja = panel.querySelector('#ag-res-caja-mes');
             const tabla = panel.querySelector('#ag-res-tabla-mes');
             const bGraf = panel.querySelector('#ag-res-ver-grafica');
@@ -562,7 +518,7 @@
         async refrescar(panel) {
             const kpis = panel.querySelector('#ag-res-kpis');
             kpis.innerHTML = `<div class="col-12">${cargando('Calculando el resumen…')}</div>`;
-            const resumen = await Datos.resumen(AG.filtros, modo);
+            const resumen = await Datos.resumen(AG.filtros, MODO);
             pintar(panel, resumen);
         }
     });
