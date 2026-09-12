@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20260912-tablero-ventanas-3">
+    <link rel="stylesheet" href="style.css?v=20260912-tablero-ventanas-4">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -23236,8 +23236,13 @@ FF
                                                 </div>
                                             </div>
 
-                                            <!-- Una ventana por área. FBO todavía no muestra nada. -->
+                                            <!-- Una ventana por área. Descargas va primero: en pantalla ancha es la cuadrada
+                                                 de la izquierda y las otras doce van seis y seis. FBO todavía no muestra nada. -->
                                             <div class="est-ventanas">
+                                                <button class="nav-link est-ventana" id="est-tab-descargas" data-bs-toggle="pill" data-bs-target="#est-pane-descargas" type="button" role="tab" data-est-area="descargas">
+                                                    <span class="est-ventana-icono"><i class="fas fa-download"></i></span>
+                                                    <span class="est-ventana-texto"><b>Descargas</b><small>Archivos del periodo</small></span>
+                                                </button>
                                                 <button class="nav-link est-ventana" id="est-tab-explorador" data-bs-toggle="pill" data-bs-target="#est-pane-explorador" type="button" role="tab" data-est-area="explorador">
                                                     <span class="est-ventana-icono"><i class="fas fa-magnifying-glass-chart"></i></span>
                                                     <span class="est-ventana-texto"><b>Explorador</b><small>Consulta libre por dimensiones</small></span>
@@ -23282,10 +23287,6 @@ FF
                                                 <button class="nav-link est-ventana" id="est-tab-clasificacion" data-bs-toggle="pill" data-bs-target="#est-pane-clasificacion" type="button" role="tab" data-est-area="clasificacion">
                                                     <span class="est-ventana-icono"><i class="fas fa-sitemap"></i></span>
                                                     <span class="est-ventana-texto"><b>Clasificación</b><small>Segmento y naturaleza</small></span>
-                                                </button>
-                                                <button class="nav-link est-ventana" id="est-tab-descargas" data-bs-toggle="pill" data-bs-target="#est-pane-descargas" type="button" role="tab" data-est-area="descargas">
-                                                    <span class="est-ventana-icono"><i class="fas fa-download"></i></span>
-                                                    <span class="est-ventana-texto"><b>Descargas</b><small>Archivos del periodo</small></span>
                                                 </button>
                                                 <button class="nav-link est-ventana" id="est-tab-informe" data-bs-toggle="pill" data-bs-target="#est-pane-informe" type="button" role="tab" data-est-area="informe">
                                                     <span class="est-ventana-icono"><i class="fas fa-file-pdf"></i></span>
@@ -39593,7 +39594,7 @@ FF
 <script src="js/estadistico-informe.js?v=20260821-v6" defer></script>
 <!-- Modulo estadistico de operaciones (pestana Estadistica de Conciliacion) -->
 <script src="js/estadistica-motor.js?v=20260908-v1" defer></script>
-<script src="js/estadistica-panel.js?v=20260912-tablero-ventanas-3" defer></script>
+<script src="js/estadistica-panel.js?v=20260912-tablero-ventanas-4" defer></script>
 <script src="js/estadistica-clasificacion.js?v=20260908-v1" defer></script>
 
 <!-- ═══ Aviación General · FBO (GAG · Servicios Conexos) ═══

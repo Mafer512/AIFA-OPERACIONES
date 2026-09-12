@@ -22,8 +22,8 @@ const FILTROS = ['est-f-desde', 'est-f-hasta', 'est-f-preset', 'est-f-aerolinea'
   'est-f-matricula', 'est-f-endpoint', 'est-f-direccion', 'est-f-nacint', 'est-f-segmento', 'est-f-naturaleza',
   'est-f-servicio', 'est-btn-aplicar', 'est-btn-limpiar', 'est-btn-refrescar'];
 
-const VENTANAS = ['explorador', 'operaciones', 'pasajeros', 'aerolineas', 'rutas', 'aeronaves', 'carga', 'fbo',
-  'puntualidad', 'comparador', 'clasificacion', 'descargas', 'informe'];
+const VENTANAS = ['descargas', 'explorador', 'operaciones', 'pasajeros', 'aerolineas', 'rutas', 'aeronaves',
+  'carga', 'fbo', 'puntualidad', 'comparador', 'clasificacion', 'informe'];
 
 beforeAll(() => {
   const inicio = html.indexOf('<div class="tab-pane fade p-4" id="pane-conci-estadistica"');
@@ -62,7 +62,7 @@ describe('la cabecera del módulo', () => {
 });
 
 describe('las ventanas por área', () => {
-  test('van de Explorador a Informe oficial, con FBO después de Carga', () => {
+  test('Descargas primero; luego de Explorador a Informe oficial, con FBO después de Carga', () => {
     const ids = [...document.querySelectorAll('.est-ventanas > .est-ventana')].map(b => b.id);
     expect(ids).toEqual(VENTANAS.map(a => `est-tab-${a}`));
   });
@@ -106,16 +106,16 @@ describe('el estilo', () => {
 });
 
 describe('el acomodo pedido', () => {
-  test('siete ventanas por renglón y el segundo renglón centrado', () => {
-    expect(css).toMatch(/\.est-ventanas \{[^}]*--est-por-renglon: 7;[^}]*justify-content: center;/);
-    expect(css).toContain('flex: 0 0 calc((100% - (var(--est-por-renglon) - 1) * var(--est-separacion)) / var(--est-por-renglon));');
+  test('en pantalla ancha, Descargas cuadrada a la izquierda y dos renglones de seis', () => {
+    expect(css).toMatch(/@media \(min-width: 1200px\) \{\n\s*\.est-ventanas \{[^}]*grid-template-columns: 9\.2rem repeat\(6, minmax\(0, 1fr\)\);/);
+    expect(css).toMatch(/\.est-ventanas > #est-tab-descargas \{[^}]*grid-row: 1 \/ span 2;/);
   });
 
-  test('FBO y Puntualidad abren el segundo renglón: 7 arriba y 6 abajo', () => {
+  test('Descargas va primero y las otras doce quedan seis y seis', () => {
     const ids = [...document.querySelectorAll('.est-ventanas > .est-ventana')].map(b => b.id);
-    expect(ids).toHaveLength(13);
-    expect(ids.indexOf('est-tab-fbo')).toBe(7);
-    expect(ids.indexOf('est-tab-puntualidad')).toBe(8);
+    expect(ids[0]).toBe('est-tab-descargas');
+    expect(ids.slice(1, 7)).toEqual(['explorador', 'operaciones', 'pasajeros', 'aerolineas', 'rutas', 'aeronaves'].map(x => 'est-tab-' + x));
+    expect(ids.slice(7)).toEqual(['carga', 'fbo', 'puntualidad', 'comparador', 'clasificacion', 'informe'].map(x => 'est-tab-' + x));
   });
 
   test('los filtros ceden espacio para caber en un renglón', () => {
@@ -133,5 +133,12 @@ describe('el acomodo pedido', () => {
     const panel = fs.readFileSync(path.join(raiz, 'js', 'estadistica-panel.js'), 'utf8');
     expect(panel).not.toContain("toggle('opacity-50'");
     expect(css).toMatch(/\.est-cabecera \.nav-link\.est-cargando::after \{/);
+  });
+});
+
+describe('el aviso de carga', () => {
+  test('mientras carga, el contenido del área se oculta y se ve el aviso', () => {
+    expect(css).toMatch(/\.est-pane-cargando > :not\(\.est-carga\) \{\n\s*display: none !important;/);
+    expect(css).toMatch(/\.est-carga-relleno \{[^}]*transition: width/);
   });
 });
