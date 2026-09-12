@@ -234,3 +234,10 @@ describe('los controles del Explorador', () => {
     expect(css).toMatch(/\.tb-controles-fila \.form-select \{[^}]*max-width: 13rem;/);
   });
 });
+
+describe('la frase de cada área', () => {
+  test('ocupa todo el ancho, sin tope', () => {
+    expect(css.match(/\n\.fbo-frase \{[^}]*\}/)[0]).not.toMatch(/max-width/);
+    expect(css).toMatch(/\.fbo-cabeza-texto \{[^}]*flex: 1 1 32rem;/);
+  });
+});

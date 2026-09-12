@@ -21823,6 +21823,11 @@ body.dark-mode .est-aviso-error {
    gap: .75rem 1.5rem;
 }
 
+.fbo-cabeza-texto {
+   flex: 1 1 32rem;
+   min-width: 0;
+}
+
 .fbo-titulo {
    margin: 0 0 .3rem;
    font-weight: 800;
@@ -21833,8 +21838,8 @@ body.dark-mode .est-aviso-error {
    color: #0d6efd;
 }
 
+/* La frase ocupa todo el ancho disponible: menos renglones, menos alto. */
 .fbo-frase {
-   max-width: 64rem;
    margin: 0;
    font-size: .92rem;
    line-height: 1.55;
