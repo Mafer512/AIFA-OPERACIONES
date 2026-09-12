@@ -216,3 +216,20 @@ describe('todas las áreas con el diseño de FBO', () => {
     expect(css).toMatch(/#est-pane-informe \.table-responsive \{[^}]*border-radius: \.9rem;/);
   });
 });
+
+describe('los controles del Explorador', () => {
+  test('agrupación, filtro, consultar, CSV y Excel van en un solo renglón', () => {
+    const filas = $('est-pane-explorador').querySelectorAll('.tb-controles .tb-controles-fila');
+    expect(filas).toHaveLength(1);
+    const ids = [...filas[0].querySelectorAll('select, button')].map((el) => el.id);
+    expect(ids).toEqual(['est-exp-dim1', 'est-exp-dim2', 'est-exp-dim3', 'est-exp-filtro-campo', 'est-exp-filtro-valor',
+      'est-exp-consultar', 'est-exp-csv', 'est-exp-excel']);
+    expect(filas[0].querySelector('#est-exp-conteo')).not.toBeNull();
+    expect(filas[0].querySelector('#est-exp-filtro-nota')).not.toBeNull();
+  });
+
+  test('en pantalla ancha la fila no se parte', () => {
+    expect(css).toMatch(/@media \(min-width: 1400px\) \{\s*\.tb-controles-fila \{\s*flex-wrap: nowrap;/);
+    expect(css).toMatch(/\.tb-controles-fila \.form-select \{[^}]*max-width: 13rem;/);
+  });
+});

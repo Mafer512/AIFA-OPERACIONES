@@ -22370,6 +22370,56 @@ body.dark-mode .fbo-sin-dato {
 .tb-controles .form-label {
    font-weight: 600;
    color: #475569;
+   white-space: nowrap;
+}
+
+/* Explorador: agrupación, filtro, consultar y exportar en un solo renglón.
+   Las listas ceden ancho para caber; en pantallas angostas la fila puede
+   bajar a un segundo renglón antes que desbordarse. */
+.tb-controles-fila {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: flex-end;
+   gap: .5rem;
+}
+
+.tb-controles-fila > div {
+   min-width: 0;
+}
+
+.tb-controles-fila .form-select {
+   width: auto;
+   max-width: 13rem;
+}
+
+.tb-controles-fila > .btn,
+.tb-controles-conteo {
+   flex: 0 0 auto;
+   white-space: nowrap;
+}
+
+/* Conteo, CSV y Excel viajan juntos y pegados a la derecha. */
+.tb-controles-exportar {
+   display: flex;
+   flex: 0 0 auto;
+   align-items: center;
+   gap: .5rem;
+   margin-left: auto;
+}
+
+.tb-controles-exportar .btn {
+   white-space: nowrap;
+}
+
+.tb-controles-conteo {
+   align-self: center;
+   font-size: .75rem;
+}
+
+@media (min-width: 1400px) {
+   .tb-controles-fila {
+      flex-wrap: nowrap;
+   }
 }
 
 .tb-tabla {
