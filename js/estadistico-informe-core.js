@@ -230,6 +230,60 @@
         return aggregated;
     }
 
+    // Aviación General desde el directorio de la Gerencia de Aviación General
+    // (aviacion_general_operaciones), la misma fuente del tablero FBO:
+    // aviacion_general_resumen().por_mes trae movimientos y pasajeros por mes.
+    // Cuando llega, reemplaza a monthly_operations en TODOS los meses (un mes
+    // sin movimientos en el directorio vale cero) y se rehacen los totales por
+    // año de General a partir de sus meses. Sin datos no toca nada.
+    function aplicarAviacionGeneral(aggregated, porMes) {
+        const filas = (porMes || []).filter(f => Number.isInteger(Number(f?.anio)) && Number.isInteger(Number(f?.mes)));
+        if (!aggregated || !filas.length) return false;
+        aggregated.porAnioMes.forEach(entry => { entry.general = emptyCounters(); });
+        filas.forEach(f => {
+            const anio = Number(f.anio);
+            const key = `${anio}-${Number(f.mes)}`;
+            if (!aggregated.porAnioMes.has(key)) {
+                aggregated.porAnioMes.set(key, { comercial: emptyCounters(), general: emptyCounters(), carga: emptyCounters() });
+            }
+            const general = emptyCounters();
+            general.ops = toNumber(f.movimientos);
+            general.pax = toNumber(f.pax);
+            general.opsLlegada = toNumber(f.llegadas);
+            general.opsSalida = toNumber(f.salidas);
+            aggregated.porAnioMes.get(key).general = general;
+            aggregated.anios.push(anio);
+        });
+        aggregated.porAnio.forEach(total => { total.general = emptyCounters(); });
+        aggregated.porAnioMes.forEach((entry, key) => {
+            const anio = Number(String(key).split('-')[0]);
+            if (!Number.isInteger(anio)) return;
+            if (!aggregated.porAnio.has(anio)) {
+                aggregated.porAnio.set(anio, { comercial: emptyCounters(), general: emptyCounters(), carga: emptyCounters() });
+            }
+            const total = aggregated.porAnio.get(anio);
+            if (!total.general) total.general = emptyCounters();
+            CAMPOS_CONTADOR.forEach(campo => { total.general[campo] += entry.general?.[campo] || 0; });
+        });
+        aggregated.anios = [...new Set(aggregated.anios)].sort((a, b) => a - b);
+        aggregated.fuenteGeneral = 'aviacion_general_operaciones';
+        return true;
+    }
+
+    // Cifras de General de un día (o rango) a partir de los totales que
+    // devuelve aviacion_general_resumen con fecha_desde/fecha_hasta.
+    function contadorAviacionGeneral(totales) {
+        if (!totales || typeof totales !== 'object') return null;
+        const c = emptyCounters();
+        c.ops = toNumber(totales.movimientos);
+        c.pax = toNumber(totales.pax);
+        c.opsLlegada = toNumber(totales.llegadas);
+        c.opsSalida = toNumber(totales.salidas);
+        c.opsNacional = toNumber(totales.nacionales);
+        c.opsInternacional = toNumber(totales.internacionales);
+        return c;
+    }
+
     function sumTipo(entries, tipo) {
         return entries.reduce((acc, entry) => {
             const counters = entry?.[tipo];
@@ -690,6 +744,8 @@
         toNumber,
         aggregateResumen,
         mergeOficiales,
+        aplicarAviacionGeneral,
+        contadorAviacionGeneral,
         buildAcumulado,
         yearTotals,
         monthTotals,
