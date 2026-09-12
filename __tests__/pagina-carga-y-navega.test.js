@@ -234,6 +234,37 @@ describe('Conciliación · el modo hoja de cálculo se apaga fuera de sus pesta�
     await mostrarPestana('tab-conci-estadistica');
     expect(win.document.body.classList.contains('conci-manifest-workspace')).toBe(false);
   });
+
+  // Estadística va a pantalla completa como Manifiestos —sin encabezado, con el
+  // menú de Conciliación hasta arriba— pero con su propio modo, que no fija la
+  // altura: así no se repite el tablero cortado que se reportó.
+  test('Estadística enciende su pantalla completa y Manifiestos la apaga', async () => {
+    const body = win.document.body;
+    await mostrarPestana('tab-conci-estadistica');
+    expect(body.classList.contains('conci-estadistica-workspace')).toBe(true);
+    await mostrarPestana('tab-conci-comercial');
+    expect(body.classList.contains('conci-estadistica-workspace')).toBe(false);
+    expect(body.classList.contains('conci-manifest-workspace')).toBe(true);
+    await mostrarPestana('tab-conci-estadistica');
+    expect(body.classList.contains('conci-estadistica-workspace')).toBe(true);
+  });
+
+  test('su pantalla completa esconde el encabezado pero no bloquea el scroll', () => {
+    const css = fs.readFileSync(path.join(raiz, 'style.css'), 'utf8').replace(/\r\n/g, '\n');
+    const reglas = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(([, selector]) => selector.includes('body.conci-estadistica-workspace'));
+    const oculta = reglas.find(([, selector]) => /body\.conci-estadistica-workspace \.header\b/.test(selector));
+    expect(oculta && oculta[2]).toMatch(/display:\s*none\s*!important/);
+    for (const [, , cuerpo] of reglas) {
+      expect(cuerpo).not.toMatch(/height:\s*100vh/);
+      expect(cuerpo).not.toMatch(/overflow:\s*hidden/);
+    }
+  });
+
+  test('el botón Menú de Conciliación la apaga', () => {
+    win.conciReturnToMainMenu();
+    expect(win.document.body.classList.contains('conci-estadistica-workspace')).toBe(false);
+  });
 });
 
 describe('cada entrada del menú abre lo que dice', () => {
