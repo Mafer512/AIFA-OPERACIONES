@@ -21595,18 +21595,17 @@ body.dark-mode .est-cabecera .nav-link:not(.active) .est-ventana-texto small {
    }
 }
 
-/* Aviso mientras se arma el reporte de un área: ocupa el lugar del contenido
-   (que se oculta hasta que llegan los datos) con un mensaje y su avance. */
-/* Mientras carga, lo que el área ya tenía queda detrás, difuminado, y el
-   aviso flota encima sin contorno. */
+/* Mientras carga, el contenido queda difuminado sobre un fondo blanco.
+   El aviso y su avance flotan encima sin tarjeta, contorno ni sombra. */
 .est-pane-cargando {
    position: relative;
    min-height: 18rem;
+   background: #fff;
 }
 
 .est-pane-cargando > :not(.est-carga) {
    filter: blur(6px);
-   opacity: .55;
+   opacity: .35;
    pointer-events: none;
    user-select: none;
 }
@@ -21623,11 +21622,9 @@ body.dark-mode .est-cabecera .nav-link:not(.active) .est-ventana-texto small {
    width: min(30rem, calc(100% - 2rem));
    padding: 1.75rem 1.5rem;
    border: 0;
-   border-radius: 1rem;
-   background: rgba(255, 255, 255, .72);
-   -webkit-backdrop-filter: blur(14px);
-   backdrop-filter: blur(14px);
-   box-shadow: 0 24px 60px -30px rgba(15, 23, 42, .35);
+   border-radius: 0;
+   background: transparent;
+   box-shadow: none;
    transform: translateX(-50%);
    text-align: center;
 }
@@ -21705,8 +21702,8 @@ body.dark-mode .est-cabecera .nav-link:not(.active) .est-ventana-texto small {
    }
 }
 
-body.dark-mode .est-carga {
-   background: rgba(30, 41, 59, .72);
+body.dark-mode .est-pane-cargando {
+   background: var(--card-bg);
 }
 
 body.dark-mode .est-carga-titulo {
