@@ -1817,6 +1817,10 @@ FF
                         <i class="fas fa-plane-departure si-ico"></i>
                         <span class="si-txt">Conciliación</span>
                     </a>
+                    <a class="menu-item si-link si-quick si-quick--agen" href="#" data-section="aviacion-general">
+                        <i class="fas fa-paper-plane si-ico"></i>
+                        <span class="si-txt">Aviación General · FBO</span>
+                    </a>
                     <a class="menu-item si-link si-quick si-quick--punc" href="#" data-section="puntualidad-agosto" style="display:none;" aria-hidden="true">
                         <i class="fas fa-stopwatch si-ico"></i>
                         <span class="si-txt">Puntualidad</span>
@@ -23681,6 +23685,23 @@ FF
                     </div><!-- /card -->
                 </div><!-- /conciliacion-section -->
 
+                <!-- ═══ Aviación General · FBO (GAG · Servicios Conexos) ═══
+                     Sección hermana de Conciliación: captura y resguardo del
+                     histórico de movimientos de aviación general.
+
+                     El contenedor va VACÍO a propósito. Toda la interfaz la
+                     inyecta js/aviacion-general/panel.js la primera vez que se
+                     entra a la sección, y las pantallas viven cada una en su
+                     archivo (vista-*.js). Así este documento no crece con cada
+                     pestaña nueva del módulo y agregar una no obliga a tocar
+                     index.html.
+
+                     No confundir con #aviacion-general-fbo-section, que es la
+                     página informativa de la terminal (infraestructura, video,
+                     posiciones) y no se toca desde aquí. -->
+                <div id="aviacion-general-section" class="content-section"></div>
+                <!-- /aviacion-general-section -->
+
                 <!-- ═══ Reportes (Carga / Pasajeros) ═══
                      Página propia, hermana de Conciliación y no una vista dentro de
                      ella: al abrirla desaparecen las pestañas de Conciliación
@@ -39557,6 +39578,26 @@ FF
 <script src="js/estadistica-motor.js?v=20260908-v1" defer></script>
 <script src="js/estadistica-panel.js?v=20260908-v1" defer></script>
 <script src="js/estadistica-clasificacion.js?v=20260908-v1" defer></script>
+
+<!-- ═══ Aviación General · FBO (GAG · Servicios Conexos) ═══
+     Orden obligatorio: núcleo → datos → panel → pantallas.
+       core.js   no depende de nada (se puede probar en Node);
+       datos.js  es el único que habla con Supabase;
+       panel.js  arma la sección y publica window.AviacionGeneral;
+       vista-*   se registran solas en ese panel — agregar una pantalla es
+                 agregar un archivo aquí, sin tocar nada más del documento.
+     Todos con defer: se ejecutan en este orden, ya con el DOM listo. -->
+<link rel="stylesheet" href="js/aviacion-general/aviacion-general.css?v=20260911-v1">
+<script src="js/aviacion-general/core.js?v=20260911-v1" defer></script>
+<script src="js/aviacion-general/datos.js?v=20260911-v1" defer></script>
+<script src="js/aviacion-general/panel.js?v=20260911-v1" defer></script>
+<script src="js/aviacion-general/vista-resumen.js?v=20260911-v1" defer></script>
+<script src="js/aviacion-general/vista-movimientos.js?v=20260911-v1" defer></script>
+<script src="js/aviacion-general/vista-captura.js?v=20260911-v1" defer></script>
+<script src="js/aviacion-general/vista-importacion.js?v=20260911-v1" defer></script>
+<script src="js/aviacion-general/vista-validacion.js?v=20260911-v1" defer></script>
+<script src="js/aviacion-general/vista-auditoria.js?v=20260911-v1" defer></script>
+
 <!-- Navegación inline del picker de fecha en Itinerario -->
 <script>
 (function () {

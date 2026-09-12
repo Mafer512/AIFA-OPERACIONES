@@ -1,0 +1,365 @@
+/* Estilos del módulo de Aviación General / FBO.
+ *
+ * TODO lo de aquí está bajo #aviacion-general-section. Ni una regla escapa a
+ * ese prefijo: el portal comparte una hoja de 600 KB entre decenas de módulos y
+ * un selector suelto como `.tabla th` se cobra la factura en otra pantalla, dos
+ * meses después, sin que nadie relacione una cosa con la otra.
+ *
+ * La paleta se apoya en las variables de Bootstrap que ya usa el resto del
+ * tablero. El acento cian es el mismo de la página informativa del FBO, para
+ * que se lean como dos caras del mismo módulo.
+ */
+
+#aviacion-general-section {
+    --ag-accent: #0ea5e9;
+    --ag-accent-dark: #0369a1;
+    --ag-ink: #0f172a;
+    --ag-muted: #64748b;
+    --ag-line: #e2e8f0;
+    --ag-bg: #f8fafc;
+}
+
+/* ── Encabezado ─────────────────────────────────────────────────────────── */
+
+#aviacion-general-section .ag-header {
+    background: linear-gradient(135deg, #0c4a6e 0%, #075985 55%, #0e7490 100%);
+    color: #fff;
+    border-radius: 1rem;
+    padding: 1.15rem 1.35rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 18px 38px -22px rgba(8, 47, 73, .85);
+}
+
+#aviacion-general-section .ag-header h2 {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: -.01em;
+    margin: 0;
+}
+
+#aviacion-general-section .ag-header .ag-eyebrow {
+    font-size: .68rem;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: #7dd3fc;
+}
+
+#aviacion-general-section .ag-header .ag-sub {
+    font-size: .82rem;
+    color: rgba(255, 255, 255, .78);
+    margin: .15rem 0 0;
+}
+
+#aviacion-general-section .ag-nivel {
+    font-size: .68rem;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    background: rgba(255, 255, 255, .16);
+    border: 1px solid rgba(255, 255, 255, .28);
+    color: #fff;
+    border-radius: 999px;
+    padding: .28rem .7rem;
+}
+
+/* ── Barra de filtros ───────────────────────────────────────────────────── */
+
+#aviacion-general-section .ag-filtros {
+    background: #fff;
+    border: 1px solid var(--ag-line);
+    border-radius: .85rem;
+    padding: .85rem;
+    margin-bottom: .9rem;
+}
+
+#aviacion-general-section .ag-filtros label {
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ag-muted);
+    margin-bottom: .15rem;
+}
+
+#aviacion-general-section .ag-filtros .form-control,
+#aviacion-general-section .ag-filtros .form-select {
+    font-size: .85rem;
+}
+
+#aviacion-general-section .ag-chip-filtro {
+    font-size: .72rem;
+    font-weight: 600;
+    background: #e0f2fe;
+    color: var(--ag-accent-dark);
+    border: 1px solid #bae6fd;
+    border-radius: 999px;
+    padding: .16rem .6rem;
+}
+
+/* ── Tarjetas de cifras ─────────────────────────────────────────────────── */
+
+#aviacion-general-section .ag-kpi {
+    background: #fff;
+    border: 1px solid var(--ag-line);
+    border-left: 4px solid var(--c, var(--ag-accent));
+    border-radius: .75rem;
+    padding: .8rem .9rem;
+    height: 100%;
+}
+
+#aviacion-general-section .ag-kpi .ag-kpi-lbl {
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ag-muted);
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+}
+
+#aviacion-general-section .ag-kpi .ag-kpi-val {
+    font-size: 1.55rem;
+    font-weight: 800;
+    color: var(--ag-ink);
+    line-height: 1.15;
+    margin-top: .12rem;
+}
+
+#aviacion-general-section .ag-kpi .ag-kpi-pie {
+    font-size: .72rem;
+    color: var(--ag-muted);
+}
+
+/* ── Tablas ─────────────────────────────────────────────────────────────── */
+
+#aviacion-general-section .ag-tabla-wrap {
+    background: #fff;
+    border: 1px solid var(--ag-line);
+    border-radius: .85rem;
+    overflow: auto;
+    max-height: 62vh;
+}
+
+#aviacion-general-section .ag-tabla {
+    font-size: .82rem;
+    margin: 0;
+    white-space: nowrap;
+}
+
+#aviacion-general-section .ag-tabla thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f1f5f9;
+    border-bottom: 2px solid var(--ag-line);
+    font-size: .68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #475569;
+    padding: .55rem .6rem;
+    vertical-align: middle;
+}
+
+#aviacion-general-section .ag-tabla tbody td {
+    padding: .4rem .6rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+#aviacion-general-section .ag-tabla tbody tr:hover { background: #f0f9ff; }
+
+/* Una fila anulada se ve anulada. Si sólo lo dijera una etiqueta al final de
+   la fila, nadie la leería al revisar cien renglones. */
+#aviacion-general-section .ag-tabla tbody tr.ag-anulada td {
+    opacity: .55;
+    text-decoration: line-through;
+    text-decoration-color: rgba(220, 53, 69, .5);
+}
+
+#aviacion-general-section .ag-tabla .ag-num { text-align: right; font-variant-numeric: tabular-nums; }
+#aviacion-general-section .ag-tabla .ag-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* ── Distintivos de estado ──────────────────────────────────────────────── */
+
+#aviacion-general-section .ag-badge {
+    font-size: .66rem;
+    font-weight: 800;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    border-radius: 999px;
+    padding: .18rem .5rem;
+    display: inline-block;
+    line-height: 1.25;
+}
+
+#aviacion-general-section .ag-badge--llegada { background: #dcfce7; color: #166534; }
+#aviacion-general-section .ag-badge--salida  { background: #dbeafe; color: #1e40af; }
+#aviacion-general-section .ag-badge--nal     { background: #f1f5f9; color: #334155; }
+#aviacion-general-section .ag-badge--int     { background: #fef3c7; color: #92400e; }
+#aviacion-general-section .ag-badge--pend    { background: #fef3c7; color: #92400e; }
+#aviacion-general-section .ag-badge--val     { background: #dcfce7; color: #166534; }
+#aviacion-general-section .ag-badge--obs     { background: #fee2e2; color: #991b1b; }
+#aviacion-general-section .ag-badge--anulado { background: #fee2e2; color: #991b1b; }
+
+/* ── Pestañas ───────────────────────────────────────────────────────────── */
+
+#aviacion-general-section .ag-tabs {
+    border-bottom: 2px solid var(--ag-line);
+    gap: .15rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+}
+
+#aviacion-general-section .ag-tabs .nav-link {
+    border: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: .5rem .5rem 0 0;
+    color: var(--ag-muted);
+    font-size: .84rem;
+    font-weight: 700;
+    padding: .55rem .9rem;
+    white-space: nowrap;
+}
+
+#aviacion-general-section .ag-tabs .nav-link:hover { color: var(--ag-accent-dark); background: #f0f9ff; }
+
+#aviacion-general-section .ag-tabs .nav-link.active {
+    color: var(--ag-accent-dark);
+    border-bottom-color: var(--ag-accent);
+    background: transparent;
+}
+
+#aviacion-general-section .ag-tabs .nav-link .badge {
+    font-size: .62rem;
+    vertical-align: middle;
+}
+
+/* ── Gráficas ───────────────────────────────────────────────────────────── */
+
+#aviacion-general-section .ag-card {
+    background: #fff;
+    border: 1px solid var(--ag-line);
+    border-radius: .85rem;
+    padding: .9rem;
+    height: 100%;
+}
+
+#aviacion-general-section .ag-card h6 {
+    font-size: .78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: #475569;
+    margin-bottom: .6rem;
+}
+
+/* El alto fijo evita el bucle en el que Chart.js crece un poco en cada
+   redibujado hasta empujar la página entera hacia abajo. */
+#aviacion-general-section .ag-chart-box { position: relative; height: 260px; }
+#aviacion-general-section .ag-chart-box--alto { height: 320px; }
+
+/* ── Importación ────────────────────────────────────────────────────────── */
+
+#aviacion-general-section .ag-dropzone {
+    border: 2px dashed #bae6fd;
+    border-radius: 1rem;
+    background: #f0f9ff;
+    padding: 2rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+}
+
+#aviacion-general-section .ag-dropzone:hover,
+#aviacion-general-section .ag-dropzone.ag-drag {
+    background: #e0f2fe;
+    border-color: var(--ag-accent);
+}
+
+#aviacion-general-section .ag-dropzone i { font-size: 2.2rem; color: var(--ag-accent); }
+
+#aviacion-general-section .ag-mapeo {
+    font-size: .78rem;
+    border: 1px solid var(--ag-line);
+    border-radius: .6rem;
+    padding: .6rem .75rem;
+    background: #fff;
+}
+
+#aviacion-general-section .ag-mapeo .ag-map-fila {
+    display: flex;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .18rem 0;
+    border-bottom: 1px dashed #f1f5f9;
+}
+
+#aviacion-general-section .ag-mapeo .ag-map-fila:last-child { border-bottom: 0; }
+
+/* ── Auditoría ──────────────────────────────────────────────────────────── */
+
+#aviacion-general-section .ag-aud-item {
+    border-left: 3px solid var(--ag-line);
+    padding: .5rem 0 .5rem .85rem;
+    margin-left: .4rem;
+    position: relative;
+}
+
+#aviacion-general-section .ag-aud-item::before {
+    content: '';
+    position: absolute;
+    left: -6px;
+    top: .85rem;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--ag-accent);
+    border: 2px solid #fff;
+}
+
+#aviacion-general-section .ag-aud-item.ag-aud--insert::before { background: #22c55e; }
+#aviacion-general-section .ag-aud-item.ag-aud--update::before { background: #f59e0b; }
+#aviacion-general-section .ag-aud-item.ag-aud--delete::before { background: #ef4444; }
+
+#aviacion-general-section .ag-aud-diff {
+    font-size: .74rem;
+    background: #f8fafc;
+    border: 1px solid var(--ag-line);
+    border-radius: .5rem;
+    padding: .4rem .55rem;
+    margin-top: .35rem;
+}
+
+#aviacion-general-section .ag-aud-diff .ag-de { color: #991b1b; text-decoration: line-through; }
+#aviacion-general-section .ag-aud-diff .ag-a  { color: #166534; font-weight: 700; }
+
+/* ── Estados vacíos y avisos ────────────────────────────────────────────── */
+
+#aviacion-general-section .ag-vacio {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--ag-muted);
+}
+
+#aviacion-general-section .ag-vacio i { font-size: 2.4rem; opacity: .35; display: block; margin-bottom: .6rem; }
+
+/* ── Responsivo ─────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+    #aviacion-general-section .ag-header { padding: .9rem 1rem; border-radius: .75rem; }
+    #aviacion-general-section .ag-header h2 { font-size: 1.05rem; }
+    #aviacion-general-section .ag-tabla-wrap { max-height: 55vh; }
+    #aviacion-general-section .ag-chart-box { height: 220px; }
+}
+
+/* ── Impresión ──────────────────────────────────────────────────────────── */
+
+@media print {
+    #aviacion-general-section .ag-filtros,
+    #aviacion-general-section .ag-tabs,
+    #aviacion-general-section .ag-no-print { display: none !important; }
+    #aviacion-general-section .ag-tabla-wrap { max-height: none; overflow: visible; border: 0; }
+}

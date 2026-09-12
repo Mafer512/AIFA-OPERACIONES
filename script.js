@@ -32274,6 +32274,7 @@ async function _conciSaveBulkEdits() {
         { key: 'parte-operaciones',    label: 'Parte de Operaciones',    icon: 'file-invoice',      group: 'Operaciones' },
         { key: 'analisis-operaciones', label: 'Análisis de Operaciones', icon: 'chart-pie',         group: 'Operaciones' },
         { key: 'conciliacion',         label: 'Conciliación',            icon: 'tasks',             group: 'Operaciones' },
+        { key: 'aviacion-general',     label: 'Aviación General · FBO',  icon: 'paper-plane',       group: 'Operaciones' },
         { key: 'puntualidad-agosto',   label: 'Puntualidad',             icon: 'clock',             group: 'Operaciones' },
         { key: 'demoras',              label: 'Demoras',                 icon: 'clock',             group: 'Operaciones' },
         { key: 'aerolineas',           label: 'Aerolíneas',              icon: 'plane',             group: 'Módulos' },
@@ -32366,7 +32367,7 @@ async function _conciSaveBulkEdits() {
             desc: 'GAG · GC · GCOMB',
             icon: 'truck-loading',
             color: '#fd7e14',
-            sections: ['aviacion-general-fbo', 'combustibles', 'capacidad-carga']
+            sections: ['aviacion-general-fbo', 'aviacion-general', 'combustibles', 'capacidad-carga']
         },
         {
             key: 'SI',
