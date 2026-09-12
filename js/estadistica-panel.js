@@ -267,16 +267,30 @@
         state.graficas[idCanvas] = new window.Chart(canvas, config);
     }
 
-    const opcionesGrafica = (extra) => Object.assign({
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-            legend: { position: 'bottom' },
-            datalabels: { display: false }
-        },
-        scales: { y: { beginAtZero: true } }
-    }, extra || {});
+    // Opciones comunes de las gráficas, con los colores del tema: el gris por
+    // omisión de Chart.js casi no se lee sobre el fondo oscuro. Cada eje y la
+    // leyenda toman el color del texto salvo que la gráfica diga otro.
+    function opcionesGrafica(extra) {
+        const tema = fboTema();
+        const opciones = Object.assign({
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom' },
+                datalabels: { display: false }
+            },
+            scales: { y: { beginAtZero: true } }
+        }, extra || {});
+        const leyenda = opciones.plugins && opciones.plugins.legend;
+        if (leyenda && !leyenda.labels) leyenda.labels = { color: tema.texto };
+        Object.values(opciones.scales || {}).forEach((eje) => {
+            eje.ticks = Object.assign({ color: tema.texto }, eje.ticks || {});
+            eje.grid = Object.assign({ color: tema.rejilla }, eje.grid || {});
+            if (eje.title && !eje.title.color) eje.title.color = tema.texto;
+        });
+        return opciones;
+    }
 
     // ── Filtros ──────────────────────────────────────────────────────────────
     function rangoDePreset(preset) {
@@ -442,6 +456,167 @@
         ? 'No cuentan en ninguna métrica'
         : 'Sin cancelaciones en el periodo';
 
+    // ── Tablero: el diseño de FBO en todas las áreas ─────────────────────────
+    // Cada área abre con una frase que cuenta el periodo, tarjetas con icono y
+    // variación, barras de composición, tendencias con su promedio y rankings
+    // horizontales con el valor al final de la barra. Todo se arma con lo que
+    // ya devolvió el servidor: aquí sólo se reparten proporciones y se escribe.
+    const negrita = (texto) => `<b>${esc(texto)}</b>`;
+    const periodoTexto = () => `Del ${fboFecha(desde())} al ${fboFecha(hasta())}`;
+
+    function pintarFrase(id, html) {
+        const el = $(id);
+        if (el) el.innerHTML = html;
+    }
+
+    function pintarComposicion(id, barras) {
+        const el = $(id);
+        if (!el) return;
+        el.innerHTML = barras.filter(Boolean).join('')
+            || '<p class="text-muted small mb-0">Sin datos que repartir en el periodo.</p>';
+    }
+
+    // Cómo cambió algo contra el mismo periodo del año anterior, en palabras.
+    function cambioTexto(variacion, sujeto) {
+        if (!variacion || variacion.estado !== 'ok') return '';
+        const p = variacion.porcentual;
+        if (p === 0) return ` Contra el mismo periodo del año anterior, ${sujeto} quedaron igual.`;
+        return ` Contra el mismo periodo del año anterior, ${sujeto} ${p > 0 ? 'crecieron' : 'bajaron'} ${Motor.fmtPorcentaje(Math.abs(p), 1)}.`;
+    }
+
+    // Escribe el valor al final de cada barra horizontal, con el formato del área.
+    function etiquetasDeBarra(formato) {
+        return {
+            id: 'tbEtiquetas',
+            afterDatasetsDraw(chart) {
+                const meta = chart.getDatasetMeta(0);
+                if (!meta || !meta.data) return;
+                const { ctx } = chart;
+                ctx.save();
+                ctx.font = '600 11px system-ui, -apple-system, "Segoe UI", sans-serif';
+                ctx.fillStyle = fboTema().valor;
+                ctx.textBaseline = 'middle';
+                meta.data.forEach((barra, i) => {
+                    ctx.fillText(formato(chart.data.datasets[0].data[i]), barra.x + 6, barra.y);
+                });
+                ctx.restore();
+            }
+        };
+    }
+
+    // Ranking horizontal con los primeros de una lista ya ordenada.
+    function pintarRanking(idCanvas, filas, opciones) {
+        const o = Object.assign({
+            limite: 10,
+            color: COLORES[0],
+            serie: 'Operaciones',
+            etiqueta: (f) => f.d1,
+            valor: (f) => f.operaciones,
+            formato: (v) => Motor.fmtEntero(v)
+        }, opciones || {});
+        const lista = (filas || []).slice(0, o.limite);
+        const canvas = $(idCanvas);
+        if (canvas && canvas.parentElement) canvas.parentElement.style.height = `${Math.max(9, lista.length * 1.9 + 2.5)}rem`;
+        pintarGrafica(idCanvas, {
+            type: 'bar',
+            data: {
+                labels: lista.map((f) => String(o.etiqueta(f) ?? '—')),
+                datasets: [{
+                    label: o.serie,
+                    data: lista.map((f) => Motor.toNumero(o.valor(f)) ?? 0),
+                    backgroundColor: o.color,
+                    borderRadius: 6,
+                    maxBarThickness: 22
+                }]
+            },
+            options: opcionesGrafica({
+                indexAxis: 'y',
+                interaction: { mode: 'nearest', axis: 'y', intersect: false },
+                layout: { padding: { right: 64 } },
+                plugins: {
+                    legend: { display: false },
+                    datalabels: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => (o.globo ? o.globo(lista[ctx.dataIndex] || {}) : `${o.serie}: ${o.formato(ctx.parsed.x)}`)
+                        }
+                    }
+                },
+                scales: {
+                    x: Object.assign({ beginAtZero: true }, o.maximo ? { suggestedMax: o.maximo } : {}),
+                    y: {
+                        grid: { display: false },
+                        // Los nombres largos se abrevian en el eje; completos, en el globo.
+                        ticks: {
+                            callback(valor) {
+                                const ancho = (this.chart && this.chart.width) || 600;
+                                const cabe = Math.max(10, Math.min(24, Math.floor(ancho / 24)));
+                                const texto = String(this.getLabelForValue(valor));
+                                return texto.length > cabe ? `${texto.slice(0, cabe - 1)}…` : texto;
+                            }
+                        }
+                    }
+                }
+            }),
+            plugins: [etiquetasDeBarra(o.formato)]
+        });
+    }
+
+    // Tendencia mensual: barras apiladas por serie y la línea punteada del
+    // promedio del periodo, que se saca aquí sólo para dibujarla. El total del
+    // globo es el que mandó el servidor, no una suma de las barras.
+    function pintarTendencia(idCanvas, mensual, series, opciones) {
+        const o = opciones || {};
+        const formato = o.formato || ((v) => Motor.fmtEntero(v));
+        const canvas = $(idCanvas);
+        if (canvas && canvas.parentElement) canvas.parentElement.style.height = '';
+        const totales = mensual.map((f) => Motor.toNumero(o.total(f)) || 0);
+        const promedio = totales.length ? totales.reduce((a, v) => a + v, 0) / totales.length : 0;
+        pintarGrafica(idCanvas, {
+            type: 'bar',
+            data: {
+                labels: mensual.map((f) => fboMes(f.d1)),
+                datasets: series.map((s) => ({
+                    type: 'bar',
+                    label: s.etiqueta,
+                    data: mensual.map((f) => Motor.toNumero(s.valor(f)) ?? 0),
+                    backgroundColor: s.color,
+                    borderRadius: 4,
+                    maxBarThickness: 56,
+                    stack: 'mes'
+                })).concat([{
+                    type: 'line',
+                    label: `Promedio mensual: ${formato(promedio)}`,
+                    data: totales.map(() => promedio),
+                    borderColor: fboTema().oscuro ? '#94a3b8' : '#64748b',
+                    borderDash: [6, 4],
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    fill: false,
+                    stack: 'promedio'
+                }])
+            },
+            options: opcionesGrafica({
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'bottom' },
+                    datalabels: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            footer: (elementos) => (elementos.length
+                                ? `Total: ${formato(totales[elementos[0].dataIndex])}`
+                                : '')
+                        }
+                    }
+                },
+                scales: {
+                    x: { stacked: true, grid: { display: false } },
+                    y: { stacked: true, beginAtZero: true }
+                }
+            })
+        });
+    }
+
     // ── A · Resumen ejecutivo ────────────────────────────────────────────────
     async function pintarResumen() {
         const rangoAnterior = Motor.periodoAnterior(desde(), hasta());
@@ -456,52 +631,84 @@
 
         const v = (campo) => Motor.variacion(totalAnterior[campo], total[campo]);
         const vAnio = (campo) => Motor.variacion(totalAnioAnterior[campo], total[campo]);
+        const chips = (campo, soloAnio) => (soloAnio ? '' : `${chipVariacion(v(campo), 'vs periodo anterior')}<br>`)
+            + chipVariacion(vAnio(campo), 'vs año anterior');
+
+        pintarFrase('est-resumen-frase', `${periodoTexto()} se ${fboUno(total.operaciones, 'registró', 'registraron')} `
+            + `${negrita(Motor.fmtEntero(total.operaciones))} ${fboUno(total.operaciones, 'operación', 'operaciones')} `
+            + `(${fboCuenta(total.operacionesLlegada, 'llegada', 'llegadas')} y ${fboCuenta(total.operacionesSalida, 'salida', 'salidas')}) `
+            + `con ${negrita(Motor.fmtEntero(total.paxTotal))} pasajeros y ${negrita(Motor.fmtToneladas(total.cargaTotalKg))} de carga.`
+            + (total.factorOcupacion === null || total.factorOcupacion === undefined ? ''
+                : ` El factor de ocupación fue de ${negrita(Motor.fmtPorcentaje(total.factorOcupacion))}.`)
+            + (total.puntualidadPorcentaje === null || total.puntualidadPorcentaje === undefined ? ''
+                : ` El ${negrita(Motor.fmtPorcentaje(total.puntualidadPorcentaje))} de las operaciones evaluables cumplió la ventana del slot.`)
+            + cambioTexto(vAnio('operaciones'), 'las operaciones'));
 
         $('est-resumen-tarjetas').innerHTML = [
-            tarjeta('Operaciones', Motor.fmtEntero(total.operaciones),
-                `Llegadas ${Motor.fmtEntero(total.operacionesLlegada)} · Salidas ${Motor.fmtEntero(total.operacionesSalida)}`,
-                `${chipVariacion(v('operaciones'), 'vs periodo anterior')}<br>${chipVariacion(vAnio('operaciones'), 'vs año anterior')}`),
-            tarjeta('Pasajeros', Motor.fmtEntero(total.paxTotal),
-                `Llegada ${Motor.fmtEntero(total.paxLlegada)} · Salida ${Motor.fmtEntero(total.paxSalida)}`,
-                `${chipVariacion(v('paxTotal'), 'vs periodo anterior')}<br>${chipVariacion(vAnio('paxTotal'), 'vs año anterior')}`),
-            tarjeta('Carga transportada', Motor.fmtToneladas(total.cargaTotalKg),
-                `Nacional ${Motor.fmtToneladas(total.cargaNacionalKg)} · Internacional ${Motor.fmtToneladas(total.cargaInternacionalKg)}`,
-                `${chipVariacion(v('cargaTotalKg'), 'vs periodo anterior')}<br>${chipVariacion(vAnio('cargaTotalKg'), 'vs año anterior')}`),
-            tarjeta('Factor de ocupación', Motor.fmtPorcentaje(total.factorOcupacion),
-                `${Motor.fmtEntero(total.ocupacionPax)} pasajeros sobre ${Motor.fmtEntero(total.ocupacionCapacidad)} asientos`,
-                chipVariacion(vAnio('factorOcupacion'), 'vs año anterior')),
-            tarjeta('Puntualidad', Motor.fmtPorcentaje(total.puntualidadPorcentaje),
-                `${Motor.fmtEntero(total.operacionesPuntuales)} a tiempo de ${Motor.fmtEntero(total.operacionesEvaluablesPuntualidad)} evaluables`,
-                chipVariacion(vAnio('puntualidadPorcentaje'), 'vs año anterior'))
+            kpiFbo({ icono: 'fa-plane', color: '#0d6efd', titulo: 'Operaciones', valor: Motor.fmtEntero(total.operaciones),
+                detalle: `Llegadas ${Motor.fmtEntero(total.operacionesLlegada)} · Salidas ${Motor.fmtEntero(total.operacionesSalida)}`,
+                variacion: chips('operaciones') }),
+            kpiFbo({ icono: 'fa-users', color: '#20c997', titulo: 'Pasajeros', valor: Motor.fmtEntero(total.paxTotal),
+                detalle: `Llegada ${Motor.fmtEntero(total.paxLlegada)} · Salida ${Motor.fmtEntero(total.paxSalida)}`,
+                variacion: chips('paxTotal') }),
+            kpiFbo({ icono: 'fa-box', color: '#fd7e14', titulo: 'Carga transportada', valor: Motor.fmtToneladas(total.cargaTotalKg),
+                detalle: `Nacional ${Motor.fmtToneladas(total.cargaNacionalKg)} · Internacional ${Motor.fmtToneladas(total.cargaInternacionalKg)}`,
+                variacion: chips('cargaTotalKg') }),
+            kpiFbo({ icono: 'fa-chair', color: '#6f42c1', titulo: 'Factor de ocupación', valor: Motor.fmtPorcentaje(total.factorOcupacion),
+                detalle: `${Motor.fmtEntero(total.ocupacionPax)} pasajeros sobre ${Motor.fmtEntero(total.ocupacionCapacidad)} asientos`,
+                variacion: chips('factorOcupacion', true) }),
+            kpiFbo({ icono: 'fa-clock', color: '#198754', titulo: 'Puntualidad', valor: Motor.fmtPorcentaje(total.puntualidadPorcentaje),
+                detalle: `${Motor.fmtEntero(total.operacionesPuntuales)} a tiempo de ${Motor.fmtEntero(total.operacionesEvaluablesPuntualidad)} evaluables`,
+                variacion: chips('puntualidadPorcentaje', true) })
         ].join('');
 
         // Calidad del dato: dice cuándo un indicador puede estar engañando.
-        $('est-resumen-calidad').innerHTML = '<div class="d-flex gap-2 flex-wrap">'
+        $('est-resumen-calidad').innerHTML = '<div class="fbo-destacados">'
             + Motor.calidad(total).map((c) => {
                 const bajo = c.porcentaje !== null && c.porcentaje < 80;
-                return `<span class="badge rounded-pill ${bajo ? 'bg-warning text-dark' : 'bg-light text-dark'} border">
-                    ${esc(c.etiqueta)}: ${esc(c.texto)}</span>`;
+                return `<span class="fbo-destacado${bajo ? ' fbo-destacado-aviso' : ''}">`
+                    + `<i class="fas ${bajo ? 'fa-triangle-exclamation' : 'fa-circle-check'}" aria-hidden="true"></i>`
+                    + `<span><small>${esc(c.etiqueta)}</small><b>${esc(c.texto)}</b></span></span>`;
             }).join('') + '</div>';
 
         await pintarAvisosDe(total);
 
-        const etiquetas = mensual.map((f) => f.d1);
         pintarGrafica('est-resumen-chart', {
-            type: 'line',
+            type: 'bar',
             data: {
-                labels: etiquetas,
+                labels: mensual.map((f) => fboMes(f.d1)),
                 datasets: [
-                    { label: 'Operaciones', data: mensual.map((f) => f.operaciones), borderColor: COLORES[0], backgroundColor: COLORES[0], tension: 0.25, yAxisID: 'y' },
-                    { label: 'Pasajeros', data: mensual.map((f) => f.paxTotal), borderColor: COLORES[1], backgroundColor: COLORES[1], tension: 0.25, yAxisID: 'y1' }
+                    { type: 'bar', label: 'Operaciones', data: mensual.map((f) => f.operaciones), backgroundColor: '#0d6efd', borderRadius: 4, maxBarThickness: 48, yAxisID: 'y' },
+                    { type: 'line', label: 'Pasajeros', data: mensual.map((f) => f.paxTotal), borderColor: '#20c997', backgroundColor: '#20c997', tension: 0.3, pointRadius: 3, yAxisID: 'y1' }
                 ]
             },
             options: opcionesGrafica({
                 scales: {
+                    x: { grid: { display: false } },
                     y: { beginAtZero: true, position: 'left', title: { display: true, text: 'Operaciones' } },
                     y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Pasajeros' } }
                 }
             })
         });
+
+        pintarComposicion('est-resumen-composicion', [
+            barraComposicion('Operaciones por movimiento', [
+                { etiqueta: 'Llegadas', valor: fboNum(total.operacionesLlegada), color: '#0d6efd' },
+                { etiqueta: 'Salidas', valor: fboNum(total.operacionesSalida), color: '#20c997' }
+            ]),
+            barraComposicion('Operaciones por ámbito', [
+                { etiqueta: 'Nacional', valor: fboNum(total.operacionesNacional), color: '#0369a1' },
+                { etiqueta: 'Internacional', valor: fboNum(total.operacionesInternacional), color: '#fd7e14' }
+            ]),
+            barraComposicion('Carga por ámbito (t)', [
+                { etiqueta: 'Nacional', valor: fboNum(Motor.kgAToneladas(total.cargaNacionalKg)), color: '#6f42c1' },
+                { etiqueta: 'Internacional', valor: fboNum(Motor.kgAToneladas(total.cargaInternacionalKg)), color: '#d63384' }
+            ]),
+            barraComposicion('Ventana del slot', [
+                { etiqueta: 'Cumple', valor: fboNum(total.operacionesPuntuales), color: '#198754' },
+                { etiqueta: 'Fuera de ventana', valor: fboNum(total.operacionesAnticipadas) + fboNum(total.operacionesDemoradas), color: '#dc3545' }
+            ])
+        ]);
 
         const columnas = [
             { titulo: 'Indicador', clave: 'etiqueta' },
@@ -622,28 +829,39 @@
         pintarTabla('est-exp-tabla', columnas, filas, { total, etiquetaTotal: 'TOTAL' });
 
         $('est-exp-conteo').textContent = `${Motor.fmtEntero(filas.length)} renglones`;
+        pintarFrase('est-exp-frase', `${periodoTexto()}, agrupado por ${esc(dims.map((d) => Motor.DIMENSIONES[d] || d).join(' × '))}: `
+            + `${negrita(Motor.fmtEntero(filas.length))} ${fboUno(filas.length, 'renglón', 'renglones')} con `
+            + `${negrita(Motor.fmtEntero(total.operaciones))} operaciones, ${negrita(Motor.fmtEntero(total.paxTotal))} pasajeros `
+            + `y ${negrita(Motor.fmtToneladas(total.cargaTotalKg))} de carga.${extra ? ' Con el filtro adicional aplicado.' : ''}`);
         $('est-exp-tarjetas').innerHTML = [
-            tarjeta('Operaciones', Motor.fmtEntero(total.operaciones), `${Motor.fmtEntero(total.operacionesCanceladas)} canceladas excluidas`),
-            tarjeta('Pasajeros', Motor.fmtEntero(total.paxTotal), ''),
-            tarjeta('Carga', Motor.fmtToneladas(total.cargaTotalKg), ''),
-            tarjeta('Factor de ocupación', Motor.fmtPorcentaje(total.factorOcupacion),
-                Motor.cobertura(total.operacionesConOcupacion, total.operaciones).texto)
+            kpiFbo({ icono: 'fa-plane', color: '#0d6efd', titulo: 'Operaciones', valor: Motor.fmtEntero(total.operaciones),
+                detalle: `${Motor.fmtEntero(total.operacionesCanceladas)} canceladas excluidas` }),
+            kpiFbo({ icono: 'fa-users', color: '#20c997', titulo: 'Pasajeros', valor: Motor.fmtEntero(total.paxTotal),
+                detalle: `Llegada ${Motor.fmtEntero(total.paxLlegada)} · Salida ${Motor.fmtEntero(total.paxSalida)}` }),
+            kpiFbo({ icono: 'fa-box', color: '#fd7e14', titulo: 'Carga', valor: Motor.fmtToneladas(total.cargaTotalKg),
+                detalle: `${Motor.fmtEntero(total.operacionesConCarga)} operaciones con carga` }),
+            kpiFbo({ icono: 'fa-chair', color: '#6f42c1', titulo: 'Factor de ocupación', valor: Motor.fmtPorcentaje(total.factorOcupacion),
+                detalle: Motor.cobertura(total.operacionesConOcupacion, total.operaciones).texto })
         ].join('');
 
         // Sólo se grafica cuando hay una dimensión: dos o tres cruzadas no dan
         // una serie legible, y una gráfica que no se entiende estorba.
         const canvas = $('est-exp-chart');
-        if (canvas) canvas.parentElement.style.display = dims.length === 1 ? '' : 'none';
+        const panelGrafica = canvas ? canvas.closest('.fbo-panel') : null;
+        if (panelGrafica) panelGrafica.hidden = dims.length !== 1;
         if (dims.length === 1) {
-            const top = filas.slice().sort((a, b) => b.operaciones - a.operaciones).slice(0, 25);
-            pintarGrafica('est-exp-chart', {
-                type: 'bar',
-                data: {
-                    labels: top.map((f) => Motor.etiquetaDimension(dims[0], f.d1)),
-                    datasets: [{ label: 'Operaciones', data: top.map((f) => f.operaciones), backgroundColor: COLORES[0] }]
-                },
-                options: opcionesGrafica()
-            });
+            if (dims[0] === 'anio_mes') {
+                pintarTendencia('est-exp-chart', filas.slice().sort((a, b) => String(a.d1).localeCompare(String(b.d1))), [
+                    { etiqueta: 'Llegadas', valor: (f) => f.operacionesLlegada, color: '#0d6efd' },
+                    { etiqueta: 'Salidas', valor: (f) => f.operacionesSalida, color: '#20c997' }
+                ], { total: (f) => f.operaciones });
+            } else {
+                pintarRanking('est-exp-chart', filas.slice().sort((a, b) => b.operaciones - a.operaciones), {
+                    limite: 20,
+                    etiqueta: (f) => Motor.etiquetaDimension(dims[0], f.d1),
+                    globo: (f) => `${Motor.fmtEntero(f.operaciones)} operaciones · ${Motor.fmtEntero(f.paxTotal)} pasajeros`
+                });
+            }
         }
         await pintarAvisosDe(total);
     }
@@ -656,31 +874,55 @@
             totalPeriodo(desde(), hasta())
         ]);
 
+        const sinAmbito = fboNum(total.operaciones) - fboNum(total.operacionesNacional) - fboNum(total.operacionesInternacional);
+        pintarFrase('est-ops-frase', `${periodoTexto()} se ${fboUno(total.operaciones, 'registró', 'registraron')} `
+            + `${negrita(Motor.fmtEntero(total.operaciones))} ${fboUno(total.operaciones, 'operación válida', 'operaciones válidas')}: `
+            + `${fboCuenta(total.operacionesLlegada, 'llegada', 'llegadas')} y ${fboCuenta(total.operacionesSalida, 'salida', 'salidas')}. `
+            + `El ${negrita(fboPctTexto(fboNum(total.operacionesNacional), fboNum(total.operaciones)))} fue nacional.`
+            + (fboNum(total.operacionesCanceladas)
+                ? ` ${fboCuenta(total.operacionesCanceladas, 'operación cancelada', 'operaciones canceladas')} no ${fboUno(total.operacionesCanceladas, 'cuenta', 'cuentan')} en ninguna métrica.`
+                : ' Sin cancelaciones en el periodo.'));
+
         $('est-ops-tarjetas').innerHTML = [
-            tarjeta('Operaciones válidas', Motor.fmtEntero(total.operaciones), 'Excluye canceladas'),
-            tarjeta('Llegadas', Motor.fmtEntero(total.operacionesLlegada), ''),
-            tarjeta('Salidas', Motor.fmtEntero(total.operacionesSalida), ''),
-            tarjeta('Nacional / Internacional',
-                `${Motor.fmtEntero(total.operacionesNacional)} / ${Motor.fmtEntero(total.operacionesInternacional)}`, ''),
-            tarjeta('Canceladas', Motor.fmtEntero(total.operacionesCanceladas),
-                cancelPorOrigen(total)),
-            tarjeta('Rotaciones', Motor.fmtEntero(total.rotaciones),
-                total.turnaroundPromedioMin === null
+            kpiFbo({ icono: 'fa-plane', color: '#0d6efd', titulo: 'Operaciones válidas', valor: Motor.fmtEntero(total.operaciones), detalle: 'Excluye canceladas' }),
+            kpiFbo({ icono: 'fa-plane-arrival', color: '#0891b2', titulo: 'Llegadas', valor: Motor.fmtEntero(total.operacionesLlegada),
+                detalle: `${fboPctTexto(fboNum(total.operacionesLlegada), fboNum(total.operaciones))} del total` }),
+            kpiFbo({ icono: 'fa-plane-departure', color: '#20c997', titulo: 'Salidas', valor: Motor.fmtEntero(total.operacionesSalida),
+                detalle: `${fboPctTexto(fboNum(total.operacionesSalida), fboNum(total.operaciones))} del total` }),
+            kpiFbo({ icono: 'fa-globe', color: '#0369a1', titulo: 'Nacional / Internacional',
+                valor: `${Motor.fmtEntero(total.operacionesNacional)} / ${Motor.fmtEntero(total.operacionesInternacional)}`,
+                detalle: sinAmbito > 0 ? `${Motor.fmtEntero(sinAmbito)} sin determinar` : 'Todas con ámbito' }),
+            kpiFbo({ icono: 'fa-ban', color: '#dc3545', titulo: 'Canceladas', valor: Motor.fmtEntero(total.operacionesCanceladas), detalle: cancelPorOrigen(total) }),
+            kpiFbo({ icono: 'fa-right-left', color: '#6f42c1', titulo: 'Rotaciones', valor: Motor.fmtEntero(total.rotaciones),
+                detalle: total.turnaroundPromedioMin === null || total.turnaroundPromedioMin === undefined
                     ? 'Sin tiempo en tierra medible'
-                    : `Tiempo en tierra promedio ${Motor.fmtDecimal(total.turnaroundPromedioMin)} min`)
+                    : `Tiempo en tierra promedio ${Motor.fmtDecimal(total.turnaroundPromedioMin)} min` })
         ].join('');
 
-        pintarGrafica('est-ops-chart', {
-            type: 'bar',
-            data: {
-                labels: mensual.map((f) => f.d1),
-                datasets: [
-                    { label: 'Llegadas', data: mensual.map((f) => f.operacionesLlegada), backgroundColor: COLORES[0] },
-                    { label: 'Salidas', data: mensual.map((f) => f.operacionesSalida), backgroundColor: COLORES[1] }
-                ]
-            },
-            options: opcionesGrafica({ scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } })
-        });
+        pintarTendencia('est-ops-chart', mensual, [
+            { etiqueta: 'Llegadas', valor: (f) => f.operacionesLlegada, color: '#0d6efd' },
+            { etiqueta: 'Salidas', valor: (f) => f.operacionesSalida, color: '#20c997' }
+        ], { total: (f) => f.operaciones });
+
+        pintarComposicion('est-ops-composicion', [
+            barraComposicion('Movimiento', [
+                { etiqueta: 'Llegadas', valor: fboNum(total.operacionesLlegada), color: '#0d6efd' },
+                { etiqueta: 'Salidas', valor: fboNum(total.operacionesSalida), color: '#20c997' }
+            ]),
+            barraComposicion('Ámbito', [
+                { etiqueta: 'Nacional', valor: fboNum(total.operacionesNacional), color: '#0369a1' },
+                { etiqueta: 'Internacional', valor: fboNum(total.operacionesInternacional), color: '#fd7e14' },
+                { etiqueta: 'Sin determinar', valor: Math.max(0, sinAmbito), color: FBO_GRIS }
+            ]),
+            barraComposicion('Clasificación', [
+                { etiqueta: 'Clasificadas', valor: fboNum(total.operacionesClasificadas), color: '#6f42c1' },
+                { etiqueta: 'Sin clasificar', valor: fboNum(total.operacionesSinClasificar), color: FBO_GRIS }
+            ]),
+            barraComposicion('Estado', [
+                { etiqueta: 'Válidas', valor: fboNum(total.operaciones), color: '#198754' },
+                { etiqueta: 'Canceladas', valor: fboNum(total.operacionesCanceladas), color: '#dc3545' }
+            ])
+        ]);
 
         pintarTabla('est-ops-tabla', [
             { titulo: 'Periodo', clave: 'd1' },
@@ -714,43 +956,59 @@
         ]);
 
         const cobOcup = Motor.cobertura(total.operacionesConOcupacion, total.operaciones);
+        pintarFrase('est-pax-frase', `${periodoTexto()} ${fboUno(total.paxTotal, 'viajó', 'viajaron')} `
+            + `${negrita(Motor.fmtEntero(total.paxTotal))} ${fboUno(total.paxTotal, 'pasajero', 'pasajeros')} `
+            + `(${Motor.fmtEntero(total.paxLlegada)} de llegada y ${Motor.fmtEntero(total.paxSalida)} de salida); `
+            + `el ${negrita(fboPctTexto(fboNum(total.paxNacional), fboNum(total.paxTotal)))} fue nacional.`
+            + (total.factorOcupacion === null || total.factorOcupacion === undefined ? ''
+                : ` El factor de ocupación fue de ${negrita(Motor.fmtPorcentaje(total.factorOcupacion))}, calculado con ${esc(cobOcup.texto)} de las operaciones.`));
+
         $('est-pax-tarjetas').innerHTML = [
             // PAX TOTAL = pasajeros de llegada + pasajeros de salida.
-            tarjeta('Pasajeros totales', Motor.fmtEntero(total.paxTotal),
-                `Llegada ${Motor.fmtEntero(total.paxLlegada)} + Salida ${Motor.fmtEntero(total.paxSalida)}`),
-            tarjeta('Nacional', Motor.fmtEntero(total.paxNacional), ''),
-            tarjeta('Internacional', Motor.fmtEntero(total.paxInternacional), ''),
-            tarjeta('Factor de ocupación', Motor.fmtPorcentaje(total.factorOcupacion),
-                `Calculado con ${cobOcup.texto} de las operaciones`),
-            tarjeta('Promedio por operación',
-                total.operacionesConPax > 0 ? Motor.fmtEntero((total.paxTotal || 0) / total.operacionesConPax) : '—',
-                `${Motor.fmtEntero(total.operacionesConPax)} operaciones con dato de pasajeros`),
-            tarjeta('Programados vs no abordados',
-                `${Motor.fmtEntero(total.paxProgramados)} / ${Motor.fmtEntero(total.paxNoAbordados)}`,
-                total.tasaNoAbordados === null
+            kpiFbo({ icono: 'fa-users', color: '#20c997', titulo: 'Pasajeros totales', valor: Motor.fmtEntero(total.paxTotal),
+                detalle: `Llegada ${Motor.fmtEntero(total.paxLlegada)} + Salida ${Motor.fmtEntero(total.paxSalida)}` }),
+            kpiFbo({ icono: 'fa-flag', color: '#0369a1', titulo: 'Nacional', valor: Motor.fmtEntero(total.paxNacional),
+                detalle: `${fboPctTexto(fboNum(total.paxNacional), fboNum(total.paxTotal))} del total` }),
+            kpiFbo({ icono: 'fa-earth-americas', color: '#fd7e14', titulo: 'Internacional', valor: Motor.fmtEntero(total.paxInternacional),
+                detalle: `${fboPctTexto(fboNum(total.paxInternacional), fboNum(total.paxTotal))} del total` }),
+            kpiFbo({ icono: 'fa-chair', color: '#6f42c1', titulo: 'Factor de ocupación', valor: Motor.fmtPorcentaje(total.factorOcupacion),
+                detalle: `Calculado con ${cobOcup.texto} de las operaciones` }),
+            kpiFbo({ icono: 'fa-divide', color: '#0891b2', titulo: 'Promedio por operación',
+                valor: total.operacionesConPax > 0 ? Motor.fmtEntero((total.paxTotal || 0) / total.operacionesConPax) : '—',
+                detalle: `${Motor.fmtEntero(total.operacionesConPax)} operaciones con dato de pasajeros` }),
+            kpiFbo({ icono: 'fa-user-clock', color: '#64748b', titulo: 'Programados vs no abordados',
+                valor: `${Motor.fmtEntero(total.paxProgramados)} / ${Motor.fmtEntero(total.paxNoAbordados)}`,
+                detalle: total.tasaNoAbordados === null || total.tasaNoAbordados === undefined
                     ? 'Sin pasajeros programados capturados'
-                    : `Tasa de no abordaje ${Motor.fmtPorcentaje(total.tasaNoAbordados)}`),
-            tarjeta('Tránsitos y conexiones',
-                `${Motor.fmtEntero(total.paxTransitos)} / ${Motor.fmtEntero(total.paxConexiones)}`,
-                'Pasajeros que no inician ni terminan viaje en AIFA'),
-            tarjeta('Pagan TUA', Motor.fmtEntero(total.paxPaganTua),
-                `Exentos ${Motor.fmtEntero(total.paxExentos)}`),
-            tarjeta('Inadmitidos y repatriados',
-                `${Motor.fmtEntero(total.paxInadmitidos)} / ${Motor.fmtEntero(total.paxRepatriados)}`, '')
+                    : `Tasa de no abordaje ${Motor.fmtPorcentaje(total.tasaNoAbordados)}` }),
+            kpiFbo({ icono: 'fa-shuffle', color: '#0d6efd', titulo: 'Tránsitos y conexiones',
+                valor: `${Motor.fmtEntero(total.paxTransitos)} / ${Motor.fmtEntero(total.paxConexiones)}`,
+                detalle: 'Pasajeros que no inician ni terminan viaje en AIFA' }),
+            kpiFbo({ icono: 'fa-receipt', color: '#198754', titulo: 'Pagan TUA', valor: Motor.fmtEntero(total.paxPaganTua),
+                detalle: `Exentos ${Motor.fmtEntero(total.paxExentos)}` }),
+            kpiFbo({ icono: 'fa-user-shield', color: '#dc3545', titulo: 'Inadmitidos y repatriados',
+                valor: `${Motor.fmtEntero(total.paxInadmitidos)} / ${Motor.fmtEntero(total.paxRepatriados)}`, detalle: '' })
         ].join('');
 
-        pintarGrafica('est-pax-chart', {
-            type: 'line',
-            data: {
-                labels: mensual.map((f) => f.d1),
-                datasets: [
-                    { label: 'Llegada', data: mensual.map((f) => f.paxLlegada), borderColor: COLORES[0], backgroundColor: COLORES[0], tension: 0.25 },
-                    { label: 'Salida', data: mensual.map((f) => f.paxSalida), borderColor: COLORES[1], backgroundColor: COLORES[1], tension: 0.25 },
-                    { label: 'Total', data: mensual.map((f) => f.paxTotal), borderColor: COLORES[2], backgroundColor: COLORES[2], borderDash: [5, 4], tension: 0.25 }
-                ]
-            },
-            options: opcionesGrafica()
-        });
+        pintarTendencia('est-pax-chart', mensual, [
+            { etiqueta: 'Llegada', valor: (f) => f.paxLlegada, color: '#0d6efd' },
+            { etiqueta: 'Salida', valor: (f) => f.paxSalida, color: '#20c997' }
+        ], { total: (f) => f.paxTotal });
+
+        pintarComposicion('est-pax-composicion', [
+            barraComposicion('Dirección', [
+                { etiqueta: 'Llegada', valor: fboNum(total.paxLlegada), color: '#0d6efd' },
+                { etiqueta: 'Salida', valor: fboNum(total.paxSalida), color: '#20c997' }
+            ]),
+            barraComposicion('Ámbito', [
+                { etiqueta: 'Nacional', valor: fboNum(total.paxNacional), color: '#0369a1' },
+                { etiqueta: 'Internacional', valor: fboNum(total.paxInternacional), color: '#fd7e14' }
+            ]),
+            barraComposicion('TUA', [
+                { etiqueta: 'Pagan', valor: fboNum(total.paxPaganTua), color: '#198754' },
+                { etiqueta: 'Exentos', valor: fboNum(total.paxExentos), color: FBO_GRIS }
+            ])
+        ]);
 
         pintarTabla('est-pax-tabla', [
             { titulo: 'Periodo', clave: 'd1' },
@@ -770,6 +1028,14 @@
         const conOcupacion = porAerolinea
             .filter((f) => f.factorOcupacion !== null)
             .sort((a, b) => (b.paxTotal || 0) - (a.paxTotal || 0));
+        pintarRanking('est-pax-ocupacion-chart', conOcupacion, {
+            color: '#6f42c1',
+            serie: 'Factor de ocupación',
+            valor: (f) => f.factorOcupacion,
+            formato: (valor) => Motor.fmtPorcentaje(valor, 1),
+            maximo: 100,
+            globo: (f) => `${Motor.fmtPorcentaje(f.factorOcupacion, 1)} · ${Motor.fmtEntero(f.paxTotal)} pasajeros en ${Motor.fmtEntero(f.operaciones)} operaciones`
+        });
         pintarTabla('est-pax-ocupacion', [
             { titulo: 'Aerolínea', clave: 'd1' },
             { titulo: 'Operaciones', clave: 'operaciones', tipo: 'numero' },
@@ -801,23 +1067,32 @@
                 participacionPax: paxPorAerolinea.get(f.d1) ?? null,
                 crecimiento: Motor.variacion(previo.get(f.d1)?.operaciones ?? null, f.operaciones)
             }));
+        const totalAerolineas = totalDe(actual);
 
-        const top = filas.slice(0, 12);
-        pintarGrafica('est-aero-chart', {
-            type: 'bar',
-            data: {
-                labels: top.map((f) => f.d1),
-                datasets: [
-                    { label: 'Operaciones', data: top.map((f) => f.operaciones), backgroundColor: COLORES[0] },
-                    { label: 'Pasajeros', data: top.map((f) => f.paxTotal), backgroundColor: COLORES[1], yAxisID: 'y1' }
-                ]
-            },
-            options: opcionesGrafica({
-                scales: {
-                    y: { beginAtZero: true, position: 'left' },
-                    y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false } }
-                }
-            })
+        const principal = filas[0];
+        const top3 = filas.slice(0, 3).reduce((a, f) => a + (Motor.toNumero(f.participacion) || 0), 0);
+        pintarFrase('est-aero-frase', principal
+            ? `${periodoTexto()} ${fboUno(filas.length, 'operó', 'operaron')} ${negrita(Motor.fmtEntero(filas.length))} `
+                + `${fboUno(filas.length, 'aerolínea', 'aerolíneas')}. La principal fue ${negrita(principal.d1)} con `
+                + `${negrita(Motor.fmtPorcentaje(principal.participacion, 1))} de las operaciones`
+                + (filas.length > 3 ? `; las tres primeras concentran ${negrita(Motor.fmtPorcentaje(top3, 1))}.` : '.')
+            : `${periodoTexto()} no hay operaciones de aerolíneas con los filtros vigentes.`);
+
+        $('est-aero-tarjetas').innerHTML = [
+            kpiFbo({ icono: 'fa-plane', color: '#0d6efd', titulo: 'Aerolíneas con operación', valor: Motor.fmtEntero(filas.length),
+                detalle: 'En el periodo y con los filtros vigentes' }),
+            kpiFbo({ icono: 'fa-trophy', color: '#fd7e14', titulo: 'Principal', valor: principal ? principal.d1 : '—',
+                detalle: principal ? `${Motor.fmtPorcentaje(principal.participacion, 1)} de las operaciones` : '' }),
+            kpiFbo({ icono: 'fa-layer-group', color: '#6f42c1', titulo: 'Concentración', valor: Motor.fmtPorcentaje(top3, 1),
+                detalle: 'Operaciones de las tres primeras' }),
+            kpiFbo({ icono: 'fa-users', color: '#20c997', titulo: 'Pasajeros', valor: Motor.fmtEntero(totalAerolineas.paxTotal),
+                detalle: `Factor de ocupación ${Motor.fmtPorcentaje(totalAerolineas.factorOcupacion)}` })
+        ].join('');
+
+        pintarRanking('est-aero-chart', filas, {
+            limite: 12,
+            globo: (f) => `${Motor.fmtEntero(f.operaciones)} operaciones (${Motor.fmtPorcentaje(f.participacion, 1)}) · `
+                + `${Motor.fmtEntero(f.paxTotal)} pasajeros`
         });
 
         pintarTabla('est-aero-tabla', [
@@ -829,9 +1104,8 @@
             { titulo: 'Carga', clave: 'cargaTotalKg', tipo: 'carga' },
             { titulo: 'F. ocupación', clave: 'factorOcupacion', tipo: 'porcentaje' },
             { titulo: 'Crecimiento anual', clave: 'crecimiento', html: (f) => chipVariacion(f.crecimiento, '') }
-        ], filas, { total: totalDe(actual), etiquetaTotal: 'TOTAL' });
+        ], filas, { total: totalAerolineas, etiquetaTotal: 'TOTAL' });
 
-        const totalAerolineas = totalDe(actual);
         const avisos = Motor.validar(totalAerolineas);
         if (!repartoOps.cuadra && repartoOps.total > 0) {
             avisos.push({
@@ -860,24 +1134,45 @@
             .map((f) => Object.assign({}, f, {
                 crecimiento: Motor.variacion(previo.get(f.d1)?.operaciones ?? null, f.operaciones)
             }));
+        const lugar = (f) => (f.d2 ? `${f.d2} (${f.d1})` : String(f.d1 ?? '—'));
+        const sinAmbito = fboNum(total.operaciones) - fboNum(total.operacionesNacional) - fboNum(total.operacionesInternacional);
+
+        const principal = filas[0];
+        pintarFrase('est-rutas-frase', `${periodoTexto()} hubo operaciones con `
+            + `${negrita(Motor.fmtEntero(filas.length))} ${fboUno(filas.length, 'destino u origen', 'destinos y orígenes distintos')}.`
+            + (principal ? ` El más frecuente fue ${negrita(lugar(principal))} con ${negrita(Motor.fmtPorcentaje(principal.participacion, 1))} de las operaciones.` : '')
+            + ` El ${negrita(fboPctTexto(fboNum(total.operacionesNacional), fboNum(total.operaciones)))} de las operaciones fue nacional.`);
 
         $('est-rutas-tarjetas').innerHTML = [
-            tarjeta('Destinos y orígenes distintos', Motor.fmtEntero(filas.length), 'En el periodo y con los filtros vigentes'),
-            tarjeta('Operaciones nacionales', Motor.fmtEntero(total.operacionesNacional), ''),
-            tarjeta('Operaciones internacionales', Motor.fmtEntero(total.operacionesInternacional), ''),
-            tarjeta('Sin determinar', Motor.fmtEntero(total.operaciones - total.operacionesNacional - total.operacionesInternacional),
-                'La ruta no resolvió contra el catálogo de aeropuertos')
+            kpiFbo({ icono: 'fa-location-dot', color: '#0f766e', titulo: 'Destinos y orígenes distintos', valor: Motor.fmtEntero(filas.length),
+                detalle: 'En el periodo y con los filtros vigentes' }),
+            kpiFbo({ icono: 'fa-flag', color: '#0369a1', titulo: 'Operaciones nacionales', valor: Motor.fmtEntero(total.operacionesNacional),
+                detalle: `${fboPctTexto(fboNum(total.operacionesNacional), fboNum(total.operaciones))} del total` }),
+            kpiFbo({ icono: 'fa-earth-americas', color: '#fd7e14', titulo: 'Operaciones internacionales', valor: Motor.fmtEntero(total.operacionesInternacional),
+                detalle: `${fboPctTexto(fboNum(total.operacionesInternacional), fboNum(total.operaciones))} del total` }),
+            kpiFbo({ icono: 'fa-circle-question', color: '#94a3b8', titulo: 'Sin determinar', valor: Motor.fmtEntero(sinAmbito),
+                detalle: 'La ruta no resolvió contra el catálogo de aeropuertos' })
         ].join('');
 
-        const top = filas.slice(0, 20);
-        pintarGrafica('est-rutas-chart', {
-            type: 'bar',
-            data: {
-                labels: top.map((f) => f.d2 || f.d1),
-                datasets: [{ label: 'Operaciones', data: top.map((f) => f.operaciones), backgroundColor: COLORES[0] }]
-            },
-            options: opcionesGrafica({ indexAxis: 'y', scales: { x: { beginAtZero: true } } })
+        pintarRanking('est-rutas-chart', filas, {
+            limite: 15,
+            color: '#0f766e',
+            etiqueta: lugar,
+            globo: (f) => `${Motor.fmtEntero(f.operaciones)} operaciones (${Motor.fmtPorcentaje(f.participacion, 1)}) · `
+                + `${Motor.fmtEntero(f.paxTotal)} pasajeros`
         });
+
+        pintarComposicion('est-rutas-composicion', [
+            barraComposicion('Ámbito', [
+                { etiqueta: 'Nacional', valor: fboNum(total.operacionesNacional), color: '#0369a1' },
+                { etiqueta: 'Internacional', valor: fboNum(total.operacionesInternacional), color: '#fd7e14' },
+                { etiqueta: 'Sin determinar', valor: Math.max(0, sinAmbito), color: FBO_GRIS }
+            ]),
+            barraComposicion('Dirección', [
+                { etiqueta: 'Llegadas', valor: fboNum(total.operacionesLlegada), color: '#0d6efd' },
+                { etiqueta: 'Salidas', valor: fboNum(total.operacionesSalida), color: '#20c997' }
+            ])
+        ]);
 
         pintarTabla('est-rutas-tabla', [
             { titulo: 'Código', clave: 'd1' },
@@ -901,21 +1196,33 @@
             agregado(desde(), hasta(), ['matricula'], null, 3000),
             totalPeriodo(desde(), hasta())
         ]);
+        const tipos = porTipo.slice().sort((a, b) => b.operaciones - a.operaciones);
+        const matriculas = porMatricula.slice().sort((a, b) => b.operaciones - a.operaciones);
+        const tipoPrincipal = tipos.find((f) => f.d1);
+
+        pintarFrase('est-aeronaves-frase', `${periodoTexto()} ${fboUno(tipos.length, 'operó', 'operaron')} `
+            + `${negrita(Motor.fmtEntero(tipos.length))} ${fboUno(tipos.length, 'tipo de aeronave', 'tipos de aeronave')} y `
+            + `${negrita(Motor.fmtEntero(matriculas.length))} ${fboUno(matriculas.length, 'matrícula distinta', 'matrículas distintas')}.`
+            + (tipoPrincipal ? ` El tipo más usado fue ${negrita(tipoPrincipal.d1)}, con `
+                + `${negrita(fboPctTexto(fboNum(tipoPrincipal.operaciones), fboNum(total.operaciones)))} de las operaciones.` : ''));
 
         $('est-aeronaves-tarjetas').innerHTML = [
-            tarjeta('Rotaciones', Motor.fmtEntero(total.rotaciones),
-                Motor.cobertura(total.operacionesConTurnaround, total.operacionesSalida).texto
-                + ' con tiempo en tierra medible'),
-            tarjeta('Tiempo en tierra promedio',
-                total.turnaroundPromedioMin === null ? '—' : `${Motor.fmtDecimal(total.turnaroundPromedioMin)} min`,
-                total.turnaroundMinimoMin === null ? 'Sin rotaciones emparejadas'
-                    : `Entre ${Motor.fmtEntero(total.turnaroundMinimoMin)} y ${Motor.fmtEntero(total.turnaroundMaximoMin)} min`),
-            tarjeta('Pernoctas', Motor.fmtEntero(total.operacionesPernocta),
-                total.pernoctaPromedioMin === null ? 'Sin pernoctas capturadas'
-                    : `Promedio ${Motor.fmtDecimal(total.pernoctaPromedioMin / 60)} h`),
-            tarjeta('Asientos ofrecidos', Motor.fmtEntero(total.ocupacionCapacidad),
-                `Factor de ocupación ${Motor.fmtPorcentaje(total.factorOcupacion)}`)
+            kpiFbo({ icono: 'fa-right-left', color: '#6f42c1', titulo: 'Rotaciones', valor: Motor.fmtEntero(total.rotaciones),
+                detalle: `${Motor.cobertura(total.operacionesConTurnaround, total.operacionesSalida).texto} con tiempo en tierra medible` }),
+            kpiFbo({ icono: 'fa-stopwatch', color: '#0891b2', titulo: 'Tiempo en tierra promedio',
+                valor: total.turnaroundPromedioMin === null || total.turnaroundPromedioMin === undefined ? '—' : `${Motor.fmtDecimal(total.turnaroundPromedioMin)} min`,
+                detalle: total.turnaroundMinimoMin === null || total.turnaroundMinimoMin === undefined ? 'Sin rotaciones emparejadas'
+                    : `Entre ${Motor.fmtEntero(total.turnaroundMinimoMin)} y ${Motor.fmtEntero(total.turnaroundMaximoMin)} min` }),
+            kpiFbo({ icono: 'fa-moon', color: '#1a2f55', titulo: 'Pernoctas', valor: Motor.fmtEntero(total.operacionesPernocta),
+                detalle: total.pernoctaPromedioMin === null || total.pernoctaPromedioMin === undefined ? 'Sin pernoctas capturadas'
+                    : `Promedio ${Motor.fmtDecimal(total.pernoctaPromedioMin / 60)} h` }),
+            kpiFbo({ icono: 'fa-chair', color: '#20c997', titulo: 'Asientos ofrecidos', valor: Motor.fmtEntero(total.ocupacionCapacidad),
+                detalle: `Factor de ocupación ${Motor.fmtPorcentaje(total.factorOcupacion)}` })
         ].join('');
+
+        const globo = (f) => `${Motor.fmtEntero(f.operaciones)} operaciones · ${Motor.fmtEntero(f.paxTotal)} pasajeros`;
+        pintarRanking('est-aeronaves-chart', tipos, { color: '#6f42c1', etiqueta: (f) => f.d1 || 'Sin dato', globo });
+        pintarRanking('est-aeronaves-mat-chart', matriculas, { color: '#0d6efd', etiqueta: (f) => f.d1 || 'Sin dato', globo });
 
         const columnas = (etiqueta) => [
             { titulo: etiqueta, clave: 'd1' },
@@ -933,10 +1240,8 @@
             { titulo: 'Carga', clave: 'cargaTotalKg', tipo: 'carga' }
         ];
 
-        pintarTabla('est-aeronaves-tipo', columnas('Tipo de aeronave'),
-            porTipo.slice().sort((a, b) => b.operaciones - a.operaciones), { total, etiquetaTotal: 'TOTAL' });
-        pintarTabla('est-aeronaves-matricula', columnas('Matrícula'),
-            porMatricula.slice().sort((a, b) => b.operaciones - a.operaciones), { total, etiquetaTotal: 'TOTAL' });
+        pintarTabla('est-aeronaves-tipo', columnas('Tipo de aeronave'), tipos, { total, etiquetaTotal: 'TOTAL' });
+        pintarTabla('est-aeronaves-matricula', columnas('Matrícula'), matriculas, { total, etiquetaTotal: 'TOTAL' });
 
         await pintarAvisosDe(total);
     }
@@ -948,21 +1253,35 @@
             agregado(desde(), hasta(), ['aerolinea'], null, 1000),
             totalPeriodo(desde(), hasta())
         ]);
+        const conCarga = porAerolinea.filter((f) => (f.cargaTotalKg || 0) > 0)
+            .sort((a, b) => (b.cargaTotalKg || 0) - (a.cargaTotalKg || 0));
+        const toneladas = (kg) => fboNum(Motor.kgAToneladas(kg));
+        const fmtT = (t) => `${Motor.fmtDecimal(t)} t`;
+
+        pintarFrase('est-carga-frase', `${periodoTexto()} se ${fboUno(total.operacionesConCarga, 'transportó', 'transportaron')} `
+            + `${negrita(Motor.fmtToneladas(total.cargaTotalKg))} de carga: ${esc(Motor.fmtToneladas(total.cargaNacionalKg))} nacional y `
+            + `${esc(Motor.fmtToneladas(total.cargaInternacionalKg))} internacional, en `
+            + `${fboCuenta(total.operacionesConCarga, 'operación con carga', 'operaciones con carga')}.`
+            + (conCarga[0] ? ` La aerolínea con más carga fue ${negrita(conCarga[0].d1)}, con `
+                + `${negrita(fboPctTexto(fboNum(conCarga[0].cargaTotalKg), fboNum(total.cargaTotalKg)))} del total.` : ''));
 
         $('est-carga-tarjetas').innerHTML = [
-            tarjeta('Carga transportada', Motor.fmtToneladas(total.cargaTotalKg),
-                `Nacional ${Motor.fmtToneladas(total.cargaNacionalKg)} · Internacional ${Motor.fmtToneladas(total.cargaInternacionalKg)}`),
-            tarjeta('Descargada en AIFA', Motor.fmtToneladas(total.cargaDescargadaKg), 'Movimientos de llegada'),
-            tarjeta('Embarcada en AIFA', Motor.fmtToneladas(total.cargaEmbarcadaKg), 'Movimientos de salida'),
-            tarjeta('En tránsito', Motor.fmtToneladas(total.cargaTransitoKg),
-                'Contabilizada una sola vez por rotación'),
-            tarjeta('Correo', Motor.fmtToneladas(total.correoKg), ''),
+            kpiFbo({ icono: 'fa-box', color: '#fd7e14', titulo: 'Carga transportada', valor: Motor.fmtToneladas(total.cargaTotalKg),
+                detalle: `Nacional ${Motor.fmtToneladas(total.cargaNacionalKg)} · Internacional ${Motor.fmtToneladas(total.cargaInternacionalKg)}` }),
+            kpiFbo({ icono: 'fa-arrow-down', color: '#0d6efd', titulo: 'Descargada en AIFA', valor: Motor.fmtToneladas(total.cargaDescargadaKg),
+                detalle: 'Movimientos de llegada' }),
+            kpiFbo({ icono: 'fa-arrow-up', color: '#20c997', titulo: 'Embarcada en AIFA', valor: Motor.fmtToneladas(total.cargaEmbarcadaKg),
+                detalle: 'Movimientos de salida' }),
+            kpiFbo({ icono: 'fa-shuffle', color: '#6f42c1', titulo: 'En tránsito', valor: Motor.fmtToneladas(total.cargaTransitoKg),
+                detalle: 'Contabilizada una sola vez por rotación' }),
+            kpiFbo({ icono: 'fa-envelope', color: '#0891b2', titulo: 'Correo', valor: Motor.fmtToneladas(total.correoKg), detalle: '' }),
             // Importación/exportación es OTRA dimensión: una carga de
             // importación es además internacional y puede ir en tránsito.
-            tarjeta('Importación / Exportación',
-                `${Motor.fmtToneladas(total.cargaImportacionKg)} / ${Motor.fmtToneladas(total.cargaExportacionKg)}`,
-                'Régimen aduanal, independiente de nacional/internacional'),
-            tarjeta('Equipaje', Motor.fmtToneladas(total.equipajeKg), 'No forma parte de la carga transportada')
+            kpiFbo({ icono: 'fa-file-invoice', color: '#1a2f55', titulo: 'Importación / Exportación',
+                valor: `${Motor.fmtToneladas(total.cargaImportacionKg)} / ${Motor.fmtToneladas(total.cargaExportacionKg)}`,
+                detalle: 'Régimen aduanal, independiente de nacional/internacional' }),
+            kpiFbo({ icono: 'fa-suitcase', color: '#94a3b8', titulo: 'Equipaje', valor: Motor.fmtToneladas(total.equipajeKg),
+                detalle: 'No forma parte de la carga transportada' })
         ].join('');
 
         // Aviso honesto: mientras nadie capture el desglose, "descargada" y
@@ -981,21 +1300,33 @@
             }
         }
 
-        pintarGrafica('est-carga-chart', {
-            type: 'bar',
-            data: {
-                labels: mensual.map((f) => f.d1),
-                datasets: [
-                    { label: 'Nacional (t)', data: mensual.map((f) => Motor.kgAToneladas(f.cargaNacionalKg)), backgroundColor: COLORES[0] },
-                    { label: 'Internacional (t)', data: mensual.map((f) => Motor.kgAToneladas(f.cargaInternacionalKg)), backgroundColor: COLORES[2] },
-                    {
-                        label: 'Total transportada (t)',
-                        data: mensual.map((f) => Motor.kgAToneladas(f.cargaTotalKg)),
-                        type: 'line', borderColor: COLORES[4], backgroundColor: COLORES[4], tension: 0.25
-                    }
-                ]
-            },
-            options: opcionesGrafica({ scales: { x: { stacked: true }, y: { stacked: false, beginAtZero: true } } })
+        pintarTendencia('est-carga-chart', mensual, [
+            { etiqueta: 'Nacional (t)', valor: (f) => Motor.kgAToneladas(f.cargaNacionalKg), color: '#0d6efd' },
+            { etiqueta: 'Internacional (t)', valor: (f) => Motor.kgAToneladas(f.cargaInternacionalKg), color: '#fd7e14' }
+        ], { total: (f) => Motor.kgAToneladas(f.cargaTotalKg), formato: fmtT });
+
+        pintarComposicion('est-carga-composicion', [
+            barraComposicion('Ámbito (t)', [
+                { etiqueta: 'Nacional', valor: toneladas(total.cargaNacionalKg), color: '#0d6efd' },
+                { etiqueta: 'Internacional', valor: toneladas(total.cargaInternacionalKg), color: '#fd7e14' }
+            ]),
+            barraComposicion('Movimiento en AIFA (t)', [
+                { etiqueta: 'Descargada', valor: toneladas(total.cargaDescargadaKg), color: '#0369a1' },
+                { etiqueta: 'Embarcada', valor: toneladas(total.cargaEmbarcadaKg), color: '#20c997' },
+                { etiqueta: 'En tránsito', valor: toneladas(total.cargaTransitoKg), color: '#6f42c1' }
+            ]),
+            barraComposicion('Régimen aduanal (t)', [
+                { etiqueta: 'Importación', valor: toneladas(total.cargaImportacionKg), color: '#1a2f55' },
+                { etiqueta: 'Exportación', valor: toneladas(total.cargaExportacionKg), color: '#d63384' }
+            ])
+        ]);
+
+        pintarRanking('est-carga-aero-chart', conCarga, {
+            color: '#fd7e14',
+            serie: 'Carga (t)',
+            valor: (f) => Motor.kgAToneladas(f.cargaTotalKg),
+            formato: fmtT,
+            globo: (f) => `${Motor.fmtToneladas(f.cargaTotalKg)} en ${Motor.fmtEntero(f.operacionesConCarga || f.operaciones)} operaciones`
         });
 
         const columnasCarga = [
@@ -1019,7 +1350,7 @@
             [{ titulo: 'Aerolínea', clave: 'd1' }].concat(columnasCarga).concat([
                 { titulo: 'Operaciones', clave: 'operaciones', tipo: 'numero' }
             ]),
-            porAerolinea.filter((f) => (f.cargaTotalKg || 0) > 0).sort((a, b) => (b.cargaTotalKg || 0) - (a.cargaTotalKg || 0)),
+            conCarga,
             { total, etiquetaTotal: 'TOTAL', vacio: 'Ninguna operación del periodo reporta carga.' });
 
         await pintarAvisosDe(total);
@@ -1033,42 +1364,71 @@
             agregado(desde(), hasta(), ['codigo_demora', 'causa_demora'], null, 500),
             totalPeriodo(desde(), hasta())
         ]);
+        const causas = porCausa.filter((f) => f.d1 || f.d2).sort((a, b) => b.operacionesDemoradas - a.operacionesDemoradas);
+        const causa = (f) => [f.d1, f.d2].filter(Boolean).join(' · ');
 
         const cob = Motor.cobertura(total.operacionesEvaluablesPuntualidad, total.operaciones);
+        pintarFrase('est-punt-frase', (total.puntualidadPorcentaje === null || total.puntualidadPorcentaje === undefined
+            ? `${periodoTexto()} ninguna operación tiene slot ni dictamen con qué evaluarse.`
+            : `${periodoTexto()} el ${negrita(Motor.fmtPorcentaje(total.puntualidadPorcentaje))} de las operaciones evaluables `
+                + `cumplió la ventana del slot (${esc(cob.texto)} de las operaciones tienen con qué evaluarse).`)
+            + ` ${fboCuenta(total.operacionesDemoradas, 'operación', 'operaciones')} ${fboUno(total.operacionesDemoradas, 'tuvo', 'tuvieron')} `
+            + 'demora de más de 15 minutos.'
+            + (causas[0] ? ` La causa más frecuente fue ${negrita(causa(causas[0]))}.` : ''));
+
         $('est-punt-tarjetas').innerHTML = [
             // La medición oficial es contra el SLOT VIGENTE
             // (coalesce(slot_coordinado, slot_asignado)), no contra la hora
             // programada. Cumplir la ventana es ANTES, EN TIEMPO o DESPUÉS.
-            tarjeta('Cumple la ventana del slot', Motor.fmtPorcentaje(total.puntualidadPorcentaje),
-                `ANTES + EN TIEMPO + DESPUÉS, sobre ${cob.texto} de las operaciones`),
-            tarjeta('En tiempo', Motor.fmtEntero(total.operacionesEnTiempo),
-                `Antes ${Motor.fmtEntero(total.operacionesAntes)} · Después ${Motor.fmtEntero(total.operacionesDespues)}`),
-            tarjeta('Fuera de ventana',
-                `${Motor.fmtEntero(total.operacionesAnticipadas)} / ${Motor.fmtEntero(total.operacionesDemoradas)}`,
-                'Anticipadas / con demora (más de 15 min)'),
-            tarjeta('Desviación media contra el slot',
-                total.minutosVsSlotPromedio === null ? '—' : `${Motor.fmtDecimal(total.minutosVsSlotPromedio)} min`,
-                'Positivo = después del slot'),
-            tarjeta('Demora operacional',
-                total.demoraPromedio === null ? '—' : `${Motor.fmtDecimal(total.demoraPromedio)} min`,
-                'Concepto distinto: retraso del vuelo, no cumplimiento del permiso')
+            kpiFbo({ icono: 'fa-circle-check', color: '#198754', titulo: 'Cumple la ventana del slot', valor: Motor.fmtPorcentaje(total.puntualidadPorcentaje),
+                detalle: `ANTES + EN TIEMPO + DESPUÉS, sobre ${cob.texto} de las operaciones` }),
+            kpiFbo({ icono: 'fa-clock', color: '#0d6efd', titulo: 'En tiempo', valor: Motor.fmtEntero(total.operacionesEnTiempo),
+                detalle: `Antes ${Motor.fmtEntero(total.operacionesAntes)} · Después ${Motor.fmtEntero(total.operacionesDespues)}` }),
+            kpiFbo({ icono: 'fa-triangle-exclamation', color: '#dc3545', titulo: 'Fuera de ventana',
+                valor: `${Motor.fmtEntero(total.operacionesAnticipadas)} / ${Motor.fmtEntero(total.operacionesDemoradas)}`,
+                detalle: 'Anticipadas / con demora (más de 15 min)' }),
+            kpiFbo({ icono: 'fa-arrows-left-right', color: '#6f42c1', titulo: 'Desviación media contra el slot',
+                valor: total.minutosVsSlotPromedio === null || total.minutosVsSlotPromedio === undefined ? '—' : `${Motor.fmtDecimal(total.minutosVsSlotPromedio)} min`,
+                detalle: 'Positivo = después del slot' }),
+            kpiFbo({ icono: 'fa-hourglass-half', color: '#fd7e14', titulo: 'Demora operacional',
+                valor: total.demoraPromedio === null || total.demoraPromedio === undefined ? '—' : `${Motor.fmtDecimal(total.demoraPromedio)} min`,
+                detalle: 'Retraso del vuelo, no cumplimiento del permiso' })
         ].join('');
 
         pintarGrafica('est-punt-chart', {
-            type: 'line',
+            type: 'bar',
             data: {
-                labels: mensual.map((f) => f.d1),
+                labels: mensual.map((f) => fboMes(f.d1)),
                 datasets: [
-                    { label: 'Cumple slot (%)', data: mensual.map((f) => f.puntualidadPorcentaje), borderColor: COLORES[1], backgroundColor: COLORES[1], tension: 0.25 },
-                    { label: 'Demora promedio (min)', data: mensual.map((f) => f.demoraPromedio), borderColor: COLORES[2], backgroundColor: COLORES[2], tension: 0.25, yAxisID: 'y1' }
+                    { type: 'line', label: 'Cumple slot (%)', data: mensual.map((f) => f.puntualidadPorcentaje), borderColor: '#198754', backgroundColor: '#198754', tension: 0.3, pointRadius: 3, yAxisID: 'y' },
+                    { type: 'bar', label: 'Demora promedio (min)', data: mensual.map((f) => f.demoraPromedio), backgroundColor: 'rgba(253, 126, 20, .55)', borderRadius: 4, maxBarThickness: 48, yAxisID: 'y1' }
                 ]
             },
             options: opcionesGrafica({
                 scales: {
-                    y: { beginAtZero: true, position: 'left', suggestedMax: 100 },
-                    y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false } }
+                    x: { grid: { display: false } },
+                    y: { beginAtZero: true, position: 'left', suggestedMax: 100, title: { display: true, text: '% cumple' } },
+                    y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'min' } }
                 }
             })
+        });
+
+        pintarComposicion('est-punt-composicion', [
+            barraComposicion('Resultado contra el slot', [
+                { etiqueta: 'Anticipadas', valor: fboNum(total.operacionesAnticipadas), color: '#0dcaf0' },
+                { etiqueta: 'Antes', valor: fboNum(total.operacionesAntes), color: '#20c997' },
+                { etiqueta: 'En tiempo', valor: fboNum(total.operacionesEnTiempo), color: '#198754' },
+                { etiqueta: 'Después', valor: fboNum(total.operacionesDespues), color: '#ffc107' },
+                { etiqueta: 'Demora', valor: fboNum(total.operacionesDemoradas), color: '#dc3545' }
+            ])
+        ]);
+
+        pintarRanking('est-punt-causas-chart', causas, {
+            color: '#dc3545',
+            serie: 'Demoradas',
+            etiqueta: causa,
+            valor: (f) => f.operacionesDemoradas,
+            globo: (f) => `${Motor.fmtEntero(f.operacionesDemoradas)} demoradas · ${Motor.fmtEntero(f.minutosDemoraTotal)} minutos acumulados`
         });
 
         const columnasPunt = [
@@ -1096,8 +1456,7 @@
             { titulo: 'Demoradas', clave: 'operacionesDemoradas', tipo: 'numero' },
             { titulo: 'Minutos acumulados', clave: 'minutosDemoraTotal', tipo: 'numero' },
             { titulo: 'Demora prom. (min)', clave: 'demoraPromedio', tipo: 'decimal' }
-        ], porCausa.filter((f) => f.d1 || f.d2).sort((a, b) => b.operacionesDemoradas - a.operacionesDemoradas),
-            { vacio: 'No hay códigos ni causas de demora capturados en el periodo.' });
+        ], causas, { vacio: 'No hay códigos ni causas de demora capturados en el periodo.' });
 
         await pintarAvisosDe(total);
     }
@@ -1145,6 +1504,29 @@
         const etiquetaB = Motor.etiquetaRango(b.desde, b.hasta);
         const comparacion = Motor.comparar(totalB, totalA, etiquetaB, etiquetaA);
         state.ultimoComparador = { comparacion, etiquetaA, etiquetaB };
+
+        const operaciones = comparacion.metricas.find((f) => f.clave === 'operaciones') || comparacion.metricas[0];
+        pintarFrase('est-cmp-frase', `Periodo A ${negrita(etiquetaA)} contra periodo B ${negrita(etiquetaB)}, que sirve de referencia: `
+            + 'cada variación dice cuánto cambió A respecto de B.'
+            + (operaciones && operaciones.variacion && operaciones.variacion.estado === 'ok'
+                ? ` Las operaciones ${operaciones.variacion.porcentual >= 0 ? 'crecieron' : 'bajaron'} `
+                    + `${negrita(Motor.fmtPorcentaje(Math.abs(operaciones.variacion.porcentual), 1))}.`
+                : ''));
+
+        // Una tarjeta por indicador principal: el valor de A, el de B debajo y
+        // la variación con su flecha.
+        const ICONOS = ['fa-plane', 'fa-users', 'fa-box', 'fa-chair', 'fa-clock', 'fa-right-left'];
+        const tarjetas = $('est-cmp-tarjetas');
+        if (tarjetas) {
+            tarjetas.innerHTML = comparacion.metricas.slice(0, 6).map((f, i) => kpiFbo({
+                icono: ICONOS[i % ICONOS.length],
+                color: COLORES[i % COLORES.length],
+                titulo: f.etiqueta,
+                valor: Motor.formatearPorTipo(f.valorB, f.tipo),
+                detalle: `${etiquetaB}: ${Motor.formatearPorTipo(f.valorA, f.tipo)}`,
+                variacion: chipVariacion(f.variacion, `vs ${etiquetaB}`)
+            })).join('');
+        }
 
         pintarTabla('est-cmp-tabla', [
             { titulo: 'Indicador', clave: 'etiqueta' },
@@ -1241,18 +1623,17 @@
                 return `<button class="btn btn-sm btn-outline-success" data-est-doc="${esc(doc.clave)}" data-est-formato="${esc(f)}" ${permitido ? '' : 'disabled'}>
                     <i class="fas ${icono} me-1"></i>${f.toUpperCase()}</button>`;
             }).join(' ');
-            return `<div class="col-12 col-md-6 col-xl-4">
-                <div class="card h-100 shadow-sm border-0">
-                    <div class="card-body d-flex flex-column">
-                        <h6 class="fw-semibold text-primary mb-1"><i class="fas ${esc(doc.icono)} me-2"></i>${esc(doc.titulo)}</h6>
-                        <p class="text-muted mb-3" style="font-size:.78rem">${esc(doc.descripcion)}</p>
-                        <div class="mt-auto d-flex gap-2 flex-wrap align-items-center">
-                            ${botones}
-                            ${permitido ? '' : '<small class="text-muted"><i class="fas fa-lock me-1"></i>Requiere más permisos</small>'}
-                        </div>
-                    </div>
+            return `<article class="tb-doc">
+                <span class="tb-doc-icono" aria-hidden="true"><i class="fas ${esc(doc.icono)}"></i></span>
+                <div class="tb-doc-texto">
+                    <h6>${esc(doc.titulo)}</h6>
+                    <p>${esc(doc.descripcion)}</p>
                 </div>
-            </div>`;
+                <div class="tb-doc-acciones">
+                    ${botones}
+                    ${permitido ? '' : '<small class="text-muted"><i class="fas fa-lock me-1"></i>Requiere más permisos</small>'}
+                </div>
+            </article>`;
         }).join('');
     }
 
@@ -2189,17 +2570,25 @@
             }
         });
 
-        // Al cambiar entre claro y oscuro, las gráficas de FBO toman sus
-        // colores otra vez: se repintan con lo ya traído si están a la vista,
-        // o en la próxima apertura si no.
-        let fboOscuro = document.body.classList.contains('dark-mode');
+        // Al cambiar entre claro y oscuro, las gráficas toman sus colores otra
+        // vez: FBO se repinta con lo ya traído, el área abierta se vuelve a
+        // pintar y las demás, en su próxima apertura. Sólo reacciona la
+        // instancia cuyo tablero sigue en la página.
+        const raizTablero = $('est-subnav');
+        let temaOscuro = document.body.classList.contains('dark-mode');
         if (window.MutationObserver) {
             new MutationObserver(() => {
                 const oscuro = document.body.classList.contains('dark-mode');
-                if (oscuro === fboOscuro) return;
-                fboOscuro = oscuro;
-                if (state.areaActiva === 'fbo') pintarGraficasFbo();
-                else state.cargadas.delete('fbo');
+                if (oscuro === temaOscuro || (raizTablero && !raizTablero.isConnected)) return;
+                temaOscuro = oscuro;
+                const area = state.areaActiva;
+                if (area === 'fbo') {
+                    pintarGraficasFbo();
+                    [...state.cargadas].filter((a) => a !== 'fbo').forEach((a) => state.cargadas.delete(a));
+                    return;
+                }
+                state.cargadas.clear();
+                if (RENDERIZADORES[area]) mostrarArea(area, true);
             }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
         }
 

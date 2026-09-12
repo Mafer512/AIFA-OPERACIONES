@@ -168,3 +168,51 @@ describe('el lienzo de Estadística', () => {
     expect($('est-avisos').classList.contains('mb-3')).toBe(false);
   });
 });
+
+describe('todas las áreas con el diseño de FBO', () => {
+  const AREAS = [['resumen', 'est-resumen'], ['explorador', 'est-exp'], ['operaciones', 'est-ops'],
+    ['pasajeros', 'est-pax'], ['aerolineas', 'est-aero'], ['rutas', 'est-rutas'], ['aeronaves', 'est-aeronaves'],
+    ['carga', 'est-carga'], ['puntualidad', 'est-punt'], ['comparador', 'est-cmp']];
+
+  test('cada área abre con su cabecera y su frase, y acomoda lo demás en paneles', () => {
+    for (const [area, prefijo] of AREAS) {
+      const pane = $(`est-pane-${area}`);
+      expect(pane.querySelector('.fbo-tablero .fbo-cabeza .fbo-titulo')).not.toBeNull();
+      expect(pane.querySelector(`#${prefijo}-frase.fbo-frase`)).not.toBeNull();
+      expect(pane.querySelectorAll('.fbo-panel').length).toBeGreaterThan(0);
+    }
+    for (const area of ['clasificacion', 'descargas']) {
+      expect($(`est-pane-${area}`).querySelector('.fbo-cabeza .fbo-titulo')).not.toBeNull();
+    }
+  });
+
+  test('las tarjetas usan la rejilla de FBO y cada tabla va dentro de un panel', () => {
+    AREAS.forEach(([, prefijo]) => expect($(`${prefijo}-tarjetas`).classList.contains('fbo-kpis')).toBe(true));
+    const tablas = document.querySelectorAll('#est-subcontent table[id^="est-"]');
+    expect(tablas.length).toBeGreaterThan(10);
+    tablas.forEach((tabla) => expect(tabla.closest('.fbo-panel')).not.toBeNull());
+  });
+
+  test('siguen todos los identificadores que usan el panel y la clasificación', () => {
+    ['est-resumen-calidad', 'est-resumen-chart', 'est-resumen-variaciones',
+      'est-exp-dim1', 'est-exp-dim2', 'est-exp-dim3', 'est-exp-consultar', 'est-exp-filtro-campo', 'est-exp-filtro-valor',
+      'est-exp-filtro-nota', 'est-exp-csv', 'est-exp-excel', 'est-exp-conteo', 'est-exp-chart', 'est-exp-tabla',
+      'est-ops-chart', 'est-ops-tabla', 'est-ops-clasif', 'est-pax-chart', 'est-pax-tabla', 'est-pax-ocupacion',
+      'est-aero-chart', 'est-aero-tabla', 'est-rutas-chart', 'est-rutas-tabla', 'est-aeronaves-tipo', 'est-aeronaves-matricula',
+      'est-carga-nota', 'est-carga-chart', 'est-carga-tabla', 'est-carga-aerolinea', 'est-punt-chart', 'est-punt-aerolinea',
+      'est-punt-causas', 'est-cmp-preset', 'est-cmp-a-desde', 'est-cmp-a-hasta', 'est-cmp-b-desde', 'est-cmp-b-hasta',
+      'est-cmp-comparar', 'est-cmp-csv', 'est-cmp-tabla', 'est-cla-nueva', 'est-cla-solo-activas', 'est-cla-conteo',
+      'est-cla-solo-lectura', 'est-cla-tabla', 'est-cla-sin-resumen', 'est-cla-sin-tabla', 'est-descargas-lista']
+      .forEach((id) => expect($(id)).not.toBeNull());
+  });
+
+  test('las tablas largas se desplazan dentro de su panel con el encabezado fijo', () => {
+    expect(css).toMatch(/\.tb-tabla-alta \{[^}]*max-height:[^}]*overflow: auto;/);
+    expect(css).toMatch(/\.tb-tabla thead th \{[^}]*position: sticky;/);
+  });
+
+  test('el Informe oficial toma tarjetas y paneles del mismo lenguaje', () => {
+    expect(css).toMatch(/#est-pane-informe \.airline-stat-card \{[^}]*border-left: 4px solid/);
+    expect(css).toMatch(/#est-pane-informe \.table-responsive \{[^}]*border-radius: \.9rem;/);
+  });
+});
