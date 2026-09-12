@@ -411,7 +411,7 @@
             kpi('Movimientos', Core.numero(t.movimientos), esc(rango), AZUL, 'fa-plane'),
             kpi('Llegadas / Salidas',
                 `${Core.numero(t.llegadas)} / ${Core.numero(t.salidas)}`,
-                `${Core.numero(t.rotaciones)} rotaciones`, VERDE, 'fa-right-left'),
+                `${Core.numero(t.movimientos)} movimientos`, VERDE, 'fa-right-left'),
             kpi('Pasajeros A.G.', Core.numero(t.pax), esc(desglosePax(t)), MORADO, 'fa-users'),
             kpi('Por validar', Core.numero(t.pendientes),
                 `${Core.numero(t.validados)} validados · ${Core.numero(t.observados)} observados`,
