@@ -20,7 +20,7 @@
 
     /* Clases del espacio de trabajo a pantalla completa de Conciliación: fijan
        esa sección sobre todo lo demás, así que hay que soltarlas al salir. */
-    const CLASES_ORIGEN = ['conci-manifest-workspace', 'conci-itinerary-workspace'];
+    const CLASES_ORIGEN = ['conci-manifest-workspace', 'conci-itinerary-workspace', 'conci-estadistica-workspace'];
 
     /* Reportes usa su propio espacio de trabajo a pantalla completa, con las
        mismas reglas: sin encabezado, sin barra de agenda y sin barra lateral,

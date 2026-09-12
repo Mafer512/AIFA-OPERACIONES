@@ -21075,6 +21075,28 @@ body.conci-reportes-workspace .conci-reportes-tab-content {
 }
 
 /* ==========================================================================
+   Conciliacion > Estadistica: pantalla completa con scroll
+   Arriba el encabezado del aeropuerto (logo, titulo, hoy, hora, Actualizar)
+   y debajo las pestanas de Conciliacion con su boton Menu. Se quitan la barra
+   lateral, la agenda del dia, la cabecera de Conciliacion y el boton Menu
+   flotante, que ahi repetia al de las pestanas. NO fija la pagina a 100vh:
+   el tablero es largo y se recorre con el scroll normal de la pagina.
+   ========================================================================== */
+body.conci-estadistica-workspace #ag-today-bar,
+body.conci-estadistica-workspace .sidebar,
+body.conci-estadistica-workspace #sidebar-overlay,
+body.conci-estadistica-workspace .conci-section-heading,
+body.conci-estadistica-workspace #navdeck-back {
+   display: none !important;
+}
+
+body.conci-estadistica-workspace .main-content {
+   width: 100% !important;
+   margin-left: 0 !important;
+   padding: .4rem !important;
+}
+
+/* ==========================================================================
    Reportes > Pasajeros
    Los tres reportes se imprimen tal cual, asi que la hoja imita la plantilla
    del libro que sustituye. Los colores salen de xl/styles.xml del propio
