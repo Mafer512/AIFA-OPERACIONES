@@ -15,7 +15,7 @@ const indexSource = fs.readFileSync(path.resolve(__dirname, '..', 'index.html'),
 // alguien renombra un id allá, esta prueba falla en vez de seguir pasando
 // contra una copia que ya no existe.
 function marcadoDelModulo() {
-  const inicio = indexSource.indexOf('<ul class="nav nav-pills gap-1 mb-3 flex-wrap" id="est-subnav"');
+  const inicio = indexSource.indexOf('<div class="nav est-cabecera" id="est-subnav"');
   const fin = indexSource.indexOf('<!-- INFORME OFICIAL');
   if (inicio === -1 || fin === -1 || fin < inicio) {
     throw new Error('No se encontró el marcado del módulo estadístico en index.html');
@@ -566,5 +566,19 @@ describe('Panel estadístico · convivencia con lo que ya existía', () => {
     expect(panelSource).toMatch(/window\.Chart/);
     expect(panelSource).not.toMatch(/echarts|plotly|highcharts|d3\.select|apexcharts/i);
     expect(marcadoDelModulo()).not.toMatch(/tailwind|bulma|foundation/i);
+  });
+});
+
+describe('la ventana FBO', () => {
+  test('existe y todavía no consulta ni muestra nada', async () => {
+    const { client } = await montar('admin');
+    await reposar();
+    const antes = client.llamadas.length;
+    document.getElementById('est-tab-fbo').dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+    expect(client.llamadas.length).toBe(antes);
+    expect(document.getElementById('est-pane-fbo').innerHTML.trim()).toBe('');
+    // Los filtros siguen a la vista: FBO no es el Informe oficial.
+    expect(document.getElementById('est-filtros').classList.contains('d-none')).toBe(false);
   });
 });
