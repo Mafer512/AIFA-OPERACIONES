@@ -235,9 +235,10 @@ describe('Conciliación · el modo hoja de cálculo se apaga fuera de sus pesta�
     expect(win.document.body.classList.contains('conci-manifest-workspace')).toBe(false);
   });
 
-  // Estadística va a pantalla completa como Manifiestos —sin encabezado, con el
-  // menú de Conciliación hasta arriba— pero con su propio modo, que no fija la
-  // altura: así no se repite el tablero cortado que se reportó.
+  // Estadística va a pantalla completa —encabezado del aeropuerto arriba, las
+  // pestañas de Conciliación con su Menú debajo, sin barra lateral ni Menú
+  // flotante— con su propio modo, que no fija la altura: así no se repite el
+  // tablero cortado que se reportó.
   test('Estadística enciende su pantalla completa y Manifiestos la apaga', async () => {
     const body = win.document.body;
     await mostrarPestana('tab-conci-estadistica');
@@ -249,11 +250,15 @@ describe('Conciliación · el modo hoja de cálculo se apaga fuera de sus pesta�
     expect(body.classList.contains('conci-estadistica-workspace')).toBe(true);
   });
 
-  test('su pantalla completa esconde el encabezado pero no bloquea el scroll', () => {
+  test('su pantalla completa deja el encabezado, quita el Menú flotante y no bloquea el scroll', () => {
     const css = fs.readFileSync(path.join(raiz, 'style.css'), 'utf8').replace(/\r\n/g, '\n');
     const reglas = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
       .filter(([, selector]) => selector.includes('body.conci-estadistica-workspace'));
-    const oculta = reglas.find(([, selector]) => /body\.conci-estadistica-workspace \.header\b/.test(selector));
+    expect(reglas.length).toBeGreaterThan(0);
+    // El encabezado del aeropuerto se ve: ninguna regla del modo lo toca.
+    expect(reglas.some(([selector]) => /\.header\b/.test(selector))).toBe(false);
+    // El Menú flotante de abajo sí se oculta: arriba ya está el de las pestañas.
+    const oculta = reglas.find(([selector]) => /body\.conci-estadistica-workspace #navdeck-back\b/.test(selector));
     expect(oculta && oculta[2]).toMatch(/display:\s*none\s*!important/);
     for (const [, , cuerpo] of reglas) {
       expect(cuerpo).not.toMatch(/height:\s*100vh/);
