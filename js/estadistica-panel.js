@@ -617,6 +617,12 @@
         });
     }
 
+    // Los indicadores de calidad con menos del 80 % de cobertura (los avisos
+    // amarillos: desglose de carga, rotaciones, pasajeros programados,
+    // validación) se ocultan por ahora, a pedido del área, mientras esa
+    // información no se capture. Para volver a mostrarlos, poner true.
+    const MOSTRAR_COBERTURA_BAJA = false;
+
     // ── A · Resumen ejecutivo ────────────────────────────────────────────────
     async function pintarResumen() {
         const rangoAnterior = Motor.periodoAnterior(desde(), hasta());
@@ -663,8 +669,10 @@
         ].join('');
 
         // Calidad del dato: dice cuándo un indicador puede estar engañando.
+        const calidad = Motor.calidad(total)
+            .filter((c) => MOSTRAR_COBERTURA_BAJA || !(c.porcentaje !== null && c.porcentaje < 80));
         $('est-resumen-calidad').innerHTML = '<div class="fbo-destacados">'
-            + Motor.calidad(total).map((c) => {
+            + calidad.map((c) => {
                 const bajo = c.porcentaje !== null && c.porcentaje < 80;
                 return `<span class="fbo-destacado${bajo ? ' fbo-destacado-aviso' : ''}">`
                     + `<i class="fas ${bajo ? 'fa-triangle-exclamation' : 'fa-circle-check'}" aria-hidden="true"></i>`
