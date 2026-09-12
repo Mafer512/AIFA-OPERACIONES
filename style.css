@@ -21073,6 +21073,27 @@ body.conci-reportes-workspace .conci-reportes-tab-content {
 }
 
 /* ==========================================================================
+   Conciliacion > Estadistica: pantalla completa con scroll
+   Como Manifiestos y Reportes: sin encabezado, barra de hoy ni barra lateral,
+   con las pestanas de Conciliacion y su boton Menu hasta arriba. A diferencia
+   de ellos NO fija la pagina a 100vh: el tablero es largo y se recorre con el
+   scroll normal de la pagina.
+   ========================================================================== */
+body.conci-estadistica-workspace .header,
+body.conci-estadistica-workspace #ag-today-bar,
+body.conci-estadistica-workspace .sidebar,
+body.conci-estadistica-workspace #sidebar-overlay,
+body.conci-estadistica-workspace .conci-section-heading {
+   display: none !important;
+}
+
+body.conci-estadistica-workspace .main-content {
+   width: 100% !important;
+   margin-left: 0 !important;
+   padding: .4rem !important;
+}
+
+/* ==========================================================================
    Reportes > Pasajeros
    Los tres reportes se imprimen tal cual, asi que la hoja imita la plantilla
    del libro que sustituye. Los colores salen de xl/styles.xml del propio
