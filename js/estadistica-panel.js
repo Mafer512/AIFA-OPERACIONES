@@ -127,11 +127,12 @@
         if (!lista.length) { host.classList.add('d-none'); host.innerHTML = ''; return; }
         host.classList.remove('d-none');
         host.innerHTML = lista.map((a) => {
-            const clase = a.nivel === 'error' ? 'alert-danger' : (a.nivel === 'aviso' ? 'alert-warning' : 'alert-secondary');
-            const icono = a.nivel === 'error' ? 'fa-circle-exclamation'
-                : (a.nivel === 'aviso' ? 'fa-triangle-exclamation' : 'fa-circle-info');
-            return `<div class="alert ${clase} py-2 px-3 mb-2" style="font-size:.8rem">
-                <i class="fas ${icono} me-2"></i>${esc(a.mensaje)}</div>`;
+            // Van al pie de la página, como texto sobre el fondo: el icono
+            // conserva el color que dice si es advertencia o error.
+            const nivel = a.nivel === 'error' ? 'error' : (a.nivel === 'aviso' ? 'aviso' : 'info');
+            const icono = nivel === 'error' ? 'fa-circle-exclamation'
+                : (nivel === 'aviso' ? 'fa-triangle-exclamation' : 'fa-circle-info');
+            return `<p class="est-aviso est-aviso-${nivel}"><i class="fas ${icono}" aria-hidden="true"></i><span>${esc(a.mensaje)}</span></p>`;
         }).join('');
     }
 
