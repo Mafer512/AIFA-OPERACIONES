@@ -944,3 +944,35 @@ describe('las áreas con el diseño de FBO', () => {
     expect(oscuro).toBe('#cbd5e1');
   });
 });
+
+describe('la gráfica de carga por mes', () => {
+  async function abrirCarga(sinDesglose) {
+    const montaje = await montar('admin');
+    if (sinDesglose) {
+      const original = montaje.client.rpc.getMockImplementation();
+      montaje.client.rpc.mockImplementation(async (nombre, params) => {
+        const r = await original(nombre, params);
+        if (nombre === 'estadistica_agregado' && Array.isArray(r.data)) {
+          r.data = r.data.map((f) => Object.assign({}, f, { carga_nacional_kg: null, carga_internacional_kg: null }));
+        }
+        return r;
+      });
+    }
+    document.getElementById('est-tab-carga').dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+    return montaje.graficas.filter((g) => g.id === 'est-carga-chart').pop().config.data.datasets;
+  }
+
+  test('sin desglose nacional/internacional, las barras son la carga transportada', async () => {
+    const series = await abrirCarga(true);
+    expect(series[0].label).toBe('Carga transportada (t)');
+    expect(series[0].data).toEqual([45, 45]);
+    expect(document.getElementById('est-carga-frase').textContent).toMatch(/sin desglose nacional\/internacional/);
+    expect(document.getElementById('est-carga-frase').textContent).not.toMatch(/— nacional/);
+  });
+
+  test('con desglose completo se apilan nacional e internacional, sin tramo gris', async () => {
+    const series = await abrirCarga(false);
+    expect(series.map((s) => s.label).slice(0, -1)).toEqual(['Nacional (t)', 'Internacional (t)']);
+  });
+});

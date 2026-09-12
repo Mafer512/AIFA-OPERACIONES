@@ -1259,8 +1259,10 @@
         const fmtT = (t) => `${Motor.fmtDecimal(t)} t`;
 
         pintarFrase('est-carga-frase', `${periodoTexto()} se ${fboUno(total.operacionesConCarga, 'transportó', 'transportaron')} `
-            + `${negrita(Motor.fmtToneladas(total.cargaTotalKg))} de carga: ${esc(Motor.fmtToneladas(total.cargaNacionalKg))} nacional y `
-            + `${esc(Motor.fmtToneladas(total.cargaInternacionalKg))} internacional, en `
+            + `${negrita(Motor.fmtToneladas(total.cargaTotalKg))} de carga`
+            + (fboNum(total.cargaNacionalKg) + fboNum(total.cargaInternacionalKg) > 0
+                ? `: ${esc(Motor.fmtToneladas(total.cargaNacionalKg))} nacional y ${esc(Motor.fmtToneladas(total.cargaInternacionalKg))} internacional, en `
+                : ' (sin desglose nacional/internacional capturado), en ')
             + `${fboCuenta(total.operacionesConCarga, 'operación con carga', 'operaciones con carga')}.`
             + (conCarga[0] ? ` La aerolínea con más carga fue ${negrita(conCarga[0].d1)}, con `
                 + `${negrita(fboPctTexto(fboNum(conCarga[0].cargaTotalKg), fboNum(total.cargaTotalKg)))} del total.` : ''));
@@ -1300,10 +1302,19 @@
             }
         }
 
-        pintarTendencia('est-carga-chart', mensual, [
-            { etiqueta: 'Nacional (t)', valor: (f) => Motor.kgAToneladas(f.cargaNacionalKg), color: '#0d6efd' },
-            { etiqueta: 'Internacional (t)', valor: (f) => Motor.kgAToneladas(f.cargaInternacionalKg), color: '#fd7e14' }
-        ], { total: (f) => Motor.kgAToneladas(f.cargaTotalKg), formato: fmtT });
+        // Sin desglose nacional/internacional capturado, apilar esas dos series
+        // deja la gráfica en blanco: entonces las barras son la carga
+        // transportada. Con desglose parcial, lo que falta para el total va en
+        // un tramo gris "Sin desglose", para que cada barra llegue a su total.
+        const sinDesgloseMes = (f) => Math.max(0, toneladas(f.cargaTotalKg) - toneladas(f.cargaNacionalKg) - toneladas(f.cargaInternacionalKg));
+        const hayDesglose = mensual.some((f) => fboNum(f.cargaNacionalKg) + fboNum(f.cargaInternacionalKg) > 0);
+        const seriesCarga = hayDesglose
+            ? [
+                { etiqueta: 'Nacional (t)', valor: (f) => Motor.kgAToneladas(f.cargaNacionalKg), color: '#0d6efd' },
+                { etiqueta: 'Internacional (t)', valor: (f) => Motor.kgAToneladas(f.cargaInternacionalKg), color: '#fd7e14' }
+            ].concat(mensual.some((f) => sinDesgloseMes(f) >= 0.001) ? [{ etiqueta: 'Sin desglose (t)', valor: sinDesgloseMes, color: FBO_GRIS }] : [])
+            : [{ etiqueta: 'Carga transportada (t)', valor: (f) => Motor.kgAToneladas(f.cargaTotalKg), color: '#fd7e14' }];
+        pintarTendencia('est-carga-chart', mensual, seriesCarga, { total: (f) => Motor.kgAToneladas(f.cargaTotalKg), formato: fmtT });
 
         pintarComposicion('est-carga-composicion', [
             barraComposicion('Ámbito (t)', [
