@@ -49,6 +49,9 @@
         ultimoExplorador: null,
         ultimoComparador: null,
         diagnostico: null,
+        fboFiltro: null,
+        fboMetrica: 'movimientos',
+        fboUltimo: null,
         iniciado: false
     };
 
@@ -1576,6 +1579,471 @@
         else await descargarExcel([{ titulo: doc ? doc.titulo : clave, columnas, filas }], nombre);
     }
 
+    // ── J · FBO · Aviación General ───────────────────────────────────────────
+    // Primer tablero con la visualización nueva: una frase que cuenta el
+    // periodo, tarjetas con su variación, la tendencia con selector, barras de
+    // composición y rankings que filtran todo el tablero al tocarlos.
+    //
+    // Las cifras llegan ya sumadas de aviacion_general_resumen (migración 046),
+    // la misma función que usa el módulo de Aviación General: las dos pantallas
+    // dicen lo mismo y aquí no se recalcula ninguna métrica. En el navegador
+    // sólo se sacan proporciones y el promedio mensual, para pintar.
+    const FBO_MOVIMIENTO = Object.freeze({ A: 'LLEGADA', D: 'SALIDA' });
+    const FBO_AMBITO = Object.freeze({ Nacional: 'NACIONAL', Internacional: 'INTERNACIONAL' });
+    // Lo que se puede elegir tocando el tablero, y cómo se llama en pantalla.
+    const FBO_CAMPOS = Object.freeze({
+        operador: 'Operador',
+        tipo_aeronave: 'Tipo de aeronave',
+        aeropuerto: 'Origen / destino',
+        matricula: 'Matrícula'
+    });
+    // Filtros de la barra cuyas opciones salen de la operación de las otras
+    // ventanas, no de Aviación General: en FBO no se aplican, y se avisa.
+    const FBO_FILTROS_AJENOS = Object.freeze([
+        ['aerolinea', 'Aerolínea'], ['tipo_aeronave', 'Tipo aeronave'], ['matricula', 'Matrícula'],
+        ['endpoint', 'Origen / destino'], ['segmento_aviacion', 'Segmento'],
+        ['naturaleza_operacion', 'Naturaleza'], ['tipo_servicio', 'Tipo servicio']
+    ]);
+    // Cómo se nombra, en la nota de cada ranking, lo que llega sin dato.
+    const FBO_SIN_DATO = Object.freeze({ operador: 'operador', tipo_aeronave: 'tipo de aeronave', aeropuerto: 'origen / destino' });
+    const FBO_GRIS = '#94a3b8';
+
+    const fboNum = (valor) => Number(valor) || 0;
+    const fboPct = (parte, total) => (total > 0 ? (parte / total) * 100 : 0);
+    const fboClave = (clave) => (clave === null || clave === undefined || String(clave).trim() === '' ? null : String(clave));
+    const fboUno = (n, singular, plural) => (fboNum(n) === 1 ? singular : plural);
+    const fboCuenta = (n, singular, plural) => `${Motor.fmtEntero(n)} ${fboUno(n, singular, plural)}`;
+
+    // Proporción para leer: sin decimales, salvo que sea menos de 1 %.
+    function fboPctTexto(parte, total) {
+        const pct = fboPct(parte, total);
+        return Motor.fmtPorcentaje(pct, pct > 0 && pct < 1 ? 1 : 0);
+    }
+
+    // Colores de ejes y leyendas según el tema: el gris por omisión de
+    // Chart.js casi no se lee sobre el fondo oscuro.
+    function fboTema() {
+        const oscuro = document.body.classList.contains('dark-mode');
+        return {
+            oscuro,
+            texto: oscuro ? '#cbd5e1' : '#475569',
+            rejilla: oscuro ? 'rgba(148, 163, 184, .16)' : 'rgba(148, 163, 184, .22)',
+            valor: oscuro ? '#e2e8f0' : '#0f172a'
+        };
+    }
+
+    function fboMes(periodo) {
+        const [anio, mes] = String(periodo || '').split('-').map(Number);
+        const m = Motor.MESES[mes - 1];
+        return m ? `${m.corto} ${anio}` : String(periodo || '');
+    }
+
+    function fboFecha(iso) {
+        const { anio, mes, dia } = Motor.partesIso(iso);
+        return dia ? `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${anio}` : '—';
+    }
+
+    // Los filtros de la barra que sí le aplican a Aviación General, con los
+    // nombres y valores que entiende aviacion_general_filtro_ok.
+    function filtrosFbo(desdeIso, hastaIso) {
+        const f = state.filtros || {};
+        const filtros = {
+            fecha_desde: desdeIso || '',
+            fecha_hasta: hastaIso || '',
+            tipo_operacion: FBO_MOVIMIENTO[(f.direccion || [])[0]] || '',
+            ambito_operacion: FBO_AMBITO[(f.nacional_internacional || [])[0]] || ''
+        };
+        if (state.fboFiltro) filtros[state.fboFiltro.campo] = state.fboFiltro.valor;
+        return filtros;
+    }
+
+    async function resumenFbo(filtros) {
+        const client = await getClient();
+        const { data, error } = await client.rpc('aviacion_general_resumen', { p_filtros: filtros });
+        if (error) {
+            if (error.code === 'PGRST202' || error.code === '42883') {
+                throw new Error('falta la función aviacion_general_resumen en la base (migración 046 de Aviación General).');
+            }
+            throw error;
+        }
+        return data || {};
+    }
+
+    function filtrarFbo(campo, valor) {
+        if (!FBO_CAMPOS[campo] || !fboClave(valor)) return;
+        state.fboFiltro = { campo, valor: String(valor) };
+        mostrarArea('fbo', true);
+    }
+
+    // Escribe el valor al final de cada barra horizontal: así el número no
+    // depende de adivinarlo contra el eje.
+    const FBO_ETIQUETAS = {
+        id: 'fboEtiquetas',
+        afterDatasetsDraw(chart) {
+            const meta = chart.getDatasetMeta(0);
+            if (!meta || !meta.data) return;
+            const { ctx } = chart;
+            ctx.save();
+            ctx.font = '600 11px system-ui, -apple-system, "Segoe UI", sans-serif';
+            ctx.fillStyle = fboTema().valor;
+            ctx.textBaseline = 'middle';
+            meta.data.forEach((barra, i) => {
+                ctx.fillText(Motor.fmtEntero(chart.data.datasets[0].data[i]), barra.x + 6, barra.y);
+            });
+            ctx.restore();
+        }
+    };
+
+    function fraseFbo(t, rango) {
+        const mov = fboNum(t.movimientos);
+        return `Del ${fboFecha(rango.desde)} al ${fboFecha(rango.hasta)} ${fboUno(mov, 'se atendió', 'se atendieron')} `
+            + `<b>${Motor.fmtEntero(mov)}</b> ${fboUno(mov, 'movimiento', 'movimientos')} de aviación general `
+            + `(${fboCuenta(t.llegadas, 'llegada', 'llegadas')} y ${fboCuenta(t.salidas, 'salida', 'salidas')}) `
+            + `con <b>${Motor.fmtEntero(t.pax)}</b> ${fboUno(t.pax, 'pasajero', 'pasajeros')}, `
+            + `de <b>${Motor.fmtEntero(t.operadores)}</b> ${fboUno(t.operadores, 'operador', 'operadores')} `
+            + `y ${fboCuenta(t.matriculas, 'aeronave distinta', 'aeronaves distintas')}. `
+            + `El ${fboPctTexto(fboNum(t.nacionales), mov)} fue nacional.`;
+    }
+
+    function kpiFbo({ icono, color, titulo, valor, detalle, variacion }) {
+        return `<div class="fbo-kpi" style="--fbo-color:${color}">
+            <span class="fbo-kpi-icono" aria-hidden="true"><i class="fas ${icono}"></i></span>
+            <div class="fbo-kpi-texto">
+                <span class="fbo-kpi-titulo">${esc(titulo)}</span>
+                <strong class="fbo-kpi-valor">${esc(valor)}</strong>
+                ${detalle ? `<small class="fbo-kpi-detalle">${esc(detalle)}</small>` : ''}
+                ${variacion || ''}
+            </div>
+        </div>`;
+    }
+
+    function pintarKpisFbo(t, previo) {
+        const v = (campo) => (previo ? chipVariacion(Motor.variacion(previo[campo], t[campo]), 'vs periodo anterior') : '');
+        const mov = fboNum(t.movimientos);
+        $('est-fbo-kpis').innerHTML = [
+            kpiFbo({ icono: 'fa-plane', color: '#0d6efd', titulo: 'Movimientos', valor: Motor.fmtEntero(mov),
+                detalle: `${Motor.fmtEntero(t.llegadas)} llegadas · ${Motor.fmtEntero(t.salidas)} salidas`, variacion: v('movimientos') }),
+            kpiFbo({ icono: 'fa-right-left', color: '#0891b2', titulo: 'Vuelos atendidos', valor: Motor.fmtEntero(t.rotaciones),
+                detalle: 'Llegada y salida de una visita cuentan una vez', variacion: v('rotaciones') }),
+            kpiFbo({ icono: 'fa-users', color: '#20c997', titulo: 'Pasajeros', valor: Motor.fmtEntero(t.pax),
+                detalle: `${Motor.fmtEntero(t.adultos)} adultos · ${Motor.fmtEntero(t.infantes)} infantes`, variacion: v('pax') }),
+            kpiFbo({ icono: 'fa-hashtag', color: '#6f42c1', titulo: 'Aeronaves distintas', valor: Motor.fmtEntero(t.matriculas),
+                detalle: 'Matrículas diferentes en el periodo', variacion: v('matriculas') }),
+            kpiFbo({ icono: 'fa-building', color: '#fd7e14', titulo: 'Operadores', valor: Motor.fmtEntero(t.operadores),
+                detalle: 'Distintos en el periodo', variacion: v('operadores') }),
+            kpiFbo({ icono: 'fa-circle-check', color: '#198754', titulo: 'Validados',
+                valor: fboPctTexto(fboNum(t.validados), mov),
+                detalle: `${Motor.fmtEntero(t.validados)} de ${Motor.fmtEntero(mov)} · ${Motor.fmtEntero(t.observados)} observados` })
+        ].join('');
+    }
+
+    function destacadoFbo(icono, titulo, texto, campo, valor) {
+        const cuerpo = `<i class="fas ${icono}" aria-hidden="true"></i><span><small>${esc(titulo)}</small><b>${esc(texto)}</b></span>`;
+        return campo
+            ? `<button type="button" class="fbo-destacado" data-fbo-campo="${esc(campo)}" data-fbo-valor="${esc(valor)}" title="Ver solo ${esc(valor)}">${cuerpo}</button>`
+            : `<span class="fbo-destacado">${cuerpo}</span>`;
+    }
+
+    function pintarDestacadosFbo(d) {
+        const mov = fboNum((d.totales || {}).movimientos);
+        const chips = [];
+        // Lo que ya está filtrado no se vuelve a destacar: sería el 100 %.
+        const filtrado = state.fboFiltro ? state.fboFiltro.campo : null;
+        const meses = d.por_mes || [];
+        if (meses.length > 1) {
+            const pico = meses.reduce((a, f) => (fboNum(f.movimientos) > fboNum(a.movimientos) ? f : a), meses[0]);
+            chips.push(destacadoFbo('fa-arrow-trend-up', 'Mes con más movimientos',
+                `${fboMes(pico.periodo)} · ${Motor.fmtEntero(pico.movimientos)}`));
+        }
+        const primero = (lista) => (lista || []).find((f) => fboClave(f.clave));
+        const operador = primero(d.top_operadores);
+        if (operador && filtrado !== 'operador') {
+            chips.push(destacadoFbo('fa-building', 'Operador principal',
+                `${operador.clave} · ${fboPctTexto(fboNum(operador.movimientos), mov)}`, 'operador', operador.clave));
+        }
+        const aeronave = primero(d.top_aeronaves);
+        if (aeronave && filtrado !== 'tipo_aeronave') {
+            chips.push(destacadoFbo('fa-plane-up', 'Aeronave más usada',
+                `${aeronave.clave} · ${Motor.fmtEntero(aeronave.movimientos)}`, 'tipo_aeronave', aeronave.clave));
+        }
+        const aeropuerto = primero(d.top_aeropuertos);
+        if (aeropuerto && filtrado !== 'aeropuerto') {
+            chips.push(destacadoFbo('fa-location-dot', 'Origen / destino más frecuente',
+                `${aeropuerto.clave} · ${Motor.fmtEntero(aeropuerto.movimientos)}`, 'aeropuerto', aeropuerto.clave));
+        }
+        // Calidad del dato, a la vista: una buena parte de los movimientos no
+        // trae origen/destino, y sin decirlo el ranking engañaría.
+        const sinDato = (d.top_aeropuertos || []).find((f) => !fboClave(f.clave));
+        if (sinDato && mov) {
+            chips.push('<span class="fbo-destacado fbo-destacado-aviso"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i>'
+                + `<span><small>Calidad del dato</small><b>${fboPctTexto(fboNum(sinDato.movimientos), mov)} sin origen / destino</b></span></span>`);
+        }
+        $('est-fbo-destacados').innerHTML = chips.join('');
+    }
+
+    function barraComposicion(titulo, partes) {
+        const total = partes.reduce((a, p) => a + p.valor, 0);
+        if (!total) return '';
+        const pct = (p) => fboPctTexto(p.valor, total);
+        return `<div class="fbo-comp">
+            <div class="fbo-comp-titulo">${esc(titulo)}</div>
+            <div class="fbo-comp-barra" role="img" aria-label="${esc(partes.map((p) => `${p.etiqueta} ${pct(p)}`).join(', '))}">
+                ${partes.map((p) => `<span style="width:${fboPct(p.valor, total).toFixed(2)}%;background:${p.color}" title="${esc(p.etiqueta)}: ${Motor.fmtEntero(p.valor)}"></span>`).join('')}
+            </div>
+            <div class="fbo-comp-leyenda">${partes.map((p) => `<span><i style="background:${p.color}"></i>${esc(p.etiqueta)} <b>${pct(p)}</b> <small>${Motor.fmtEntero(p.valor)}</small></span>`).join('')}</div>
+        </div>`;
+    }
+
+    function pintarComposicionFbo(t) {
+        $('est-fbo-composicion').innerHTML = [
+            barraComposicion('Movimiento', [
+                { etiqueta: 'Llegadas', valor: fboNum(t.llegadas), color: '#0d6efd' },
+                { etiqueta: 'Salidas', valor: fboNum(t.salidas), color: '#20c997' }
+            ]),
+            barraComposicion('Ámbito', [
+                { etiqueta: 'Nacional', valor: fboNum(t.nacionales), color: '#0369a1' },
+                { etiqueta: 'Internacional', valor: fboNum(t.internacionales), color: '#fd7e14' }
+            ]),
+            barraComposicion('Pasajeros', [
+                { etiqueta: 'Adultos', valor: fboNum(t.adultos), color: '#6f42c1' },
+                { etiqueta: 'Infantes', valor: fboNum(t.infantes), color: '#d63384' }
+            ]),
+            barraComposicion('Validación', [
+                { etiqueta: 'Validados', valor: fboNum(t.validados), color: '#198754' },
+                { etiqueta: 'Pendientes', valor: fboNum(t.pendientes), color: FBO_GRIS },
+                { etiqueta: 'Observados', valor: fboNum(t.observados), color: '#dc3545' }
+            ])
+        ].join('');
+    }
+
+    // La tendencia se vuelve a dibujar con lo ya traído: cambiar entre
+    // movimientos y pasajeros no consulta otra vez.
+    function pintarTendenciaFbo() {
+        const datos = state.fboUltimo;
+        if (!datos) return;
+        const filas = datos.por_mes || [];
+        const pax = state.fboMetrica === 'pax';
+        const tema = fboTema();
+        const valores = filas.map((f) => fboNum(pax ? f.pax : f.movimientos));
+        const promedio = valores.length ? valores.reduce((a, v) => a + v, 0) / valores.length : 0;
+        const barra = { type: 'bar', borderRadius: 4, maxBarThickness: 56, stack: 'mes' };
+        const barras = pax
+            ? [Object.assign({ label: 'Pasajeros', data: valores, backgroundColor: '#6f42c1' }, barra)]
+            : [
+                Object.assign({ label: 'Llegadas', data: filas.map((f) => fboNum(f.llegadas)), backgroundColor: '#0d6efd' }, barra),
+                Object.assign({ label: 'Salidas', data: filas.map((f) => fboNum(f.salidas)), backgroundColor: '#20c997' }, barra)
+            ];
+        pintarGrafica('est-fbo-mes', {
+            type: 'bar',
+            data: {
+                labels: filas.map((f) => fboMes(f.periodo)),
+                datasets: barras.concat([{
+                    type: 'line',
+                    label: `Promedio mensual: ${Motor.fmtEntero(promedio)}`,
+                    data: valores.map(() => promedio),
+                    borderColor: tema.oscuro ? '#94a3b8' : '#64748b',
+                    borderDash: [6, 4],
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    fill: false,
+                    stack: 'promedio'
+                }])
+            },
+            options: opcionesGrafica({
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: tema.texto } },
+                    datalabels: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            // El total del mes es el que manda el servidor, no una suma aquí.
+                            footer: (elementos) => {
+                                if (pax || !elementos.length) return '';
+                                return `Total: ${Motor.fmtEntero((filas[elementos[0].dataIndex] || {}).movimientos)}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { stacked: true, grid: { display: false }, ticks: { color: tema.texto } },
+                    y: { stacked: true, beginAtZero: true, grid: { color: tema.rejilla }, ticks: { color: tema.texto } }
+                }
+            })
+        });
+        const titulo = $('est-fbo-t-mes');
+        if (titulo) titulo.textContent = pax ? 'Pasajeros por mes' : 'Movimientos por mes';
+        document.querySelectorAll('#est-pane-fbo [data-fbo-metrica]').forEach((boton) => {
+            const activo = boton.dataset.fboMetrica === (pax ? 'pax' : 'movimientos');
+            boton.classList.toggle('active', activo);
+            boton.setAttribute('aria-pressed', activo ? 'true' : 'false');
+        });
+    }
+
+    // Lo que no trae dato no entra a la gráfica: con la mitad de los
+    // movimientos sin origen/destino, esa barra aplastaría a las demás. Se
+    // dice debajo, con su cifra, en lugar de esconderlo.
+    function pintarRankingFbo(idCanvas, filas, campo, color, total) {
+        const lista = (filas || []).filter((f) => fboClave(f.clave)).slice(0, 10);
+        const sinDato = (filas || []).filter((f) => !fboClave(f.clave)).reduce((a, f) => a + fboNum(f.movimientos), 0);
+        const nota = $(`${idCanvas}-sin`);
+        if (nota) {
+            nota.hidden = !sinDato;
+            nota.innerHTML = sinDato
+                ? `<i class="fas fa-circle-info" aria-hidden="true"></i><span>Además, ${fboCuenta(sinDato, 'movimiento', 'movimientos')} `
+                    + `(${fboPctTexto(sinDato, total)}) no ${fboUno(sinDato, 'trae', 'traen')} ${esc(FBO_SIN_DATO[campo])} `
+                    + `y no se grafica${fboUno(sinDato, '', 'n')}.</span>`
+                : '';
+        }
+        const canvas = $(idCanvas);
+        if (canvas && canvas.parentElement) canvas.parentElement.style.height = `${Math.max(9, lista.length * 1.9 + 2.5)}rem`;
+        const tema = fboTema();
+        pintarGrafica(idCanvas, {
+            type: 'bar',
+            data: {
+                labels: lista.map((f) => String(f.clave)),
+                datasets: [{
+                    label: 'Movimientos',
+                    data: lista.map((f) => fboNum(f.movimientos)),
+                    backgroundColor: color,
+                    borderRadius: 6,
+                    maxBarThickness: 22
+                }]
+            },
+            options: opcionesGrafica({
+                indexAxis: 'y',
+                interaction: { mode: 'nearest', axis: 'y', intersect: false },
+                layout: { padding: { right: 48 } },
+                plugins: {
+                    legend: { display: false },
+                    datalabels: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => {
+                                const f = lista[ctx.dataIndex] || {};
+                                return `${Motor.fmtEntero(f.movimientos)} movimientos · ${Motor.fmtEntero(f.pax)} pasajeros · `
+                                    + `${Motor.fmtPorcentaje(fboPct(fboNum(f.movimientos), total), 1)} del total`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { beginAtZero: true, grid: { color: tema.rejilla }, ticks: { color: tema.texto } },
+                    y: {
+                        grid: { display: false },
+                        // Los nombres largos se abrevian en el eje; completos, en el globo.
+                        ticks: {
+                            color: tema.texto,
+                            callback(valor) {
+                                // Cuántas letras caben depende del ancho de la gráfica.
+                                const ancho = (this.chart && this.chart.width) || 600;
+                                const cabe = Math.max(10, Math.min(24, Math.floor(ancho / 24)));
+                                const texto = String(this.getLabelForValue(valor));
+                                return texto.length > cabe ? `${texto.slice(0, cabe - 1)}…` : texto;
+                            }
+                        }
+                    }
+                },
+                // Tocar una barra filtra todo el tablero por ese elemento.
+                onClick: (evento, elementos) => {
+                    const elegido = elementos && elementos[0];
+                    if (elegido) filtrarFbo(campo, (lista[elegido.index] || {}).clave);
+                },
+                onHover: (evento, elementos) => {
+                    const destino = evento && evento.native && evento.native.target;
+                    if (destino) destino.style.cursor = elementos && elementos.length ? 'pointer' : 'default';
+                }
+            }),
+            plugins: [FBO_ETIQUETAS]
+        });
+    }
+
+    function pintarMatriculasFbo(filas) {
+        const lista = (filas || []).filter((f) => fboClave(f.clave)).slice(0, 10);
+        const maximo = Math.max(1, ...lista.map((f) => fboNum(f.movimientos)));
+        $('est-fbo-matriculas').innerHTML = lista.length
+            ? `<ol class="fbo-lista">${lista.map((f, i) => `<li>
+                <span class="fbo-lista-pos">${i + 1}</span>
+                <button type="button" class="fbo-lista-clave" data-fbo-campo="matricula" data-fbo-valor="${esc(f.clave)}" title="Ver solo la ${esc(f.clave)}">${esc(f.clave)}</button>
+                <span class="fbo-lista-detalle">${esc([f.operador, f.tipo_aeronave].filter(Boolean).join(' · '))}</span>
+                <span class="fbo-lista-barra" aria-hidden="true"><span style="width:${(fboNum(f.movimientos) / maximo * 100).toFixed(1)}%"></span></span>
+                <b class="fbo-lista-valor">${Motor.fmtEntero(f.movimientos)}</b>
+            </li>`).join('')}</ol>`
+            : '<p class="text-muted small mb-0">Sin matrículas en el periodo.</p>';
+    }
+
+    // Con el periodo vacío no hay nada que tocar: sin filtro, ni la pista.
+    function pintarFiltroFbo(vacio) {
+        const caja = $('est-fbo-filtro');
+        if (!caja) return;
+        const f = state.fboFiltro;
+        caja.innerHTML = f
+            ? `<span class="fbo-chip"><i class="fas fa-filter" aria-hidden="true"></i>${esc(FBO_CAMPOS[f.campo])}: <b>${esc(f.valor)}</b>`
+                + `<button type="button" class="fbo-chip-quitar" data-fbo-quitar aria-label="Quitar el filtro de ${esc(FBO_CAMPOS[f.campo])}">&times;</button></span>`
+            : (vacio ? '' : '<span class="fbo-pista"><i class="fas fa-hand-pointer" aria-hidden="true"></i>Toca una barra, un destacado o una matrícula para ver solo eso.</span>');
+    }
+
+    function pintarNotaFbo() {
+        const nota = $('est-fbo-nota');
+        if (!nota) return;
+        const ajenos = FBO_FILTROS_AJENOS.filter(([campo]) => (state.filtros[campo] || []).length).map(([, etiqueta]) => etiqueta);
+        nota.classList.toggle('d-none', !ajenos.length);
+        nota.innerHTML = ajenos.length
+            ? '<i class="fas fa-circle-info me-1" aria-hidden="true"></i>En FBO se aplican el periodo, Movimiento y Territorial. '
+                + `${esc(ajenos.join(', '))} ${ajenos.length === 1 ? 'es un filtro' : 'son filtros'} de las otras ventanas `
+                + `y aquí no se aplica${ajenos.length === 1 ? '' : 'n'}.`
+            : '';
+    }
+
+    async function pintarVacioFbo(rango) {
+        let historico = null;
+        try { historico = (await resumenFbo({})).totales || null; } catch (_) { historico = null; }
+        const hay = historico && fboNum(historico.movimientos);
+        $('est-fbo-vacio').innerHTML = `<i class="fas fa-plane-slash" aria-hidden="true"></i>
+            <p class="fbo-vacio-titulo">No hay movimientos de aviación general del ${fboFecha(rango.desde)} al ${fboFecha(rango.hasta)}${state.fboFiltro ? ' con el filtro elegido' : ''}.</p>
+            ${hay ? `<p>El histórico cargado va del ${fboFecha(historico.fecha_min)} al ${fboFecha(historico.fecha_max)}.</p>
+                <button type="button" class="btn btn-sm btn-primary" data-fbo-historico data-desde="${esc(historico.fecha_min)}" data-hasta="${esc(historico.fecha_max)}">
+                    <i class="fas fa-clock-rotate-left me-1" aria-hidden="true"></i>Ver todo el histórico</button>` : ''}`;
+    }
+
+    // Las gráficas se dibujan con lo ya traído: al cambiar la métrica o el
+    // tema se repintan sin volver a consultar.
+    function pintarGraficasFbo() {
+        const datos = state.fboUltimo;
+        const total = fboNum(((datos || {}).totales || {}).movimientos);
+        if (!total) return;
+        pintarTendenciaFbo();
+        pintarRankingFbo('est-fbo-operadores', datos.top_operadores, 'operador', '#0d6efd', total);
+        pintarRankingFbo('est-fbo-aeronaves', datos.top_aeronaves, 'tipo_aeronave', '#6f42c1', total);
+        pintarRankingFbo('est-fbo-aeropuertos', datos.top_aeropuertos, 'aeropuerto', '#0f766e', total);
+    }
+
+    async function pintarFbo() {
+        const rango = { desde: desde(), hasta: hasta() };
+        const anterior = Motor.periodoAnterior(rango.desde, rango.hasta);
+        const [actual, previo] = await Promise.all([
+            resumenFbo(filtrosFbo(rango.desde, rango.hasta)),
+            // La comparación es un extra: si falla, el tablero sale sin ella.
+            resumenFbo(filtrosFbo(anterior.desde, anterior.hasta)).catch(() => null)
+        ]);
+        state.fboUltimo = actual;
+        const t = actual.totales || {};
+        const vacio = !fboNum(t.movimientos);
+        pintarFiltroFbo(vacio);
+        pintarNotaFbo();
+        $('est-fbo-vacio')?.classList.toggle('d-none', !vacio);
+        $('est-fbo-contenido')?.classList.toggle('d-none', vacio);
+        $('est-fbo-frase').innerHTML = vacio ? '' : fraseFbo(t, rango);
+        if (vacio) {
+            await pintarVacioFbo(rango);
+            return;
+        }
+        pintarKpisFbo(t, previo && previo.totales);
+        pintarDestacadosFbo(actual);
+        pintarComposicionFbo(t);
+        pintarGraficasFbo();
+        pintarMatriculasFbo(actual.top_matriculas);
+    }
+
     // ── Orquestación de áreas ────────────────────────────────────────────────
     const RENDERIZADORES = {
         resumen: pintarResumen,
@@ -1588,6 +2056,7 @@
         carga: pintarCarga,
         puntualidad: pintarPuntualidad,
         comparador: pintarComparador,
+        fbo: pintarFbo,
         descargas: async () => pintarDescargas()
     };
 
@@ -1597,6 +2066,9 @@
         // El Informe oficial tiene su propia barra: los filtros de este módulo
         // no le aplican y esconderlos evita sugerir que sí.
         $('est-filtros')?.classList.toggle('d-none', area === 'informe');
+        // Los avisos de arriba son de la operación del itinerario; en FBO,
+        // que lee Aviación General, sólo confundirían.
+        if ($('est-avisos')) $('est-avisos').hidden = area === 'fbo';
         if (area === 'informe') {
             // La gráfica del informe se creó con su panel oculto; al hacerse
             // visible hay que darle un empujón para que tome el tamaño real.
@@ -1663,6 +2135,8 @@
             ['est-f-aerolinea', 'est-f-tipo-aeronave', 'est-f-matricula', 'est-f-endpoint',
                 'est-f-direccion', 'est-f-nacint', 'est-f-segmento', 'est-f-naturaleza', 'est-f-servicio']
                 .forEach((id) => { if ($(id)) $(id).value = ''; });
+            // Limpiar también quita lo que se eligió tocando el tablero de FBO.
+            state.fboFiltro = null;
             aplicarFiltros();
         });
         $('est-btn-refrescar')?.addEventListener('click', async () => {
@@ -1686,6 +2160,47 @@
         document.querySelectorAll('#est-subnav [data-est-area]').forEach((boton) => {
             boton.addEventListener('shown.bs.tab', () => mostrarArea(boton.dataset.estArea, false));
         });
+
+        // FBO: un solo escucha para todo lo que se toca dentro del tablero.
+        $('est-pane-fbo')?.addEventListener('click', (evento) => {
+            const metrica = evento.target.closest('[data-fbo-metrica]');
+            if (metrica) {
+                state.fboMetrica = metrica.dataset.fboMetrica === 'pax' ? 'pax' : 'movimientos';
+                pintarTendenciaFbo();
+                return;
+            }
+            if (evento.target.closest('[data-fbo-quitar]')) {
+                state.fboFiltro = null;
+                mostrarArea('fbo', true);
+                return;
+            }
+            const elegido = evento.target.closest('[data-fbo-campo]');
+            if (elegido) {
+                filtrarFbo(elegido.dataset.fboCampo, elegido.dataset.fboValor);
+                return;
+            }
+            const historico = evento.target.closest('[data-fbo-historico]');
+            if (historico && $('est-f-desde') && $('est-f-hasta')) {
+                if ($('est-f-preset')) $('est-f-preset').value = '';
+                $('est-f-desde').value = historico.dataset.desde;
+                $('est-f-hasta').value = historico.dataset.hasta;
+                aplicarFiltros();
+            }
+        });
+
+        // Al cambiar entre claro y oscuro, las gráficas de FBO toman sus
+        // colores otra vez: se repintan con lo ya traído si están a la vista,
+        // o en la próxima apertura si no.
+        let fboOscuro = document.body.classList.contains('dark-mode');
+        if (window.MutationObserver) {
+            new MutationObserver(() => {
+                const oscuro = document.body.classList.contains('dark-mode');
+                if (oscuro === fboOscuro) return;
+                fboOscuro = oscuro;
+                if (state.areaActiva === 'fbo') pintarGraficasFbo();
+                else state.cargadas.delete('fbo');
+            }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        }
 
         $('est-exp-consultar')?.addEventListener('click', () => mostrarArea('explorador', true));
         $('est-exp-filtro-campo')?.addEventListener('change', () => {

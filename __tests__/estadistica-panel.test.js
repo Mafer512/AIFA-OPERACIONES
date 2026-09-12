@@ -569,17 +569,217 @@ describe('Panel estadístico · convivencia con lo que ya existía', () => {
   });
 });
 
-describe('la ventana FBO', () => {
-  test('existe y todavía no consulta ni muestra nada', async () => {
-    const { client } = await montar('admin');
-    await reposar();
-    const antes = client.llamadas.length;
+describe('la ventana FBO · Aviación General', () => {
+  // Lo que devuelve aviacion_general_resumen (migración 046), con la forma real.
+  const RESUMEN = {
+    totales: {
+      movimientos: 200, llegadas: 101, salidas: 99, nacionales: 150, internacionales: 50,
+      pax: 640, adultos: 600, infantes: 40, rotaciones: 95, operadores: 30, matriculas: 44,
+      pendientes: 150, validados: 40, observados: 10, fecha_min: '2026-01-02', fecha_max: '2026-08-30'
+    },
+    por_mes: [
+      { periodo: '2026-01', anio: 2026, mes: 1, movimientos: 80, llegadas: 41, salidas: 39, pax: 250 },
+      { periodo: '2026-02', anio: 2026, mes: 2, movimientos: 120, llegadas: 60, salidas: 60, pax: 390 }
+    ],
+    por_ambito: [],
+    por_tipo_operacion: [],
+    top_operadores: [{ clave: 'JETS DEL NORTE', movimientos: 60, pax: 180 }, { clave: 'AERO SERVICIOS', movimientos: 40, pax: 90 }],
+    top_aeronaves: [{ clave: 'G650', movimientos: 50, pax: 150 }],
+    top_aeropuertos: [{ clave: null, movimientos: 104, pax: 300 }, { clave: 'MMTO', movimientos: 30, pax: 80 }],
+    top_matriculas: [{ clave: 'XA-ABC', movimientos: 12, operador: 'JETS DEL NORTE', tipo_aeronave: 'G650' }]
+  };
+
+  async function montarFbo(respuesta) {
+    const montaje = await montar('admin');
+    const original = montaje.client.rpc.getMockImplementation();
+    montaje.client.rpc.mockImplementation(async (nombre, params) => {
+      if (nombre !== 'aviacion_general_resumen') return original(nombre, params);
+      montaje.client.llamadas.push({ nombre, params });
+      return typeof respuesta === 'function' ? respuesta(params) : { data: respuesta, error: null };
+    });
+    return montaje;
+  }
+
+  const llamadasFbo = (client) => client.llamadas.filter((l) => l.nombre === 'aviacion_general_resumen');
+  const ultimaDe = (graficas, id) => graficas.filter((g) => g.id === id).pop().config;
+
+  async function abrirFbo() {
     document.getElementById('est-tab-fbo').dispatchEvent(new window.Event('shown.bs.tab'));
     await reposar();
-    expect(client.llamadas.length).toBe(antes);
-    expect(document.getElementById('est-pane-fbo').innerHTML.trim()).toBe('');
-    // Los filtros siguen a la vista: FBO no es el Informe oficial.
-    expect(document.getElementById('est-filtros').classList.contains('d-none')).toBe(false);
+  }
+
+  test('pide el resumen del periodo y del anterior, con los filtros que le aplican a Aviación General', async () => {
+    const { client } = await montarFbo(RESUMEN);
+    document.getElementById('est-f-direccion').value = 'A';
+    document.getElementById('est-f-nacint').value = 'Internacional';
+    document.getElementById('est-btn-aplicar').click();
+    await reposar();
+    await abrirFbo();
+    const anio = new Date().getFullYear();
+    const anterior = window.EstadisticaMotor.periodoAnterior(`${anio}-01-01`, `${anio}-12-31`);
+    const [actual, previo] = llamadasFbo(client).map((l) => l.params.p_filtros);
+    expect(actual).toEqual({
+      fecha_desde: `${anio}-01-01`, fecha_hasta: `${anio}-12-31`,
+      tipo_operacion: 'LLEGADA', ambito_operacion: 'INTERNACIONAL'
+    });
+    expect(previo).toMatchObject({ fecha_desde: anterior.desde, fecha_hasta: anterior.hasta });
+  });
+
+  test('pinta la frase, las tarjetas, los destacados, la composición y las gráficas', async () => {
+    const { graficas } = await montarFbo(RESUMEN);
+    await abrirFbo();
+    const frase = document.getElementById('est-fbo-frase').textContent;
+    expect(frase).toContain('200');
+    expect(frase).toContain('640');
+    const kpis = document.getElementById('est-fbo-kpis');
+    expect(kpis.querySelectorAll('.fbo-kpi')).toHaveLength(6);
+    expect(kpis.textContent).toContain('Vuelos atendidos');
+    expect(kpis.textContent).toContain('95');
+    expect(document.getElementById('est-fbo-composicion').querySelectorAll('.fbo-comp')).toHaveLength(4);
+    const destacados = document.getElementById('est-fbo-destacados').textContent;
+    expect(destacados).toContain('JETS DEL NORTE');
+    // 104 de 200 movimientos no traen origen/destino: se dice, no se esconde.
+    expect(destacados).toContain('52 % sin origen / destino');
+    expect(graficas.map((g) => g.id)).toEqual(expect.arrayContaining(
+      ['est-fbo-mes', 'est-fbo-operadores', 'est-fbo-aeronaves', 'est-fbo-aeropuertos']));
+    // Lo que no trae origen/destino no entra a la gráfica (la aplastaría): se dice debajo.
+    expect(ultimaDe(graficas, 'est-fbo-aeropuertos').data.labels).toEqual(['MMTO']);
+    const sinDato = document.getElementById('est-fbo-aeropuertos-sin');
+    expect(sinDato.hidden).toBe(false);
+    expect(sinDato.textContent).toContain('104 movimientos (52 %) no traen origen / destino');
+    expect(document.getElementById('est-fbo-operadores-sin').hidden).toBe(true);
+    expect(document.getElementById('est-fbo-matriculas').textContent).toContain('XA-ABC');
+  });
+
+  test('tocar una barra filtra todo el tablero, y el chip quita el filtro', async () => {
+    const { client, graficas } = await montarFbo(RESUMEN);
+    await abrirFbo();
+    ultimaDe(graficas, 'est-fbo-operadores').options.onClick({}, [{ index: 0 }]);
+    await reposar();
+    expect(llamadasFbo(client).slice(-2)[0].params.p_filtros.operador).toBe('JETS DEL NORTE');
+    expect(document.getElementById('est-fbo-filtro').textContent).toContain('JETS DEL NORTE');
+    document.querySelector('#est-fbo-filtro [data-fbo-quitar]').click();
+    await reposar();
+    expect(llamadasFbo(client).slice(-2)[0].params.p_filtros).not.toHaveProperty('operador');
+    expect(document.querySelector('#est-fbo-filtro [data-fbo-quitar]')).toBeNull();
+  });
+
+  test('una matrícula o un destacado también filtran', async () => {
+    const { client } = await montarFbo(RESUMEN);
+    await abrirFbo();
+    document.querySelector('#est-fbo-matriculas [data-fbo-campo="matricula"]').click();
+    await reposar();
+    expect(llamadasFbo(client).slice(-2)[0].params.p_filtros.matricula).toBe('XA-ABC');
+    document.querySelector('#est-fbo-destacados [data-fbo-campo="tipo_aeronave"]').click();
+    await reposar();
+    expect(llamadasFbo(client).slice(-2)[0].params.p_filtros.tipo_aeronave).toBe('G650');
+  });
+
+  test('con un filtro puesto, su destacado sobra y no se repite', async () => {
+    const { graficas } = await montarFbo(RESUMEN);
+    await abrirFbo();
+    ultimaDe(graficas, 'est-fbo-operadores').options.onClick({}, [{ index: 0 }]);
+    await reposar();
+    const destacados = document.getElementById('est-fbo-destacados');
+    expect(destacados.querySelector('[data-fbo-campo="operador"]')).toBeNull();
+    expect(destacados.querySelector('[data-fbo-campo="tipo_aeronave"]')).not.toBeNull();
+  });
+
+  test('los nombres largos se abrevian en el eje y la frase concuerda en singular', async () => {
+    const largo = 'AEROSERVICIOS EJECUTIVOS DEL CENTRO DE MEXICO';
+    const uno = Object.assign({}, RESUMEN, {
+      totales: Object.assign({}, RESUMEN.totales, { operadores: 1, llegadas: 1 }),
+      top_operadores: [{ clave: largo, movimientos: 60, pax: 180 }]
+    });
+    const { graficas } = await montarFbo(uno);
+    await abrirFbo();
+    const eje = ultimaDe(graficas, 'est-fbo-operadores').options.scales.y.ticks.callback;
+    const texto = eje.call({ getLabelForValue: () => largo }, 0);
+    expect(texto.length).toBeLessThanOrEqual(24);
+    expect(texto.endsWith('…')).toBe(true);
+    // En una gráfica angosta caben menos letras.
+    expect(eje.call({ chart: { width: 300 }, getLabelForValue: () => largo }, 0).length).toBeLessThanOrEqual(12);
+    const frase = document.getElementById('est-fbo-frase').textContent;
+    expect(frase).toContain('de 1 operador y');
+    expect(frase).toContain('(1 llegada y');
+  });
+
+  test('el selector de la tendencia cambia a pasajeros sin volver a consultar', async () => {
+    const { client, graficas } = await montarFbo(RESUMEN);
+    await abrirFbo();
+    const antes = llamadasFbo(client).length;
+    document.querySelector('#est-pane-fbo [data-fbo-metrica="pax"]').click();
+    const tendencia = ultimaDe(graficas, 'est-fbo-mes');
+    expect(tendencia.data.datasets[0].label).toBe('Pasajeros');
+    expect(tendencia.data.datasets[0].data).toEqual([250, 390]);
+    expect(tendencia.data.datasets[1].label).toContain('Promedio mensual');
+    expect(document.getElementById('est-fbo-t-mes').textContent).toBe('Pasajeros por mes');
+    expect(llamadasFbo(client).length).toBe(antes);
+  });
+
+  test('"Limpiar" de la barra también quita lo elegido en el tablero', async () => {
+    const { client, graficas } = await montarFbo(RESUMEN);
+    await abrirFbo();
+    ultimaDe(graficas, 'est-fbo-operadores').options.onClick({}, [{ index: 0 }]);
+    await reposar();
+    document.getElementById('est-btn-limpiar').click();
+    await reposar();
+    expect(llamadasFbo(client).slice(-2)[0].params.p_filtros).not.toHaveProperty('operador');
+    expect(document.querySelector('#est-fbo-filtro [data-fbo-quitar]')).toBeNull();
+  });
+
+  test('avisa qué filtros de la barra no le aplican a Aviación General', async () => {
+    const { client } = await montarFbo(RESUMEN);
+    document.getElementById('est-f-segmento').value = 'GENERAL';
+    document.getElementById('est-btn-aplicar').click();
+    await reposar();
+    await abrirFbo();
+    const nota = document.getElementById('est-fbo-nota');
+    expect(nota.classList.contains('d-none')).toBe(false);
+    expect(nota.textContent).toContain('Segmento');
+    expect(llamadasFbo(client)[0].params.p_filtros).not.toHaveProperty('segmento_aviacion');
+  });
+
+  test('un periodo sin movimientos lo dice y ofrece ver todo el histórico', async () => {
+    const vacio = { totales: { movimientos: 0 }, por_mes: [], top_operadores: [], top_aeronaves: [], top_aeropuertos: [], top_matriculas: [] };
+    await montarFbo((params) => ({ data: params.p_filtros.fecha_desde ? vacio : RESUMEN, error: null }));
+    await abrirFbo();
+    const caja = document.getElementById('est-fbo-vacio');
+    expect(caja.classList.contains('d-none')).toBe(false);
+    expect(document.getElementById('est-fbo-contenido').classList.contains('d-none')).toBe(true);
+    expect(caja.textContent).toContain('02/01/2026');
+    expect(caja.querySelector('[data-fbo-historico]').dataset.desde).toBe('2026-01-02');
+    // Sin movimientos no hay nada que tocar: tampoco se ofrece la pista.
+    expect(document.getElementById('est-fbo-filtro').textContent.trim()).toBe('');
+  });
+
+  test('los avisos de la operación del itinerario se ocultan en FBO y vuelven al salir', async () => {
+    await montarFbo(RESUMEN);
+    await abrirFbo();
+    expect(document.getElementById('est-avisos').hidden).toBe(true);
+    document.getElementById('est-tab-carga').dispatchEvent(new window.Event('shown.bs.tab'));
+    await reposar();
+    expect(document.getElementById('est-avisos').hidden).toBe(false);
+  });
+
+  test('al cambiar a oscuro, las gráficas se repintan con colores legibles y sin consultar', async () => {
+    const { client, graficas } = await montarFbo(RESUMEN);
+    await abrirFbo();
+    const antes = llamadasFbo(client).length;
+    const claro = ultimaDe(graficas, 'est-fbo-operadores').options.scales.x.ticks.color;
+    document.body.classList.add('dark-mode');
+    await reposar();
+    const oscuro = ultimaDe(graficas, 'est-fbo-operadores').options.scales.x.ticks.color;
+    document.body.classList.remove('dark-mode');
+    await reposar();
+    expect(oscuro).not.toBe(claro);
+    expect(llamadasFbo(client).length).toBe(antes);
+  });
+
+  test('si la base no tiene la función del resumen, lo explica', async () => {
+    await montarFbo(() => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function public.aviacion_general_resumen' } }));
+    await abrirFbo();
+    expect(document.getElementById('est-error').textContent).toContain('migración 046');
   });
 });
 

@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20260912-tablero-ventanas-4">
+    <link rel="stylesheet" href="style.css?v=20260912-fbo-1">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -23509,8 +23509,64 @@ FF
                                                 <div class="row g-3" id="est-descargas-lista"></div>
                                             </div>
 
-                                            <!-- FBO · servicios FBO y aviación ejecutiva: todavía sin contenido. -->
-                                            <div class="tab-pane fade" id="est-pane-fbo" role="tabpanel" aria-labelledby="est-tab-fbo"></div>
+                                            <!-- FBO · Aviación General: primer tablero con la visualización nueva. Las
+                                                 cifras salen ya sumadas de aviacion_general_resumen (migración 046),
+                                                 la misma función que usa el módulo de Aviación General. -->
+                                            <div class="tab-pane fade" id="est-pane-fbo" role="tabpanel" aria-labelledby="est-tab-fbo">
+                                                <div class="fbo-tablero">
+                                                    <div class="fbo-cabeza">
+                                                        <div class="fbo-cabeza-texto">
+                                                            <h5 class="fbo-titulo"><i class="fas fa-plane-circle-check me-2" aria-hidden="true"></i>Aviación General · FBO</h5>
+                                                            <p class="fbo-frase" id="est-fbo-frase"></p>
+                                                        </div>
+                                                        <div class="fbo-filtro-activo" id="est-fbo-filtro" aria-live="polite"></div>
+                                                    </div>
+                                                    <p class="fbo-nota d-none" id="est-fbo-nota"></p>
+                                                    <div class="fbo-vacio d-none" id="est-fbo-vacio" role="status"></div>
+                                                    <div class="fbo-contenido" id="est-fbo-contenido">
+                                                        <div class="fbo-kpis" id="est-fbo-kpis"></div>
+                                                        <div class="fbo-destacados" id="est-fbo-destacados"></div>
+                                                        <div class="fbo-rejilla">
+                                                            <section class="fbo-panel fbo-panel-tendencia" aria-labelledby="est-fbo-t-mes">
+                                                                <header class="fbo-panel-cabeza">
+                                                                    <div>
+                                                                        <h6 id="est-fbo-t-mes">Movimientos por mes</h6>
+                                                                        <p>Cada barra es un mes; la línea punteada es el promedio del periodo.</p>
+                                                                    </div>
+                                                                    <div class="btn-group btn-group-sm" role="group" aria-label="Qué mostrar por mes">
+                                                                        <button type="button" class="btn btn-outline-primary active" data-fbo-metrica="movimientos" aria-pressed="true">Movimientos</button>
+                                                                        <button type="button" class="btn btn-outline-primary" data-fbo-metrica="pax" aria-pressed="false">Pasajeros</button>
+                                                                    </div>
+                                                                </header>
+                                                                <div class="fbo-grafica fbo-grafica-alta"><canvas id="est-fbo-mes" role="img" aria-label="Movimientos de aviación general por mes"></canvas></div>
+                                                            </section>
+                                                            <section class="fbo-panel" aria-labelledby="est-fbo-t-comp">
+                                                                <header class="fbo-panel-cabeza"><div><h6 id="est-fbo-t-comp">Composición</h6><p>Cómo se reparten movimientos, pasajeros y validación.</p></div></header>
+                                                                <div id="est-fbo-composicion"></div>
+                                                            </section>
+                                                            <section class="fbo-panel" aria-labelledby="est-fbo-t-op">
+                                                                <header class="fbo-panel-cabeza"><div><h6 id="est-fbo-t-op">Operadores más frecuentes</h6><p>Toca una barra para ver solo ese operador.</p></div></header>
+                                                                <div class="fbo-grafica"><canvas id="est-fbo-operadores" role="img" aria-label="Operadores con más movimientos"></canvas></div>
+                                                                <p class="fbo-sin-dato" id="est-fbo-operadores-sin" hidden></p>
+                                                            </section>
+                                                            <section class="fbo-panel" aria-labelledby="est-fbo-t-aer">
+                                                                <header class="fbo-panel-cabeza"><div><h6 id="est-fbo-t-aer">Tipos de aeronave</h6><p>Toca una barra para ver solo ese tipo.</p></div></header>
+                                                                <div class="fbo-grafica"><canvas id="est-fbo-aeronaves" role="img" aria-label="Tipos de aeronave con más movimientos"></canvas></div>
+                                                                <p class="fbo-sin-dato" id="est-fbo-aeronaves-sin" hidden></p>
+                                                            </section>
+                                                            <section class="fbo-panel" aria-labelledby="est-fbo-t-apt">
+                                                                <header class="fbo-panel-cabeza"><div><h6 id="est-fbo-t-apt">Orígenes y destinos</h6><p>En una llegada es el origen; en una salida, el destino.</p></div></header>
+                                                                <div class="fbo-grafica"><canvas id="est-fbo-aeropuertos" role="img" aria-label="Aeropuertos de origen y destino más frecuentes"></canvas></div>
+                                                                <p class="fbo-sin-dato" id="est-fbo-aeropuertos-sin" hidden></p>
+                                                            </section>
+                                                            <section class="fbo-panel fbo-panel-matriculas" aria-labelledby="est-fbo-t-mat">
+                                                                <header class="fbo-panel-cabeza"><div><h6 id="est-fbo-t-mat">Aeronaves más recurrentes</h6><p>Toca una matrícula para ver solo sus movimientos.</p></div></header>
+                                                                <div id="est-fbo-matriculas"></div>
+                                                            </section>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
 
                                             <!-- INFORME OFICIAL — contenido original, sin cambios -->
                                             <div class="tab-pane fade" id="est-pane-informe" role="tabpanel">
@@ -39594,7 +39650,7 @@ FF
 <script src="js/estadistico-informe.js?v=20260821-v6" defer></script>
 <!-- Modulo estadistico de operaciones (pestana Estadistica de Conciliacion) -->
 <script src="js/estadistica-motor.js?v=20260908-v1" defer></script>
-<script src="js/estadistica-panel.js?v=20260912-tablero-ventanas-4" defer></script>
+<script src="js/estadistica-panel.js?v=20260912-fbo-1" defer></script>
 <script src="js/estadistica-clasificacion.js?v=20260908-v1" defer></script>
 
 <!-- ═══ Aviación General · FBO (GAG · Servicios Conexos) ═══

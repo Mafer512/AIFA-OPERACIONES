@@ -75,6 +75,10 @@ navegador**.
 | Detectar capturas repetidas | `aviacion_general_duplicados()` | Misma llave que usa la importación, para que ambas señalen lo mismo |
 | Normalizar horas, fechas, matrículas | `core.js` | Son reglas de lectura del Excel, no de negocio; se prueban sin navegador |
 
+El tablero **FBO** del módulo estadístico (*Estadística → FBO*) lee este mismo
+`aviacion_general_resumen()` con los mismos nombres de filtro, así que da las mismas cifras que
+el *Resumen* de este módulo. Ver `docs/modulo-estadistico.md`, sección 10 ter.
+
 ---
 
 ## 3. Normalización: las decisiones que importan

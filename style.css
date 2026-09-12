@@ -21707,6 +21707,538 @@ body.dark-mode .est-carga-barra {
 }
 
 /* ==========================================================================
+   Estadistica > FBO · Aviacion General: el primer tablero con la
+   visualizacion nueva. Frase que cuenta el periodo, tarjetas con su
+   variacion, destacados que se pueden tocar, tendencia con selector, barras
+   de composicion y rankings que filtran todo el tablero.
+   ========================================================================== */
+.fbo-tablero {
+   display: flex;
+   flex-direction: column;
+   gap: 1rem;
+}
+
+.fbo-contenido {
+   display: flex;
+   flex-direction: column;
+   gap: 1rem;
+}
+
+.fbo-cabeza {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: .75rem 1.5rem;
+}
+
+.fbo-titulo {
+   margin: 0 0 .3rem;
+   font-weight: 800;
+   color: #1a2f55;
+}
+
+.fbo-titulo i {
+   color: #0d6efd;
+}
+
+.fbo-frase {
+   max-width: 64rem;
+   margin: 0;
+   font-size: .92rem;
+   line-height: 1.55;
+   color: #334155;
+}
+
+.fbo-frase b {
+   color: #0b4fc4;
+}
+
+.fbo-filtro-activo {
+   flex: 0 0 auto;
+   padding-top: .2rem;
+}
+
+.fbo-pista {
+   font-size: .78rem;
+   color: #64748b;
+}
+
+.fbo-pista i {
+   margin-right: .4rem;
+   color: #0d6efd;
+}
+
+.fbo-chip {
+   display: inline-flex;
+   align-items: center;
+   gap: .45rem;
+   padding: .35rem .45rem .35rem .8rem;
+   border-radius: 999px;
+   background: #e8f0fe;
+   color: #0b4fc4;
+   font-size: .82rem;
+}
+
+.fbo-chip-quitar {
+   display: grid;
+   place-items: center;
+   width: 1.45rem;
+   height: 1.45rem;
+   padding: 0;
+   border: 0;
+   border-radius: 50%;
+   background: #0d6efd;
+   color: #fff;
+   font-size: 1rem;
+   line-height: 1;
+   cursor: pointer;
+}
+
+.fbo-nota {
+   margin: 0;
+   padding: .45rem .75rem;
+   border-radius: .6rem;
+   background: #f1f5f9;
+   color: #475569;
+   font-size: .8rem;
+}
+
+.fbo-kpis {
+   display: grid;
+   grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
+   gap: .75rem;
+}
+
+.fbo-kpi {
+   display: flex;
+   gap: .75rem;
+   padding: .9rem 1rem;
+   border: 1px solid rgba(14, 55, 99, .1);
+   border-left: 4px solid var(--fbo-color, #0d6efd);
+   border-radius: .9rem;
+   background: #fff;
+   box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
+
+.fbo-kpi-icono {
+   flex: 0 0 auto;
+   display: grid;
+   place-items: center;
+   width: 2.4rem;
+   height: 2.4rem;
+   border-radius: .7rem;
+   background: #eef2ff;
+   background: color-mix(in srgb, var(--fbo-color, #0d6efd) 14%, transparent);
+   color: var(--fbo-color, #0d6efd);
+   font-size: 1.05rem;
+}
+
+.fbo-kpi-texto {
+   display: flex;
+   flex-direction: column;
+   min-width: 0;
+   line-height: 1.25;
+}
+
+.fbo-kpi-titulo {
+   font-size: .72rem;
+   font-weight: 700;
+   letter-spacing: .03em;
+   text-transform: uppercase;
+   color: #64748b;
+}
+
+.fbo-kpi-valor {
+   font-size: 1.55rem;
+   font-weight: 800;
+   color: #0f172a;
+   font-variant-numeric: tabular-nums;
+}
+
+.fbo-kpi-detalle {
+   font-size: .74rem;
+   color: #64748b;
+}
+
+.fbo-destacados {
+   display: flex;
+   flex-wrap: wrap;
+   gap: .5rem;
+}
+
+.fbo-destacados:empty {
+   display: none;
+}
+
+.fbo-destacado {
+   display: inline-flex;
+   align-items: center;
+   gap: .6rem;
+   padding: .45rem .85rem;
+   border: 1px solid rgba(14, 55, 99, .12);
+   border-radius: .8rem;
+   background: #fff;
+   color: #1a2f55;
+   font-size: .8rem;
+   text-align: left;
+}
+
+.fbo-destacado i {
+   color: #0d6efd;
+}
+
+.fbo-destacado > span {
+   display: flex;
+   flex-direction: column;
+   line-height: 1.2;
+}
+
+.fbo-destacado small {
+   font-size: .68rem;
+   color: #64748b;
+}
+
+button.fbo-destacado {
+   cursor: pointer;
+   transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+button.fbo-destacado:hover,
+button.fbo-destacado:focus-visible {
+   border-color: #93b8f5;
+   box-shadow: 0 6px 16px -10px rgba(13, 110, 253, .45);
+}
+
+.fbo-destacado-aviso {
+   border-color: #fcd34d;
+   background: #fffbeb;
+}
+
+.fbo-destacado-aviso i {
+   color: #b45309;
+}
+
+.fbo-rejilla {
+   display: grid;
+   grid-template-columns: repeat(3, minmax(0, 1fr));
+   gap: .9rem;
+}
+
+.fbo-panel {
+   display: flex;
+   flex-direction: column;
+   gap: .6rem;
+   min-width: 0;
+   padding: .9rem 1rem 1rem;
+   border: 1px solid rgba(14, 55, 99, .1);
+   border-radius: .9rem;
+   background: #fff;
+   box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
+
+.fbo-panel-tendencia {
+   grid-column: span 2;
+}
+
+.fbo-panel-matriculas {
+   grid-column: 1 / -1;
+}
+
+.fbo-panel-cabeza {
+   display: flex;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: .75rem;
+}
+
+.fbo-panel-cabeza h6 {
+   margin: 0;
+   font-weight: 700;
+   color: #1a2f55;
+}
+
+.fbo-panel-cabeza p {
+   margin: .1rem 0 0;
+   font-size: .74rem;
+   color: #64748b;
+}
+
+.fbo-grafica {
+   position: relative;
+   height: 18rem;
+}
+
+.fbo-grafica-alta {
+   height: 20rem;
+}
+
+.fbo-comp {
+   margin-bottom: .9rem;
+}
+
+.fbo-comp:last-child {
+   margin-bottom: 0;
+}
+
+.fbo-comp-titulo {
+   margin-bottom: .3rem;
+   font-size: .72rem;
+   font-weight: 700;
+   letter-spacing: .03em;
+   text-transform: uppercase;
+   color: #475569;
+}
+
+.fbo-comp-barra {
+   display: flex;
+   height: .8rem;
+   overflow: hidden;
+   border-radius: 999px;
+   background: #e5edf8;
+}
+
+.fbo-comp-barra span {
+   height: 100%;
+}
+
+.fbo-comp-leyenda {
+   display: flex;
+   flex-wrap: wrap;
+   gap: .25rem .9rem;
+   margin-top: .35rem;
+   font-size: .76rem;
+   color: #334155;
+}
+
+.fbo-comp-leyenda i {
+   display: inline-block;
+   width: .6rem;
+   height: .6rem;
+   margin-right: .3rem;
+   border-radius: 2px;
+}
+
+.fbo-comp-leyenda small {
+   color: #94a3b8;
+}
+
+.fbo-lista {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: .5rem 2rem;
+   margin: 0;
+   padding: 0;
+   list-style: none;
+}
+
+.fbo-lista li {
+   display: grid;
+   grid-template-columns: 1.5rem auto minmax(0, 1fr) 5rem 2.8rem;
+   align-items: center;
+   gap: .55rem;
+   font-size: .8rem;
+}
+
+.fbo-lista-pos {
+   display: grid;
+   place-items: center;
+   width: 1.5rem;
+   height: 1.5rem;
+   border-radius: 50%;
+   background: #eef2ff;
+   color: #4338ca;
+   font-size: .7rem;
+   font-weight: 700;
+}
+
+.fbo-lista-clave {
+   padding: .1rem .5rem;
+   border: 1px solid rgba(14, 55, 99, .15);
+   border-radius: .4rem;
+   background: #fff;
+   color: #0b4fc4;
+   font-family: inherit;
+   font-size: .78rem;
+   font-weight: 700;
+   cursor: pointer;
+}
+
+.fbo-lista-clave:hover,
+.fbo-lista-clave:focus-visible {
+   border-color: #93b8f5;
+   background: #e8f0fe;
+}
+
+.fbo-lista-detalle {
+   overflow: hidden;
+   color: #64748b;
+   white-space: nowrap;
+   text-overflow: ellipsis;
+}
+
+.fbo-lista-barra {
+   height: .45rem;
+   overflow: hidden;
+   border-radius: 999px;
+   background: #eef2f7;
+}
+
+.fbo-lista-barra span {
+   display: block;
+   height: 100%;
+   border-radius: inherit;
+   background: #6f42c1;
+}
+
+.fbo-lista-valor {
+   text-align: right;
+   font-variant-numeric: tabular-nums;
+}
+
+.fbo-vacio {
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   gap: .45rem;
+   padding: 2.5rem 1rem;
+   border: 1px dashed rgba(14, 55, 99, .2);
+   border-radius: 1rem;
+   background: #fff;
+   color: #475569;
+   text-align: center;
+}
+
+.fbo-vacio > i {
+   font-size: 2rem;
+   color: #94a3b8;
+}
+
+.fbo-vacio p {
+   margin: 0;
+}
+
+.fbo-vacio-titulo {
+   font-weight: 700;
+   color: #1a2f55;
+}
+
+.fbo-sin-dato {
+   display: flex;
+   align-items: flex-start;
+   gap: .45rem;
+   margin: 0;
+   font-size: .74rem;
+   line-height: 1.4;
+   color: #64748b;
+}
+
+.fbo-sin-dato[hidden] {
+   display: none;
+}
+
+.fbo-sin-dato i {
+   margin-top: .15rem;
+   color: #b45309;
+}
+
+@media (max-width: 1199.98px) {
+   .fbo-rejilla {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+}
+
+@media (max-width: 767.98px) {
+   .fbo-rejilla,
+   .fbo-lista {
+      grid-template-columns: minmax(0, 1fr);
+   }
+
+   .fbo-panel-tendencia {
+      grid-column: auto;
+   }
+
+   /* El selector baja debajo del título, completo y en fila. */
+   .fbo-panel-cabeza {
+      flex-wrap: wrap;
+   }
+
+   .fbo-panel-cabeza .btn-group {
+      flex-direction: row;
+      flex-wrap: nowrap;
+   }
+}
+
+body.dark-mode .fbo-kpi,
+body.dark-mode .fbo-panel,
+body.dark-mode .fbo-destacado,
+body.dark-mode .fbo-vacio,
+body.dark-mode .fbo-lista-clave {
+   border-color: rgba(255, 255, 255, .1);
+   background: #1e293b;
+}
+
+body.dark-mode .fbo-titulo,
+body.dark-mode .fbo-kpi-valor,
+body.dark-mode .fbo-panel-cabeza h6,
+body.dark-mode .fbo-destacado,
+body.dark-mode .fbo-vacio-titulo {
+   color: #e2e8f0;
+}
+
+body.dark-mode .fbo-frase,
+body.dark-mode .fbo-comp-leyenda {
+   color: #cbd5e1;
+}
+
+body.dark-mode .fbo-nota {
+   background: rgba(255, 255, 255, .06);
+   color: #cbd5e1;
+}
+
+body.dark-mode .fbo-comp-barra,
+body.dark-mode .fbo-lista-barra {
+   background: rgba(255, 255, 255, .1);
+}
+
+body.dark-mode .fbo-destacado-aviso {
+   border-color: #b45309;
+   background: rgba(245, 158, 11, .12);
+}
+
+/* En oscuro, el azul marino de las cifras y las matrículas no se lee. */
+body.dark-mode .fbo-frase b,
+body.dark-mode .fbo-lista-clave {
+   color: #93c5fd;
+}
+
+body.dark-mode .fbo-lista-clave:hover,
+body.dark-mode .fbo-lista-clave:focus-visible {
+   background: rgba(13, 110, 253, .2);
+}
+
+body.dark-mode .fbo-chip {
+   background: rgba(13, 110, 253, .2);
+   color: #bfdbfe;
+}
+
+body.dark-mode .fbo-lista-pos {
+   background: rgba(99, 102, 241, .22);
+   color: #c7d2fe;
+}
+
+body.dark-mode .fbo-kpi-titulo,
+body.dark-mode .fbo-kpi-detalle,
+body.dark-mode .fbo-comp-titulo,
+body.dark-mode .fbo-panel-cabeza p,
+body.dark-mode .fbo-destacado small,
+body.dark-mode .fbo-lista-detalle,
+body.dark-mode .fbo-pista,
+body.dark-mode .fbo-sin-dato {
+   color: #94a3b8;
+}
+
+/* ==========================================================================
    Reportes > Pasajeros
    Los tres reportes se imprimen tal cual, asi que la hoja imita la plantilla
    del libro que sustituye. Los colores salen de xl/styles.xml del propio

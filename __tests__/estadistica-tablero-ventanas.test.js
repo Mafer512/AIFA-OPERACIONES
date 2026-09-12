@@ -5,7 +5,7 @@
  *
  * Arriba, el recuadro "Estadísticas" —que es el botón del Resumen— y los 15
  * filtros del módulo, de "Desde" al botón de actualizar. Abajo, una ventana
- * por área, de Explorador a Informe oficial, más FBO (todavía vacía). En el
+ * por área, de Explorador a Informe oficial, más FBO (tablero de Aviación General). En el
  * encabezado de la página, dentro de Estadística, el título es la frase del
  * tablero de diseño.
  */
@@ -78,10 +78,16 @@ describe('las ventanas por área', () => {
     }
   });
 
-  test('FBO es nueva y su panel todavía no muestra nada', () => {
+  test('FBO es nueva y su panel trae el tablero de Aviación General', () => {
     expect($('est-tab-fbo').querySelector('.est-ventana-nuevo').textContent).toBe('Nuevo');
-    expect($('est-pane-fbo').innerHTML.trim()).toBe('');
     expect($('est-pane-fbo').classList.contains('tab-pane')).toBe(true);
+    for (const id of ['est-fbo-frase', 'est-fbo-filtro', 'est-fbo-nota', 'est-fbo-vacio', 'est-fbo-contenido', 'est-fbo-kpis',
+      'est-fbo-destacados', 'est-fbo-mes', 'est-fbo-composicion', 'est-fbo-operadores', 'est-fbo-aeronaves',
+      'est-fbo-aeropuertos', 'est-fbo-matriculas', 'est-fbo-operadores-sin', 'est-fbo-aeronaves-sin',
+      'est-fbo-aeropuertos-sin']) {
+      expect($('est-pane-fbo').querySelector('#' + id)).not.toBeNull();
+    }
+    expect([...$('est-pane-fbo').querySelectorAll('[data-fbo-metrica]')].map((b) => b.dataset.fboMetrica)).toEqual(['movimientos', 'pax']);
   });
 });
 
