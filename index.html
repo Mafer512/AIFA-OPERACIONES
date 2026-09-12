@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20260912-tableros-1">
+    <link rel="stylesheet" href="style.css?v=20260912-tableros-3">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -23338,37 +23338,36 @@ FF
                                                         </div>
                                                     </div>
                                                     <section class="fbo-panel tb-controles" aria-label="Qué consultar">
-                                                        <div class="d-flex align-items-end gap-2 flex-wrap">
+                                                        <!-- Un solo renglón: agrupación, filtro adicional por CUALQUIER dimensión
+                                                             (sin recargar la barra superior), consultar y exportar. -->
+                                                        <div class="tb-controles-fila">
                                                             <div>
                                                                 <label class="form-label mb-0" style="font-size:.72rem" for="est-exp-dim1">Agrupar por</label>
-                                                                <select class="form-select form-select-sm" id="est-exp-dim1" style="width:auto"></select>
+                                                                <select class="form-select form-select-sm" id="est-exp-dim1"></select>
                                                             </div>
                                                             <div>
                                                                 <label class="form-label mb-0" style="font-size:.72rem" for="est-exp-dim2">y por</label>
-                                                                <select class="form-select form-select-sm" id="est-exp-dim2" style="width:auto"></select>
+                                                                <select class="form-select form-select-sm" id="est-exp-dim2"></select>
                                                             </div>
                                                             <div>
                                                                 <label class="form-label mb-0" style="font-size:.72rem" for="est-exp-dim3">y por</label>
-                                                                <select class="form-select form-select-sm" id="est-exp-dim3" style="width:auto"></select>
+                                                                <select class="form-select form-select-sm" id="est-exp-dim3"></select>
                                                             </div>
-                                                            <button class="btn btn-sm btn-primary" id="est-exp-consultar" type="button"><i class="fas fa-play me-1"></i>Consultar</button>
-                                                        </div>
-                                                        <!-- Filtro adicional por CUALQUIER dimensión, sin recargar la barra
-                                                             superior con un desplegable por campo. -->
-                                                        <div class="d-flex align-items-end gap-2 flex-wrap">
                                                             <div>
                                                                 <label class="form-label mb-0" style="font-size:.72rem" for="est-exp-filtro-campo">Filtrar además por</label>
-                                                                <select class="form-select form-select-sm" id="est-exp-filtro-campo" style="width:auto"></select>
+                                                                <select class="form-select form-select-sm" id="est-exp-filtro-campo"></select>
                                                             </div>
                                                             <div>
-                                                                <label class="form-label mb-0" style="font-size:.72rem" for="est-exp-filtro-valor">Valor</label>
-                                                                <select class="form-select form-select-sm" id="est-exp-filtro-valor" style="width:auto;max-width:16rem"><option value="">Todos</option></select>
+                                                                <label class="form-label mb-0" style="font-size:.72rem" for="est-exp-filtro-valor">Valor
+                                                                    <span class="text-muted fw-normal ms-1" id="est-exp-filtro-nota"></span></label>
+                                                                <select class="form-select form-select-sm" id="est-exp-filtro-valor"><option value="">Todos</option></select>
                                                             </div>
-                                                            <span class="text-muted" id="est-exp-filtro-nota" style="font-size:.72rem"></span>
-                                                            <span class="flex-grow-1"></span>
-                                                            <button class="btn btn-sm btn-outline-success" id="est-exp-csv" type="button"><i class="fas fa-file-csv me-1"></i>CSV</button>
-                                                            <button class="btn btn-sm btn-outline-success" id="est-exp-excel" type="button"><i class="fas fa-file-excel me-1"></i>Excel</button>
-                                                            <span class="text-muted" id="est-exp-conteo" style="font-size:.75rem"></span>
+                                                            <button class="btn btn-sm btn-primary" id="est-exp-consultar" type="button"><i class="fas fa-play me-1"></i>Consultar</button>
+                                                            <div class="tb-controles-exportar">
+                                                                <span class="text-muted tb-controles-conteo" id="est-exp-conteo"></span>
+                                                                <button class="btn btn-sm btn-outline-success" id="est-exp-csv" type="button"><i class="fas fa-file-csv me-1"></i>CSV</button>
+                                                                <button class="btn btn-sm btn-outline-success" id="est-exp-excel" type="button"><i class="fas fa-file-excel me-1"></i>Excel</button>
+                                                            </div>
                                                         </div>
                                                     </section>
                                                     <div class="fbo-kpis" id="est-exp-tarjetas"></div>
