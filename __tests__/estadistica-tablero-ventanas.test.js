@@ -149,10 +149,11 @@ describe('el aviso de carga', () => {
     expect(css).toMatch(/\.est-carga-relleno \{[^}]*transition: width/);
   });
 
-  test('el recuadro del aviso no lleva contorno y difumina lo que tiene detrás', () => {
+  test('el aviso flota sin tarjeta, contorno ni sombra sobre el contenido difuminado', () => {
     const regla = css.match(/\n\.est-carga \{[^}]*\}/)[0];
     expect(regla).toMatch(/border: 0;/);
-    expect(regla).toMatch(/backdrop-filter: blur\(/);
+    expect(regla).toMatch(/background: transparent;/);
+    expect(regla).toMatch(/box-shadow: none;/);
   });
 });
 
