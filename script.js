@@ -23111,9 +23111,9 @@ function _conciUpdateWorkspaceMode() {
     document.body.classList.toggle('conci-manifest-workspace', enabled);
     document.body.classList.toggle('conci-itinerary-workspace',
         !!(enabled && itineraryPane?.classList.contains('active')));
-    // Estadistica tambien va a pantalla completa (sin encabezado ni barra
-    // lateral, con el menu de Conciliacion hasta arriba), pero SIN el alto fijo
-    // de la hoja de calculo: el tablero es largo y baja con el scroll normal.
+    // Estadistica tambien va a pantalla completa (con el encabezado del
+    // aeropuerto, sin barra lateral ni boton Menu flotante), pero SIN el alto
+    // fijo de la hoja de calculo: el tablero es largo y baja con el scroll.
     document.body.classList.toggle('conci-estadistica-workspace',
         !!(section?.classList.contains('active') && statsPane?.classList.contains('active')));
     requestAnimationFrame(_conciSyncScrollHeight);
@@ -23128,8 +23128,8 @@ window.conciReturnToMainMenu = function () {
 
 document.addEventListener('DOMContentLoaded', () => {
     // Estadistica va en la lista aunque NO use el modo hoja de calculo: es
-    // justamente la pestana que tiene que APAGARLO (y encender el suyo, sin
-    // encabezado pero con scroll). Sin este listener, entrar a
+    // justamente la pestana que tiene que APAGARLO (y encender el suyo, que
+    // conserva el scroll). Sin este listener, entrar a
     // Estadistica desde Itinerario o Manifiestos dejaba el body en
     // conci-manifest-workspace, que fija la pagina a 100vh con overflow:hidden;
     // el contenido se veia cortado a media pantalla y no bajaba con el scroll.
