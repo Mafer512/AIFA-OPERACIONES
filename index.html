@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20260912-tablero-ventanas-2">
+    <link rel="stylesheet" href="style.css?v=20260912-tablero-ventanas-3">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -23216,17 +23216,22 @@ FF
                                                             <label class="form-label mb-0" style="font-size:.72rem" for="est-f-servicio">Tipo servicio</label>
                                                             <select class="form-select form-select-sm" id="est-f-servicio" style="width:auto;max-width:11rem"><option value="">Todos</option></select>
                                                         </div>
-                                                        <button class="btn btn-sm btn-primary" id="est-btn-aplicar" type="button">
-                                                            <i class="fas fa-filter me-1"></i>Aplicar
-                                                        </button>
-                                                        <button class="btn btn-sm btn-outline-secondary" id="est-btn-limpiar" type="button" title="Quitar todos los filtros">
-                                                            <i class="fas fa-eraser"></i>
-                                                        </button>
-                                                        <button class="btn btn-sm btn-outline-secondary" id="est-btn-refrescar" type="button" title="Recalcular la estadística en la base">
-                                                            <i class="fas fa-sync-alt"></i>
-                                                        </button>
-                                                        <span class="flex-grow-1"></span>
-                                                        <span class="text-muted" id="est-frescura" style="font-size:.72rem;white-space:nowrap"></span>
+                                                        <!-- Aplicar, limpiar y actualizar; encima, la fecha de los datos, en el
+                                                             renglón de las etiquetas: así los filtros caben en una sola línea. -->
+                                                        <div class="est-filtros-acciones">
+                                                            <span class="text-muted" id="est-frescura"></span>
+                                                            <div class="d-flex gap-2">
+                                                                <button class="btn btn-sm btn-primary" id="est-btn-aplicar" type="button">
+                                                                    <i class="fas fa-filter me-1"></i>Aplicar
+                                                                </button>
+                                                                <button class="btn btn-sm btn-outline-secondary" id="est-btn-limpiar" type="button" title="Quitar todos los filtros">
+                                                                    <i class="fas fa-eraser"></i>
+                                                                </button>
+                                                                <button class="btn btn-sm btn-outline-secondary" id="est-btn-refrescar" type="button" title="Recalcular la estadística en la base">
+                                                                    <i class="fas fa-sync-alt"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -39588,7 +39593,7 @@ FF
 <script src="js/estadistico-informe.js?v=20260821-v6" defer></script>
 <!-- Modulo estadistico de operaciones (pestana Estadistica de Conciliacion) -->
 <script src="js/estadistica-motor.js?v=20260908-v1" defer></script>
-<script src="js/estadistica-panel.js?v=20260908-v1" defer></script>
+<script src="js/estadistica-panel.js?v=20260912-tablero-ventanas-3" defer></script>
 <script src="js/estadistica-clasificacion.js?v=20260908-v1" defer></script>
 
 <!-- ═══ Aviación General · FBO (GAG · Servicios Conexos) ═══
