@@ -21317,9 +21317,10 @@ body.conci-estadistica-workspace .main-title {
    margin: 0;
 }
 
-/* Siete ventanas por renglón; el segundo renglón (seis) queda centrado. */
+/* Ventanas en renglones parejos y centrados. En pantalla ancha (abajo),
+   Descargas cuadrada a la izquierda y las otras doce en dos renglones de seis. */
 .est-ventanas {
-   --est-por-renglon: 7;
+   --est-por-renglon: 4;
    --est-separacion: .6rem;
    grid-area: ventanas;
    display: flex;
@@ -21465,9 +21466,36 @@ body.dark-mode .est-cabecera .nav-link:not(.active) .est-ventana-texto small {
    }
 }
 
-@media (max-width: 1199.98px) {
+@media (min-width: 1200px) {
    .est-ventanas {
-      --est-por-renglon: 4;
+      display: grid;
+      grid-template-columns: 9.2rem repeat(6, minmax(0, 1fr));
+      grid-auto-rows: minmax(4.3rem, auto);
+   }
+
+   .est-ventanas > .est-ventana {
+      flex: none;
+   }
+
+   /* Descargas: cuadrada, del alto de los dos renglones. */
+   .est-ventanas > #est-tab-descargas {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+      flex-direction: column;
+      justify-content: center;
+      gap: .5rem;
+      text-align: center;
+   }
+
+   .est-ventanas > #est-tab-descargas .est-ventana-icono {
+      width: 3rem;
+      height: 3rem;
+      border-radius: .8rem;
+      font-size: 1.35rem;
+   }
+
+   .est-ventanas > #est-tab-descargas .est-ventana-texto {
+      align-items: center;
    }
 }
 
@@ -21565,6 +21593,117 @@ body.dark-mode .est-cabecera .nav-link:not(.active) .est-ventana-texto small {
    .est-cabecera .nav-link.est-cargando::after {
       animation: none;
    }
+}
+
+/* Aviso mientras se arma el reporte de un área: ocupa el lugar del contenido
+   (que se oculta hasta que llegan los datos) con un mensaje y su avance. */
+.est-pane-cargando > :not(.est-carga) {
+   display: none !important;
+}
+
+.est-carga {
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   gap: .35rem;
+   max-width: 30rem;
+   margin: 2.5rem auto;
+   padding: 1.75rem 1.5rem;
+   border: 1px solid rgba(14, 55, 99, .1);
+   border-radius: 1rem;
+   background: #fff;
+   box-shadow: 0 10px 30px -20px rgba(15, 23, 42, .35);
+   text-align: center;
+}
+
+.est-carga-icono {
+   display: grid;
+   place-items: center;
+   width: 3.2rem;
+   height: 3.2rem;
+   margin-bottom: .35rem;
+   border-radius: .9rem;
+   background: #e8f0fe;
+   color: #0d6efd;
+   font-size: 1.4rem;
+   animation: est-latido 1.6s ease-in-out infinite;
+}
+
+.est-carga-titulo {
+   margin: 0;
+   font-size: 1.05rem;
+   font-weight: 700;
+   color: #1a2f55;
+}
+
+.est-carga-mensaje {
+   min-height: 1.2em;
+   margin: 0;
+   font-size: .82rem;
+   color: #6b7280;
+}
+
+.est-carga-barra {
+   width: 100%;
+   height: .5rem;
+   margin-top: .6rem;
+   overflow: hidden;
+   border-radius: 999px;
+   background: #e5edf8;
+}
+
+.est-carga-relleno {
+   width: 0;
+   height: 100%;
+   border-radius: inherit;
+   background: linear-gradient(90deg, #1a6ef0, #3b9bff);
+   transition: width .3s ease;
+}
+
+.est-carga-porcentaje {
+   margin: .15rem 0 0;
+   font-size: .78rem;
+   font-weight: 700;
+   color: #0d6efd;
+   font-variant-numeric: tabular-nums;
+}
+
+@keyframes est-latido {
+   0%,
+   100% {
+      transform: scale(1);
+   }
+
+   50% {
+      transform: scale(1.08);
+   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .est-carga-icono {
+      animation: none;
+   }
+
+   .est-carga-relleno {
+      transition: none;
+   }
+}
+
+body.dark-mode .est-carga {
+   border-color: rgba(255, 255, 255, .1);
+   background: #1e293b;
+}
+
+body.dark-mode .est-carga-titulo {
+   color: #e2e8f0;
+}
+
+body.dark-mode .est-carga-mensaje {
+   color: #94a3b8;
+}
+
+body.dark-mode .est-carga-barra {
+   background: rgba(255, 255, 255, .1);
 }
 
 /* ==========================================================================

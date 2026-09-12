@@ -132,6 +132,66 @@
         }).join('');
     }
 
+    // ── Aviso mientras se arma el reporte ────────────────────────────────────
+    // Las consultas no informan su avance, así que el porcentaje es una
+    // estimación: sube rápido al principio y se frena cerca del final, sin
+    // llegar a 100 antes de que estén los datos. Entonces el aviso se quita.
+    const ETAPAS_CARGA = [
+        [0, 'Conectando con la base de datos…'],
+        [20, 'Recolectando la información…'],
+        [55, 'Calculando las cifras…'],
+        [80, 'Terminando el reporte, espere un momento…']
+    ];
+    const cargasEnCurso = new Map();
+
+    function porcentajeCarga(segundos) {
+        return Math.min(95, Math.round(95 * (1 - Math.exp(-Math.max(0, segundos) / 6))));
+    }
+
+    function pintarAvisoCarga(nodo, pct) {
+        const etapa = ETAPAS_CARGA.filter(([desde]) => pct >= desde).pop();
+        nodo.querySelector('.est-carga-mensaje').textContent = etapa[1];
+        nodo.querySelector('.est-carga-relleno').style.width = `${pct}%`;
+        nodo.querySelector('.est-carga-porcentaje').textContent = `${pct} %`;
+        nodo.querySelector('.est-carga-barra').setAttribute('aria-valuenow', String(pct));
+    }
+
+    function mostrarAvisoCarga(area) {
+        const pane = $(`est-pane-${area}`);
+        if (!pane || cargasEnCurso.has(area)) return;
+        const nodo = document.createElement('div');
+        nodo.className = 'est-carga';
+        nodo.setAttribute('role', 'status');
+        nodo.setAttribute('aria-live', 'polite');
+        nodo.innerHTML = `
+            <div class="est-carga-icono" aria-hidden="true"><i class="fas fa-chart-column"></i></div>
+            <p class="est-carga-titulo">Estamos creando el reporte</p>
+            <p class="est-carga-mensaje"></p>
+            <div class="est-carga-barra" role="progressbar" aria-label="Avance estimado" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="est-carga-relleno"></div>
+            </div>
+            <p class="est-carga-porcentaje"></p>`;
+        pane.prepend(nodo);
+        pane.classList.add('est-pane-cargando');
+        const inicio = Date.now();
+        const avanzar = () => pintarAvisoCarga(nodo, porcentajeCarga((Date.now() - inicio) / 1000));
+        avanzar();
+        cargasEnCurso.set(area, { pane, nodo, reloj: setInterval(avanzar, 300) });
+    }
+
+    function quitarAvisoCarga(area) {
+        const carga = cargasEnCurso.get(area);
+        if (!carga) return;
+        clearInterval(carga.reloj);
+        cargasEnCurso.delete(area);
+        carga.nodo.remove();
+        carga.pane.classList.remove('est-pane-cargando');
+        // Las gráficas se dibujaron con el panel oculto: que tomen su tamaño real.
+        carga.pane.querySelectorAll('canvas').forEach((canvas) => {
+            try { window.Chart?.getChart?.(canvas)?.resize(); } catch (_) { }
+        });
+    }
+
     function ocupado(area, activo) {
         const boton = document.querySelector(`#est-subnav [data-est-area="${area}"]`);
         // Se marca con un indicador que gira, no atenuado: un botón gris parece
@@ -1554,6 +1614,7 @@
         if (!forzar && state.cargadas.has(area)) return;
 
         ocupado(area, true);
+        mostrarAvisoCarga(area);
         try {
             await render();
             state.cargadas.add(area);
@@ -1563,6 +1624,7 @@
             mostrarError(`No se pudieron cargar los datos: ${error?.message || error}`);
         } finally {
             ocupado(area, false);
+            quitarAvisoCarga(area);
         }
     }
 
@@ -1696,6 +1758,7 @@
     // Se expone lo mínimo que necesita la pantalla de Clasificación: el cliente
     // ya inicializado, el periodo vigente y la forma de invalidar lo pintado.
     window.EstadisticaPanel = {
+        porcentajeCarga,
         getClient,
         nivel: () => state.nivel,
         puedeAdministrarReglas,

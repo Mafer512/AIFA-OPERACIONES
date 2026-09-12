@@ -597,3 +597,60 @@ describe('mientras carga un área', () => {
     expect(boton.getAttribute('aria-busy')).toBe('false');
   });
 });
+
+describe('mientras se arma el reporte de un área', () => {
+  test('en vez de un espacio vacío muestra un aviso con su avance, y al llegar los datos se quita', async () => {
+    await montar('admin');
+    await reposar();
+    const pane = document.getElementById('est-pane-carga');
+    document.getElementById('est-tab-carga').dispatchEvent(new window.Event('shown.bs.tab'));
+    const aviso = pane.querySelector('.est-carga');
+    expect(aviso).not.toBeNull();
+    expect(aviso.getAttribute('role')).toBe('status');
+    expect(aviso.textContent).toContain('Estamos creando el reporte');
+    expect(aviso.querySelector('.est-carga-mensaje').textContent).toBe('Conectando con la base de datos…');
+    expect(aviso.querySelector('.est-carga-porcentaje').textContent).toMatch(/^\d+ %$/);
+    expect(aviso.querySelector('[role="progressbar"]').getAttribute('aria-valuenow')).toMatch(/^\d+$/);
+    expect(pane.classList.contains('est-pane-cargando')).toBe(true);
+    await reposar();
+    expect(pane.querySelector('.est-carga')).toBeNull();
+    expect(pane.classList.contains('est-pane-cargando')).toBe(false);
+  });
+
+  test('si la consulta falla, el aviso también se quita y queda el error', async () => {
+    const { client } = await montar('admin');
+    await reposar();
+    const original = client.rpc.getMockImplementation();
+    client.rpc.mockImplementation(async (nombre, params) => (nombre === 'estadistica_agregado'
+      ? { data: null, error: { message: 'canceling statement due to statement timeout' } }
+      : original(nombre, params)));
+    const pane = document.getElementById('est-pane-pasajeros');
+    document.getElementById('est-tab-pasajeros').dispatchEvent(new window.Event('shown.bs.tab'));
+    expect(pane.querySelector('.est-carga')).not.toBeNull();
+    await reposar();
+    expect(pane.querySelector('.est-carga')).toBeNull();
+    expect(document.getElementById('est-error').textContent).toContain('statement timeout');
+  });
+
+  test('el porcentaje es una estimación que sube y no llega a 100 antes de tiempo', async () => {
+    await montar('admin');
+    const { porcentajeCarga } = window.EstadisticaPanel;
+    expect(porcentajeCarga(0)).toBe(0);
+    expect(porcentajeCarga(3)).toBeGreaterThan(porcentajeCarga(1));
+    expect(porcentajeCarga(6)).toBe(60);
+    expect(porcentajeCarga(600)).toBe(95);
+  });
+});
+
+describe('nombres del panel', () => {
+  // Pasó una vez: la función del aviso de carga se llamó igual que el
+  // renderizador del área de Carga y lo tapó, así que el aviso relanzaba esa
+  // consulta cada 300 ms. Dos funciones de primer nivel con el mismo nombre
+  // no dan error: la segunda gana en silencio.
+  test('ninguna función de primer nivel se declara dos veces', () => {
+    const nombres = [...panelSource.replace(/\r\n/g, '\n').matchAll(/^    (?:async )?function ([A-Za-z_$][\w$]*)\s*\(/gm)].map((m) => m[1]);
+    const repetidos = [...new Set(nombres.filter((n, i) => nombres.indexOf(n) !== i))];
+    expect(nombres.length).toBeGreaterThan(20);
+    expect(repetidos).toEqual([]);
+  });
+});
