@@ -255,8 +255,10 @@ describe('Conciliación · el modo hoja de cálculo se apaga fuera de sus pesta�
     const reglas = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
       .filter(([, selector]) => selector.includes('body.conci-estadistica-workspace'));
     expect(reglas.length).toBeGreaterThan(0);
-    // El encabezado del aeropuerto se ve: ninguna regla del modo lo toca.
-    expect(reglas.some(([selector]) => /\.header\b/.test(selector))).toBe(false);
+    // El encabezado del aeropuerto se ve (compacto): ninguna regla del modo lo oculta.
+    const ocultaEncabezado = reglas.some(([selector, cuerpo]) => /display:\s*none/.test(cuerpo)
+      && selector.split(',').some(s => /\.header$/.test(s.trim())));
+    expect(ocultaEncabezado).toBe(false);
     // El Menú flotante de abajo sí se oculta: arriba ya está el de las pestañas.
     const oculta = reglas.find(([selector]) => /body\.conci-estadistica-workspace #navdeck-back\b/.test(selector));
     expect(oculta && oculta[2]).toMatch(/display:\s*none\s*!important/);

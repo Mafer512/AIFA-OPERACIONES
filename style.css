@@ -21093,7 +21093,163 @@ body.conci-estadistica-workspace #navdeck-back {
 body.conci-estadistica-workspace .main-content {
    width: 100% !important;
    margin-left: 0 !important;
-   padding: .4rem !important;
+   padding: 0 .4rem .4rem !important;
+}
+
+/* Encabezado compacto: un solo renglón, como el tablero de diseño. Las alas
+   de aifa-logo.png con el nombre al lado, el título, el escudo, las fichas de
+   Hoy y Hora local, Actualizar y el tema. Fuera de Estadística el encabezado
+   no cambia: estas piezas nacen ocultas. */
+.header-hoy-chip,
+.header-chip-icon,
+.header-brand-text {
+   display: none;
+}
+
+body.conci-estadistica-workspace .header {
+   margin-bottom: 0;
+   padding: .35rem .9rem !important;
+   border-radius: 0;
+}
+
+body.conci-estadistica-workspace #flying-plane,
+body.conci-estadistica-workspace #sidebar-toggler,
+body.conci-estadistica-workspace .header-subtext,
+body.conci-estadistica-workspace .utc-clock-container,
+body.conci-estadistica-workspace .header-title-row .header-logo:first-child {
+   display: none !important;
+}
+
+body.conci-estadistica-workspace .header-content {
+   min-height: 0;
+   gap: 1rem;
+}
+
+body.conci-estadistica-workspace .header-brand-block {
+   gap: .55rem;
+}
+
+/* Solo las alas: el texto de la imagen quedaría ilegible a este tamaño. */
+body.conci-estadistica-workspace .aifa-logo {
+   width: 84px;
+   height: 30px;
+   object-fit: cover;
+   object-position: center top;
+}
+
+body.conci-estadistica-workspace .header-brand-text {
+   display: flex;
+   flex-direction: column;
+   font-size: .6rem;
+   font-weight: 600;
+   line-height: 1.15;
+   letter-spacing: .02em;
+   color: #1a2f55;
+   white-space: nowrap;
+}
+
+body.conci-estadistica-workspace .header-brand-text b {
+   font-size: .8rem;
+   font-weight: 800;
+}
+
+body.conci-estadistica-workspace .header-center-content {
+   flex-direction: row;
+   gap: 0;
+   padding: 0;
+}
+
+body.conci-estadistica-workspace .header-center-content .header-title-row {
+   gap: 1rem;
+}
+
+body.conci-estadistica-workspace .main-title {
+   flex: 1 1 auto;
+   max-width: none;
+   font-size: clamp(1rem, .7rem + .75vw, 1.35rem);
+   white-space: nowrap;
+}
+
+body.conci-estadistica-workspace .header-logo {
+   height: 34px;
+}
+
+body.conci-estadistica-workspace .header-hoy-chip,
+body.conci-estadistica-workspace .formal-clock-container {
+   display: grid;
+   grid-template-columns: auto auto;
+   align-items: center;
+   column-gap: .5rem;
+   min-width: 0;
+   padding: .3rem .65rem;
+   border: 1px solid rgba(14, 55, 99, .14);
+   border-radius: 10px;
+   background: rgba(255, 255, 255, .85);
+   text-align: left;
+}
+
+body.conci-estadistica-workspace .header-chip-icon {
+   display: block;
+   grid-row: 1 / span 2;
+   font-size: 1rem;
+   color: #0e63c7;
+}
+
+body.conci-estadistica-workspace .header-hoy-chip .clock-label,
+body.conci-estadistica-workspace .formal-clock-container .clock-label {
+   font-size: .6rem;
+   font-weight: 600;
+   letter-spacing: 0;
+   text-transform: lowercase;
+   color: #1a2f55;
+}
+
+/* "HORA LOCAL" → "Hora local", como en el diseño. */
+body.conci-estadistica-workspace .header-hoy-chip .clock-label::first-letter,
+body.conci-estadistica-workspace .formal-clock-container .clock-label::first-letter {
+   text-transform: uppercase;
+}
+
+body.conci-estadistica-workspace .header-hoy-fecha,
+body.conci-estadistica-workspace .formal-clock {
+   font-family: inherit;
+   font-size: .74rem;
+   font-weight: 700;
+   letter-spacing: 0;
+   color: #0c2d57;
+   white-space: nowrap;
+}
+
+/* Las pestañas de Conciliación pegadas al encabezado, sin franja en medio. */
+body.conci-estadistica-workspace #conciliacion-tabs {
+   padding-top: .35rem !important;
+}
+
+body.dark-mode.conci-estadistica-workspace .header-brand-text,
+body.dark-mode.conci-estadistica-workspace .header-hoy-chip .clock-label,
+body.dark-mode.conci-estadistica-workspace .formal-clock-container .clock-label,
+body.dark-mode.conci-estadistica-workspace .header-hoy-fecha,
+body.dark-mode.conci-estadistica-workspace .formal-clock {
+   color: #e2e8f0;
+}
+
+body.dark-mode.conci-estadistica-workspace .header-hoy-chip,
+body.dark-mode.conci-estadistica-workspace .formal-clock-container {
+   border-color: rgba(255, 255, 255, .14);
+   background: rgba(255, 255, 255, .06);
+}
+
+/* En pantallas angostas no cabe todo en un renglón: se quedan el título, la
+   hora y los botones. */
+@media (max-width: 991.98px) {
+   body.conci-estadistica-workspace .header-brand-text,
+   body.conci-estadistica-workspace .header-hoy-chip {
+      display: none;
+   }
+
+   body.conci-estadistica-workspace .main-title {
+      white-space: normal;
+   }
 }
 
 /* ==========================================================================
