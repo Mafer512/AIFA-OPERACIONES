@@ -7954,6 +7954,13 @@ function initializeGsoQuickLinks() {
     }
 }
 
+// Fecha corta de la ficha "Hoy" del encabezado compacto: "Vie 11 Sep 2026".
+function formatHeaderHoy(fecha) {
+    const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return `${DIAS[fecha.getDay()]} ${String(fecha.getDate()).padStart(2, '0')} ${MESES[fecha.getMonth()]} ${fecha.getFullYear()}`;
+}
+
 // Fecha en la barra superior
 function updateDate() {
     try {
@@ -7965,6 +7972,8 @@ function updateDate() {
         // Capitalizar primera letra
         txt = txt.charAt(0).toUpperCase() + txt.slice(1);
         el.textContent = txt;
+        const hoy = document.getElementById('header-hoy-fecha');
+        if (hoy) hoy.textContent = formatHeaderHoy(now);
     } catch (e) { /* ignore */ }
 }
 
