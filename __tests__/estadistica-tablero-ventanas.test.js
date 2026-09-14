@@ -149,10 +149,11 @@ describe('el aviso de carga', () => {
     expect(css).toMatch(/\.est-carga-relleno \{[^}]*transition: width/);
   });
 
-  test('el recuadro del aviso no lleva contorno y difumina lo que tiene detrás', () => {
+  test('el aviso flota sin tarjeta, contorno ni sombra sobre el contenido difuminado', () => {
     const regla = css.match(/\n\.est-carga \{[^}]*\}/)[0];
     expect(regla).toMatch(/border: 0;/);
-    expect(regla).toMatch(/backdrop-filter: blur\(/);
+    expect(regla).toMatch(/background: transparent;/);
+    expect(regla).toMatch(/box-shadow: none;/);
   });
 });
 
@@ -231,5 +232,12 @@ describe('los controles del Explorador', () => {
   test('en pantalla ancha la fila no se parte', () => {
     expect(css).toMatch(/@media \(min-width: 1400px\) \{\s*\.tb-controles-fila \{\s*flex-wrap: nowrap;/);
     expect(css).toMatch(/\.tb-controles-fila \.form-select \{[^}]*max-width: 13rem;/);
+  });
+});
+
+describe('la frase de cada área', () => {
+  test('ocupa todo el ancho, sin tope', () => {
+    expect(css.match(/\n\.fbo-frase \{[^}]*\}/)[0]).not.toMatch(/max-width/);
+    expect(css).toMatch(/\.fbo-cabeza-texto \{[^}]*flex: 1 1 32rem;/);
   });
 });

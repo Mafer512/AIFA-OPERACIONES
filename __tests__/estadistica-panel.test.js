@@ -976,3 +976,13 @@ describe('la gráfica de carga por mes', () => {
     expect(series.map((s) => s.label).slice(0, -1)).toEqual(['Nacional (t)', 'Internacional (t)']);
   });
 });
+
+describe('la calidad del dato en el Resumen', () => {
+  test('por ahora sólo muestra los indicadores con cobertura suficiente: los avisos amarillos se ocultan', async () => {
+    await montar('admin');
+    const calidad = document.getElementById('est-resumen-calidad');
+    expect(calidad.querySelectorAll('.fbo-destacado-aviso')).toHaveLength(0);
+    expect(calidad.textContent).toMatch(/Cobertura de pasajeros/);
+    expect(panelSource).toContain('const MOSTRAR_COBERTURA_BAJA = false;');
+  });
+});
