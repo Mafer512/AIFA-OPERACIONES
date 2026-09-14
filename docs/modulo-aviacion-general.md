@@ -153,6 +153,45 @@ los 1,385 pasajeros no se mueven.
 La migración es idempotente, aborta si la llegada dejó de ser la que se documentó, y trae
 escrito el `DELETE` para deshacerla.
 
+#### 2024 no se cuenta por rotación: se cuenta por fecha real (migración 050)
+
+El reporte oficial de 2024 (*«Aviación General 2024PDFff.pdf»*, con tabla resumen mensual y
+serie diaria completa del año) **no sigue la misma convención que 2022**. Comparado mes por mes
+contra la base:
+
+| | Anclando por rotación | Contando por fecha real |
+|---|---|---|
+| Salidas 2024 | 1,379 — no cuadra | **1,372** |
+| Llegadas 2024 | 1,398 — no cuadra | **1,398** |
+
+Contando por fecha real, **los 12 meses de 2024 coinciden al dígito** contra el reporte, salvo
+dos huecos, ambos explicados por completo al conseguir el Excel maestro del año (2,777 filas,
+detalle vuelo por vuelo):
+
+| Mes | Hueco | Causa |
+|---|---|---|
+| Junio | el reporte trae 88 salidas, la base 87 | `512\|SALIDA\|04/06/2024\|N900MC`, capturada **2 veces** en el Excel de origen. Es el mismo caso que el id 3701, ya anulado por duplicado accidental confirmado por Gerencia |
+| Octubre | el reporte trae 180 llegadas, la base 174 | `1137\|LLEGADA\|31/10/2024\|XA-GIU` y `1138\|LLEGADA\|31/10/2024\|XB-MXK`, cada una capturada **4 veces** en el Excel de origen |
+
+Descontando esas 7 filas repetidas —las únicas de las 2,777 en todo el año—, el Excel maestro
+deduplicado coincide **perfecto, folio por folio**, con las 2,770 filas activas de la base. El
+reporte de GAG suma las filas del Excel tal cual, sin filtrar los duplicados; la base, con su
+antiduplicados por llave natural, ya los tenía fuera.
+
+`aviacion_general_resumen`, en modo `'rotacion'` (el que usan por omisión tanto el Resumen de
+FBO como Estadística), deja de anclar una salida cuando su fecha real cae en 2024 **o** cuando la
+llegada a la que ancharía cae en 2024 — la segunda condición evita que una salida de enero de
+2025 se cuele por atrás en el total de diciembre de 2024 (se comprobó que existen 3 así; sin la
+condición simétrica, diciembre habría dejado de cuadrar). Se comprobó que la frontera equivalente
+2023→2024 no existe en los datos reales, así que 2022 y 2023 no se mueven ni un movimiento.
+
+Es una excepción por año, escrita adentro de la función: ninguna pantalla necesitó cambiar,
+porque ambas ya la llamaban sin pasar `p_modo`. Que 2022 se cuente por rotación y 2024 por fecha
+real —dos convenciones distintas en la misma tabla— no es un capricho de este SQL: es lo que
+prueban, cada uno por su lado, los dos reportes oficiales. Queda pendiente decidir con más calma
+qué hacer con 2025 y 2026 en cuanto tengan un reporte anual completo que permita probarlo de la
+misma manera; por ahora conservan el comportamiento de `'rotacion'` que ya tenían.
+
 ### Tres cosas en que los datos reales desmintieron al diccionario
 
 Manda la tabla, no el documento. Las tres estaban mal implementadas en la
@@ -444,6 +483,8 @@ Todas aplicadas, en orden:
 - **049** — corrección de nueve horas de plataforma de 2023 (fracción de Excel leída como
   decimal). *Aplicada el 12/09/2026 16:43 — confirmado por auditoría: las nueve filas pasaron a
   `version=2` en la misma transacción.*
+- **050** — 2024 se cuenta por fecha real, no por rotación, dentro de `aviacion_general_resumen`.
+  *Aplicada. Verificado en vivo: 2024 da 1,372/1,398/2,770; 2022 sigue en 458.*
 
 Todas siguen la misma mecánica, por si en el futuro se agrega una nueva:
 
