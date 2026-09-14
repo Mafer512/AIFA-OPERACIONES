@@ -11723,6 +11723,8 @@ function renderNavdeckWeeklyBanner() {
         const _now = new Date();
         const _MONTH_NAMES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
         const _DOW_ES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+        const _capitalizar = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+        const _hoyTexto = `${_capitalizar(_DOW_ES[_now.getDay()])}, ${_now.getDate()} de ${_MONTH_NAMES_ES[_now.getMonth()]} de ${_now.getFullYear()}`;
         const _allCapDays = [];
         const _seenCapFechas = new Set();
         const _weekSrcsShared = [
@@ -11768,7 +11770,17 @@ function renderNavdeckWeeklyBanner() {
         /* ── hero content per mode ── */
         let heroIcon, heroKicker, heroTitle, periodPickerHtml = '';
 
-        if (mode === 'weekly') {
+        if (mode === 'current') {
+            /* Actual: el día más reciente con cifras capturadas. */
+            heroIcon   = 'fas fa-bolt';
+            heroKicker = 'Cifras del día';
+            heroTitle  = _lastCapDate
+                ? `${_capitalizar(_DOW_ES[_lastCapDate.getDay()])} ${_lastCapDate.getDate()} de ${_MONTH_NAMES_ES[_lastCapDate.getMonth()]} de ${_lastCapDate.getFullYear()}`
+                : 'Sin cifras capturadas';
+            periodPickerHtml = `
+                <p class="ndw-tap-hint" aria-label="Las tarjetas son interactivas"><i class="fas fa-hand-pointer" aria-hidden="true"></i><span>El día más reciente con cifras capturadas</span></p>
+                ${_prelimHtml}`;
+        } else if (mode === 'weekly') {
             const rangeLabel = (typeof formatWeekLabel === 'function')
                 ? formatWeekLabel(weekly)
                 : (weekly?.rango?.descripcion || 'Semana reciente');
@@ -11840,6 +11852,9 @@ function renderNavdeckWeeklyBanner() {
         /* ── view toggle ── */
         const viewToggleHtml = `
             <div class="ndw-view-toggle" role="group" aria-label="Seleccionar vista">
+                <button type="button" class="ndw-view-btn${mode === 'current' ? ' is-active' : ''}" data-ndw-mode="current" aria-pressed="${mode === 'current'}">
+                    <i class="fas fa-bolt" aria-hidden="true"></i>Actual
+                </button>
                 <button type="button" class="ndw-view-btn${mode === 'weekly'  ? ' is-active' : ''}" data-ndw-mode="weekly"  aria-pressed="${mode === 'weekly'}">
                     <i class="fas fa-calendar-week" aria-hidden="true"></i>Semanal
                 </button>
@@ -11855,8 +11870,15 @@ function renderNavdeckWeeklyBanner() {
             </div>`;
 
         /* ── card values per mode ── */
-        const subSuffix = { weekly: 'semana', monthly: 'mes', annual: 'año', historic: 'histórico' }[mode] || 'histórico';
+        const subSuffix = { current: 'del día', weekly: 'semana', monthly: 'mes', annual: 'año', historic: 'histórico' }[mode] || 'histórico';
         const getCardVal = (def) => {
+            if (mode === 'current') {
+                if (!_lastCapFecha) return 0;
+                const dia = _weekSrcsShared
+                    .map((wk) => (Array.isArray(wk?.dias) ? wk.dias.find((d) => d?.fecha === _lastCapFecha) : null))
+                    .find(Boolean);
+                return dia ? getWeeklyValue(dia, def.cat, def.metric) : 0;
+            }
             if (mode === 'weekly')  return days.reduce((acc, d) => acc + getWeeklyValue(d, def.cat, def.metric), 0);
             if (mode === 'monthly') return ndwGetMonthlyVal(def.cat, def.metric, selYear, selMonthIdx);
             if (mode === 'annual')  return ndwGetAnnualVal(def.cat, def.metric, selYear);
@@ -11869,7 +11891,7 @@ function renderNavdeckWeeklyBanner() {
             const sub   = def.sub.replace('semana', subSuffix);
             return `
             <button type="button" class="ndw-card ndw-card--${def.cat}" data-ndw-idx="${idx}"
-                    style="--ndw-accent:${def.accent};background-image:url('${def.img}');background-position:${def.bgPos || 'center center'};"
+                    style="--ndw-accent:${def.accent};--ndw-img:url('${def.img}');background-image:url('${def.img}');background-position:${def.bgPos || 'center center'};"
                     aria-label="${escapeHTML(def.label)} — ${escapeHTML(sub)}">
                 <span class="ndw-card-overlay" aria-hidden="true"></span>
                 <span class="ndw-card-icon"><i class="${def.icon}" aria-hidden="true"></i></span>
@@ -11878,18 +11900,24 @@ function renderNavdeckWeeklyBanner() {
                     <span class="ndw-card-value">${ndwFormatValue(total, def.metric)}</span>
                     <span class="ndw-card-sub">${escapeHTML(sub)}</span>
                 </span>
-                <span class="ndw-card-cta" aria-hidden="true"><i class="fas fa-${mode === 'weekly' ? 'chart-column' : 'chart-line'}"></i> ${mode === 'weekly' ? 'Ver detalle' : 'Ver análisis'}</span>
+                <span class="ndw-card-cta" aria-hidden="true"><i class="fas fa-${(mode === 'weekly' || mode === 'current') ? 'chart-column' : 'chart-line'}"></i> ${(mode === 'weekly' || mode === 'current') ? 'Ver detalle' : 'Ver análisis'}</span>
             </button>`;
         }).join('');
 
         container.innerHTML = `
             <div class="ndw-hero ndw-hero--${mode}" style="--ndw-hero-img:url('images/torre.jpg')">
                 <div class="ndw-hero-media" aria-hidden="true"></div>
-                <span class="ndw-hero-icon" aria-hidden="true"><i class="${heroIcon}"></i></span>
-                <div class="ndw-hero-text">
-                    <span class="ndw-hero-kicker">${escapeHTML(heroKicker)}</span>
-                    <span class="ndw-hero-title">${escapeHTML(heroTitle)}</span>
-                    ${periodPickerHtml}
+                <div class="ndw-hero-main">
+                    <span class="ndw-hero-welcome">Bienvenido al sistema</span>
+                    <div class="ndw-hero-card">
+                        <span class="ndw-hero-icon" aria-hidden="true"><i class="${heroIcon}"></i></span>
+                        <div class="ndw-hero-text">
+                            <span class="ndw-hero-kicker">${escapeHTML(heroKicker)}</span>
+                            <span class="ndw-hero-title">${escapeHTML(heroTitle)}</span>
+                            ${periodPickerHtml}
+                        </div>
+                    </div>
+                    <span class="ndw-hero-fecha"><i class="far fa-calendar" aria-hidden="true"></i>${escapeHTML(_hoyTexto)}</span>
                 </div>
                 ${viewToggleHtml}
             </div>
@@ -11939,7 +11967,7 @@ function renderNavdeckWeeklyBanner() {
                 if (!card) return;
                 const idx = Number(card.getAttribute('data-ndw-idx'));
                 if (!Number.isFinite(idx)) return;
-                if (NDW_VIEW_STATE.mode === 'weekly')       openNavdeckWeeklyDetail(idx);
+                if (NDW_VIEW_STATE.mode === 'weekly' || NDW_VIEW_STATE.mode === 'current') openNavdeckWeeklyDetail(idx);
                 else if (NDW_VIEW_STATE.mode === 'monthly') openNavdeckMonthlyDetail(idx);
                 else                                        openNavdeckAnnualDetail(idx);
             });
