@@ -434,23 +434,28 @@ que ya no existe.
 
 ---
 
-## 9. SQL pendiente de ejecutar
+## 9. Migraciones del módulo
 
-Las migraciones del módulo, en orden:
+Todas aplicadas, en orden:
 
 - **046** — índices y las ocho funciones de servicio. *Aplicada.*
 - **047** — conteo oficial por rotación. *Aplicada.*
-- **048** — la salida reconstruida del GN-106. *Pendiente de aplicar.*
+- **048** — la salida reconstruida del GN-106 (2022). *Aplicada.*
+- **049** — corrección de nueve horas de plataforma de 2023 (fracción de Excel leída como
+  decimal). *Aplicada el 12/09/2026 16:43 — confirmado por auditoría: las nueve filas pasaron a
+  `version=2` en la misma transacción.*
 
-Todas siguen la misma mecánica:
+Todas siguen la misma mecánica, por si en el futuro se agrega una nueva:
 
 1. Correr el archivo completo tal cual. Termina en `ROLLBACK`.
-2. Leer el bloque `VERIFICACIÓN` (cuenta índices, funciones y filas).
+2. Leer el bloque `VERIFICACIÓN` (cuenta índices, funciones y filas, o —en 049— usa
+   `RAISE NOTICE`/`RAISE EXCEPTION`: si Supabase no muestra avisos y tampoco hay error, la
+   migración pasó).
 3. Si se ve bien, cambiar `ROLLBACK` por `COMMIT` y volver a correrlo.
 
-Mientras no se aplique, el módulo abre y lo dice con todas sus letras: muestra un aviso con el
-nombre del archivo que falta correr, en lugar de dejar la pantalla en blanco con un error de
-consola que nadie va a leer.
+Si algún día `046` no estuviera aplicada, el módulo lo dice con todas sus letras al abrir:
+muestra un aviso con el nombre del archivo que falta correr, en lugar de dejar la pantalla en
+blanco con un error de consola que nadie va a leer.
 
 ---
 
