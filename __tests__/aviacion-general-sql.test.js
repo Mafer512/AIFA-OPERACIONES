@@ -374,6 +374,80 @@ describe('048 — la salida reconstruida del GN-106', () => {
     });
 });
 
+describe('049 — corrección acotada de nueve horas de 2023', () => {
+    const sql049 = fs.readFileSync(
+        path.resolve(__dirname, '..', 'supabase', 'migrations', '049_aviacion_general_correccion_horas_2023.sql'),
+        'utf8'
+    ).replace(/\r\n/g, '\n');
+    const vivo049 = sql049.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+
+    const objetivos = [
+        ['LLEGADA', 67, '2023-02-01', 'N578BB', 'hora_entrada_posicion', '08:24'],
+        ['LLEGADA', 271, '2023-04-26', 'XA-ETP', 'hora_aterrizaje', '10:48'],
+        ['LLEGADA', 487, '2023-07-04', 'N690NG', 'hora_entrada_posicion', '08:24'],
+        ['LLEGADA', 838, '2023-10-25', 'XA-MRA', 'hora_aterrizaje', '08:24'],
+        ['LLEGADA', 938, '2023-11-13', 'N582NT', 'hora_entrada_posicion', '10:48'],
+        ['SALIDA', 162, '2023-03-15', 'XB-GYM', 'hora_salida_posicion', '10:48'],
+        ['SALIDA', 726, '2023-09-25', 'N826TG', 'hora_salida_posicion', '10:48'],
+        ['SALIDA', 963, '2023-11-18', 'N390MA', 'hora_salida_posicion', '10:48'],
+        ['SALIDA', 1010, '2023-12-01', 'N690NG', 'hora_salida_posicion', '10:48']
+    ];
+
+    test('nombra las nueve filas por tipo, fila, fecha y matrícula', () => {
+        objetivos.forEach(([tipo, fila, fecha, matricula, campo, hora]) => {
+            expect(sql049).toMatch(new RegExp(
+                `\\('${tipo}'::text,\\s*${fila}, DATE '${fecha}', '${matricula}'::text, `
+                + `'${campo}'::text,[^\\n]*TIME '${hora}'\\)`
+            ));
+        });
+    });
+
+    test('sólo actualiza las tres columnas horarias involucradas', () => {
+        const updates = vivo049.match(/UPDATE public\.aviacion_general_operaciones[\s\S]*?(?=;)/g) || [];
+        expect(updates).toHaveLength(3);
+        expect(updates.map((u) => (u.match(/SET\s+(hora_[a-z_]+)/) || [])[1]).sort()).toEqual([
+            'hora_aterrizaje', 'hora_entrada_posicion', 'hora_salida_posicion'
+        ]);
+        expect(vivo049).not.toMatch(/\bINSERT\s+INTO\b/i);
+        expect(vivo049).not.toMatch(/\bDELETE\s+FROM\b/i);
+        expect(vivo049).not.toMatch(/SET\s+(estado_validacion|estatus_registro|pax_|operador|matricula)/i);
+    });
+
+    test('cada UPDATE está limitado al archivo, identidad y valor anterior', () => {
+        const updates = vivo049.match(/UPDATE public\.aviacion_general_operaciones[\s\S]*?(?=;)/g) || [];
+        updates.forEach((update) => {
+            expect(update).toContain("o.archivo_origen");
+            expect(update).toContain("'2023 FBO.xlsx'");
+            expect(update).toMatch(/o\.tipo_operacion\s+=/);
+            expect(update).toMatch(/o\.fila_origen\s+=\s+c\.fila_origen/);
+            expect(update).toMatch(/o\.fecha_operacion\s+=\s+c\.fecha_operacion/);
+            expect(update).toMatch(/upper\(o\.matricula\)\s+=\s+upper\(c\.matricula\)/);
+            expect(update).toMatch(/o\.hora_[a-z_]+\s+=\s+c\.hora_anterior/);
+        });
+    });
+
+    test('es idempotente y aborta si una fila cambió de identidad, hora o estado', () => {
+        expect(vivo049).toMatch(/v_hora_actual IS DISTINCT FROM v_objetivo\.hora_anterior/);
+        expect(vivo049).toMatch(/v_hora_actual IS DISTINCT FROM v_objetivo\.hora_correcta/);
+        expect(vivo049).toMatch(/v_coincidencias <> 1/);
+        expect(vivo049).toMatch(/v_estatus <> 'ACTIVO' OR v_validacion <> 'PENDIENTE'/);
+    });
+
+    test('verifica el universo, los totales y los doce meses oficiales', () => {
+        expect(vivo049).toMatch(/v_filas <> 2212 OR v_claves <> 2212/);
+        [2212, 1106, 8160, 4101, 4059, 1769, 443, 256, 378].forEach((n) => {
+            expect(vivo049).toContain(`<> ${n}`);
+        });
+        expect(vivo049).toContain("'2023-01-02'");
+        expect(vivo049).toContain("'2023-12-30'");
+        expect((vivo049.match(/\('2023-\d{2}',/g) || [])).toHaveLength(12);
+    });
+
+    test('termina en ROLLBACK para revisión segura', () => {
+        expect(sql049.trimEnd().endsWith('ROLLBACK;')).toBe(true);
+    });
+});
+
 describe('convención de las migraciones del repositorio', () => {
     test('abre transacción y termina en ROLLBACK para poder revisarla antes de aplicar', () => {
         expect(sqlVivo).toMatch(/^\s*BEGIN;/m);
