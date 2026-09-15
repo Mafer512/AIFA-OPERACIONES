@@ -172,6 +172,55 @@ describe('interfaz del Informe Estadístico', () => {
       expect(chart.data.datasets[2].data[0]).toBe(6); // Carga, Enero 2025
     });
 
+    test('la gráfica conserva sus datos y toma el diseño de las demás ventanas', () => {
+      const chart = chartConfigs.at(-1);
+      expect(chart.data.datasets.map(d => d.label)).toEqual(['Comercial', 'General', 'Carga']);
+      expect(chart.data.datasets.map(d => d.backgroundColor)).toEqual(['#0d6efd', '#20c997', '#fd7e14']);
+      chart.data.datasets.forEach(d => expect(d.borderRadius).toBeTruthy());
+      expect(chart.options.plugins.legend.labels.usePointStyle).toBe(true);
+      // Al pasar el cursor: cada cifra y el total del mes.
+      const detalle = chart.options.plugins.tooltip.callbacks;
+      expect(detalle.footer([{ parsed: { y: 4640 } }, { parsed: { y: 198 } }, { parsed: { y: 1035 } }])).toBe('Total del mes: 5,873');
+      // La cifra va arriba de la barra, con separador de miles; los ceros no se escriben.
+      const cifras = chart.options.plugins.datalabels;
+      const barra = (valor, ancho = 1800) => ({ chart: { width: ancho }, dataset: { data: [valor] }, dataIndex: 0 });
+      expect(cifras.anchor).toBe('end');
+      expect(cifras.display(barra(4640))).toBe(true);
+      expect(cifras.display(barra(0))).toBe(false);
+      expect(cifras.display(barra(4640, 500))).toBe(false);
+      expect(cifras.formatter(4640)).toBe('4,640');
+    });
+
+    test('al cambiar a tema oscuro, la gráfica se repinta con colores legibles y los mismos datos', async () => {
+      const antes = chartConfigs.at(-1);
+      const cuantas = chartConfigs.length;
+      document.body.classList.add('dark-mode');
+      await new Promise(resolve => setTimeout(resolve, 0));
+      try {
+        expect(chartConfigs.length).toBe(cuantas + 1);
+        const despues = chartConfigs.at(-1);
+        expect(despues.options.plugins.legend.labels.color).toBe('#cbd5e1');
+        expect(despues.data.datasets.map(d => d.data)).toEqual(antes.data.datasets.map(d => d.data));
+      } finally {
+        document.body.classList.remove('dark-mode');
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    });
+
+    test('la gráfica trae su propio plugin de cifras, aunque otro módulo lo haya quitado del registro global', async () => {
+      const plugin = { id: 'datalabels' };
+      window.ChartDataLabels = plugin;
+      try {
+        document.body.classList.add('dark-mode');
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(chartConfigs.at(-1).plugins).toEqual([plugin]);
+      } finally {
+        delete window.ChartDataLabels;
+        document.body.classList.remove('dark-mode');
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    });
+
     test('elegir un año para comparar muestra la tabla de comparativa año contra año', () => {
       const host = document.getElementById('informe-est-comparativa');
       expect(host.classList.contains('d-none')).toBe(true);

@@ -559,28 +559,116 @@
     }
 
     // ── Herramienta 3: gráfica de barras del desglose mensual ───────────────
+    // Mismos datos de siempre (Comercial, General y Carga por mes); sólo la
+    // presentación sigue el diseño de las demás ventanas de Estadística.
     function renderChart() {
         const canvas = $('informe-est-chart-mensual');
         if (!canvas || !window.Chart || !state.aggregated) return;
         const serie = Core.buildMonthlySeries(state.aggregated, state.anioSeleccionado);
         if (state.chart) { state.chart.destroy(); state.chart = null; }
+        const nota = $('informe-est-chart-nota');
+        if (nota) {
+            nota.textContent = (state.anioSeleccionado ? `Año ${state.anioSeleccionado} · ` : '')
+                + 'Comercial, General y Carga de cada mes. Pasa el cursor sobre un mes para ver el detalle y el total.';
+        }
+        const tema = temaGrafica();
+        const barras = (label, data, color) => ({
+            label, data, backgroundColor: color, hoverBackgroundColor: color,
+            borderRadius: { topLeft: 5, topRight: 5 }, borderSkipped: 'bottom',
+            maxBarThickness: 34, categoryPercentage: 0.74, barPercentage: 0.9
+        });
+        state.chartCanvas = canvas;
         state.chart = new window.Chart(canvas, {
             type: 'bar',
+            // El plugin de cifras viaja con la gráfica: otros módulos lo
+            // registran o lo quitan del registro global a su conveniencia.
+            plugins: window.ChartDataLabels ? [window.ChartDataLabels] : [],
             data: {
                 labels: serie.labels,
                 datasets: [
-                    { label: 'Comercial', data: serie.comercialOps, backgroundColor: '#0d6efd' },
-                    { label: 'General', data: serie.generalOps, backgroundColor: '#20c997' },
-                    { label: 'Carga', data: serie.cargaOps, backgroundColor: '#fd7e14' }
+                    barras('Comercial', serie.comercialOps, '#0d6efd'),
+                    barras('General', serie.generalOps, '#20c997'),
+                    barras('Carga', serie.cargaOps, '#fd7e14')
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                scales: { y: { beginAtZero: true } },
-                plugins: { legend: { position: 'bottom' } }
+                // Aire arriba para la cifra de la barra más alta.
+                layout: { padding: { top: 22 } },
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: {
+                        grid: { display: false, drawBorder: false },
+                        border: { display: false },
+                        ticks: { color: tema.texto, font: { size: 11, weight: '600' } }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: tema.rejilla, drawBorder: false },
+                        border: { display: false },
+                        ticks: { color: tema.suave, callback: (valor) => fmt(valor) }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8, padding: 18, color: tema.texto, font: { size: 12, weight: '600' } }
+                    },
+                    // Al pasar el cursor: las tres cifras del mes y su total.
+                    tooltip: {
+                        backgroundColor: tema.fondoDetalle,
+                        padding: 10,
+                        boxPadding: 4,
+                        usePointStyle: true,
+                        callbacks: {
+                            label: (item) => ` ${item.dataset.label}: ${fmt(item.parsed.y)}`,
+                            footer: (items) => (items.length
+                                ? `Total del mes: ${fmt(items.reduce((suma, item) => suma + (Number(item.parsed.y) || 0), 0))}`
+                                : '')
+                        }
+                    },
+                    // La cifra de cada barra va arriba y en pequeño; los ceros
+                    // (meses por venir) no se escriben. En pantallas angostas no
+                    // caben y quedan en el detalle del cursor.
+                    datalabels: {
+                        display: (ctx) => ctx.chart.width >= 760 && Number(ctx.dataset.data[ctx.dataIndex]) > 0,
+                        anchor: 'end',
+                        align: 'end',
+                        offset: 2,
+                        clamp: true,
+                        color: tema.texto,
+                        font: { size: 10, weight: '600' },
+                        formatter: (valor) => fmt(valor)
+                    }
+                }
             }
         });
+    }
+
+    // Colores de ejes, leyenda y cifras según el tema, como en las demás
+    // ventanas de Estadística: el gris por omisión casi no se lee en oscuro.
+    function temaGrafica() {
+        const oscuro = document.body.classList.contains('dark-mode');
+        return {
+            oscuro,
+            texto: oscuro ? '#cbd5e1' : '#475569',
+            suave: oscuro ? '#94a3b8' : '#64748b',
+            rejilla: oscuro ? 'rgba(148, 163, 184, .16)' : 'rgba(148, 163, 184, .22)',
+            fondoDetalle: oscuro ? '#0f172a' : '#1a2f55'
+        };
+    }
+
+    // Al cambiar entre tema claro y oscuro, la gráfica se vuelve a pintar con
+    // colores legibles: mismos datos, sin consultar.
+    if (window.MutationObserver && document.body) {
+        let temaOscuro = document.body.classList.contains('dark-mode');
+        new MutationObserver(() => {
+            const oscuro = document.body.classList.contains('dark-mode');
+            if (oscuro === temaOscuro) return;
+            temaOscuro = oscuro;
+            if (state.chart && state.chartCanvas && state.chartCanvas.isConnected) renderChart();
+        }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
     }
 
     // ── Herramienta 4: alertas de días sin captura ──────────────────────────
