@@ -967,11 +967,93 @@
             </table>`;
     }
 
+    // ── Override temporal de cifras oficiales (Informe Estadístico) ─────────
+    // Ver js/estadistico-informe-overrides.js para el qué/por qué/cómo
+    // desactivarlo. Sólo se usa aquí, dentro de la construcción del PDF: no
+    // toca state.aggregated/state.acumulado (de ahí siguen leyendo el
+    // tablero en pantalla, la exportación a Excel y el Resumen Estadístico),
+    // ni escribe nada en Supabase.
+    function overrideOficialActivo() {
+        const ov = window.OFFICIAL_STATISTICS_OVERRIDES;
+        return (ov && ov.activo) ? ov : null;
+    }
+
+    function overrideOficialTipo(tipo) {
+        const ov = overrideOficialActivo();
+        return (ov && ov.tipos && ov.tipos[tipo]) || null;
+    }
+
+    // Parcha en el sitio la tabla mensual (pivot) ya calculada: celdas
+    // mes×año donde el informe oficial trae el dato, TOTAL POR AÑO de los
+    // años señalados, y el gran total (ACUMULADO). Los años/meses que el
+    // override no menciona se quedan con lo ya calculado.
+    function aplicarOverrideMensual(pivot, ovTipo, esKg) {
+        Object.keys(ovTipo.mensual || {}).forEach((anioStr) => {
+            const anio = Number(anioStr);
+            if (!pivot.totalPorAnio[anio]) return;
+            const porMes = ovTipo.mensual[anioStr];
+            pivot.rows.forEach((row, idx) => {
+                const celda = porMes[idx + 1];
+                const destino = row.celdas[anio];
+                if (!celda || !destino) return;
+                if (celda.ops !== undefined) destino.ops = celda.ops;
+                if (esKg) {
+                    if (celda.tons !== undefined) destino.kg = celda.tons * 1000;
+                } else if (celda.pax !== undefined) {
+                    destino.pax = celda.pax;
+                }
+            });
+        });
+        Object.keys(ovTipo.totalPorAnio || {}).forEach((anioStr) => {
+            const anio = Number(anioStr);
+            if (!pivot.totalPorAnio[anio]) return;
+            const t = ovTipo.totalPorAnio[anioStr];
+            pivot.totalPorAnio[anio] = {
+                ops: t.ops || 0,
+                pax: esKg ? 0 : (t.pax || 0),
+                kg: esKg ? (t.tons || 0) * 1000 : 0
+            };
+        });
+        if (ovTipo.acumulado) {
+            pivot.totalGeneral = {
+                ops: ovTipo.acumulado.ops || 0,
+                pax: esKg ? 0 : (ovTipo.acumulado.pax || 0),
+                kg: esKg ? (ovTipo.acumulado.tons || 0) * 1000 : 0
+            };
+        }
+    }
+
     function seccionTipoHtml(titulo, tipo, unidadSecundaria, diaCorteCounters, corte) {
         const anios = state.anios;
         const pivot = Core.buildTablaMensualPorAnios(state.aggregated, tipo, anios);
-        const cronologico = Core.buildResumenCronologico(state.aggregated, tipo, anios, corte, diaCorteCounters);
+        let cronologico = Core.buildResumenCronologico(state.aggregated, tipo, anios, corte, diaCorteCounters);
         const esKg = unidadSecundaria === 'kg';
+
+        // Override temporal de cifras oficiales (ver js/estadistico-informe-overrides.js):
+        // se aplica DESPUÉS de calcular pivot/cronológico normalmente, como un
+        // parche de último paso — no toca state.aggregated ni ninguna otra
+        // pestaña/exportación que reutilice esos datos.
+        const ovTipo = overrideOficialTipo(tipo);
+        if (ovTipo) {
+            aplicarOverrideMensual(pivot, ovTipo, esKg);
+            if (Array.isArray(ovTipo.cronologico)) {
+                cronologico = ovTipo.cronologico.map((r) => ({
+                    label: r.label,
+                    ops: r.ops || 0,
+                    pax: esKg ? 0 : (r.pax || 0),
+                    kg: esKg ? (r.tons || 0) * 1000 : 0
+                }));
+            }
+            if (ovTipo.diaCorte) {
+                diaCorteCounters = {
+                    ...(diaCorteCounters || {}),
+                    ops: ovTipo.diaCorte.ops || 0,
+                    pax: esKg ? 0 : (ovTipo.diaCorte.pax || 0),
+                    kg: esKg ? (ovTipo.diaCorte.tons || 0) * 1000 : 0
+                };
+            }
+        }
+
         const secTexto = esKg ? 'TONELADAS' : 'PASAJEROS';
         const secValor = diaCorteCounters
             ? (esKg ? tonFormat.format((diaCorteCounters.kg || 0) / 1000) : fmt(diaCorteCounters.pax))
@@ -1270,12 +1352,14 @@
     }
 
     function buildReportHtml() {
-        const corte = state.corte || parseIsoDate(corteIsoPorOmision());
+        const ovGlobal = overrideOficialActivo();
+        const corte = ovGlobal ? ovGlobal.corte : (state.corte || parseIsoDate(corteIsoPorOmision()));
         const corteDate = new Date(corte.anio, corte.mes - 1, corte.dia);
-        const corteTexto = formatDateLong(corteDate);
-        const a = state.acumulado;
+        const corteTexto = ovGlobal ? ovGlobal.corteTexto : formatDateLong(corteDate);
+        const actualizacionTexto = ovGlobal ? ovGlobal.actualizacionTexto : formatDateLong(new Date());
+        const a = ovGlobal ? ovGlobal.encabezado : state.acumulado;
         const d = state.diaCorte || Core.aggregateDiaCorte([]);
-        const encabezado = encabezadoHtml(formatDateLong(new Date()), corteTexto);
+        const encabezado = encabezadoHtml(actualizacionTexto, corteTexto);
 
         return `
         <div style="font-family:'Montserrat','Segoe UI',Calibri,Arial,sans-serif;color:${C.navy};width:${HOJA_W}px;background:#fff;">
