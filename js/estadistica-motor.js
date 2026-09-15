@@ -643,6 +643,94 @@
         return `${desde} a ${hasta}`;
     }
 
+    // ── Override oficial (informe institucional) ─────────────────────────────
+    //
+    // Esto NO es una métrica recalculada de PostgreSQL (ver "regla de oro" al
+    // principio del archivo): es una SUSTITUCIÓN puntual por la cifra del
+    // último informe oficial, mientras mv_estadistica_operaciones no está al
+    // corriente. Fuente única: window.OFFICIAL_STATISTICS_OVERRIDES — el mismo
+    // objeto que ya usa js/estadistico-informe.js para el PDF "Informe
+    // Estadístico" (ver ese archivo para el detalle de qué se corrigió y por
+    // qué). Aquí sólo se LEE; nunca se calcula ni se guarda nada.
+    //
+    // Sólo cubre "operaciones"/"paxTotal" (con el tipo comercial del override)
+    // y "cargaTotalKg" (con el tipo carga): Aviación General no está en
+    // mv_estadistica_operaciones, así que "operaciones" de este RPC es, en la
+    // práctica, sólo Comercial + Carga capturados por manifiesto. No se
+    // inventa un desglose que el informe oficial no da (llegadas/salidas,
+    // ocupación, puntualidad, coberturas) — eso lo sigue calculando el RPC de
+    // los datos crudos, tal cual, sin tocar.
+    //
+    // Devuelve null cuando el rango pedido no se puede cubrir con la
+    // granularidad que trae el override (año completo, mes completo, o el
+    // corte exacto para el mes/año en curso): el llamador debe entonces seguir
+    // usando la cifra calculada — nunca fabricar una.
+    function sumaOficialTipo(ov, tipo, desdeIso, hastaIso) {
+        const ovTipo = ov && ov.tipos && ov.tipos[tipo];
+        if (!ovTipo) return null;
+        const corte = ov.corteIso || null;
+        // El informe oficial nunca reporta más allá de su corte: pedir hasta
+        // el 31 de diciembre cuando el corte es a media semana no debe fallar
+        // ni inventar el resto del año, simplemente se acota ahí.
+        const hastaEfectivo = (corte && hastaIso > corte) ? corte : hastaIso;
+        if (desdeIso > hastaEfectivo) return { ops: 0, pax: 0, kg: 0 };
+
+        const d = partesIso(desdeIso);
+        const h = partesIso(hastaEfectivo);
+        let ops = 0, pax = 0, kg = 0;
+
+        for (let anio = d.anio; anio <= h.anio; anio++) {
+            const inicio = anio === d.anio ? { mes: d.mes, dia: d.dia } : { mes: 1, dia: 1 };
+            const fin = anio === h.anio ? { mes: h.mes, dia: h.dia } : { mes: 12, dia: 31 };
+            const esInicioAnio = inicio.mes === 1 && inicio.dia === 1;
+            const esFinAnio = fin.mes === 12 && fin.dia === diasEnMes(anio, 12);
+            const esFinCorte = corte === isoDesdePartes(anio, fin.mes, fin.dia);
+
+            // Año completo (o "todo el año hasta el corte", que es lo mismo
+            // número si el año del corte no tiene nada después): el total por
+            // año ya es exacto, no hace falta sumar mes por mes.
+            if (esInicioAnio && (esFinAnio || esFinCorte) && ovTipo.totalPorAnio && ovTipo.totalPorAnio[anio]) {
+                const t = ovTipo.totalPorAnio[anio];
+                ops += t.ops || 0; pax += t.pax || 0; kg += (t.tons || 0) * 1000;
+                continue;
+            }
+
+            // Año parcial: sólo se puede responder si hay desglose mensual
+            // completo para ese año y el tramo pedido empieza en día 1 de mes
+            // y termina en fin de mes (o justo en el corte, que ya es una
+            // cifra "a la fecha" válida por construcción).
+            const mensualAnio = ovTipo.mensual && ovTipo.mensual[anio];
+            if (!mensualAnio || inicio.dia !== 1) return null;
+            if (fin.dia !== diasEnMes(anio, fin.mes) && !esFinCorte) return null;
+            for (let mes = inicio.mes; mes <= fin.mes; mes++) {
+                const celda = mensualAnio[mes];
+                if (!celda) return null;
+                ops += celda.ops || 0; pax += celda.pax || 0; kg += (celda.tons || 0) * 1000;
+            }
+        }
+        return { ops, pax, kg };
+    }
+
+    // API pública de esta sección: dado un rango [desdeIso, hastaIso], regresa
+    // las cifras oficiales para ese rango o null si no se puede cubrir. Se
+    // llama desde js/estadistica-panel.js (agregado/totalPeriodo) para
+    // anotar `.oficial` en los renglones ya normalizados, sin tocar sus
+    // demás campos.
+    function oficialOperacion(desdeIso, hastaIso) {
+        const ov = (typeof window !== 'undefined') ? window.OFFICIAL_STATISTICS_OVERRIDES : null;
+        if (!ov || !ov.activo || !desdeIso || !hastaIso) return null;
+        const comercial = sumaOficialTipo(ov, 'comercial', desdeIso, hastaIso);
+        const carga = sumaOficialTipo(ov, 'carga', desdeIso, hastaIso);
+        if (!comercial || !carga) return null;
+        return {
+            operaciones: comercial.ops,
+            paxTotal: comercial.pax,
+            cargaOperaciones: carga.ops,
+            cargaTotalKg: carga.kg,
+            cargaTotalToneladas: kgAToneladas(carga.kg)
+        };
+    }
+
     // ── Filtros ──────────────────────────────────────────────────────────────
     //
     // Un solo estado de filtros para todo el módulo. Cada sección lo lee, nadie
@@ -769,6 +857,20 @@
         { clave: 'minutosVsSlotPromedio', etiqueta: 'Desviación media contra slot (min)', tipo: 'decimal' }
     ]);
 
+    // Operaciones/Pasajeros/Carga: si AMBOS periodos traen `.oficial` (lo
+    // anota agregado()/totalPeriodo() en estadistica-panel.js cuando el rango
+    // es cubrible — ver oficialOperacion arriba), se comparan las dos cifras
+    // oficiales entre sí. Si sólo uno de los dos lo trae, se usa el calculado
+    // en ambos: mezclar oficial contra calculado dentro de la misma variación
+    // sería comparar dos fuentes distintas y mostrarlo como una sola.
+    const CLAVES_CON_OFICIAL = Object.freeze(['operaciones', 'paxTotal', 'cargaTotalKg']);
+    function valorComparable(total, otro, clave) {
+        if (CLAVES_CON_OFICIAL.includes(clave) && total?.oficial && otro?.oficial) {
+            return total.oficial[clave];
+        }
+        return total ? total[clave] : undefined;
+    }
+
     function comparar(totalA, totalB, etiquetaA, etiquetaB) {
         const a = totalA || normalizarFila({});
         const b = totalB || normalizarFila({});
@@ -779,9 +881,9 @@
                 clave: m.clave,
                 etiqueta: m.etiqueta,
                 tipo: m.tipo,
-                valorA: a[m.clave],
-                valorB: b[m.clave],
-                variacion: variacion(a[m.clave], b[m.clave])
+                valorA: valorComparable(a, b, m.clave),
+                valorB: valorComparable(b, a, m.clave),
+                variacion: variacion(valorComparable(a, b, m.clave), valorComparable(b, a, m.clave))
             }))
         };
     }
@@ -848,6 +950,7 @@
         mismoPeriodoAnioAnterior,
         periodoAnterior,
         etiquetaRango,
+        oficialOperacion,
 
         filtrosVacios,
         filtrosAJson,

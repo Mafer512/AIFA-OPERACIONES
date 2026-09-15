@@ -1,23 +1,25 @@
-/* OVERRIDE TEMPORAL Y REVERSIBLE — ÚNICA fuente de cifras oficiales para el
- * módulo Estadística (pestaña Estadística de Conciliación): la consumen por
- * igual las tarjetas de pantalla (Operaciones, Pasajeros, Carga, Cifras del
- * día) y el PDF "Informe Estadístico". No hay una segunda estructura para
- * las tarjetas: ambas capas leen este mismo objeto.
+/* OVERRIDE TEMPORAL Y REVERSIBLE — ÚNICA fuente de cifras oficiales para
+ * TODO el módulo Estadística (pestaña Estadística de Conciliación): la
+ * consumen por igual el PDF "Informe Estadístico" (js/estadistico-informe.js,
+ * vía state.acumulado/state.diaCorte/la tabla mensual del PDF) y el módulo
+ * nuevo de tablero (js/estadistica-panel.js + js/estadistica-motor.js, vía
+ * Motor.oficialOperacion — ver ese archivo). No hay una segunda estructura:
+ * ambos leen este mismo objeto, cada uno con su propio adaptador de lectura.
  *
- * QUÉ ES: mientras la base de datos interna (manifiestos / monthly_operations)
- * termina de ponerse al corriente, este archivo fuerza las cifras del último
- * informe oficial, para que la pantalla y el PDF puedan usarse ya.
+ * QUÉ ES: mientras la base de datos interna (manifiestos / monthly_operations
+ * / mv_estadistica_operaciones) termina de ponerse al corriente, este archivo
+ * fuerza las cifras del último informe oficial, para que la pantalla y el PDF
+ * puedan usarse ya.
  *
  * QUÉ NO ES: esto NO toca Supabase, NO modifica manifiestos ni operaciones
  * individuales, NO cambia otros módulos ni el "Resumen Estadístico" (el otro
- * PDF). Sólo lo consume js/estadistico-informe.js, como un parche de último
- * paso sobre las cifras ya calculadas (state.acumulado, state.diaCorte, y la
- * tabla mensual/cronológica de cada sección del PDF) — nunca se escribe de
- * vuelta a ningún lado.
+ * PDF). Es un parche de último paso sobre cifras ya calculadas — nunca se
+ * escribe de vuelta a ningún lado.
  *
  * CÓMO DESACTIVARLO: poner ACTIVO en false más abajo (o quitar el <script>
  * de este archivo en index.html). Todo vuelve a salir 100% de lo que calculan
- * monthly_operations/annual_operations + manifiestos, sin rastro.
+ * monthly_operations/annual_operations + manifiestos + mv_estadistica_operaciones,
+ * sin rastro.
  *
  * HISTORIAL (cada actualización oficial reemplaza sólo lo que cambió; el
  * resto de la estructura se queda igual — nunca se crea una segunda):
@@ -27,6 +29,15 @@
  *    (mes 9 de cada `mensual`), `totalPorAnio[2026]`, `acumulado`, `diaCorte`
  *    y las dos últimas filas + TOTAL de cada `cronologico`. Enero-agosto
  *    2026 y 2022-2025 NO se tocaron.
+ *  - 2026-09-15 (mismo corte, corrección integral del módulo tablero):
+ *    se agregan `totalPorAnio[2022..2025]` en comercial y `[2022,2023]` en
+ *    carga — mismos números que ya traía `cronologico`, sin recalcular nada,
+ *    porque Motor.oficialOperacion (estadistica-motor.js) necesita el total
+ *    por año exacto para responder consultas de "año completo X", cosa que
+ *    el PDF nunca necesitó pedir por separado. `corteIso` se añade también
+ *    para que ese adaptador sepa hasta dónde puede sumar. NO se agregó nada
+ *    a `general`: el módulo tablero no separa Aviación General de Comercial
+ *    (mv_estadistica_operaciones no la captura), así que no tiene consumidor.
  *
  * Alcance de cada tipo de aviación (ver detalle en cada bloque):
  *  - comercial: 2022-2025 ya son correctos en el sistema y NO se tocan; sólo
@@ -71,7 +82,17 @@
                         11: { ops: 0, pax: 0 }, 12: { ops: 0, pax: 0 }
                     }
                 },
+                // 2022-2025: mismos totales que ya traía `cronologico` más abajo
+                // (el sistema ya los tenía correctos y no se tocan) — se repiten
+                // aquí, sin recalcular nada, porque el módulo Estadística nuevo
+                // (js/estadistica-motor.js → oficialOperacion) necesita el total
+                // por año exacto para responder "año completo X", no sólo el
+                // desglose mensual de 2026.
                 totalPorAnio: {
+                    2022: { ops: 8996, pax: 912415 },
+                    2023: { ops: 23211, pax: 2631261 },
+                    2024: { ops: 51734, pax: 6318454 },
+                    2025: { ops: 52597, pax: 7058219 },
                     2026: { ops: 39811, pax: 5327701 }
                 },
                 acumulado: { ops: 176349, pax: 22248050 },
@@ -142,9 +163,14 @@
                         11: { ops: 0, tons: 0 }, 12: { ops: 0, tons: 0 }
                     }
                 },
-                // Sólo redondeo de 2024/2025 (el sistema puede mostrar .16/.75;
-                // lo oficial es .17/.74) y el dato nuevo de 2026.
+                // 2022/2023 no estaban señalados como distintos (mismos valores
+                // que `cronologico`, repetidos aquí por la misma razón que en
+                // comercial: hacen falta como total-por-año, no sólo mensual).
+                // 2024/2025 sí corrigen redondeo (el sistema puede mostrar
+                // .16/.75; lo oficial es .17/.74) y 2026 es el dato nuevo.
                 totalPorAnio: {
+                    2022: { ops: 8, tons: 5.19 },
+                    2023: { ops: 5578, tons: 186319.83 },
                     2024: { ops: 13219, tons: 447341.17 },
                     2025: { ops: 12041, tons: 406192.74 },
                     2026: { ops: 9209, tons: 292471.63 }
