@@ -11905,8 +11905,8 @@ function renderNavdeckWeeklyBanner() {
         }).join('');
 
         container.innerHTML = `
-            <div class="ndw-hero ndw-hero--${mode}" style="--ndw-hero-img:url('images/torre.jpg')">
-                <div class="ndw-hero-media" aria-hidden="true"></div>
+            <div class="ndw-hero ndw-hero--${mode}" style="--ndw-hero-img:url('images/banner.png')">
+                <div class="ndw-hero-media" aria-hidden="true"><span class="ndw-hero-foto"></span></div>
                 <div class="ndw-hero-main">
                     <span class="ndw-hero-welcome">Bienvenido al sistema</span>
                     <div class="ndw-hero-card">
