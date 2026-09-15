@@ -22618,6 +22618,11 @@ body.dark-mode .fbo-sin-dato {
    border-color: rgba(14, 55, 99, .08);
 }
 
+/* La gráfica mensual del informe, en un panel como las demás ventanas. */
+#est-pane-informe .informe-est-grafica .fbo-grafica {
+   height: 19rem;
+}
+
 body.dark-mode .tb-tabla thead th,
 body.dark-mode #est-pane-informe .table-responsive thead th {
    background: rgba(255, 255, 255, .06);

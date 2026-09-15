@@ -184,6 +184,13 @@ describe('el lienzo de Estadística', () => {
     expect(informe).toMatch(/<div class="est-pie est-pie-informe">/);
   });
 
+  test('en el Informe oficial, la gráfica mensual va en un panel con su título y su nota, como las demás ventanas', () => {
+    const informe = html.slice(html.indexOf('<!-- INFORME OFICIAL'), html.indexOf('<!-- /est-pane-informe -->'));
+    expect(informe).toMatch(/<section class="fbo-panel informe-est-grafica[^"]*"[^>]*>\s*<header class="fbo-panel-cabeza"><div><h6 id="informe-est-t-mensual">Operaciones por mes<\/h6><p id="informe-est-chart-nota">/);
+    expect(informe).toMatch(/<div class="fbo-grafica"><canvas id="informe-est-chart-mensual"/);
+    expect(informe).not.toContain('height:280px');
+  });
+
   test('en el Resumen, la calidad del dato va al pie del tablero, sin recuadros', () => {
     const tabla = $('est-resumen-variaciones');
     const calidad = $('est-resumen-calidad');
