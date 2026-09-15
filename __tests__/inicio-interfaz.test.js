@@ -189,6 +189,13 @@ describe('el banner de inicio', () => {
     const tarjetas = banner.querySelectorAll('.ndw-card');
     expect(tarjetas).toHaveLength(6);
     expect(tarjetas[0].getAttribute('style')).toContain('--ndw-img:');
+    // La torre completa: la foto nueva, en su propia capa sobre el fondo desenfocado.
+    expect(banner.querySelector('.ndw-hero').getAttribute('style')).toContain("images/banner.png");
+    expect(banner.querySelector('.ndw-hero-media > .ndw-hero-foto')).not.toBeNull();
+    expect(css).toMatch(/body\.navdeck-mode \.ndw-hero-foto \{[^}]*aspect-ratio: 1701 \/ 925;/);
+    expect(fs.existsSync(path.join(raiz, 'images', 'banner.png'))).toBe(true);
+    // En oscuro la torre también se ve: el velo se aligera hacia el centro.
+    expect(css).toMatch(/body\.navdeck-mode\.dark-mode \.ndw-hero-media::after \{\s*background: linear-gradient\(95deg, rgba\(8, 14, 28, \.82\) 0%/);
   });
 
   test('Actual muestra las cifras del día más reciente con datos', () => {
