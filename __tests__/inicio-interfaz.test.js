@@ -210,4 +210,24 @@ describe('el banner de inicio', () => {
     banner.querySelector('.ndw-card').click();
     expect(detalle).toHaveBeenCalledWith(0);
   });
+
+  test('las flechas cambian la foto entre las cuatro y el banner recuerda la elegida', () => {
+    window.localStorage.removeItem('ndwHeroImg');
+    const { banner } = montarBanner();
+    const hero = () => banner.querySelector('.ndw-hero');
+    expect(banner.querySelector('.ndw-hero-nav-num').textContent).toBe('1 / 4');
+    banner.querySelector('[data-ndw-hero="1"]').click();
+    expect(hero().getAttribute('style')).toContain('images/banner2.png');
+    expect(banner.querySelector('.ndw-hero-nav-num').textContent).toBe('2 / 4');
+    expect(window.localStorage.getItem('ndwHeroImg')).toBe('1');
+    // Hacia atrás da la vuelta: de la 2 a la 1 y de la 1 a la 4.
+    banner.querySelector('[data-ndw-hero="-1"]').click();
+    banner.querySelector('[data-ndw-hero="-1"]').click();
+    expect(hero().getAttribute('style')).toContain('images/banner4.png');
+    // Cambiar de vista vuelve a pintar el banner con la foto elegida.
+    banner.querySelector('[data-ndw-mode="current"]').click();
+    expect(hero().getAttribute('style')).toContain('images/banner4.png');
+    ['banner2', 'banner3', 'banner4'].forEach((n) => expect(fs.existsSync(path.join(raiz, 'images', `${n}.png`))).toBe(true));
+    window.localStorage.removeItem('ndwHeroImg');
+  });
 });
