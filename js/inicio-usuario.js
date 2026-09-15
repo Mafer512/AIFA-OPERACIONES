@@ -1,8 +1,7 @@
 /* Botón de usuario del encabezado (pantalla de inicio, modo tablero).
  *
  * Muestra el icono de usuario, el nombre, el rol, la dirección a la que
- * pertenece y el correo. Al presionarlo despliega la cabecera del usuario y
- * las opciones de siempre —Cambiar contraseña, Historia, Miscelánea, Gestión
+ * pertenece y el correo. Al presionarlo despliega las opciones de siempre —Cambiar contraseña, Historia, Miscelánea, Gestión
  * de Datos, Administración— más Cerrar Sesión. Esas opciones son el mismo
  * #si-user-dropdown de antes (mismos ids, manejadores y permisos), sólo que
  * ahora viven aquí; Cerrar Sesión usa la delegación global de
@@ -50,10 +49,7 @@
         const dir = area(leerSesion('user_area'));
 
         poner('hdr-user-nombre', nombre || 'Sesión activa');
-        poner('hdr-user-menu-nombre', nombre || 'Sesión activa');
         poner('hdr-user-correo', correo);
-        poner('hdr-user-menu-correo', correo);
-        poner('hdr-user-avatar', (nombre || '?').charAt(0).toUpperCase());
         poner('hdr-user-rol', rol);
         if ($('hdr-user-rol')) $('hdr-user-rol').hidden = !rol;
         if ($('hdr-user-correo')) $('hdr-user-correo').hidden = !correo;
