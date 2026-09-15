@@ -21751,10 +21751,15 @@ body.conci-estadistica-workspace .conci-workspace-shell {
    order: 1;
 }
 
-#pane-conci-estadistica > #est-avisos {
+#pane-conci-estadistica > .est-pie {
    order: 2;
    margin-top: auto;
-   padding-top: 1rem;
+}
+
+/* Pie de avisos (todas las ventanas de Estadística y el Informe oficial):
+   advertencias y errores como texto sobre el fondo blanco. */
+.est-pie > :not(.d-none):not([hidden]) {
+   margin-top: 1rem;
 }
 
 .est-aviso {
@@ -21795,6 +21800,24 @@ body.dark-mode .est-aviso {
 
 body.dark-mode .est-aviso-error {
    color: #fca5a5;
+}
+
+/* Resumen: la calidad del dato va al pie del tablero, como notas sobre el
+   fondo blanco (sin recuadros). */
+.est-resumen-calidad-pie {
+   margin-top: 1rem;
+}
+
+.est-resumen-calidad-pie .fbo-destacados {
+   gap: .35rem 1.5rem;
+}
+
+.est-resumen-calidad-pie .fbo-destacado,
+body.dark-mode .est-resumen-calidad-pie .fbo-destacado {
+   padding: .2rem 0;
+   border: 0;
+   border-radius: 0;
+   background: transparent;
 }
 
 /* ==========================================================================

@@ -191,6 +191,8 @@ describe('interfaz del Informe Estadístico', () => {
       const banner = document.getElementById('informe-est-alertas');
       expect(banner.classList.contains('d-none')).toBe(false);
       expect(banner.textContent).toContain('sin ningún manifiesto capturado');
+      // Va al pie, como texto sobre el fondo blanco (sin la caja amarilla).
+      expect(banner.querySelector('p.est-aviso.est-aviso-aviso')).not.toBeNull();
     });
 
     test('las tarjetas de acumulados suman Comercial + General y muestran Carga aparte', () => {
