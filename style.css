@@ -23849,8 +23849,44 @@ body.navdeck-mode .sidebar.nav-deck > .si-link--logout {
    abajo y el selector de vista arriba a la derecha. */
 body.navdeck-mode .ndw-hero {
    align-items: stretch;
-   min-height: 12.5rem;
+   min-height: 15rem;
    padding: 1.25rem 1.5rem;
+}
+
+/* La torre completa (images/banner.png, 1701 x 925): la foto se escala por
+   alto para que la torre quepa entera y centrada, con cielo arriba y su base
+   abajo; los lados se rellenan con la misma foto desenfocada y los bordes de
+   la nitida se funden con ese fondo. Sin zoom lento: sacaria la torre. */
+body.navdeck-mode .ndw-hero-media {
+   overflow: hidden;
+   background-image: none;
+   transform: none;
+   animation: none;
+}
+
+body.navdeck-mode .ndw-hero-media::before {
+   position: absolute;
+   inset: -40px;
+   background: var(--ndw-hero-img) center 42% / cover no-repeat;
+   content: "";
+   filter: blur(22px) saturate(1.15) brightness(.9);
+}
+
+.ndw-hero-foto {
+   display: none;
+}
+
+body.navdeck-mode .ndw-hero-foto {
+   position: absolute;
+   top: -86%;
+   left: 50%;
+   display: block;
+   height: 234%;
+   aspect-ratio: 1701 / 925;
+   background: var(--ndw-hero-img) center / cover no-repeat;
+   transform: translateX(-50%);
+   -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
+   mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
 }
 
 .ndw-hero-main {
@@ -23923,7 +23959,13 @@ body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-period-chip.is-active {
 }
 
 body.navdeck-mode:not(.dark-mode) .ndw-hero-media::after {
-   background: linear-gradient(95deg, rgba(8, 20, 45, .62) 0%, rgba(8, 20, 45, .32) 45%, rgba(8, 20, 45, 0) 78%);
+   background: linear-gradient(95deg, rgba(8, 20, 45, .62) 0%, rgba(8, 20, 45, .3) 36%, rgba(8, 20, 45, 0) 56%);
+}
+
+/* En oscuro, el velo tambien se queda del lado del texto: la torre se ve,
+   apenas atenuada para no deslumbrar. */
+body.navdeck-mode.dark-mode .ndw-hero-media::after {
+   background: linear-gradient(95deg, rgba(8, 14, 28, .82) 0%, rgba(8, 14, 28, .5) 36%, rgba(8, 14, 28, .22) 58%, rgba(8, 14, 28, .32) 100%);
 }
 
 body.navdeck-mode:not(.dark-mode) .ndw-view-toggle {
