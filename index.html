@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20260915-banner-3">
+    <link rel="stylesheet" href="style.css?v=20260915-avisos-1">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -23318,8 +23318,12 @@ FF
                                             </div>
                                         </div>
 
-                                        <div class="alert alert-danger d-none" id="est-error"></div>
-                                        <div class="d-none" id="est-avisos"></div>
+                                        <!-- Pie de la página: avisos y errores van abajo del todo, como texto
+                                             sobre el fondo blanco (sin recuadros de color). -->
+                                        <div class="est-pie" id="est-pie">
+                                            <div class="d-none" id="est-avisos"></div>
+                                            <div class="est-aviso est-aviso-error d-none" id="est-error" role="alert"></div>
+                                        </div>
 
                                         <div class="tab-content" id="est-subcontent">
 
@@ -23333,7 +23337,6 @@ FF
                                                         </div>
                                                     </div>
                                                     <div class="fbo-kpis" id="est-resumen-tarjetas"></div>
-                                                    <div id="est-resumen-calidad"></div>
                                                     <div class="fbo-rejilla">
                                                         <section class="fbo-panel fbo-panel-tendencia" aria-labelledby="est-resumen-t-mes">
                                                             <header class="fbo-panel-cabeza"><div><h6 id="est-resumen-t-mes">Evolución mensual</h6><p>Barras: operaciones · línea: pasajeros.</p></div></header>
@@ -23348,6 +23351,7 @@ FF
                                                             <div class="table-responsive tb-tabla"><table class="table table-sm align-middle mb-0" id="est-resumen-variaciones"><thead></thead><tbody></tbody></table></div>
                                                         </section>
                                                     </div>
+                                                    <div class="est-resumen-calidad-pie" id="est-resumen-calidad"></div>
                                                 </div>
                                             </div>
 
@@ -23815,9 +23819,6 @@ FF
                                             </button>
                                         </div>
 
-                                        <div class="alert alert-danger d-none" id="informe-est-error"></div>
-                                        <div class="alert alert-warning d-none" id="informe-est-alertas"></div>
-
                                         <div id="informe-est-root">
                                             <div class="airline-stats-summary mb-2" id="informe-est-acumulado"></div>
                                             <div class="airline-stats-summary mb-2" id="informe-est-dia"></div>
@@ -23864,6 +23865,12 @@ FF
                                                     <tbody></tbody>
                                                 </table>
                                             </div>
+                                        </div>
+
+                                        <!-- Avisos del informe: al pie, como texto sobre el fondo blanco. -->
+                                        <div class="est-pie est-pie-informe">
+                                            <div class="d-none" id="informe-est-alertas"></div>
+                                            <div class="est-aviso est-aviso-error d-none" id="informe-est-error" role="alert"></div>
                                         </div>
                                                                                 </div><!-- /est-pane-informe -->
 
@@ -39868,10 +39875,10 @@ FF
 <script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>
 <!-- Override TEMPORAL de cifras oficiales para el PDF "Informe Estadístico" (ver comentario en el archivo). Quitar este <script> cuando la BD esté al corriente. -->
 <script src="js/estadistico-informe-overrides.js?v=20260915-oficial-corte-10sep" defer></script>
-<script src="js/estadistico-informe.js?v=20260912-ag-directorio" defer></script>
+<script src="js/estadistico-informe.js?v=20260915-avisos-1" defer></script>
 <!-- Modulo estadistico de operaciones (pestana Estadistica de Conciliacion) -->
-<script src="js/estadistica-motor.js?v=20260908-v1" defer></script>
-<script src="js/estadistica-panel.js?v=20260912-calidad-1" defer></script>
+<script src="js/estadistica-motor.js?v=20260915-avisos-1" defer></script>
+<script src="js/estadistica-panel.js?v=20260915-avisos-1" defer></script>
 <script src="js/estadistica-clasificacion.js?v=20260908-v1" defer></script>
 
 <!-- ═══ Aviación General · FBO (GAG · Servicios Conexos) ═══

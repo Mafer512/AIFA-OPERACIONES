@@ -793,12 +793,16 @@
             ])
         ]);
 
+        // Con un año completo, el periodo inmediato anterior y el mismo periodo
+        // del año pasado son el mismo (p. ej. 2025 y 2025): se muestra una sola
+        // columna, con su variación, en lugar de dos iguales.
+        const mismoRango = rangoAnterior.desde === rangoAnioAnterior.desde && rangoAnterior.hasta === rangoAnioAnterior.hasta;
         const columnas = [
             { titulo: 'Indicador', clave: 'etiqueta' },
             { titulo: Motor.etiquetaRango(rangoAnioAnterior.desde, rangoAnioAnterior.hasta), clave: 'anioAnterior' },
-            { titulo: Motor.etiquetaRango(rangoAnterior.desde, rangoAnterior.hasta), clave: 'anterior' },
+            ...(mismoRango ? [] : [{ titulo: Motor.etiquetaRango(rangoAnterior.desde, rangoAnterior.hasta), clave: 'anterior' }]),
             { titulo: Motor.etiquetaRango(desde(), hasta()), clave: 'actual' },
-            { titulo: 'vs periodo anterior', clave: 'varAnterior', html: (f) => f.varAnterior },
+            ...(mismoRango ? [] : [{ titulo: 'vs periodo anterior', clave: 'varAnterior', html: (f) => f.varAnterior }]),
             { titulo: 'vs año anterior', clave: 'varAnio', html: (f) => f.varAnio }
         ];
         const indicadores = [

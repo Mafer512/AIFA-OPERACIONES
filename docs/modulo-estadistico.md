@@ -364,8 +364,15 @@ blanco.
 
 Los avisos del periodo —este, las operaciones sin clasificar, las canceladas y los de
 consistencia— van al **pie de la página**, como texto sobre el fondo blanco: informan sin
-empujar el contenido hacia abajo. Mientras un área carga, lo que ya tenía queda detrás del
-aviso de avance, difuminado.
+empujar el contenido hacia abajo. El mensaje de error del módulo va en ese mismo pie, en
+rojo y sin recuadro. En el Informe oficial, el aviso de días sin manifiesto capturado y su
+error van al final del informe, con el mismo estilo; en el Resumen, las notas de calidad
+del dato (coberturas) van al pie del tablero. Mientras un área carga, lo que ya tenía queda
+detrás del aviso de avance, difuminado.
+
+En la tabla *Variación contra periodos de referencia* del Resumen, cuando el periodo
+inmediato anterior y el mismo periodo del año pasado coinciden (un año completo), se
+muestra una sola columna con su variación en lugar de dos iguales.
 
 ---
 

@@ -594,9 +594,11 @@
             return;
         }
         host.classList.remove('d-none');
-        host.innerHTML = `<i class="fas fa-triangle-exclamation me-2"></i>` +
+        // Al pie de la página, como texto sobre el fondo blanco, igual que los
+        // avisos de las demás ventanas de Estadística.
+        host.innerHTML = '<p class="est-aviso est-aviso-aviso"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><span>' +
             `${faltantes.length} día(s) sin ningún manifiesto capturado en los últimos 15 días: ` +
-            `${faltantes.map((f) => escapeHtml(f)).join(', ')} — revisar si falta captura.`;
+            `${faltantes.map((f) => escapeHtml(f)).join(', ')} — revisar si falta captura.</span></p>`;
     }
 
     function respaldoNota(counters) {
