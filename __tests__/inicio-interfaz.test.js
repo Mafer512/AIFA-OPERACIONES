@@ -43,6 +43,24 @@ describe('el encabezado de inicio', () => {
     expect(html.match(/id="si-user-dropdown"/g)).toHaveLength(1);
   });
 
+  test('el menú empieza directo en Cambiar contraseña, sin cabecera de usuario', () => {
+    expect(encabezado).not.toContain('hdr-user-menu-cabeza');
+    expect(encabezado).not.toContain('hdr-user-avatar');
+    const menu = encabezado.slice(encabezado.indexOf('id="hdr-user-menu"'));
+    const primero = menu.indexOf('class="menu-item');
+    expect(menu.indexOf('id="cambiar-password-menu"')).toBeGreaterThan(primero - 1);
+    expect(menu.slice(primero, menu.indexOf('>', primero))).toContain('cambiar-password-menu');
+  });
+
+  test('el botón de usuario es blanco y el periodo va sin recuadro, sobre la foto', () => {
+    expect(css.match(/\n\.hdr-user-btn \{[^}]*\}/)[0]).toMatch(/background: #fff;/);
+    const periodo = css.match(/\n\.ndw-hero-card \{[^}]*\}/)[0];
+    expect(periodo).not.toMatch(/background|border|box-shadow/);
+    expect(css).toMatch(/body\.navdeck-mode \.ndw-hero-card \.ndw-hero-title \{\s*color: #fff !important;/);
+    // Las pastillas del periodo llevan fondo propio para leerse sobre la foto.
+    expect(css).toMatch(/\.ndw-hero-card \.ndw-prelim-banner-note,[\s\S]*?\{\s*background: rgba\(255, 255, 255, \.92\) !important;/);
+  });
+
   test('la página carga el script del botón', () => {
     expect(html).toMatch(/<script src="js\/inicio-usuario\.js\?v=[^"]+" defer><\/script>/);
   });
@@ -74,9 +92,6 @@ describe('el botón de usuario', () => {
     expect($('hdr-user-area').hidden).toBe(false);
     expect($('hdr-user-area-texto').textContent).toBe('Dirección de Operación');
     expect($('hdr-user-correo').textContent).toBe('david.escudero@aifa.operaciones');
-    expect($('hdr-user-avatar').textContent).toBe('D');
-    expect($('hdr-user-menu-nombre').textContent).toBe('David Escudero');
-    expect($('hdr-user-menu-correo').textContent).toBe('david.escudero@aifa.operaciones');
     expect($('hdr-user-btn').getAttribute('aria-label')).toContain('Superadmin');
   });
 
@@ -113,7 +128,6 @@ describe('el botón de usuario', () => {
     $('si-user-name').textContent = 'Ana López';
     await esperar();
     expect($('hdr-user-nombre').textContent).toBe('Ana López');
-    expect($('hdr-user-avatar').textContent).toBe('A');
   });
 });
 

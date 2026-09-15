@@ -23550,21 +23550,22 @@ body.conci-estadistica-workspace .hdr-user {
    align-items: center;
    gap: .6rem;
    max-width: 23rem;
-   padding: .35rem .8rem .35rem .4rem;
-   border: 0;
+   padding: .3rem .75rem .3rem .35rem;
+   border: 1px solid rgba(14, 55, 99, .12);
    border-radius: 12px;
-   background: linear-gradient(135deg, #0b2a5b, #154a9a);
-   color: #fff;
+   background: #fff;
+   color: #1a2f55;
    text-align: left;
    cursor: pointer;
-   box-shadow: 0 8px 18px -12px rgba(11, 42, 91, .8);
-   transition: background .15s ease, box-shadow .15s ease;
+   box-shadow: 0 4px 12px -10px rgba(15, 23, 42, .35);
+   transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
 }
 
 .hdr-user-btn:hover,
 .hdr-user-btn.is-open {
-   background: linear-gradient(135deg, #0e3574, #1d5bbd);
-   box-shadow: 0 10px 22px -12px rgba(11, 42, 91, .9);
+   border-color: #93b8f5;
+   background: #f8fafc;
+   box-shadow: 0 8px 18px -12px rgba(13, 110, 253, .45);
 }
 
 .hdr-user-icono {
@@ -23574,8 +23575,35 @@ body.conci-estadistica-workspace .hdr-user {
    width: 2.15rem;
    height: 2.15rem;
    border-radius: 50%;
-   background: rgba(255, 255, 255, .16);
+   background: #e8f0fe;
+   color: #0d6efd;
    font-size: .95rem;
+}
+
+body.dark-mode .hdr-user-btn {
+   border-color: rgba(255, 255, 255, .12);
+   background: rgba(15, 23, 42, .55);
+   color: #e2e8f0;
+}
+
+body.dark-mode .hdr-user-btn:hover,
+body.dark-mode .hdr-user-btn.is-open {
+   background: rgba(30, 41, 59, .9);
+}
+
+body.dark-mode .hdr-user-icono {
+   background: rgba(13, 110, 253, .2);
+   color: #93c5fd;
+}
+
+body.dark-mode .hdr-user-rol {
+   background: rgba(99, 102, 241, .22);
+   color: #c7d2fe;
+}
+
+body.dark-mode .hdr-user-correo,
+body.dark-mode .hdr-user-chev {
+   color: #94a3b8;
 }
 
 .hdr-user-texto {
@@ -23605,7 +23633,8 @@ body.conci-estadistica-workspace .hdr-user {
    flex: 0 0 auto;
    padding: .08rem .5rem;
    border-radius: 999px;
-   background: rgba(255, 255, 255, .2);
+   background: #eef2ff;
+   color: #3730a3;
    font-size: .62rem;
    font-weight: 700;
    letter-spacing: .03em;
@@ -23640,8 +23669,8 @@ body.conci-estadistica-workspace .hdr-user {
 
 .hdr-user-correo {
    overflow: hidden;
+   color: #64748b;
    font-size: .64rem;
-   opacity: .8;
    white-space: nowrap;
    text-overflow: ellipsis;
 }
@@ -23649,8 +23678,8 @@ body.conci-estadistica-workspace .hdr-user {
 .hdr-user-chev {
    flex: 0 0 auto;
    margin-left: .2rem;
+   color: #64748b;
    font-size: .6rem;
-   opacity: .75;
    transition: transform .15s ease;
 }
 
@@ -23674,47 +23703,6 @@ body.conci-estadistica-workspace .hdr-user {
 
 .hdr-user-menu[hidden] {
    display: none;
-}
-
-.hdr-user-menu-cabeza {
-   display: flex;
-   align-items: center;
-   gap: .65rem;
-   margin-bottom: .3rem;
-   padding: .65rem .7rem;
-   border-radius: 10px;
-   background: linear-gradient(135deg, #0b2a5b, #154a9a);
-   color: #fff;
-}
-
-.hdr-user-avatar {
-   display: grid;
-   place-items: center;
-   flex: 0 0 auto;
-   width: 2.2rem;
-   height: 2.2rem;
-   border-radius: 50%;
-   background: #6366f1;
-   font-weight: 800;
-}
-
-.hdr-user-menu-datos {
-   display: flex;
-   flex-direction: column;
-   min-width: 0;
-   line-height: 1.25;
-}
-
-.hdr-user-menu-datos b {
-   font-size: .86rem;
-}
-
-.hdr-user-menu-datos small {
-   overflow: hidden;
-   font-size: .7rem;
-   opacity: .82;
-   white-space: nowrap;
-   text-overflow: ellipsis;
 }
 
 /* La lista de opciones siempre se ve dentro del menu; cada opcion conserva
@@ -23889,39 +23877,53 @@ body.navdeck-mode .ndw-hero {
    gap: .45rem;
 }
 
+/* Sin recuadro: el icono y el texto del periodo van sobre la foto. */
 .ndw-hero-card {
    display: flex;
    align-items: center;
    gap: 1rem;
-   max-width: 40rem;
-   padding: .9rem 1.2rem;
-   border: 1px solid rgba(255, 255, 255, .55);
-   border-radius: 16px;
-   background: rgba(255, 255, 255, .8);
-   -webkit-backdrop-filter: blur(10px);
-   backdrop-filter: blur(10px);
-   box-shadow: 0 14px 34px -20px rgba(15, 23, 42, .6);
+   max-width: 44rem;
 }
 
 body.navdeck-mode .ndw-hero-card .ndw-hero-icon {
    width: 3.5rem;
    height: 3.5rem;
    border-radius: 14px;
+   background: rgba(255, 255, 255, .16);
+   color: #fff;
    font-size: 1.45rem;
+   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .45), 0 6px 16px rgba(0, 0, 0, .25);
 }
 
-body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-hero-title {
-   color: #0f172a;
+body.navdeck-mode .ndw-hero-card .ndw-hero-title {
+   color: #fff !important;
+   text-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+}
+
+body.navdeck-mode .ndw-hero-card .ndw-hero-kicker,
+body.navdeck-mode .ndw-hero-card .ndw-tap-hint {
+   color: rgba(255, 255, 255, .9) !important;
+   text-shadow: 0 1px 3px rgba(0, 0, 0, .45);
+}
+
+/* Sobre la foto, las pastillas del periodo y el selector de mes y año
+   necesitan fondo propio para leerse en tema claro. */
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-prelim-banner-note,
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-prelim-last-date,
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-month-stepper,
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-period-chip {
+   background: rgba(255, 255, 255, .92) !important;
    text-shadow: none;
+   box-shadow: 0 4px 12px -8px rgba(15, 23, 42, .55);
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-period-chip.is-active {
+   background: #0d6efd !important;
+   color: #fff !important;
 }
 
 body.navdeck-mode:not(.dark-mode) .ndw-hero-media::after {
-   background: linear-gradient(95deg, rgba(8, 20, 45, .5) 0%, rgba(8, 20, 45, .22) 45%, rgba(8, 20, 45, 0) 75%);
-}
-
-body.navdeck-mode.dark-mode .ndw-hero-card {
-   border-color: rgba(255, 255, 255, .12);
-   background: rgba(15, 23, 42, .72);
+   background: linear-gradient(95deg, rgba(8, 20, 45, .62) 0%, rgba(8, 20, 45, .32) 45%, rgba(8, 20, 45, 0) 78%);
 }
 
 body.navdeck-mode:not(.dark-mode) .ndw-view-toggle {
