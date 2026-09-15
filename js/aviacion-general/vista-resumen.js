@@ -249,29 +249,19 @@
     /**
      * Cómo se capturaron los pasajeros del periodo.
      *
-     * El histórico trae DOS convenciones que se reparten los años casi a
-     * mitades: unos movimientos traen el desglose (adultos e infantes) y otros
-     * sólo el total (pax_total_reportado). La columna generada pax_ag suma las
-     * tres, así que lo que no viene del desglose es, exactamente, lo que se
-     * capturó como total:
-     *
-     *     sin_desglose = pax_ag − adultos − infantes
-     *
-     * Decirlo importa: la versión anterior escribía "0 adultos · 0 infantes"
-     * bajo un total de 1,385 pasajeros, y eso no se lee como "este año se
-     * capturó de otra forma", se lee como "el módulo está mal".
+     * Muestra los adultos e infantes disponibles. Los registros capturados
+     * como total siguen incluidos en pax, sin agregar una cifra pendiente
+     * de desglose al texto del resumen.
      */
     function desglosePax(t) {
         const pax = Number(t.pax) || 0;
         const adultos = Number(t.adultos) || 0;
         const infantes = Number(t.infantes) || 0;
-        const sinDesglose = Math.max(0, pax - adultos - infantes);
 
         if (!pax) return 'Sin pasajeros registrados';
         if (!adultos && !infantes) return 'Capturados como total, sin desglose por edad';
 
         const partes = [`${Core.numero(adultos)} adultos`, `${Core.numero(infantes)} infantes`];
-        if (sinDesglose) partes.push(`${Core.numero(sinDesglose)} sin desglose`);
         return partes.join(' · ');
     }
 

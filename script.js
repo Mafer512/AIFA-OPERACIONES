@@ -11849,6 +11849,9 @@ function renderNavdeckWeeklyBanner() {
                 ${_prelimHtml}`;
         }
 
+        /* ── foto del banner: va según la hora local (ver ndwHeroImgPorHora) ── */
+        const heroImg = ndwHeroImgPorHora();
+
         /* ── view toggle ── */
         const viewToggleHtml = `
             <div class="ndw-view-toggle" role="group" aria-label="Seleccionar vista">
@@ -11905,7 +11908,7 @@ function renderNavdeckWeeklyBanner() {
         }).join('');
 
         container.innerHTML = `
-            <div class="ndw-hero ndw-hero--${mode}" style="--ndw-hero-img:url('images/banner.png')">
+            <div class="ndw-hero ndw-hero--${mode}" style="--ndw-hero-img:url('${heroImg}')" data-ndw-hero-img="${heroImg}">
                 <div class="ndw-hero-media" aria-hidden="true"><span class="ndw-hero-foto"></span></div>
                 <div class="ndw-hero-main">
                     <span class="ndw-hero-welcome">Bienvenido al sistema</span>
@@ -11923,6 +11926,11 @@ function renderNavdeckWeeklyBanner() {
             </div>
             <div class="ndw-cards">${cardsHtml}</div>
         `;
+
+        // La foto sigue al reloj: cada segundo revisa si la hora cruzó un horario.
+        if (!container._ndwFotoReloj) {
+            container._ndwFotoReloj = setInterval(ndwActualizarFotoPorHora, 1000);
+        }
 
         if (!container._ndwWired) {
             container._ndwWired = true;
@@ -11973,6 +11981,32 @@ function renderNavdeckWeeklyBanner() {
             });
         }
     } catch (e) { /* ignore */ }
+}
+
+/* Foto del banner de inicio según la hora local que muestra el reloj del
+   encabezado (la del navegador):
+     06:00:01 a 15:00:00  images/banner4.png  (día)
+     15:00:01 a 17:00:00  images/banner.png   (tarde)
+     17:00:01 a 20:00:00  images/banner2.png  (anochecer)
+     20:00:01 a 06:00:00  images/banner3.png  (noche) */
+function ndwHeroImgPorHora(fecha) {
+    const d = fecha || new Date();
+    const s = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+    if (s > 6 * 3600 && s <= 15 * 3600) return 'images/banner4.png';
+    if (s > 15 * 3600 && s <= 17 * 3600) return 'images/banner.png';
+    if (s > 17 * 3600 && s <= 20 * 3600) return 'images/banner2.png';
+    return 'images/banner3.png';
+}
+
+/* Cuando la hora cruza uno de esos horarios, cambia la foto del banner ya
+   pintado (sin volver a pintarlo). */
+function ndwActualizarFotoPorHora() {
+    const hero = document.querySelector('#navdeck-weekly-banner .ndw-hero');
+    if (!hero) return;
+    const img = ndwHeroImgPorHora();
+    if (hero.getAttribute('data-ndw-hero-img') === img) return;
+    hero.setAttribute('data-ndw-hero-img', img);
+    hero.setAttribute('style', `--ndw-hero-img:url('${img}')`);
 }
 
 function openNavdeckWeeklyDetail(idx) {

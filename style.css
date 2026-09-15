@@ -23878,10 +23878,10 @@ body.navdeck-mode .ndw-hero-media::before {
 
 body.navdeck-mode .ndw-hero-foto {
    position: absolute;
-   top: -86%;
+   top: -75%;
    left: 50%;
    display: block;
-   height: 234%;
+   height: 220%;
    aspect-ratio: 1701 / 925;
    background: var(--ndw-hero-img) center / cover no-repeat;
    transform: translateX(-50%);
