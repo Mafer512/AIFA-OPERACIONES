@@ -11374,7 +11374,7 @@ function ndwFormatValue(value, metric) {
 }
 
 /* ── NDW shared view state ── */
-let NDW_VIEW_STATE = { mode: 'weekly', year: null, monthIdx: null, monthTouched: false };
+let NDW_VIEW_STATE = { mode: 'weekly', year: null, monthIdx: null, monthTouched: false, heroIdx: null };
 let _ndwDetailChart = null;
 
 /* ── Peak-line chart config (badge labels + gradient fill) for NDW modals ── */
@@ -11849,6 +11849,22 @@ function renderNavdeckWeeklyBanner() {
                 ${_prelimHtml}`;
         }
 
+        /* ── foto del banner: cuatro tomas de la torre, con flechas abajo a la
+           derecha para cambiarla; la elegida se recuerda en el navegador ── */
+        const heroImgs = ['images/banner.png', 'images/banner2.png', 'images/banner3.png', 'images/banner4.png'];
+        if (NDW_VIEW_STATE.heroIdx === null || NDW_VIEW_STATE.heroIdx === undefined) {
+            let guardada = 0;
+            try { guardada = Number(localStorage.getItem('ndwHeroImg')) || 0; } catch (_) { guardada = 0; }
+            NDW_VIEW_STATE.heroIdx = ((guardada % heroImgs.length) + heroImgs.length) % heroImgs.length;
+        }
+        const heroImg = heroImgs[NDW_VIEW_STATE.heroIdx];
+        const heroNavHtml = `
+            <div class="ndw-hero-nav" role="group" aria-label="Cambiar la foto del banner">
+                <button type="button" class="ndw-hero-nav-btn" data-ndw-hero="-1" aria-label="Foto anterior"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                <span class="ndw-hero-nav-num" aria-live="polite">${NDW_VIEW_STATE.heroIdx + 1} / ${heroImgs.length}</span>
+                <button type="button" class="ndw-hero-nav-btn" data-ndw-hero="1" aria-label="Foto siguiente"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+            </div>`;
+
         /* ── view toggle ── */
         const viewToggleHtml = `
             <div class="ndw-view-toggle" role="group" aria-label="Seleccionar vista">
@@ -11905,7 +11921,7 @@ function renderNavdeckWeeklyBanner() {
         }).join('');
 
         container.innerHTML = `
-            <div class="ndw-hero ndw-hero--${mode}" style="--ndw-hero-img:url('images/banner.png')">
+            <div class="ndw-hero ndw-hero--${mode}" style="--ndw-hero-img:url('${heroImg}')" data-ndw-hero-imgs="${heroImgs.join('|')}">
                 <div class="ndw-hero-media" aria-hidden="true"><span class="ndw-hero-foto"></span></div>
                 <div class="ndw-hero-main">
                     <span class="ndw-hero-welcome">Bienvenido al sistema</span>
@@ -11920,6 +11936,7 @@ function renderNavdeckWeeklyBanner() {
                     <span class="ndw-hero-fecha"><i class="far fa-calendar" aria-hidden="true"></i>${escapeHTML(_hoyTexto)}</span>
                 </div>
                 ${viewToggleHtml}
+                ${heroNavHtml}
             </div>
             <div class="ndw-cards">${cardsHtml}</div>
         `;
@@ -11927,6 +11944,25 @@ function renderNavdeckWeeklyBanner() {
         if (!container._ndwWired) {
             container._ndwWired = true;
             container.addEventListener('click', (ev) => {
+                const heroBtn = ev.target.closest('[data-ndw-hero]');
+                if (heroBtn) {
+                    const hero = container.querySelector('.ndw-hero');
+                    const imgs = ((hero && hero.getAttribute('data-ndw-hero-imgs')) || '').split('|').filter(Boolean);
+                    if (!hero || !imgs.length) return;
+                    const n = imgs.length;
+                    NDW_VIEW_STATE.heroIdx = ((((NDW_VIEW_STATE.heroIdx || 0) + Number(heroBtn.getAttribute('data-ndw-hero'))) % n) + n) % n;
+                    try { localStorage.setItem('ndwHeroImg', String(NDW_VIEW_STATE.heroIdx)); } catch (_) { /* sin almacenamiento */ }
+                    // Sólo cambia la foto (y su fondo desenfocado): no se vuelve a pintar el banner.
+                    hero.setAttribute('style', `--ndw-hero-img:url('${imgs[NDW_VIEW_STATE.heroIdx]}')`);
+                    const num = hero.querySelector('.ndw-hero-nav-num');
+                    if (num) num.textContent = `${NDW_VIEW_STATE.heroIdx + 1} / ${n}`;
+                    // Las demás fotos se descargan hasta que alguien usa las flechas.
+                    if (!container._ndwHeroPrecarga) {
+                        container._ndwHeroPrecarga = true;
+                        imgs.forEach((src) => { const img = new Image(); img.src = src; });
+                    }
+                    return;
+                }
                 const modeBtn = ev.target.closest('[data-ndw-mode]');
                 if (modeBtn) {
                     NDW_VIEW_STATE.mode = modeBtn.getAttribute('data-ndw-mode');
