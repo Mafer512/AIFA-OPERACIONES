@@ -173,10 +173,12 @@ describe('el banner de inicio', () => {
       ${extraer('function ndwFormatValue(', '\n}\n')}
       ${extraer('let NDW_VIEW_STATE = ', ';\n')}
       ${extraer('function renderNavdeckWeeklyBanner(', '\n}\n')}
-      return { render: renderNavdeckWeeklyBanner };
+      ${extraer('function ndwHeroImgPorHora(', '\n}\n')}
+      ${extraer('function ndwActualizarFotoPorHora(', '\n}\n')}
+      return { render: renderNavdeckWeeklyBanner, porHora: ndwHeroImgPorHora };
     `)(detalle, semana);
     api.render();
-    return { detalle, banner: $('navdeck-weekly-banner') };
+    return { detalle, api, banner: $('navdeck-weekly-banner') };
   }
 
   test('la vista Actual va antes de Semanal y el hero trae bienvenida, tarjeta del periodo y fecha', () => {
@@ -190,7 +192,7 @@ describe('el banner de inicio', () => {
     expect(tarjetas).toHaveLength(6);
     expect(tarjetas[0].getAttribute('style')).toContain('--ndw-img:');
     // La torre completa: la foto nueva, en su propia capa sobre el fondo desenfocado.
-    expect(banner.querySelector('.ndw-hero').getAttribute('style')).toContain("images/banner.png");
+    expect(banner.querySelector('.ndw-hero').getAttribute('style')).toMatch(/images\/banner\d?\.png/);
     expect(banner.querySelector('.ndw-hero-media > .ndw-hero-foto')).not.toBeNull();
     expect(css).toMatch(/body\.navdeck-mode \.ndw-hero-foto \{[^}]*aspect-ratio: 1701 \/ 925;/);
     expect(fs.existsSync(path.join(raiz, 'images', 'banner.png'))).toBe(true);
@@ -211,23 +213,39 @@ describe('el banner de inicio', () => {
     expect(detalle).toHaveBeenCalledWith(0);
   });
 
-  test('las flechas cambian la foto entre las cuatro y el banner recuerda la elegida', () => {
-    window.localStorage.removeItem('ndwHeroImg');
-    const { banner } = montarBanner();
-    const hero = () => banner.querySelector('.ndw-hero');
-    expect(banner.querySelector('.ndw-hero-nav-num').textContent).toBe('1 / 4');
-    banner.querySelector('[data-ndw-hero="1"]').click();
-    expect(hero().getAttribute('style')).toContain('images/banner2.png');
-    expect(banner.querySelector('.ndw-hero-nav-num').textContent).toBe('2 / 4');
-    expect(window.localStorage.getItem('ndwHeroImg')).toBe('1');
-    // Hacia atrás da la vuelta: de la 2 a la 1 y de la 1 a la 4.
-    banner.querySelector('[data-ndw-hero="-1"]').click();
-    banner.querySelector('[data-ndw-hero="-1"]').click();
-    expect(hero().getAttribute('style')).toContain('images/banner4.png');
-    // Cambiar de vista vuelve a pintar el banner con la foto elegida.
-    banner.querySelector('[data-ndw-mode="current"]').click();
-    expect(hero().getAttribute('style')).toContain('images/banner4.png');
-    ['banner2', 'banner3', 'banner4'].forEach((n) => expect(fs.existsSync(path.join(raiz, 'images', `${n}.png`))).toBe(true));
-    window.localStorage.removeItem('ndwHeroImg');
+  test('la foto va según la hora local del sitio, en sus cuatro horarios', () => {
+    const { api } = montarBanner();
+    const foto = (hms) => api.porHora(new Date(`2026-09-15T${hms}`));
+    expect(foto('06:00:00')).toBe('images/banner3.png');
+    expect(foto('06:00:01')).toBe('images/banner4.png');
+    expect(foto('15:00:00')).toBe('images/banner4.png');
+    expect(foto('15:00:01')).toBe('images/banner.png');
+    expect(foto('17:00:00')).toBe('images/banner.png');
+    expect(foto('17:00:01')).toBe('images/banner2.png');
+    expect(foto('20:00:00')).toBe('images/banner2.png');
+    expect(foto('20:00:01')).toBe('images/banner3.png');
+    expect(foto('00:00:00')).toBe('images/banner3.png');
+    expect(foto('23:59:59')).toBe('images/banner3.png');
+    ['banner', 'banner2', 'banner3', 'banner4'].forEach((n) => expect(fs.existsSync(path.join(raiz, 'images', `${n}.png`))).toBe(true));
+  });
+
+  test('ya no hay flechas y la foto cambia sola cuando el reloj cruza un horario', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-09-15T17:00:00'));
+    try {
+      const { banner } = montarBanner();
+      const hero = () => banner.querySelector('.ndw-hero');
+      expect(banner.querySelector('.ndw-hero-nav, [data-ndw-hero]')).toBeNull();
+      expect(css).not.toContain('.ndw-hero-nav');
+      expect(hero().getAttribute('style')).toContain('images/banner.png');
+      jest.setSystemTime(new Date('2026-09-15T17:00:01'));
+      jest.advanceTimersByTime(1000);
+      expect(hero().getAttribute('style')).toContain('images/banner2.png');
+      // Cambiar de vista vuelve a pintar el banner con la foto de la hora.
+      banner.querySelector('[data-ndw-mode="current"]').click();
+      expect(hero().getAttribute('style')).toContain('images/banner2.png');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
