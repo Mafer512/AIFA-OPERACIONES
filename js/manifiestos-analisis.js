@@ -1,8 +1,8 @@
 /**
  * manifiestos-analisis.js
  * Analisis exhaustivo de manifiestos - Tabla: "Base de datos Manifiestos 2025"
- * Sub-pesta�as: Resumen | Pasajeros | Aerol�neas | Rutas | Equipaje | Datos
- * v2.1 � Logos de aerol�neas + porcentajes en gr�ficas
+ * Sub-pestañas: Resumen | Pasajeros | Aerolíneas | Rutas | Equipaje | Datos
+ * v2.1 · Logos de aerolíneas + porcentajes en gráficas
  */
 (function () {
   'use strict';
@@ -11,7 +11,13 @@
     '2025':      { name: 'Base de datos Manifiestos 2025',          label: 'Manifiestos 2025 — Datos anuales' },
     'feb2026':   { name: 'Base de Datos Manifiestos Febrero 2026',   label: 'Febrero 2026 — Datos mensuales' },
     'abr2026':   { name: 'Manifiestos',                              label: 'Abril 2026 — Datos mensuales' },
-    'jun2026':   { name: 'Manifiestos Junio 2026',                   label: 'Junio 2026 — Datos mensuales' }
+    'jun2026':   { name: 'Manifiestos Junio 2026',                   label: 'Junio 2026 — Datos mensuales' },
+    // De mayo de 2026 en adelante el dato bueno ya no se importa de un
+    // Excel mensual: sale de maestra_operaciones, que se llena sola con lo
+    // que se captura en Conciliación, el itinerario del AODB y el portal.
+    // Por eso este período no tiene fecha de corte superior: crece solo.
+    'maestra':   { name: 'maestra_operaciones',                      label: 'Mayo 2026 en adelante — Maestra de operaciones',
+                   fuente: 'maestra', desde: '2026-05-01' }
   };
   let _activeTableKey = '2025';
   const getTableName  = () => TABLES[_activeTableKey].name;
@@ -24,13 +30,13 @@
   const PAL_7     = ['#0d6efd','#fd7e14','#20c997','#0dcaf0','#d63384','#ffc107','#6c757d'];
 
   /* -------------------------------------------------------
-     LOGOS DE AEROL�NEAS
-     Mapeo nombre ? c�digo IATA para obtener logos de Google
+     LOGOS DE AEROLÍNEAS
+     Mapeo nombre → código IATA para obtener logos de Google
   ------------------------------------------------------- */
   const AIRLINE_IATA = {
-    'aerom\u00e9xico': 'AM', 'aeromexico': 'AM', 'aerom�xico connect': 'AM',
-    'aerolitoral': 'AM', 'aerovias': 'AM', 'aerov\u00edas': 'AM', 'aerovias de mexico': 'AM', 'aerov�as de m�xico': 'AM',
-    'mexicana': 'XN', 'mexicana de aviacion': 'XN', 'mexicana de aviaci�n': 'XN',
+    'aerom\u00e9xico': 'AM', 'aeromexico': 'AM', 'aeroméxico connect': 'AM',
+    'aerolitoral': 'AM', 'aerovias': 'AM', 'aerov\u00edas': 'AM', 'aerovias de mexico': 'AM', 'aerovías de méxico': 'AM',
+    'mexicana': 'XN', 'mexicana de aviacion': 'XN', 'mexicana de aviación': 'XN',
     'volaris': 'Y4', 'vuela': 'Y4',
     'vivaaerobus': 'VB', 'viva aerobus': 'VB', 'viva aerob\u00fas': 'VB',
     'arajet': 'DM',
@@ -151,7 +157,7 @@
       + ' onerror="this.style.display=\'none\'">';
   }
 
-  /* Custom Chart.js plugin: dibuja logos en eje Y de gr�ficas horizontales */
+  /* Custom Chart.js plugin: dibuja logos en eje Y de gráficas horizontales */
   const airlineLogoPlugin = {
     id: 'airlineLogos',
     afterDraw(chart, args, opts) {
@@ -194,9 +200,9 @@
   const getFecha    = r => col(r, 'FECHA', 'fecha') || '';
   const getMes      = r => col(r, 'MES', 'mes') || '';
 
-  /* Extrae la hora (0-23) preferentemente de la columna HR. DE OPERACI�N */
+  /* Extrae la hora (0-23) preferentemente de la columna HR. DE OPERACIÓN */
   function getHour(r) {
-    // Columna principal: HR. DE OPERACI�N (y variantes de escritura)
+    // Columna principal: HR. DE OPERACIÓN (y variantes de escritura)
     const raw = col(r, 'HR. DE OPERACI\u00d3N', 'HR. DE OPERACION', 'HR DE OPERACION', 'HR DE OPERACI\u00d3N',
                        'HORA DE OPERACI\u00d3N', 'HORA DE OPERACION', 'HORA OPERACION',
                        'HR. OPERACI\u00d3N', 'HR. OPERACION',
@@ -207,7 +213,7 @@
       // HH:MM o HH:MM:SS
       const m1 = s.match(/^(\d{1,2}):(\d{2})/);
       if (m1) return parseInt(m1[1], 10);
-      // HHMM num�rico (e.g. "0830")
+      // HHMM numérico (e.g. "0830")
       const m2 = s.match(/^(\d{3,4})$/);
       if (m2) return parseInt(s.length === 3 ? s[0] : s.substring(0, 2), 10);
       // Datetime con T o espacio: "2025-12-20T14:30" / "2025-12-20 14:30"
@@ -223,13 +229,13 @@
     return -1; // sin dato
   }
 
-  /* Extrae minuto del d�a (0..1439) para an�lisis de simultaneidad */
+  /* Extrae minuto del día (0..1439) para análisis de simultaneidad */
   function getMinuteOfDay(r) {
-    const raw = col(r, 'HR. DE OPERACI�N', 'HR. DE OPERACION', 'HR DE OPERACION', 'HR DE OPERACI�N',
-                       'HORA DE OPERACI�N', 'HORA DE OPERACION', 'HORA OPERACION',
-                       'HR. OPERACI�N', 'HR. OPERACION',
+    const raw = col(r, 'HR. DE OPERACIÓN', 'HR. DE OPERACION', 'HR DE OPERACION', 'HR DE OPERACIÓN',
+                       'HORA DE OPERACIÓN', 'HORA DE OPERACION', 'HORA OPERACION',
+                       'HR. OPERACIÓN', 'HR. OPERACION',
                        'SLOT ASIGNADO', 'SLOT COORDINADO',
-                       'HORA DE INICIO O TERMINO DE PERNOCTA', 'HORA DE RECEPCI�N', 'HORA DE RECEPCION');
+                       'HORA DE INICIO O TERMINO DE PERNOCTA', 'HORA DE RECEPCIÓN', 'HORA DE RECEPCION');
     const parseToMinute = (val) => {
       if (!val) return -1;
       const s = String(val).trim();
@@ -239,7 +245,7 @@
         const hh = parseInt(m1[1], 10), mm = parseInt(m1[2], 10);
         if (hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59) return (hh * 60) + mm;
       }
-      // HHMM num�rico (e.g. 0830)
+      // HHMM numérico (e.g. 0830)
       const m2 = s.match(/^(\d{3,4})$/);
       if (m2) {
         const hh = parseInt(s.length === 3 ? s[0] : s.substring(0, 2), 10);
@@ -308,7 +314,7 @@
   const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const tickK   = v => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'k' : v;
 
-  /* Opciones de datalabels para pies � etiquetas externas con nombre y % */
+  /* Opciones de datalabels para pies — etiquetas externas con nombre y % */
   function datalabelsPiePct(total) {
     return {
       display: true,
@@ -376,6 +382,7 @@
     // Reset airline dropdown
     const sel = document.getElementById('mdb-filter-airline');
     if (sel) while (sel.options.length > 1) sel.remove(1);
+    syncOrigenFilter(_allData);
     // Reload
     load();
   }
@@ -384,7 +391,7 @@
      INIT
   ------------------------------------------------------- */
   document.addEventListener('DOMContentLoaded', () => {
-    // Desactivar datalabels globalmente por defecto (s�lo activar donde queremos)
+    // Desactivar datalabels globalmente por defecto (sólo activar donde queremos)
     if (window.Chart && window.ChartDataLabels) {
       Chart.unregister(ChartDataLabels);
     }
@@ -439,33 +446,21 @@
     showOverlay('Cargando manifiestos...');
     try {
       const client = window.supabaseClient;
-      if (!client) throw new Error('Supabase no disponible � inicia sesi\u00f3n primero');
-      const BS = 1000;
-      const tableName = getTableName();
+      if (!client) throw new Error('Supabase no disponible — inicia sesión primero');
+      const periodo = TABLES[_activeTableKey];
 
-      // 1. Obtener el total de registros con una sola petici�n HEAD
-      setOverlayText('Consultando registros...');
-      const { count, error: countErr } = await client.from(tableName).select('*', { count: 'exact', head: true });
-      if (countErr) throw countErr;
-      const total = Math.min(count || 0, 200000);
+      const all = periodo.fuente === 'maestra'
+        ? await fetchMaestra(client, periodo)
+        : await fetchTablaImportada(client, periodo.name);
 
-      // 2. Descargar todas las p�ginas en paralelo
-      const pages = Math.ceil(total / BS);
-      setOverlayText('Descargando ' + total.toLocaleString() + ' registros en ' + pages + ' lotes...');
-      const requests = Array.from({ length: pages }, (_, i) =>
-        client.from(tableName).select('*').range(i * BS, (i + 1) * BS - 1)
-      );
-      const results = await Promise.all(requests);
-      const errors = results.filter(r => r.error);
-      if (errors.length) throw errors[0].error;
-      const all = results.flatMap(r => r.data || []);
       _allData = all; _loaded = true;
       _dataCache[_activeTableKey] = all;
       if (all.length > 0) {
-        console.log('[ManifiestosBD] Columnas de la tabla "' + tableName + '":', Object.keys(all[0]));
+        console.log('[ManifiestosBD] Columnas del período "' + periodo.label + '":', Object.keys(all[0]));
         console.log('[ManifiestosBD] Primera fila de muestra:', all[0]);
       }
-      if (all.length === 0) { showBanner('info', 'La tabla est\u00e1 vac\u00eda o RLS bloquea la lectura.'); hideOverlay(); return; }
+      syncOrigenFilter(all);
+      if (all.length === 0) { showBanner('info', 'No hay registros para este período, o RLS bloquea la lectura.'); hideOverlay(); return; }
       preloadAirlineLogos(all);
       const airlines = [...new Set(all.map(r => getAirline(r)))].sort();
       const sel = document.getElementById('mdb-filter-airline');
@@ -480,6 +475,120 @@
     } finally { hideOverlay(); }
   }
 
+  /* Las tablas que se importaron de Excel: se leen enteras, tal cual. */
+  async function fetchTablaImportada(client, tableName) {
+    const BS = 1000;
+    // 1. Obtener el total de registros con una sola petición HEAD
+    setOverlayText('Consultando registros...');
+    const { count, error: countErr } = await client.from(tableName).select('*', { count: 'exact', head: true });
+    if (countErr) throw countErr;
+    const total = Math.min(count || 0, 200000);
+
+    // 2. Descargar todas las páginas en paralelo
+    const pages = Math.ceil(total / BS);
+    setOverlayText('Descargando ' + total.toLocaleString() + ' registros en ' + pages + ' lotes...');
+    const requests = Array.from({ length: pages }, (_, i) =>
+      client.from(tableName).select('*').range(i * BS, (i + 1) * BS - 1)
+    );
+    const results = await Promise.all(requests);
+    const errors = results.filter(r => r.error);
+    if (errors.length) throw errors[0].error;
+    return results.flatMap(r => r.data || []);
+  }
+
+  /* maestra_operaciones, de una fecha en adelante.
+   *
+   * Es la tabla viva: consolida Conciliación Manifiestos, el itinerario del
+   * AODB y los manifiestos del portal en un renglón por operación. No se lee
+   * entera —son todos los años— sino del corte del período hacia adelante, y
+   * sólo las columnas que las gráficas usan (ver ManifiestosMaestra.COLUMNAS:
+   * pedir "*" arrastraría datos_origen, el renglón completo del AODB en jsonb).
+   * Los renglones salen traducidos al vocabulario de los manifiestos, así que
+   * las ocho sub-pestañas no se enteran de que cambió la fuente. */
+  async function fetchMaestra(client, periodo) {
+    const BS = 1000;
+    setOverlayText('Consultando operaciones desde ' + periodo.desde + '...');
+    const { count, error: countErr } = await client
+      .from(periodo.name)
+      .select('id', { count: 'exact', head: true })
+      .gte('fecha_operacion', periodo.desde);
+    if (countErr) throw countErr;
+    const total = Math.min(count || 0, 200000);
+    if (!total) return [];
+
+    const pages = Math.ceil(total / BS);
+    setOverlayText('Descargando ' + total.toLocaleString() + ' operaciones en ' + pages + ' lotes...');
+    const columnas = ManifiestosMaestra.COLUMNAS.join(',');
+    const requests = Array.from({ length: pages }, (_, i) =>
+      client
+        .from(periodo.name)
+        .select(columnas)
+        .gte('fecha_operacion', periodo.desde)
+        // El orden tiene que ser total y estable: los lotes se piden en
+        // paralelo y sin un desempate (el id) dos de ellos pueden traer el
+        // mismo renglón y dejar otro fuera.
+        .order('fecha_operacion', { ascending: true })
+        .order('id', { ascending: true })
+        .range(i * BS, (i + 1) * BS - 1)
+    );
+    const results = await Promise.all(requests);
+    const errors = results.filter(r => r.error);
+    if (errors.length) throw errors[0].error;
+    const crudas = results.flatMap(r => r.data || []);
+
+    setOverlayText('Preparando ' + crudas.length.toLocaleString() + ' operaciones...');
+    const paisesPorIata = await fetchPaisesPorIata(client);
+    const catalogo = window.AifaAerolineas;
+    if (catalogo && typeof catalogo.cargar === 'function') {
+      try { await catalogo.cargar(client); } catch (_) { /* el catálogo ayuda, no bloquea */ }
+    }
+    return ManifiestosMaestra.mapearFilas(crudas, {
+      nombreAerolinea: catalogo ? (n => catalogo.canonico(n)) : null,
+      paisesPorIata
+    });
+  }
+
+  /* IATA → país, para saber si una operación fue nacional o internacional
+     cuando el manifiesto no trae capturado el tipo. */
+  let _paisesPorIata = null;
+  async function fetchPaisesPorIata(client) {
+    if (_paisesPorIata) return _paisesPorIata;
+    const mapa = new Map();
+    try {
+      const { data, error } = await client.from('catalogo_aeropuertos').select('iata,pais').limit(20000);
+      if (!error) (data || []).forEach(r => {
+        const iata = String((r && r.iata) || '').trim().toUpperCase();
+        const pais = String((r && r.pais) || '').trim();
+        if (iata && pais) mapa.set(iata, pais);
+      });
+    } catch (_) { /* sin catálogo el tipo de operación se queda en blanco, no se inventa */ }
+    _paisesPorIata = mapa;
+    return mapa;
+  }
+
+  /* El filtro de "Registros" sólo tiene sentido en la maestra, donde conviven
+     los manifiestos capturados con los vuelos que el itinerario ya programó
+     pero nadie ha conciliado. Se muestra con el conteo de cada grupo para que
+     se vea de dónde salen las cifras. */
+  function syncOrigenFilter(rows) {
+    const wrap = document.getElementById('mdb-filter-origen-wrap');
+    const sel = document.getElementById('mdb-filter-origen');
+    if (!wrap || !sel) return;
+    const esMaestra = TABLES[_activeTableKey].fuente === 'maestra';
+    wrap.classList.toggle('d-none', !esMaestra);
+    if (!esMaestra) { sel.value = ''; return; }
+
+    const conManifiesto = (rows || []).filter(r => r._origen === 'manifiesto').length;
+    const programados = (rows || []).length - conManifiesto;
+    const etiqueta = (base, n) => base + ' (' + fmt(n) + ')';
+    [...sel.options].forEach(o => {
+      if (o.value === 'manifiesto') o.textContent = etiqueta('Con manifiesto', conManifiesto);
+      else if (o.value === 'itinerario') o.textContent = etiqueta('Sólo programados', programados);
+      else o.textContent = etiqueta('Todos los registros', (rows || []).length);
+    });
+    if (!sel.value) sel.value = 'manifiesto';
+  }
+
   /* -------------------------------------------------------
      FILTRADO
   ------------------------------------------------------- */
@@ -489,6 +598,7 @@
     const dir     = document.getElementById('mdb-filter-direction')?.value || '';
     const optype  = document.getElementById('mdb-filter-optype')?.value  || '';
     const airline = document.getElementById('mdb-filter-airline')?.value || '';
+    const origen  = document.getElementById('mdb-filter-origen')?.value  || '';
     const monthName = monthN ? MONTHS_ES[parseInt(monthN, 10) - 1] : '';
 
     _filtered = _allData.filter(r => {
@@ -499,8 +609,17 @@
         else { if (parseFecha(r).monthIdx !== parseInt(monthN, 10) - 1) return false; }
       }
       if (dir    && !getDir(r).toLowerCase().includes(dir.toLowerCase()))       return false;
-      if (optype && !getOpType(r).toLowerCase().includes(optype.toLowerCase())) return false;
+      // Con includes() a secas, "Nacional" dejaba pasar también a las
+      // internacionales: "internacional" contiene "nacional". isDom/isInt ya
+      // distinguen las dos, y son las mismas reglas que cuentan los KPIs.
+      if (optype) {
+        const quiereInt = optype.toLowerCase().includes('int');
+        if (quiereInt ? !isInt(r) : !isDom(r)) return false;
+      }
       if (airline && getAirline(r) !== airline) return false;
+      // _origen sólo lo traen los renglones de la maestra; en las tablas
+      // importadas viene indefinido y el filtro no les aplica.
+      if (origen && r._origen && r._origen !== origen) return false;
       return true;
     });
     _currentPage = 1;
@@ -511,6 +630,8 @@
     ['mdb-filter-year','mdb-filter-month','mdb-filter-direction','mdb-filter-optype','mdb-filter-airline']
       .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     const s = document.getElementById('mdb-search-input'); if (s) s.value = '';
+    const origen = document.getElementById('mdb-filter-origen');
+    if (origen) origen.value = TABLES[_activeTableKey].fuente === 'maestra' ? 'manifiesto' : '';
     applyFilters();
   }
 
@@ -582,7 +703,7 @@
     set('mdb-kpi-int-pax',        fmt(intPax));
     set('mdb-kpi-int-pct',        pct(intPax, totalPax) + ' del total');
     set('mdb-record-count',       fmt(total) + ' reg.');
-    // Logo aerol�nea l�der
+    // Logo aerolínea líder
     if (top) {
       const el = document.getElementById('mdb-kpi-top-airline');
       if (el) el.innerHTML = airlineLogoHTML(top[0], 20) + escHtml(top[0]);
@@ -590,7 +711,7 @@
   }
 
   /* -------------------------------------------------------
-     SUB-PESTA�A: RESUMEN
+     SUB-PESTAÑA: RESUMEN
   ------------------------------------------------------- */
   function renderTabResumen() {
     renderChartMonthly();
@@ -703,7 +824,7 @@
   }
 
   /* -------------------------------------------------------
-     SUB-PESTA�A: PASAJEROS
+     SUB-PESTAÑA: PASAJEROS
   ------------------------------------------------------- */
   function renderTabPasajeros() {
     const d = _filtered;
@@ -812,7 +933,7 @@
             label: c => ' ' + c.dataset.label + ': ' + fmt(c.raw),
             footer: items => {
               const total = combM[items[0].dataIndex];
-              return items.map(i => pct(i.raw, total) + ' del mes � ' + i.dataset.label).join('\n');
+              return items.map(i => pct(i.raw, total) + ' del mes · ' + i.dataset.label).join('\n');
             }
           }}
         },
@@ -855,7 +976,7 @@
   }
 
   /* -------------------------------------------------------
-     SUB-PESTA�A: AEROL�NEAS
+     SUB-PESTAÑA: AEROLÍNEAS
   ------------------------------------------------------- */
   function renderTabAerolineas() {
     renderAirlineRanking();
@@ -985,7 +1106,7 @@
   }
 
   /* -------------------------------------------------------
-     SUB-PESTA�A: RUTAS
+     SUB-PESTAÑA: RUTAS
   ------------------------------------------------------- */
   function renderTabRutas() {
     renderChartRoutes();
@@ -1085,7 +1206,7 @@
   }
 
   /* -------------------------------------------------------
-     SUB-PESTA�A: EQUIPAJE
+     SUB-PESTAÑA: EQUIPAJE
   ------------------------------------------------------- */
   function renderTabEquipaje() {
     const d = _filtered;
@@ -1182,10 +1303,10 @@
   }
 
   /* -------------------------------------------------------
-     SUB-PESTA�A: DATOS
+     SUB-PESTAÑA: DATOS
   ------------------------------------------------------- */
   /* -------------------------------------------------------
-     SUB-PESTA�A: OPERACIONES
+     SUB-PESTAÑA: OPERACIONES
   ------------------------------------------------------- */
   function renderTabOperaciones() {
     const d = _filtered;
@@ -1245,7 +1366,7 @@
         tbody.appendChild(tr);
       });
       if (!hasAnyData) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin datos para el per�odo seleccionado</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin datos para el período seleccionado</td></tr>';
       }
     }
 
@@ -1311,7 +1432,7 @@
       });
     }
 
-    // Heatmaps: pasajeros y operaciones por hora x d�a de semana (datos de manifiestos)
+    // Heatmaps: pasajeros y operaciones por hora x día de semana (datos de manifiestos)
     renderOperacionesHeatmaps(d);
   }
 
@@ -1334,74 +1455,31 @@
   }
 
   function buildOperacionesHeatmapState(rows) {
-    const createMatrix = () => Array.from({ length: 24 }, () => Array(7).fill(0));
-    const createDetailsMatrix = () => Array.from({ length: 24 }, () => Array.from({ length: 7 }, () => []));
-    const allPax = createMatrix();
-    const allOps = createMatrix();
-    const allDetails = createDetailsMatrix();
-    const weekMap = new Map(); // weekKey -> { monday, pax, ops }
-
-    rows.forEach(r => {
-      const h = getHour(r);
-      if (!Number.isFinite(h) || h < 0 || h > 23) return;
-
-      const dayKey = getDayKey(r);
-      if (!dayKey) return;
-      const dt = new Date(dayKey + 'T12:00:00');
-      if (Number.isNaN(dt.getTime())) return;
-
-      const dayIdx = (dt.getDay() + 6) % 7; // Monday=0 ... Sunday=6
-      const paxVal = getPaxTotal(r);
-      const detailRec = {
-        dayKey,
-        fecha: getFecha(r) || dayKey,
-        hora: getOperacionesHeatmapHourLabel(r, h),
+    return ManifiestosMaestra.construirMapaCalor(rows || [], {
+      hora: getHour,
+      dia: getDayKey,
+      pax: getPaxTotal,
+      detalle: r => ({
+        dayKey: getDayKey(r),
+        fecha: getFecha(r) || getDayKey(r),
+        hora: getOperacionesHeatmapHourLabel(r, getHour(r)),
         manifiesto: getDir(r) || '',
         aerolinea: getAirline(r) || '',
         vuelo: getFlight(r) || '',
         ruta: getRoute(r) || '',
         tipoOperacion: getOpType(r) || '',
-        pax: paxVal
-      };
-
-      allPax[h][dayIdx] += paxVal;
-      allOps[h][dayIdx] += 1;
-      allDetails[h][dayIdx].push(detailRec);
-
-      const monday = new Date(dt);
-      monday.setDate(dt.getDate() - dayIdx);
-      const wkKey = monday.toISOString().slice(0, 10);
-      if (!weekMap.has(wkKey)) {
-        weekMap.set(wkKey, { monday: wkKey, pax: createMatrix(), ops: createMatrix(), details: createDetailsMatrix() });
-      }
-      const wk = weekMap.get(wkKey);
-      wk.pax[h][dayIdx] += paxVal;
-      wk.ops[h][dayIdx] += 1;
-      wk.details[h][dayIdx].push(detailRec);
+        pax: getPaxTotal(r)
+      })
     });
-
-    const weekKeys = Array.from(weekMap.keys()).sort();
-    const weeks = {};
-    weekKeys.forEach((k, idx) => {
-      weeks[k] = {
-        index: idx + 1,
-        label: buildWeekLabel(k, idx + 1),
-        pax: weekMap.get(k).pax,
-        ops: weekMap.get(k).ops,
-        details: weekMap.get(k).details,
-      };
-    });
-
-    return { allPax, allOps, allDetails, weeks, weekKeys };
   }
 
   function getOperacionesHeatmapHourLabel(row, fallbackHour) {
     const raw = col(row,
-      'HR. DE OPERACI�N', 'HR. DE OPERACION', 'HR DE OPERACION', 'HR DE OPERACI�N',
-      'HORA DE OPERACI�N', 'HORA DE OPERACION', 'HORA OPERACION',
-      'HR. OPERACI�N', 'HR. OPERACION',
+      'HR. DE OPERACIÓN', 'HR. DE OPERACION', 'HR DE OPERACION', 'HR DE OPERACIÓN',
+      'HORA DE OPERACIÓN', 'HORA DE OPERACION', 'HORA OPERACION',
+      'HR. OPERACIÓN', 'HR. OPERACION',
       'SLOT ASIGNADO', 'SLOT COORDINADO',
-      'HORA DE INICIO O TERMINO DE PERNOCTA', 'HORA DE RECEPCI�N', 'HORA DE RECEPCION'
+      'HORA DE INICIO O TERMINO DE PERNOCTA', 'HORA DE RECEPCIÓN', 'HORA DE RECEPCION'
     );
     if (raw) {
       const s = String(raw).trim();
@@ -1411,143 +1489,219 @@
     return String(fallbackHour).padStart(2, '0') + ':00';
   }
 
-  function buildWeekLabel(weekKey, index) {
-    const m = new Date(weekKey + 'T12:00:00');
-    if (Number.isNaN(m.getTime())) return 'S' + index;
-    const s = new Date(m);
-    s.setDate(m.getDate() + 6);
-    const shortMonths = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-    const left = String(m.getDate()).padStart(2, '0') + ' ' + shortMonths[m.getMonth()];
-    const right = String(s.getDate()).padStart(2, '0') + ' ' + shortMonths[s.getMonth()];
-    return 'S' + index + ' ' + left + '–' + right;
-  }
+  /* Lo que el usuario eligió en cada mapa, para que un cambio de filtro no lo
+     regrese a la vista inicial cuando la pestaña se vuelve a dibujar. */
+  const _heatmapVista = {
+    pax: { vista: 'semana', semana: '0', mes: '' },
+    ops: { vista: 'semana', semana: '0', mes: '' }
+  };
 
+  /* Dibuja el mapa de calor. El mismo dato se puede leer de dos formas:
+   *
+   *   · Día de la semana — 24 x 7. El patrón que se repite: a qué horas de los
+   *     martes se llena la terminal. Acumulado, o una semana a la vez.
+   *   · Fecha por fecha  — 24 x los días del mes elegido. Lo que pasó el martes
+   *     12 a las 07:00, que es lo que hace falta para revisar un día concreto y
+   *     no un promedio de todos los martes.
+   *
+   * Cualquier celda con actividad se abre y muestra los vuelos que la formaron.
+   */
   function drawOperacionesHeatmap(container, state, config) {
     const metric = config.metric;
-    const tone = config.tone;
     const unit = config.unit;
-    const dayLabels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-    const dayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-    let selectedWeek = '0';
+    const activa = config.tone === 'warning' ? 'btn-warning' : 'btn-primary';
+    const inactiva = 'btn-outline-secondary';
+    const diasCortos = ManifiestosMaestra.DIAS_CORTOS;
+    const diasLargos = ManifiestosMaestra.DIAS_LARGOS;
 
-    const getMatrix = () => {
-      if (selectedWeek !== '0' && state.weeks[selectedWeek]) {
-        return metric === 'pax' ? state.weeks[selectedWeek].pax : state.weeks[selectedWeek].ops;
-      }
-      return metric === 'pax' ? state.allPax : state.allOps;
+    const pref = _heatmapVista[metric] || (_heatmapVista[metric] = { vista: 'semana', semana: '0', mes: '' });
+    if (pref.semana !== '0' && !state.porSemana.has(pref.semana)) pref.semana = '0';
+    // El mes recordado puede no existir en los datos nuevos; si no, el último.
+    if (!state.porMes.has(pref.mes)) {
+      pref.mes = state.clavesMes.length ? state.clavesMes[state.clavesMes.length - 1] : '';
+    }
+
+    const colorFor = (value, maxVal) => {
+      if (!maxVal || value <= 0) return '#edf2f7';
+      const t = Math.max(0, Math.min(1, value / maxVal));
+      const light = config.tone === 'warning' ? [248, 229, 211] : [218, 230, 248];
+      const dark = config.tone === 'warning' ? [245, 146, 49] : [67, 130, 221];
+      const c = i => Math.round(light[i] + (dark[i] - light[i]) * t);
+      return `rgb(${c(0)}, ${c(1)}, ${c(2)})`;
     };
 
-    const getDetailsMatrix = () => {
-      if (selectedWeek !== '0' && state.weeks[selectedWeek]) {
-        return state.weeks[selectedWeek].details;
+    /* Las dos vistas, detrás de la misma interfaz: una lista de columnas y dos
+       funciones que dicen qué hay en la celda (hora, columna). */
+    const armarVista = () => {
+      if (pref.vista === 'fecha') {
+        const mes = state.porMes.get(pref.mes);
+        const dias = mes ? mes.dias : [];
+        return {
+          modo: 'fecha',
+          columnas: dias.map(clave => {
+            const d = state.porDia.get(clave);
+            return {
+              titulo: d.etiqueta,
+              subtitulo: d.diaSemana,
+              resalta: d.finDeSemana,
+              nombre: d.diaSemanaLargo + ' ' + d.etiqueta
+            };
+          }),
+          valor: (h, i) => { const d = state.porDia.get(dias[i]); return d ? d[metric][h] : 0; },
+          detalles: (h, i) => { const d = state.porDia.get(dias[i]); return d ? d.detalles[h] : []; },
+          leyenda: mes ? mes.etiqueta : 'Sin datos'
+        };
       }
-      return state.allDetails;
+      const base = (pref.semana !== '0' && state.porSemana.has(pref.semana))
+        ? state.porSemana.get(pref.semana)
+        : state.semana;
+      return {
+        modo: 'semana',
+        columnas: diasCortos.map((d, i) => ({ titulo: d, subtitulo: '', resalta: i >= 5, nombre: diasLargos[i] })),
+        valor: (h, i) => base[metric][h][i],
+        detalles: (h, i) => base.detalles[h][i],
+        leyenda: pref.semana === '0'
+          ? 'Todas las semanas'
+          : ((state.porSemana.get(pref.semana) || {}).etiqueta || 'Semana')
+      };
     };
 
     const render = () => {
-      const matrix = getMatrix();
-      const detailsMatrix = getDetailsMatrix();
-      const rowsWithData = [];
+      const v = armarVista();
+      const nCols = v.columnas.length;
+
+      // Sólo las horas con actividad: veinticuatro renglones, la mitad en cero,
+      // esconden los que sí tienen algo que decir.
+      const conDatos = [];
       for (let h = 0; h < 24; h++) {
-        const rowSum = matrix[h].reduce((a, b) => a + b, 0);
-        if (rowSum > 0) rowsWithData.push(h);
+        let suma = 0;
+        for (let i = 0; i < nCols; i++) suma += v.valor(h, i);
+        if (suma > 0) conDatos.push(h);
       }
+      const horas = conDatos.length ? conDatos : Array.from({ length: 24 }, (_, h) => h);
 
-      const hours = rowsWithData.length ? rowsWithData : Array.from({ length: 24 }, (_, h) => h);
-      const values = hours.flatMap(h => matrix[h]);
-      const maxVal = Math.max(0, ...values);
-
-      const dayTotals = Array(7).fill(0);
-      const hourTotals = [];
-      let grandTotal = 0;
-      hours.forEach(h => {
-        const row = matrix[h] || Array(7).fill(0);
-        const rowTotal = row.reduce((a, b) => a + b, 0);
-        hourTotals.push(rowTotal);
-        grandTotal += rowTotal;
-        row.forEach((v, idx) => { dayTotals[idx] += v; });
+      let maxVal = 0;
+      const totalesCol = Array(nCols).fill(0);
+      const totalesFila = [];
+      let granTotal = 0;
+      horas.forEach(h => {
+        let suma = 0;
+        for (let i = 0; i < nCols; i++) {
+          const x = v.valor(h, i);
+          if (x > maxVal) maxVal = x;
+          suma += x;
+          totalesCol[i] += x;
+        }
+        totalesFila.push(suma);
+        granTotal += suma;
       });
 
-      const weekButtons = [
-        `<button type="button" class="btn btn-sm ${selectedWeek === '0' ? (tone === 'warning' ? 'btn-warning' : 'btn-primary') : 'btn-outline-secondary'}" data-week="0">Todas</button>`,
-        ...state.weekKeys.map(wk => {
-          const active = selectedWeek === wk;
-          const lbl = state.weeks[wk].label;
-          return `<button type="button" class="btn btn-sm ${active ? (tone === 'warning' ? 'btn-warning' : 'btn-primary') : 'btn-outline-secondary'}" data-week="${wk}">${escHtml(lbl)}</button>`;
-        })
-      ].join('');
-
-      const weekLabel = selectedWeek === '0' ? 'Todas las semanas' : (state.weeks[selectedWeek]?.label || 'Semana');
-      const colorFor = (value) => {
-        if (!maxVal || value <= 0) return '#edf2f7';
-        const t = Math.max(0, Math.min(1, value / maxVal));
-        if (tone === 'warning') {
-          const light = [248, 229, 211];
-          const dark = [245, 146, 49];
-          const r = Math.round(light[0] + (dark[0] - light[0]) * t);
-          const g = Math.round(light[1] + (dark[1] - light[1]) * t);
-          const b = Math.round(light[2] + (dark[2] - light[2]) * t);
-          return `rgb(${r}, ${g}, ${b})`;
-        }
-        const light = [218, 230, 248];
-        const dark = [67, 130, 221];
-        const r = Math.round(light[0] + (dark[0] - light[0]) * t);
-        const g = Math.round(light[1] + (dark[1] - light[1]) * t);
-        const b = Math.round(light[2] + (dark[2] - light[2]) * t);
-        return `rgb(${r}, ${g}, ${b})`;
-      };
+      const botonVista = (clave, etiqueta, icono) =>
+        `<button type="button" class="btn btn-sm ${pref.vista === clave ? activa : inactiva}" data-mdbhm-vista="${clave}">`
+        + `<i class="fas ${icono} me-1"></i>${etiqueta}</button>`;
 
       let html = '';
-      html += `<div class="small text-muted mb-2">Filtrar semana:</div>`;
-      html += `<div class="d-flex flex-wrap gap-2 mb-3">${weekButtons}</div>`;
-      html += `<p class="text-muted small mb-2">Muestra el total de <strong>${unit}</strong> por franja horaria y día de la semana (${escHtml(weekLabel)}). Los colores más oscuros indican mayor actividad.</p>`;
-      html += '<div class="table-responsive"><table class="table table-sm table-bordered text-center align-middle mb-0">';
-      html += '<thead class="table-light"><tr><th class="text-center">Hora</th>';
-      dayLabels.forEach(d => { html += `<th class="text-center">${d}</th>`; });
+      html += '<div class="d-flex flex-wrap align-items-center gap-2 mb-2">';
+      html += '<span class="small text-muted fw-semibold">Ver por:</span>';
+      html += '<div class="btn-group btn-group-sm shadow-sm">'
+        + botonVista('semana', 'Día de la semana', 'fa-calendar-week')
+        + botonVista('fecha', 'Fecha por fecha', 'fa-calendar-day')
+        + '</div>';
+      html += '</div>';
+
+      if (v.modo === 'fecha') {
+        const chips = state.clavesMes.map(k => {
+          const m = state.porMes.get(k);
+          return `<button type="button" class="btn btn-sm ${pref.mes === k ? activa : inactiva}" data-mdbhm-mes="${k}">`
+            + `${escHtml(m.etiqueta)} <span class="badge bg-light text-secondary border fw-normal">${m.dias.length} d</span></button>`;
+        }).join('');
+        html += '<div class="small text-muted mb-2">Elegir mes:</div>';
+        html += '<div class="d-flex flex-wrap gap-2 mb-3">'
+          + (chips || '<span class="text-muted small">Sin fechas con hora de operación en el filtro actual.</span>')
+          + '</div>';
+      } else {
+        const chips = [
+          `<button type="button" class="btn btn-sm ${pref.semana === '0' ? activa : inactiva}" data-mdbhm-semana="0">Todas</button>`,
+          ...state.clavesSemana.map(k => {
+            const s = state.porSemana.get(k);
+            return `<button type="button" class="btn btn-sm ${pref.semana === k ? activa : inactiva}" data-mdbhm-semana="${k}">${escHtml(s.etiqueta)}</button>`;
+          })
+        ].join('');
+        html += '<div class="small text-muted mb-2">Filtrar semana:</div>';
+        html += `<div class="d-flex flex-wrap gap-2 mb-3">${chips}</div>`;
+      }
+
+      const eje = v.modo === 'fecha' ? 'día del mes' : 'día de la semana';
+      html += `<p class="text-muted small mb-2">Muestra el total de <strong>${unit}</strong> por franja horaria y ${eje}`
+        + ` (${escHtml(v.leyenda)}). Los colores más oscuros indican mayor actividad;`
+        + ' haz clic en cualquier celda para ver los vuelos que la forman.</p>';
+
+      if (!nCols) {
+        container.innerHTML = html + '<p class="text-muted small mb-0">No hay nada que dibujar con la selección actual.</p>';
+        cablear(container, v);
+        return;
+      }
+
+      // La columna de la hora se queda fija: con un mes completo la tabla se
+      // desplaza a lo ancho y sin esto se pierde la referencia del renglón.
+      const fija = 'position:sticky;left:0;z-index:2;';
+      const anchoCol = v.modo === 'fecha' ? 'min-width:54px;' : '';
+
+      html += '<div class="table-responsive"><table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size:.8rem">';
+      html += `<thead class="table-light"><tr><th class="text-center" style="${fija}background:#f8f9fa;">Hora</th>`;
+      v.columnas.forEach(c => {
+        const sub = c.subtitulo
+          ? `<div class="text-muted fw-normal" style="font-size:.68rem">${escHtml(c.subtitulo)}</div>`
+          : '';
+        html += `<th class="text-center${c.resalta ? ' table-warning' : ''}" style="${anchoCol}">${escHtml(c.titulo)}${sub}</th>`;
+      });
       html += '<th class="text-center">Total</th></tr></thead><tbody>';
 
-      hours.forEach((h, idx) => {
-        const row = matrix[h] || Array(7).fill(0);
-        html += `<tr><th class="text-center">${String(h).padStart(2, '0')}:00</th>`;
-        row.forEach((v, dayIdx) => {
-          if (v > 0) {
-            html += `<td data-mdbhm-hour="${h}" data-mdbhm-day="${dayIdx}" style="background:${colorFor(v)};font-weight:600;cursor:pointer;" title="Ver vuelos de esta celda">${fmt(v)}</td>`;
+      horas.forEach((h, idx) => {
+        html += `<tr><th class="text-center text-nowrap" style="${fija}background:#fff;">${String(h).padStart(2, '0')}:00</th>`;
+        for (let i = 0; i < nCols; i++) {
+          const val = v.valor(h, i);
+          const fondo = `background:${colorFor(val, maxVal)};font-weight:600;`;
+          if (val > 0) {
+            html += `<td data-mdbhm-hora="${h}" data-mdbhm-col="${i}" style="${fondo}cursor:pointer;" title="Ver vuelos de esta celda">${fmt(val)}</td>`;
           } else {
-            html += `<td style="background:${colorFor(v)};font-weight:600;">${fmt(v)}</td>`;
+            html += `<td style="${fondo}">${fmt(val)}</td>`;
           }
-        });
-        html += `<td class="fw-bold bg-light">${fmt(hourTotals[idx])}</td></tr>`;
+        }
+        html += `<td class="fw-bold bg-light">${fmt(totalesFila[idx])}</td></tr>`;
       });
 
-      html += '<tr class="table-secondary fw-bold"><th>Total</th>';
-      dayTotals.forEach(v => { html += `<td>${fmt(v)}</td>`; });
-      html += `<td>${fmt(grandTotal)}</td></tr>`;
+      html += `<tr class="table-secondary fw-bold"><th style="${fija}background:#e2e3e5;">Total</th>`;
+      totalesCol.forEach(t => { html += `<td>${fmt(t)}</td>`; });
+      html += `<td>${fmt(granTotal)}</td></tr>`;
       html += '</tbody></table></div>';
 
       container.innerHTML = html;
+      cablear(container, v);
+    };
 
-      container.querySelectorAll('button[data-week]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          selectedWeek = btn.dataset.week || '0';
-          render();
-        });
+    const cablear = (raiz, v) => {
+      raiz.querySelectorAll('button[data-mdbhm-vista]').forEach(btn => {
+        btn.addEventListener('click', () => { pref.vista = btn.dataset.mdbhmVista || 'semana'; render(); });
       });
-
-      container.querySelectorAll('td[data-mdbhm-hour]').forEach(td => {
+      raiz.querySelectorAll('button[data-mdbhm-semana]').forEach(btn => {
+        btn.addEventListener('click', () => { pref.semana = btn.dataset.mdbhmSemana || '0'; render(); });
+      });
+      raiz.querySelectorAll('button[data-mdbhm-mes]').forEach(btn => {
+        btn.addEventListener('click', () => { pref.mes = btn.dataset.mdbhmMes || ''; render(); });
+      });
+      raiz.querySelectorAll('td[data-mdbhm-hora]').forEach(td => {
         td.addEventListener('click', () => {
-          const hour = parseInt(td.dataset.mdbhmHour || '-1', 10);
-          const dayIdx = parseInt(td.dataset.mdbhmDay || '-1', 10);
-          if (!Number.isFinite(hour) || hour < 0 || hour > 23 || !Number.isFinite(dayIdx) || dayIdx < 0 || dayIdx > 6) return;
-          const records = (detailsMatrix[hour] && detailsMatrix[hour][dayIdx]) ? detailsMatrix[hour][dayIdx] : [];
-          const weekLabelForTitle = selectedWeek === '0' ? 'Todas las semanas' : (state.weeks[selectedWeek]?.label || 'Semana');
+          const hour = parseInt(td.dataset.mdbhmHora, 10);
+          const i = parseInt(td.dataset.mdbhmCol, 10);
+          if (!Number.isFinite(hour) || !Number.isFinite(i) || !v.columnas[i]) return;
           showOperacionesHeatmapDrilldown({
-            records,
+            records: v.detalles(hour, i),
             metric,
             hour,
-            dayIdx,
-            dayName: dayNames[dayIdx],
-            weekLabel: weekLabelForTitle,
-            unit
+            unit,
+            columna: v.columnas[i].nombre,
+            periodo: v.leyenda
           });
         });
       });
@@ -1565,7 +1719,7 @@
     const records = Array.isArray(ctx.records) ? ctx.records : [];
     const titleMetric = ctx.metric === 'ops' ? 'Operaciones' : 'Pasajeros';
     const badgeClass = ctx.metric === 'ops' ? 'bg-warning text-dark' : 'bg-primary';
-    titleEl.innerHTML = `${titleMetric} · ${escHtml(ctx.dayName || '')} ${String(ctx.hour).padStart(2, '0')}:00 <span class="badge ${badgeClass} fw-normal ms-2">${fmt(records.length)} registro${records.length === 1 ? '' : 's'}</span>`;
+    titleEl.innerHTML = `${titleMetric} · ${escHtml(ctx.columna || '')} ${String(ctx.hour).padStart(2, '0')}:00 <span class="badge ${badgeClass} fw-normal ms-2">${fmt(records.length)} registro${records.length === 1 ? '' : 's'}</span>`;
 
     if (!records.length) {
       bodyEl.innerHTML = '<p class="text-muted mb-0">Sin registros para esta celda.</p>';
@@ -1582,19 +1736,19 @@
     });
 
     const totalPax = sorted.reduce((acc, r) => acc + (Number(r.pax) || 0), 0);
-    let html = `<p class="text-muted small mb-3">Semana: <strong>${escHtml(ctx.weekLabel || 'Todas las semanas')}</strong>. Total de registros: <strong>${fmt(sorted.length)}</strong>. Total de pasajeros: <strong>${fmt(totalPax)}</strong>.</p>`;
+    let html = `<p class="text-muted small mb-3">Período: <strong>${escHtml(ctx.periodo || 'Todas las semanas')}</strong>. Total de registros: <strong>${fmt(sorted.length)}</strong>. Total de pasajeros: <strong>${fmt(totalPax)}</strong>.</p>`;
     html += '<div class="table-responsive"><table class="table table-sm table-hover table-bordered align-middle mb-0" style="font-size:0.82rem">';
     html += '<thead class="table-light"><tr><th>Fecha</th><th>Hora</th><th>Manifiesto</th><th>Aerolínea</th><th>Vuelo</th><th>Ruta</th><th>Tipo de operación</th><th class="text-end">Pax</th></tr></thead><tbody>';
 
     sorted.forEach(r => {
       html += '<tr>';
-      html += `<td class="text-nowrap">${escHtml(r.fecha || '�')}</td>`;
-      html += `<td class="text-nowrap fw-semibold">${escHtml(r.hora || '�')}</td>`;
-      html += `<td>${escHtml(r.manifiesto || '�')}</td>`;
-      html += `<td>${escHtml(r.aerolinea || '�')}</td>`;
-      html += `<td class="fw-semibold">${escHtml(r.vuelo || '�')}</td>`;
-      html += `<td>${escHtml(r.ruta || '�')}</td>`;
-      html += `<td>${escHtml(r.tipoOperacion || '�')}</td>`;
+      html += `<td class="text-nowrap">${escHtml(r.fecha || '—')}</td>`;
+      html += `<td class="text-nowrap fw-semibold">${escHtml(r.hora || '—')}</td>`;
+      html += `<td>${escHtml(r.manifiesto || '—')}</td>`;
+      html += `<td>${escHtml(r.aerolinea || '—')}</td>`;
+      html += `<td class="fw-semibold">${escHtml(r.vuelo || '—')}</td>`;
+      html += `<td>${escHtml(r.ruta || '—')}</td>`;
+      html += `<td>${escHtml(r.tipoOperacion || '—')}</td>`;
       html += `<td class="text-end">${fmt(r.pax || 0)}</td>`;
       html += '</tr>';
     });
@@ -1605,7 +1759,7 @@
   }
 
   /* -------------------------------------------------------
-     HELPER: D�A
+     HELPER: DÍA
   ------------------------------------------------------- */
   function getDayKey(r) {
     const raw = getFecha(r); if (!raw) return '';
@@ -1617,7 +1771,7 @@
   }
 
   /* -------------------------------------------------------
-     SUB-PESTA�A: POR D�A
+     SUB-PESTAÑA: POR DÍA
   ------------------------------------------------------- */
   function renderTabDia() {
     const DIAS_ES = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
@@ -1672,7 +1826,7 @@
                 try { const d = new Date(sorted[items[0].dataIndex] + 'T12:00:00'); return DIAS_ES[d.getDay()] + ', ' + sorted[items[0].dataIndex]; } catch(_) { return sorted[items[0].dataIndex]; }
               },
               label: c => ' ' + c.dataset.label + ': ' + fmt(c.raw) + ' (' + pct(c.raw, totData[c.dataIndex]) + ')',
-              footer: items => 'Total: ' + fmt(totData[items[0].dataIndex]) + ' (' + pct(totData[items[0].dataIndex], grandTotal) + ' del per�odo)'
+              footer: items => 'Total: ' + fmt(totData[items[0].dataIndex]) + ' (' + pct(totData[items[0].dataIndex], grandTotal) + ' del período)'
             }}
           },
           scales: {
@@ -1687,7 +1841,7 @@
     const tbody = document.getElementById('mdb-tbody-dia');
     if (!tbody) return;
     if (!sorted.length) {
-      tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">Sin datos para el per�odo seleccionado</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">Sin datos para el período seleccionado</td></tr>';
       return;
     }
     const totalPax      = sorted.reduce((s, k) => s + map[k].pax, 0);
@@ -1719,7 +1873,7 @@
         '<td class="text-end" style="color:#6610f2">' + fmt(v.depPax) + '</td>' +
         '<td class="text-end" style="color:#fd7e14">' + fmt(v.domPax) + '</td>' +
         '<td class="text-end" style="color:#20c997">' + fmt(v.intPax) + '</td>' +
-        '<td class="text-end text-muted">' + (v.flights ? fmt(Math.round(v.pax / v.flights)) : '�') + '</td>' +
+        '<td class="text-end text-muted">' + (v.flights ? fmt(Math.round(v.pax / v.flights)) : '—') + '</td>' +
         '</tr>';
     }).join('') +
     '<tr class="table-dark fw-bold">' +
@@ -1749,7 +1903,7 @@
     // Hourly breakdown
     renderDiaHourChart();
 
-    // Simultaneous operations by 10-minute slots (�5 min window)
+    // Simultaneous operations by 10-minute slots (±5 min window)
     renderDiaSimultaneousOps();
 
     // Airline breakdown
@@ -2047,7 +2201,7 @@
   function renderTabDatos() { renderTable(_filtered); }
 
   /* -------------------------------------------------------
-     DETALLE POR HORA DE UN D�A ESPEC�FICO
+     DETALLE POR HORA DE UN DÍA ESPECÍFICO
   ------------------------------------------------------- */
   function renderDiaDetail(dateKey) {
     const DIAS_ES2 = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
@@ -2154,9 +2308,9 @@
           '</td>' +
           '<td class="text-end small text-muted">' + av.flights + '</td>' +
           '<td class="text-end fw-bold small">' + fmt(tot) + '</td>' +
-          '<td class="text-end small" style="color:#d63384">' + (av.arr ? fmt(av.arr) : '�') + '</td>' +
-          '<td class="text-end small" style="color:#6610f2">' + (av.dep ? fmt(av.dep) : '�') + '</td>' +
-          '<td class="text-end small text-muted">' + (grandH ? ((tot / grandH * 100).toFixed(1) + '%') : '�') + '</td>' +
+          '<td class="text-end small" style="color:#d63384">' + (av.arr ? fmt(av.arr) : '—') + '</td>' +
+          '<td class="text-end small" style="color:#6610f2">' + (av.dep ? fmt(av.dep) : '—') + '</td>' +
+          '<td class="text-end small text-muted">' + (grandH ? ((tot / grandH * 100).toFixed(1) + '%') : '—') + '</td>' +
           '<td></td>' +
           '</tr>';
       }).join('');
@@ -2173,8 +2327,8 @@
         '<td><div class="d-flex align-items-center gap-1">' + logo + '<span class="fw-semibold small">' + escHtml(name) + '</span></div></td>' +
         '<td class="text-end small">' + v.flights + '</td>' +
         '<td class="text-end fw-bold small">' + fmt(v.pax) + '</td>' +
-        '<td class="text-end small" style="color:#d63384">' + (v.arr ? fmt(v.arr) : '�') + '</td>' +
-        '<td class="text-end small" style="color:#6610f2">' + (v.dep ? fmt(v.dep) : '�') + '</td>' +
+        '<td class="text-end small" style="color:#d63384">' + (v.arr ? fmt(v.arr) : '—') + '</td>' +
+        '<td class="text-end small" style="color:#6610f2">' + (v.dep ? fmt(v.dep) : '—') + '</td>' +
         '<td class="text-end small">' +
           '<div class="d-flex align-items-center gap-1 justify-content-end">' +
             '<div class="progress flex-grow-1" style="height:6px;min-width:30px;">' +
@@ -2182,11 +2336,11 @@
             '<span class="fw-semibold text-primary">' + pct(v.pax, totalPax) + '</span>' +
           '</div>' +
         '</td>' +
-        '<td class="small text-muted">' + escHtml(hList || '�') + '</td>' +
+        '<td class="small text-muted">' + escHtml(hList || '—') + '</td>' +
         '</tr>';
     }).join('') + (airSorted.length ? '<tr class="table-light fw-bold"><td colspan="3" class="text-end small">TOTAL</td><td class="text-end small">' + fmt(totalPax) + '</td><td colspan="4"></td></tr>' : '');
 
-    // Matrix: Hora � Aerol�nea (top 10)
+    // Matrix: Hora × Aerolínea (top 10)
     const matrixCols = airSorted.slice(0, Math.min(10, airSorted.length)).map(([n]) => n);
     const matrixHeader = '<th class="text-nowrap small fw-semibold" style="min-width:80px;">Hora</th><th class="text-end small fw-semibold">Total</th>' +
       matrixCols.map((a, i) => '<th class="text-center" style="font-size:0.65rem;min-width:72px;max-width:90px;background:' + AIR_COLORS[i % AIR_COLORS.length] + '22;">' +
@@ -2260,7 +2414,7 @@
       (hasHour ?
         '<div class="card border-0 shadow-sm mb-3">' +
           '<div class="card-header bg-white border-0 pb-0">' +
-            '<span class="fw-bold small"><i class="fas fa-clock me-2 text-warning"></i>Pasajeros por Hora � ' + escHtml(dayLabel) + '</span>' +
+            '<span class="fw-bold small"><i class="fas fa-clock me-2 text-warning"></i>Pasajeros por Hora · ' + escHtml(dayLabel) + '</span>' +
           '</div>' +
           '<div class="card-body pt-2"><div style="position:relative;height:240px;"><canvas id="mdb-chart-hour-detail"></canvas></div></div>' +
         '</div>'
@@ -2480,10 +2634,11 @@
     { label:'Tipo Manifiesto', key:'TIPO DE MANIFIESTO' },
     { label:'Aerol\u00ednea', key:'AEROLINEA', logo: true },
     { label:'Tipo Op.',        key:'TIPO DE OPERACION', altKey:'TIPO DE OPERACI\u00d3N' },
-    { label:'Equipo',          key:'EQUIPO' },
+    { label:'Equipo',          key:'EQUIPO', altKey:'AERONAVE' },
     { label:'Matr\u00edcula', key:'MATRICULA', altKey:'MAT\u00cdCULA' },
     { label:'# Vuelo',         key:'# DE VUELO' },
     { label:'Dest./Origen',    key:'DESTINO / ORIGEN' },
+    { label:'Hora Op.',        key:'HR. DE OPERACIÓN', altKey:'HR. DE OPERACION' },
     { label:'Total Pax',       key:'TOTAL PAX',          num: true },
     { label:'TUA',             key:'PAX QUE PAGAN TUA', altKey:'PAX. QUE PAGAN TUA', num: true },
     { label:'Infantes',        key:'INFANTES',            num: true },
@@ -2550,8 +2705,10 @@
     if (!window.XLSX) { alert('Librer\u00eda XLSX no disponible.'); return; }
     const ws = XLSX.utils.json_to_sheet(_filtered);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Manifiestos2025');
-    XLSX.writeFile(wb, 'manifiestos_2025_export.xlsx');
+    // El nombre sale del período que se está viendo: el archivo decía
+    // "2025" aunque se exportara abril de 2026 o la maestra.
+    XLSX.utils.book_append_sheet(wb, ws, 'Manifiestos');
+    XLSX.writeFile(wb, 'manifiestos_' + _activeTableKey + '_export.xlsx');
   }
 
   function showOverlay(msg)    { const ov = document.getElementById('mdb-overlay'); if (ov) { ov.style.display='flex'; ov.classList.remove('d-none'); } setOverlayText(msg); }
@@ -2569,16 +2726,16 @@
   function hideBanner() { const b = document.getElementById('mdb-banner'); if (b) b.innerHTML = ''; }
 
   /* -------------------------------------------------------
-     API P�BLICA � usada por manifiestos-upload.js
+     API PÚBLICA — usada por manifiestos-upload.js
   ------------------------------------------------------- */
   /**
-   * Registra un nuevo per�odo en TABLES y a�ade su bot�n en la UI.
+   * Registra un nuevo período en TABLES y añade su botón en la UI.
    * Llamado por manifiestos-upload.js tras importar un mes exitosamente.
    * @param {string} key        - Clave interna, p.ej. "abr2026"
    * @param {string} tableName  - Nombre real de la tabla en Supabase
-   * @param {string} label      - Etiqueta visible, p.ej. "Abril 2026 � Datos mensuales"
+   * @param {string} label      - Etiqueta visible, p.ej. "Abril 2026 — Datos mensuales"
    */
-  /** Recarga forzada de los datos del per�odo activo � llamado tras importar. */
+  /** Recarga forzada de los datos del período activo — llamado tras importar. */
   window.manifiestoReload = function () {
     _loaded = false; _allData = [];
     delete _dataCache[_activeTableKey];
@@ -2592,8 +2749,8 @@
     if (TABLES[key]) { switchMdbPeriod(key); return; }
     TABLES[key] = { name: tableName, label: label };
 
-    // A�adir bot�n en el grupo de per�odos
-    const group = document.querySelector('.btn-group[aria-label="Seleccionar per�odo"]');
+    // Añadir botón en el grupo de períodos
+    const group = document.querySelector('.btn-group[aria-label="Seleccionar período"]');
     if (group) {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -2607,7 +2764,7 @@
       group.appendChild(btn);
     }
 
-    // Cambiar al nuevo per�odo
+    // Cambiar al nuevo período
     switchMdbPeriod(key);
   };
 

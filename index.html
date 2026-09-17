@@ -28662,6 +28662,10 @@ FF
                                     <button type="button" class="btn btn-outline-primary mdb-period-btn" data-table="Manifiestos Junio 2026" id="mdb-period-jun2026">
                                         <i class="fas fa-calendar-day me-1"></i>Junio 2026
                                     </button>
+                                    <button type="button" class="btn btn-outline-primary mdb-period-btn" data-table="maestra_operaciones" id="mdb-period-maestra"
+                                        title="Operaciones de mayo de 2026 en adelante, directo de la maestra de operaciones">
+                                        <i class="fas fa-database me-1"></i>Mayo 2026 →
+                                    </button>
                                 </div>
                                 <span class="badge bg-light text-secondary border fw-normal small" id="mdb-period-label">Manifiestos 2025 — Datos anuales</span>
                                 <!-- Botón importar  solo admin / editor -->
@@ -28796,6 +28800,20 @@ FF
                                             </select>
                                         </div>
 
+                                        <!-- Registros — sólo aplica a la maestra de operaciones, donde
+                                             conviven los manifiestos capturados con los vuelos que el
+                                             itinerario ya programó pero nadie ha conciliado. -->
+                                        <div class="col-auto d-none" id="mdb-filter-origen-wrap">
+                                            <label class="d-flex align-items-center gap-1 form-label small fw-semibold mb-1 text-secondary">
+                                                <i class="fas fa-database text-primary"></i> Registros
+                                            </label>
+                                            <select class="form-select form-select-sm shadow-sm" id="mdb-filter-origen" aria-label="Registros a incluir" style="width:210px;border-color:#c5cbe8;">
+                                                <option value="manifiesto" selected>Con manifiesto</option>
+                                                <option value="itinerario">Sólo programados</option>
+                                                <option value="">Todos los registros</option>
+                                            </select>
+                                        </div>
+
                                         <!-- Separador visual -->
                                         <div class="col-auto d-none d-md-block">
                                             <div style="width:1px;height:38px;background:#d0d5ea;margin-bottom:2px;"></div>
@@ -28834,7 +28852,7 @@ FF
                                     });
                                 }
                                 function updateActiveFilterCount() {
-                                    const ids = ['mdb-filter-year','mdb-filter-month','mdb-filter-direction','mdb-filter-optype','mdb-filter-airline'];
+                                    const ids = ['mdb-filter-year','mdb-filter-month','mdb-filter-direction','mdb-filter-optype','mdb-filter-airline','mdb-filter-origen'];
                                     let count = 0;
                                     ids.forEach(id => { const el = document.getElementById(id); if (el && el.value) count++; });
                                     const badge = document.getElementById('mdb-active-filter-count');
@@ -28858,7 +28876,7 @@ FF
                                     setupToggleGroup('mdb-optype-btngroup', 'mdb-filter-optype',    'btn-success',   'btn-outline-success');
 
                                     // Sincronizar badge al cambiar selects de año/mes/aerolínea
-                                    ['mdb-filter-year','mdb-filter-month','mdb-filter-airline'].forEach(id => {
+                                    ['mdb-filter-year','mdb-filter-month','mdb-filter-airline','mdb-filter-origen'].forEach(id => {
                                         const el = document.getElementById(id);
                                         if (el) el.addEventListener('change', updateActiveFilterCount);
                                     });
@@ -37383,7 +37401,8 @@ FF
     <script src="js/frecuencias_playas.js?v=1"></script>
     <script src="js/session-timeout.js?v=1"></script>
     <script src="js/manifiestos.js"></script>
-    <script src="js/manifiestos-analisis.js"></script>
+    <script src="js/manifiestos-maestra.js?v=20260914"></script>
+    <script src="js/manifiestos-analisis.js?v=20260914"></script>
     <script src="js/manifiestos-carga.js"></script>
     <script src="js/portal-admin.js?v=20260727-archive-category-v2"></script>
     <script src="js/medicas.js?v=2"></script>
