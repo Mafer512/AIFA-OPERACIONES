@@ -21998,39 +21998,29 @@ function _conciGetExportRows() {
     return rows;
 }
 
-async function _conciExportToExcel(kind) {
-    if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
-        alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
-        return;
-    }
-    const rows = _conciGetExportRows();
-    if (!rows.length) {
-        alert('No hay datos cargados para exportar.');
-        return;
-    }
-    const columns = _conciManifestosSummaryColumns;
-    const year = _conciEditFallbackYear;
-    const cols = (Array.isArray(columns) && columns.length) ? columns : Object.keys(rows[0] || {});
-    const optypeCol  = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
-    const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
+// ─── Formato compartido de las exportaciones a Excel ───────────────────────
+// "Exportar Excel" (Total / Pasajeros / Carga) y "Exportar por capturista"
+// arman sus tablas con estas mismas piezas — tipografía, encabezado, bordes,
+// alineaciones, anchos de columna y el valor/color de cada celda según el tipo
+// de columna (aerolínea con su color, fechas y horas, puntualidad, etc.) — para
+// que los dos archivos salgan con el mismo estándar visual.
+const _CONCI_EXPORT_BORDER_SIDE = { style: 'thin', color: { argb: 'FFBFBFBF' } };
+const _CONCI_EXPORT_BORDER = {
+    top: _CONCI_EXPORT_BORDER_SIDE, left: _CONCI_EXPORT_BORDER_SIDE,
+    bottom: _CONCI_EXPORT_BORDER_SIDE, right: _CONCI_EXPORT_BORDER_SIDE,
+};
+const _CONCI_EXPORT_BASE_FONT = { name: 'Noto Sans', size: 10 };
 
-    const isCarga = kind === 'carga';
-    const isTotal = kind === 'total';
-    // 'total' no separa por tipo: junta pasajeros y carga en una sola hoja con
-    // las mismas columnas que se ven en la grilla (mismo criterio que usa
-    // _conciExportPorCapturista para su tabla por capturista), reutilizando el
-    // formato de Pasajeros/Carga columna por columna cuando aplica.
-    const defs = isTotal
-        ? cols.map(c => _CONCI_EXPORT_COLS_TOTAL_BY_HEADER.get(String(c).trim().toUpperCase()) || { h: c, t: 'text', a: [c] })
-        : (isCarga ? _CONCI_EXPORT_COLS_CARGA : _CONCI_EXPORT_COLS_PAX);
-    const dataRows = isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga);
-    if (!dataRows.length) {
-        // Decía "en la vista actual", lo que daba a entender que respeta los
-        // filtros de la tabla. No los respeta: exporta el día completo.
-        alert(isTotal ? 'No hay datos cargados para exportar.' : `No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
-        return;
-    }
+// Definición de columna destino para cada encabezado de la grilla combinada;
+// un encabezado sin definición se exporta tal cual, como texto.
+function _conciExportDefsForColumns(cols) {
+    return cols.map(c => _CONCI_EXPORT_COLS_TOTAL_BY_HEADER.get(String(c).trim().toUpperCase()) || { h: c, t: 'text', a: [c] });
+}
 
+// Fábrica de la función que calcula el valor y estilo de una celda destino
+// según su tipo de columna (def.t). `isCarga` solo cambia de dónde sale el
+// código de aeropuerto para TIPO DE OPERACIÓN en la hoja de Carga.
+function _conciExportMakeCellComputer({ isCarga, year }) {
     const get = _conciExportGetField;
     const routeCity = (raw, isArr) => {
         const parts = String(raw || '').toUpperCase().split(/[-\/]+/).filter(Boolean);
@@ -22132,6 +22122,82 @@ async function _conciExportToExcel(kind) {
                 return { value: String(rawVal || '') };
         }
     };
+    return computeCell;
+}
+
+// Llegada / salida de una fila, según su TIPO DE MANIFIESTO.
+function _conciExportRowIsArrival(row) {
+    const tipoRaw = String(_conciExportGetField(row, ['TIPO DE MANIFIESTO']) || '').toLowerCase();
+    return /lleg|arr/.test(tipoRaw);
+}
+
+// Encabezado de tabla: verde institucional, texto blanco en negritas, centrado.
+function _conciExportStyleHeaderRow(headerRow) {
+    headerRow.height = 34;
+    headerRow.eachCell((cell) => {
+        cell.font = { name: 'Noto Sans', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF15683F' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        cell.border = _CONCI_EXPORT_BORDER;
+    });
+}
+
+// Agrega una fila de datos con el estilo de cada celda (calculado por
+// _conciExportMakeCellComputer) y va midiendo el ancho que necesita cada columna.
+function _conciExportAddDataRow(ws, cells, maxLen) {
+    const xr = ws.addRow(cells.map(c => (c.value === undefined || c.value === null) ? '' : c.value));
+    xr.eachCell((cell, colNumber) => {
+        const meta = cells[colNumber - 1] || {};
+        cell.font = { ..._CONCI_EXPORT_BASE_FONT };
+        if (meta.bold) cell.font.bold = true;
+        if (meta.fontColor) cell.font.color = { argb: meta.fontColor };
+        cell.alignment = meta.align || { vertical: 'middle', horizontal: 'center' };
+        cell.border = _CONCI_EXPORT_BORDER;
+        if (meta.fill) cell.fill = meta.fill;
+        const len = String(cell.value ?? '').length;
+        if (len > maxLen[colNumber - 1]) maxLen[colNumber - 1] = len;
+    });
+    return xr;
+}
+
+function _conciExportColumnWidth(maxLen) {
+    return Math.min(46, Math.max(11, maxLen + 2));
+}
+
+async function _conciExportToExcel(kind) {
+    if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
+        alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
+        return;
+    }
+    const rows = _conciGetExportRows();
+    if (!rows.length) {
+        alert('No hay datos cargados para exportar.');
+        return;
+    }
+    const columns = _conciManifestosSummaryColumns;
+    const year = _conciEditFallbackYear;
+    const cols = (Array.isArray(columns) && columns.length) ? columns : Object.keys(rows[0] || {});
+    const optypeCol  = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
+    const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
+
+    const isCarga = kind === 'carga';
+    const isTotal = kind === 'total';
+    // 'total' no separa por tipo: junta pasajeros y carga en una sola hoja con
+    // las mismas columnas que se ven en la grilla (mismo criterio que usa
+    // _conciExportPorCapturista para su tabla por capturista), reutilizando el
+    // formato de Pasajeros/Carga columna por columna cuando aplica.
+    const defs = isTotal
+        ? _conciExportDefsForColumns(cols)
+        : (isCarga ? _CONCI_EXPORT_COLS_CARGA : _CONCI_EXPORT_COLS_PAX);
+    const dataRows = isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga);
+    if (!dataRows.length) {
+        // Decía "en la vista actual", lo que daba a entender que respeta los
+        // filtros de la tabla. No los respeta: exporta el día completo.
+        alert(isTotal ? 'No hay datos cargados para exportar.' : `No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
+        return;
+    }
+
+    const computeCell =_conciExportMakeCellComputer({ isCarga, year });
 
     const sheetLabel = isTotal ? 'Total' : (isCarga ? 'Carga' : 'Pasajeros');
     const wb = new ExcelJS.Workbook();
@@ -22141,40 +22207,17 @@ async function _conciExportToExcel(kind) {
     const headers = defs.map(d => d.h.trim());
     ws.columns = headers.map(h => ({ header: h, key: h }));
     const maxLen = headers.map(h => h.length);
-    const thin = { style: 'thin', color: { argb: 'FFBFBFBF' } };
-    const border = { top: thin, left: thin, bottom: thin, right: thin };
-    const baseFont = { name: 'Noto Sans', size: 10 };
 
     // Header
-    const headerRow = ws.getRow(1);
-    headerRow.height = 34;
-    headerRow.eachCell((cell) => {
-        cell.font = { name: 'Noto Sans', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF15683F' } };
-        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        cell.border = border;
-    });
+    _conciExportStyleHeaderRow(ws.getRow(1));
 
     // Data
     dataRows.forEach((row) => {
-        const tipoRaw = String(get(row, ['TIPO DE MANIFIESTO']) || '').toLowerCase();
-        const isArr = /lleg|arr/.test(tipoRaw);
-        const cells = defs.map(d => computeCell(d, row, isArr));
-        const xr = ws.addRow(cells.map(c => (c.value === undefined || c.value === null) ? '' : c.value));
-        xr.eachCell((cell, colNumber) => {
-            const meta = cells[colNumber - 1] || {};
-            cell.font = { ...baseFont };
-            if (meta.bold) cell.font.bold = true;
-            if (meta.fontColor) cell.font.color = { argb: meta.fontColor };
-            cell.alignment = meta.align || { vertical: 'middle', horizontal: 'center' };
-            cell.border = border;
-            if (meta.fill) cell.fill = meta.fill;
-            const len = String(cell.value ?? '').length;
-            if (len > maxLen[colNumber - 1]) maxLen[colNumber - 1] = len;
-        });
+        const isArr = _conciExportRowIsArrival(row);
+        _conciExportAddDataRow(ws, defs.map(d => computeCell(d, row, isArr)), maxLen);
     });
 
-    ws.columns.forEach((col, i) => { col.width = Math.min(46, Math.max(11, maxLen[i] + 2)); });
+    ws.columns.forEach((col, i) => { col.width = _conciExportColumnWidth(maxLen[i]); });
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
 
     const buf = await wb.xlsx.writeBuffer();
@@ -22191,6 +22234,9 @@ window.conciExportExcel = _conciExportToExcel;
 // excluyen las columnas internas). Solo entran manifiestos ya capturados —
 // HR. DE RECEPCIÓN es la misma autoridad de estado que usan los contadores y
 // el filtro "Capturados/Sin capturar" (ver _conciIsReceptionColumn).
+// El formato (encabezado, bordes, alineaciones, anchos, colores de aerolínea y
+// de puntualidad, formato de fechas y horas) sale de los mismos helpers que
+// usa "Exportar Excel" > Total (_conciExportMakeCellComputer y compañía).
 const _CONCI_EXPORT_CAPTURISTA_HIDDEN_COLS = new Set(['_fuente', '_isPax', '_validado_itinerario', '_validado_por_itinerario', 'id', 'Año', 'Mes', 'Día']);
 
 // Convierte a número cuando el texto es puramente numérico (para que sume/ordene
@@ -22240,9 +22286,8 @@ async function _conciExportPorCapturista() {
     });
 
     const wb = new ExcelJS.Workbook();
-    const thin = { style: 'thin', color: { argb: 'FFBFBFBF' } };
-    const border = { top: thin, left: thin, bottom: thin, right: thin };
-    const baseFont = { name: 'Noto Sans', size: 10 };
+    const defs = _conciExportDefsForColumns(cols);
+    const computeCell = _conciExportMakeCellComputer({ isCarga: false, year: _conciEditFallbackYear });
     const usedSheetNames = new Set();
     const sheetNameFor = (nombre) => {
         const base = nombre.replace(/[*?:\/\\\[\]]/g, ' ').trim().slice(0, 31) || 'Capturista';
@@ -22277,31 +22322,23 @@ async function _conciExportPorCapturista() {
 
         const headerRow = ws.getRow(3);
         cols.forEach((c, i) => { headerRow.getCell(i + 1).value = c; });
-        headerRow.height = 30;
-        headerRow.eachCell((cell) => {
-            cell.font = { name: 'Noto Sans', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E7D32' } };
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            cell.border = border;
-        });
+        _conciExportStyleHeaderRow(headerRow);
 
         const maxLen = cols.map(c => c.length);
         filas.forEach(row => {
-            const values = cols.map(c => _conciExportCapturistaCellValue(get(row, [c])));
-            const xr = ws.addRow(values);
-            xr.eachCell((cell, colNumber) => {
-                const isObservaciones = /observacion/i.test(cols[colNumber - 1] || '');
-                cell.font = { ...baseFont };
-                cell.alignment = isObservaciones
-                    ? { vertical: 'middle', horizontal: 'left', wrapText: true }
-                    : { vertical: 'middle', horizontal: typeof cell.value === 'number' ? 'right' : 'center' };
-                cell.border = border;
-                const len = String(cell.value ?? '').length;
-                if (len > maxLen[colNumber - 1]) maxLen[colNumber - 1] = len;
-            });
+            const isArr = _conciExportRowIsArrival(row);
+            _conciExportAddDataRow(ws, defs.map((d, i) => {
+                const cell = computeCell(d, row, isArr);
+                if (cell.value !== '' && cell.value !== undefined && cell.value !== null) return cell;
+                // Total recalcula algunas columnas (p. ej. TIPO DE OPERACIÓN a partir
+                // de la ruta) y puede quedar vacío donde la grilla sí tiene el dato
+                // capturado; aquí no se pierde: se conserva lo que ya traía la tabla.
+                const capturado = String(get(row, [cols[i]]) ?? '').trim();
+                return capturado === '' ? cell : { ...cell, value: capturado };
+            }), maxLen);
         });
 
-        cols.forEach((_, i) => { ws.getColumn(i + 1).width = Math.min(46, Math.max(11, maxLen[i] + 2)); });
+        cols.forEach((_, i) => { ws.getColumn(i + 1).width = _conciExportColumnWidth(maxLen[i]); });
         ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: cols.length } };
     }
 
