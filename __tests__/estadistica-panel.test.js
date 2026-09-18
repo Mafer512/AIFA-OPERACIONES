@@ -336,6 +336,21 @@ describe('Panel estadístico · áreas', () => {
     expect(document.querySelectorAll('#est-avisos .est-aviso').length).toBeGreaterThanOrEqual(2);
   });
 
+  test('con un año completo, la tabla de variación no repite el año anterior', async () => {
+    await montar('admin');
+    const encabezados = () => [...document.querySelectorAll('#est-resumen-variaciones thead th')].map((th) => th.textContent.trim());
+    const anio = new Date().getFullYear();
+    // El periodo inmediato anterior y el mismo del año pasado son el mismo año: una sola columna.
+    expect(encabezados()).toEqual(['Indicador', String(anio - 1), String(anio), 'vs año anterior']);
+    // Con un mes, los dos periodos de referencia son distintos y salen los dos.
+    document.getElementById('est-f-desde').value = `${anio}-03-01`;
+    document.getElementById('est-f-hasta').value = `${anio}-03-31`;
+    document.getElementById('est-btn-aplicar').dispatchEvent(new window.Event('click'));
+    await reposar();
+    expect(encabezados()).toHaveLength(6);
+    expect(encabezados()).toContain('vs periodo anterior');
+  });
+
   test('la carga avisa cuando el desglose no está capturado del todo', async () => {
     await montar('admin');
     document.getElementById('est-tab-carga').dispatchEvent(new window.Event('shown.bs.tab'));

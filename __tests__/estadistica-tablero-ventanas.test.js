@@ -164,9 +164,38 @@ describe('el lienzo de Estadística', () => {
   });
 
   test('los avisos van al pie de la página, en blanco como el fondo', () => {
-    expect(css).toMatch(/#pane-conci-estadistica > #est-avisos \{[^}]*order: 2;[^}]*margin-top: auto;/);
+    expect(css).toMatch(/#pane-conci-estadistica > \.est-pie \{[^}]*order: 2;[^}]*margin-top: auto;/);
+    // Los errores también: van en el mismo pie, como texto rojo sin recuadro.
+    expect($('est-avisos').parentElement.id).toBe('est-pie');
+    expect($('est-error').parentElement.id).toBe('est-pie');
+    expect($('est-error').classList.contains('alert')).toBe(false);
+    expect($('est-error').classList.contains('est-aviso-error')).toBe(true);
     expect(css.match(/\n\.est-aviso \{[^}]*\}/)[0]).toMatch(/background: transparent;/);
     expect($('est-avisos').classList.contains('mb-3')).toBe(false);
+  });
+
+  test('en el Informe oficial, el aviso de días sin captura y el error van al pie del informe, sin recuadro amarillo', () => {
+    const informe = html.slice(html.indexOf('<!-- INFORME OFICIAL'), html.indexOf('<!-- /est-pane-informe -->'));
+    const raizInforme = informe.indexOf('id="informe-est-root"');
+    expect(raizInforme).toBeGreaterThan(-1);
+    expect(informe.indexOf('id="informe-est-alertas"')).toBeGreaterThan(raizInforme);
+    expect(informe.indexOf('id="informe-est-error"')).toBeGreaterThan(raizInforme);
+    expect(informe).not.toMatch(/alert-warning[^>]*id="informe-est-alertas"/);
+    expect(informe).toMatch(/<div class="est-pie est-pie-informe">/);
+  });
+
+  test('en el Informe oficial, la gráfica mensual va en un panel con su título y su nota, como las demás ventanas', () => {
+    const informe = html.slice(html.indexOf('<!-- INFORME OFICIAL'), html.indexOf('<!-- /est-pane-informe -->'));
+    expect(informe).toMatch(/<section class="fbo-panel informe-est-grafica[^"]*"[^>]*>\s*<header class="fbo-panel-cabeza"><div><h6 id="informe-est-t-mensual">Operaciones por mes<\/h6><p id="informe-est-chart-nota">/);
+    expect(informe).toMatch(/<div class="fbo-grafica"><canvas id="informe-est-chart-mensual"/);
+    expect(informe).not.toContain('height:280px');
+  });
+
+  test('en el Resumen, la calidad del dato va al pie del tablero, sin recuadros', () => {
+    const tabla = $('est-resumen-variaciones');
+    const calidad = $('est-resumen-calidad');
+    expect(tabla.compareDocumentPosition(calidad) & window.Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(css).toMatch(/\.est-resumen-calidad-pie \.fbo-destacado,\s*body\.dark-mode \.est-resumen-calidad-pie \.fbo-destacado \{[^}]*border: 0;[^}]*background: transparent;/);
   });
 });
 

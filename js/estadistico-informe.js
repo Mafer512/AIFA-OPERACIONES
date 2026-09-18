@@ -149,7 +149,10 @@
         const aggregated = Core.mergeOficiales(Core.aggregateResumen(resumenRows), monthlyRows, annualRows);
         state.generalDirectorio = Core.aplicarAviacionGeneral(aggregated, directorioAg && directorioAg.por_mes);
         state.aggregated = aggregated;
-        state.acumulado = Core.buildAcumulado(aggregated);
+        // state.acumulado alimenta tanto las tarjetas (renderAcumulado) como
+        // el encabezado del PDF (buildReportHtml): se parcha aquí, una sola
+        // vez, para que ambas lean el mismo número oficial.
+        state.acumulado = aplicarOverrideAcumulado(Core.buildAcumulado(aggregated));
         state.aeropuertos = aeropuertos;
         state.anios = aggregated.anios.slice().sort((a, b) => b - a);
         if (!state.anios.includes(state.anioSeleccionado)) {
@@ -219,6 +222,10 @@
             const general = Core.contadorAviacionGeneral(dia && dia.totales);
             if (general) state.diaCorte.general = general;
         }
+        // Misma fuente que state.acumulado: la tarjeta "Cifras del día" y el
+        // recuadro "Cifras del <fecha>" de cada sección del PDF quedan con el
+        // mismo corte oficial, no con lo que haya (o no) en manifiestos hoy.
+        state.diaCorte = aplicarOverrideDiaCorte(state.diaCorte);
     }
 
     // Sólo el año seleccionado: la tabla de participación no usa los demás.
@@ -552,28 +559,116 @@
     }
 
     // ── Herramienta 3: gráfica de barras del desglose mensual ───────────────
+    // Mismos datos de siempre (Comercial, General y Carga por mes); sólo la
+    // presentación sigue el diseño de las demás ventanas de Estadística.
     function renderChart() {
         const canvas = $('informe-est-chart-mensual');
         if (!canvas || !window.Chart || !state.aggregated) return;
         const serie = Core.buildMonthlySeries(state.aggregated, state.anioSeleccionado);
         if (state.chart) { state.chart.destroy(); state.chart = null; }
+        const nota = $('informe-est-chart-nota');
+        if (nota) {
+            nota.textContent = (state.anioSeleccionado ? `Año ${state.anioSeleccionado} · ` : '')
+                + 'Comercial, General y Carga de cada mes. Pasa el cursor sobre un mes para ver el detalle y el total.';
+        }
+        const tema = temaGrafica();
+        const barras = (label, data, color) => ({
+            label, data, backgroundColor: color, hoverBackgroundColor: color,
+            borderRadius: { topLeft: 5, topRight: 5 }, borderSkipped: 'bottom',
+            maxBarThickness: 34, categoryPercentage: 0.74, barPercentage: 0.9
+        });
+        state.chartCanvas = canvas;
         state.chart = new window.Chart(canvas, {
             type: 'bar',
+            // El plugin de cifras viaja con la gráfica: otros módulos lo
+            // registran o lo quitan del registro global a su conveniencia.
+            plugins: window.ChartDataLabels ? [window.ChartDataLabels] : [],
             data: {
                 labels: serie.labels,
                 datasets: [
-                    { label: 'Comercial', data: serie.comercialOps, backgroundColor: '#0d6efd' },
-                    { label: 'General', data: serie.generalOps, backgroundColor: '#20c997' },
-                    { label: 'Carga', data: serie.cargaOps, backgroundColor: '#fd7e14' }
+                    barras('Comercial', serie.comercialOps, '#0d6efd'),
+                    barras('General', serie.generalOps, '#20c997'),
+                    barras('Carga', serie.cargaOps, '#fd7e14')
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                scales: { y: { beginAtZero: true } },
-                plugins: { legend: { position: 'bottom' } }
+                // Aire arriba para la cifra de la barra más alta.
+                layout: { padding: { top: 22 } },
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: {
+                        grid: { display: false, drawBorder: false },
+                        border: { display: false },
+                        ticks: { color: tema.texto, font: { size: 11, weight: '600' } }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: tema.rejilla, drawBorder: false },
+                        border: { display: false },
+                        ticks: { color: tema.suave, callback: (valor) => fmt(valor) }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8, padding: 18, color: tema.texto, font: { size: 12, weight: '600' } }
+                    },
+                    // Al pasar el cursor: las tres cifras del mes y su total.
+                    tooltip: {
+                        backgroundColor: tema.fondoDetalle,
+                        padding: 10,
+                        boxPadding: 4,
+                        usePointStyle: true,
+                        callbacks: {
+                            label: (item) => ` ${item.dataset.label}: ${fmt(item.parsed.y)}`,
+                            footer: (items) => (items.length
+                                ? `Total del mes: ${fmt(items.reduce((suma, item) => suma + (Number(item.parsed.y) || 0), 0))}`
+                                : '')
+                        }
+                    },
+                    // La cifra de cada barra va arriba y en pequeño; los ceros
+                    // (meses por venir) no se escriben. En pantallas angostas no
+                    // caben y quedan en el detalle del cursor.
+                    datalabels: {
+                        display: (ctx) => ctx.chart.width >= 760 && Number(ctx.dataset.data[ctx.dataIndex]) > 0,
+                        anchor: 'end',
+                        align: 'end',
+                        offset: 2,
+                        clamp: true,
+                        color: tema.texto,
+                        font: { size: 10, weight: '600' },
+                        formatter: (valor) => fmt(valor)
+                    }
+                }
             }
         });
+    }
+
+    // Colores de ejes, leyenda y cifras según el tema, como en las demás
+    // ventanas de Estadística: el gris por omisión casi no se lee en oscuro.
+    function temaGrafica() {
+        const oscuro = document.body.classList.contains('dark-mode');
+        return {
+            oscuro,
+            texto: oscuro ? '#cbd5e1' : '#475569',
+            suave: oscuro ? '#94a3b8' : '#64748b',
+            rejilla: oscuro ? 'rgba(148, 163, 184, .16)' : 'rgba(148, 163, 184, .22)',
+            fondoDetalle: oscuro ? '#0f172a' : '#1a2f55'
+        };
+    }
+
+    // Al cambiar entre tema claro y oscuro, la gráfica se vuelve a pintar con
+    // colores legibles: mismos datos, sin consultar.
+    if (window.MutationObserver && document.body) {
+        let temaOscuro = document.body.classList.contains('dark-mode');
+        new MutationObserver(() => {
+            const oscuro = document.body.classList.contains('dark-mode');
+            if (oscuro === temaOscuro) return;
+            temaOscuro = oscuro;
+            if (state.chart && state.chartCanvas && state.chartCanvas.isConnected) renderChart();
+        }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
     }
 
     // ── Herramienta 4: alertas de días sin captura ──────────────────────────
@@ -587,9 +682,11 @@
             return;
         }
         host.classList.remove('d-none');
-        host.innerHTML = `<i class="fas fa-triangle-exclamation me-2"></i>` +
+        // Al pie de la página, como texto sobre el fondo blanco, igual que los
+        // avisos de las demás ventanas de Estadística.
+        host.innerHTML = '<p class="est-aviso est-aviso-aviso"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><span>' +
             `${faltantes.length} día(s) sin ningún manifiesto capturado en los últimos 15 días: ` +
-            `${faltantes.map((f) => escapeHtml(f)).join(', ')} — revisar si falta captura.`;
+            `${faltantes.map((f) => escapeHtml(f)).join(', ')} — revisar si falta captura.</span></p>`;
     }
 
     function respaldoNota(counters) {
@@ -967,12 +1064,18 @@
             </table>`;
     }
 
-    // ── Override temporal de cifras oficiales (Informe Estadístico) ─────────
+    // ── Override temporal de cifras oficiales (módulo Estadística) ──────────
     // Ver js/estadistico-informe-overrides.js para el qué/por qué/cómo
-    // desactivarlo. Sólo se usa aquí, dentro de la construcción del PDF: no
-    // toca state.aggregated/state.acumulado (de ahí siguen leyendo el
-    // tablero en pantalla, la exportación a Excel y el Resumen Estadístico),
-    // ni escribe nada en Supabase.
+    // desactivarlo. ÚNICA fuente: se parcha una sola vez, justo después de
+    // calcular state.acumulado (loadCore) y state.diaCorte (loadDetalle), así
+    // que tanto las tarjetas de pantalla (renderAcumulado/renderDiaCorte)
+    // como el PDF (buildReportHtml, que lee esos mismos state.*) quedan con
+    // las mismas cifras sin duplicar nada. La tabla mensual/cronológica del
+    // PDF (pivot/cronológico) no vive en state — se recalcula cada vez que se
+    // arma el PDF — así que a esa se le aplica aparte, en seccionTipoHtml,
+    // con el mismo objeto de override. No escribe nada en Supabase ni toca
+    // state.aggregated (de ahí sigue leyendo, sin parchar, la exportación a
+    // Excel, el desglose mensual del año seleccionado y el Resumen Estadístico).
     function overrideOficialActivo() {
         const ov = window.OFFICIAL_STATISTICS_OVERRIDES;
         return (ov && ov.activo) ? ov : null;
@@ -981,6 +1084,48 @@
     function overrideOficialTipo(tipo) {
         const ov = overrideOficialActivo();
         return (ov && ov.tipos && ov.tipos[tipo]) || null;
+    }
+
+    // Parcha las tarjetas principales (Operaciones Comercial+General,
+    // Pasajeros, Carga) con el mismo total oficial que usa el PDF.
+    function aplicarOverrideAcumulado(acumulado) {
+        const ov = overrideOficialActivo();
+        if (!ov || !acumulado) return acumulado;
+        Core.TIPOS.forEach((tipo) => {
+            const ovTipo = ov.tipos[tipo];
+            if (!ovTipo || !ovTipo.acumulado || !acumulado[tipo]) return;
+            const t = ovTipo.acumulado;
+            acumulado[tipo].ops = t.ops || 0;
+            if (tipo === 'carga') acumulado[tipo].kg = (t.tons || 0) * 1000;
+            else acumulado[tipo].pax = t.pax || 0;
+        });
+        if (ov.encabezado) {
+            acumulado.totalOperaciones = ov.encabezado.totalOperaciones;
+            acumulado.totalPasajeros = ov.encabezado.totalPasajeros;
+        }
+        return acumulado;
+    }
+
+    // Parcha la tarjeta "Cifras del día" con el corte oficial (ops/pax/kg de
+    // cada tipo) en vez del día real, que en la base local puede estar sin
+    // manifiestos capturados todavía. `general` se crea aquí si hiciera
+    // falta: aggregateDiaCorte no trae esa clave por default.
+    function aplicarOverrideDiaCorte(diaCorte) {
+        const ov = overrideOficialActivo();
+        if (!ov) return diaCorte;
+        const base = diaCorte || { fecha: null, comercial: { ops: 0, pax: 0, kg: 0 }, carga: { ops: 0, pax: 0, kg: 0 } };
+        Core.TIPOS.forEach((tipo) => {
+            const ovTipo = ov.tipos[tipo];
+            if (!ovTipo || !ovTipo.diaCorte) return;
+            const t = ovTipo.diaCorte;
+            base[tipo] = {
+                ops: t.ops || 0,
+                pax: tipo === 'carga' ? 0 : (t.pax || 0),
+                kg: tipo === 'carga' ? (t.tons || 0) * 1000 : 0
+            };
+        });
+        base.fecha = ov.corteIso || base.fecha;
+        return base;
     }
 
     // Parcha en el sitio la tabla mensual (pivot) ya calculada: celdas
@@ -1044,14 +1189,9 @@
                     kg: esKg ? (r.tons || 0) * 1000 : 0
                 }));
             }
-            if (ovTipo.diaCorte) {
-                diaCorteCounters = {
-                    ...(diaCorteCounters || {}),
-                    ops: ovTipo.diaCorte.ops || 0,
-                    pax: esKg ? 0 : (ovTipo.diaCorte.pax || 0),
-                    kg: esKg ? (ovTipo.diaCorte.tons || 0) * 1000 : 0
-                };
-            }
+            // diaCorteCounters (parámetro) ya viene parchado: sale de
+            // state.diaCorte, que aplicarOverrideDiaCorte ya ajustó en
+            // loadDetalle() — misma fuente, sin repetir el override aquí.
         }
 
         const secTexto = esKg ? 'TONELADAS' : 'PASAJEROS';
@@ -1357,7 +1497,10 @@
         const corteDate = new Date(corte.anio, corte.mes - 1, corte.dia);
         const corteTexto = ovGlobal ? ovGlobal.corteTexto : formatDateLong(corteDate);
         const actualizacionTexto = ovGlobal ? ovGlobal.actualizacionTexto : formatDateLong(new Date());
-        const a = ovGlobal ? ovGlobal.encabezado : state.acumulado;
+        // state.acumulado/state.diaCorte: misma fuente ya parchada que usan
+        // las tarjetas de pantalla (aplicarOverrideAcumulado/DiaCorte en
+        // loadCore/loadDetalle) — el PDF no vuelve a leer el override aparte.
+        const a = state.acumulado;
         const d = state.diaCorte || Core.aggregateDiaCorte([]);
         const encabezado = encabezadoHtml(actualizacionTexto, corteTexto);
 
