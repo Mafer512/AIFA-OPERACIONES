@@ -20256,6 +20256,36 @@ function _conciRowIsCargo(row, optypeCol, airlineCol) {
     return false;
 }
 
+// Número de vuelo de un designador de aerolínea ("VB 9501" -> "9501").
+//
+// El itinerario solo guarda el designador completo en "[Arr]/[Dep] Flight
+// Designator": no hay una columna aparte con el número. La base ya define qué
+// es el número —_aifa_flight_number, migración 010: al designador se le quita
+// el código de aerolínea de la propia fila y lo que sigue es el número— y esto
+// hace lo mismo sin depender de la forma del código: 2 letras ("VB"), letra y
+// dígito ("E7"), dígito y letra ("6R", "5Y") o ICAO de 3 letras ("TNO").
+//   1) Con el código de aerolínea de la fila, se quita del inicio del designador.
+//   2) Sin ese código (o si el designador no empieza con él), solo se separa
+//      cuando ya viene separado por un espacio y lo de la izquierda tiene forma
+//      de código de aerolínea ("E7 610").
+// El número se devuelve como texto, sin convertirlo: conserva los ceros a la
+// izquierda ("AM 001" -> "001") y un sufijo de letra ("9501A"). Si no hay forma
+// segura de separarlo (p. ej. ya es solo el número), el valor queda tal cual.
+function _conciNumeroDeVuelo(designador, codigoAerolinea) {
+    const texto = String(designador ?? '').trim();
+    if (!texto) return texto;
+    const NUMERO = '(\\d+[A-Za-z]?)';
+    // Solo letras y dígitos, así que puede ir directo dentro de la expresión.
+    const codigo = String(codigoAerolinea ?? '').toUpperCase().replace(/[^A-Z0-9]+/g, '');
+    if (codigo) {
+        const conCodigo = texto.match(new RegExp(`^${codigo}[\\s\\-/.]*${NUMERO}$`, 'i'));
+        if (conCodigo) return conCodigo[1];
+    }
+    const separado = texto.match(new RegExp(`^([A-Za-z0-9]{2,3})\\s+${NUMERO}$`));
+    if (separado && /[A-Za-z]/.test(separado[1])) return separado[2];
+    return texto;
+}
+
 // Convierte un movimiento del itinerario en una fila de la tabla, escrita
 // siempre en las columnas reales de "Conciliación Manifiestos". Antes había un
 // segundo juego de columnas sintéticas para el caso "sin esquema", pero esos
@@ -20272,7 +20302,7 @@ function _conciVueloToRow(vRow, tipo, outputCols, colm) {
     const row = {};
     outputCols.forEach(c => { row[c] = ''; });
     if (colm.tipo)      row[colm.tipo]      = tipo;
-    if (colm.vuelo)     row[colm.vuelo]      = isArr ? vRow['[Arr] Flight Designator'] : vRow['[Dep] Flight Designator'];
+    if (colm.vuelo)     row[colm.vuelo]      = _conciNumeroDeVuelo(isArr ? vRow['[Arr] Flight Designator'] : vRow['[Dep] Flight Designator'], sourceAirline);
     if (colm.aerolinea) row[colm.aerolinea]  = airlineValue;
     if (colm.optype)    row[colm.optype]     = isArr ? vRow['[Arr] Service Type']      : vRow['[Dep] Service Type'];
     if (colm.aeronave)  row[colm.aeronave]   = vRow['Aircraft type'] || '';
