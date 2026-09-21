@@ -11685,42 +11685,6 @@ function ndwGetAnnualVal(cat, metric, yearStr) {
     return total;
 }
 
-async function ndwLoadCurrentManifestDay(dateKey, force = false) {
-    const cache = window._ndwCurrentManifestDays ||= {};
-    if (cache[dateKey]?.status === 'loading' || (!force && cache[dateKey])) return;
-    cache[dateKey] = { status: 'loading' };
-    try {
-        const client = window.supabaseClient || (window.ensureSupabaseClient && await window.ensureSupabaseClient());
-        if (!client) throw new Error('No hay conexión con manifiestos');
-        const { error: refreshError } = await client.rpc('refrescar_informe_estadistico', { p_forzar: false });
-        // Antes de la migración 028 la vista es en vivo y no existe este RPC.
-        if (refreshError && !['PGRST202', '42883'].includes(refreshError.code)) throw refreshError;
-        const totals = { comercial: { operaciones: 0, pasajeros: 0 }, carga: { operaciones: 0, toneladas: 0 } };
-        let count = 0;
-        for (let offset = 0; ; offset += 1000) {
-            const { data, error } = await client.from('v_informe_manifiestos_normalizado')
-                .select('fecha_operacion,es_carga,pax_total,carga_kg')
-                .eq('fecha_operacion', dateKey).eq('capturado', true)
-                .order('manifiesto_id', { ascending: true }).range(offset, offset + 999);
-            if (error) throw error;
-            const rows = data || [];
-            rows.forEach(row => {
-                const category = row.es_carga ? 'carga' : 'comercial';
-                totals[category].operaciones += 1;
-                if (category === 'carga') totals.carga.toneladas += (Number(row.carga_kg) || 0) / 1000;
-                else totals.comercial.pasajeros += Number(row.pax_total) || 0;
-            });
-            count += rows.length;
-            if (rows.length < 1000) break;
-        }
-        cache[dateKey] = { status: 'ready', totals, count };
-    } catch (error) {
-        cache[dateKey] = { status: 'error' };
-        console.warn('[Inicio Actual] No se pudieron consultar los manifiestos:', error);
-    }
-    renderNavdeckWeeklyBanner();
-}
-
 function renderNavdeckWeeklyBanner() {
     const container = document.getElementById('navdeck-weekly-banner');
     if (!container) return;
@@ -11757,10 +11721,6 @@ function renderNavdeckWeeklyBanner() {
 
         /* ── compute preliminary / latest-data note (shared across all modes) ── */
         const _now = new Date();
-        const currentDateKey = NDW_VIEW_STATE.date || `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
-        const currentDate = parseIsoDay(currentDateKey);
-        const currentManifest = window._ndwCurrentManifestDays?.[currentDateKey];
-        if (mode === 'current' && !currentManifest) ndwLoadCurrentManifestDay(currentDateKey);
         const _MONTH_NAMES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
         const _DOW_ES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
         const _capitalizar = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -11811,17 +11771,15 @@ function renderNavdeckWeeklyBanner() {
         let heroIcon, heroKicker, heroTitle, periodPickerHtml = '';
 
         if (mode === 'current') {
-            /* Actual: manifiestos de la fecha seleccionada, hoy por defecto. */
+            /* Actual: el día más reciente con cifras capturadas. */
             heroIcon   = 'fas fa-bolt';
             heroKicker = 'Cifras del día';
-            heroTitle = `${_capitalizar(_DOW_ES[currentDate.getDay()])} ${currentDate.getDate()} de ${_MONTH_NAMES_ES[currentDate.getMonth()]} de ${currentDate.getFullYear()}`;
+            heroTitle  = _lastCapDate
+                ? `${_capitalizar(_DOW_ES[_lastCapDate.getDay()])} ${_lastCapDate.getDate()} de ${_MONTH_NAMES_ES[_lastCapDate.getMonth()]} de ${_lastCapDate.getFullYear()}`
+                : 'Sin cifras capturadas';
             periodPickerHtml = `
-                <div class="ndw-current-picker"><label>Fecha de manifiestos <input type="date" data-ndw-date value="${currentDateKey}"></label>
-                <button type="button" data-ndw-refresh>Actualizar cifras</button></div>
-                <p class="ndw-tap-hint" aria-live="polite">${currentManifest?.status === 'ready'
-                    ? (currentManifest.count ? 'Manifiestos capturados de la fecha seleccionada · Cifras preliminares' : 'Sin manifiestos capturados para esta fecha')
-                    : currentManifest?.status === 'error' ? 'No fue posible consultar los manifiestos. Intenta actualizar.' : 'Consultando manifiestos…'}</p>
-                <p class="ndw-tap-hint">Aviación General: captura diaria de la misma fecha; 0 si no hay captura.</p>`;
+                <p class="ndw-tap-hint" aria-label="Las tarjetas son interactivas"><i class="fas fa-hand-pointer" aria-hidden="true"></i><span>El día más reciente con cifras capturadas</span></p>
+                ${_prelimHtml}`;
         } else if (mode === 'weekly') {
             const rangeLabel = (typeof formatWeekLabel === 'function')
                 ? formatWeekLabel(weekly)
@@ -11918,9 +11876,9 @@ function renderNavdeckWeeklyBanner() {
         const subSuffix = { current: 'del día', weekly: 'semana', monthly: 'mes', annual: 'año', historic: 'histórico' }[mode] || 'histórico';
         const getCardVal = (def) => {
             if (mode === 'current') {
-                if (def.cat !== 'general') return currentManifest?.status === 'ready' ? currentManifest.totals[def.cat]?.[def.metric] || 0 : null;
+                if (!_lastCapFecha) return 0;
                 const dia = _weekSrcsShared
-                    .map((wk) => (Array.isArray(wk?.dias) ? wk.dias.find((d) => d?.fecha === currentDateKey) : null))
+                    .map((wk) => (Array.isArray(wk?.dias) ? wk.dias.find((d) => d?.fecha === _lastCapFecha) : null))
                     .find(Boolean);
                 return dia ? getWeeklyValue(dia, def.cat, def.metric) : 0;
             }
@@ -11942,7 +11900,7 @@ function renderNavdeckWeeklyBanner() {
                 <span class="ndw-card-icon"><i class="${def.icon}" aria-hidden="true"></i></span>
                 <span class="ndw-card-body">
                     <span class="ndw-card-tag">${escapeHTML(def.label)}</span>
-                    <span class="ndw-card-value">${total === null ? '—' : ndwFormatValue(total, def.metric)}</span>
+                    <span class="ndw-card-value">${ndwFormatValue(total, def.metric)}</span>
                     <span class="ndw-card-sub">${escapeHTML(sub)}</span>
                 </span>
                 <span class="ndw-card-cta" aria-hidden="true"><i class="fas fa-${(mode === 'weekly' || mode === 'current') ? 'chart-column' : 'chart-line'}"></i> ${(mode === 'weekly' || mode === 'current') ? 'Ver detalle' : 'Ver análisis'}</span>
@@ -11976,17 +11934,7 @@ function renderNavdeckWeeklyBanner() {
 
         if (!container._ndwWired) {
             container._ndwWired = true;
-            container.addEventListener('change', (ev) => {
-                if (!ev.target.matches('[data-ndw-date]') || !ev.target.value) return;
-                NDW_VIEW_STATE.date = ev.target.value;
-                renderNavdeckWeeklyBanner();
-            });
             container.addEventListener('click', (ev) => {
-                if (ev.target.closest('[data-ndw-refresh]')) {
-                    ndwLoadCurrentManifestDay(container.querySelector('[data-ndw-date]').value, true);
-                    renderNavdeckWeeklyBanner();
-                    return;
-                }
                 const modeBtn = ev.target.closest('[data-ndw-mode]');
                 if (modeBtn) {
                     NDW_VIEW_STATE.mode = modeBtn.getAttribute('data-ndw-mode');
@@ -12065,20 +12013,10 @@ function openNavdeckWeeklyDetail(idx) {
     const def = NDW_CARD_DEFS[idx];
     if (!def) return;
     const weekly = (typeof getActiveWeeklyDataset === 'function') ? getActiveWeeklyDataset() : null;
-    let days = Array.isArray(weekly?.dias) ? weekly.dias : [];
-    const isCurrent = NDW_VIEW_STATE.mode === 'current';
-    if (isCurrent) {
-        const dateKey = document.querySelector('[data-ndw-date]')?.value;
-        const manifest = window._ndwCurrentManifestDays?.[dateKey];
-        if (def.cat !== 'general' && manifest?.status !== 'ready') return;
-        const sources = [...(typeof WEEKLY_OPERATIONS_DATASETS !== 'undefined' ? WEEKLY_OPERATIONS_DATASETS : []), staticData.operacionesSemanaActual];
-        const generalDay = sources.flatMap(w => w?.dias || []).find(d => d.fecha === dateKey);
-        days = [{ fecha: dateKey, label: dateKey, comercial: manifest?.totals?.comercial,
-            carga: manifest?.totals?.carga, general: generalDay?.general || {} }];
-    }
+    const days = Array.isArray(weekly?.dias) ? weekly.dias : [];
     if (!days.length) return;
 
-    const rangeLabel = isCurrent ? days[0].fecha : (typeof formatWeekLabel === 'function') ? formatWeekLabel(weekly) : 'Semana reciente';
+    const rangeLabel = (typeof formatWeekLabel === 'function') ? formatWeekLabel(weekly) : 'Semana reciente';
     const rows = days.map(d => ({
         label: d.labelFull || d.label || d.fecha || '',
         value: getWeeklyValue(d, def.cat, def.metric)
@@ -12149,7 +12087,7 @@ function openNavdeckWeeklyDetail(idx) {
                 </div>
             </div>
             <div class="ndw-modal-kpis">
-                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(total, def.metric)}</span><span class="ndw-kpi-lbl">${isCurrent ? 'Total del día' : 'Total semana'}</span></div>
+                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(total, def.metric)}</span><span class="ndw-kpi-lbl">Total semana</span></div>
                 <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(avg, def.metric)}</span><span class="ndw-kpi-lbl">Promedio diario</span></div>
                 <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(peak?.value || 0, def.metric)}</span><span class="ndw-kpi-lbl">Día pico</span></div>
             </div>
@@ -20256,36 +20194,6 @@ function _conciRowIsCargo(row, optypeCol, airlineCol) {
     return false;
 }
 
-// Número de vuelo de un designador de aerolínea ("VB 9501" -> "9501").
-//
-// El itinerario solo guarda el designador completo en "[Arr]/[Dep] Flight
-// Designator": no hay una columna aparte con el número. La base ya define qué
-// es el número —_aifa_flight_number, migración 010: al designador se le quita
-// el código de aerolínea de la propia fila y lo que sigue es el número— y esto
-// hace lo mismo sin depender de la forma del código: 2 letras ("VB"), letra y
-// dígito ("E7"), dígito y letra ("6R", "5Y") o ICAO de 3 letras ("TNO").
-//   1) Con el código de aerolínea de la fila, se quita del inicio del designador.
-//   2) Sin ese código (o si el designador no empieza con él), solo se separa
-//      cuando ya viene separado por un espacio y lo de la izquierda tiene forma
-//      de código de aerolínea ("E7 610").
-// El número se devuelve como texto, sin convertirlo: conserva los ceros a la
-// izquierda ("AM 001" -> "001") y un sufijo de letra ("9501A"). Si no hay forma
-// segura de separarlo (p. ej. ya es solo el número), el valor queda tal cual.
-function _conciNumeroDeVuelo(designador, codigoAerolinea) {
-    const texto = String(designador ?? '').trim();
-    if (!texto) return texto;
-    const NUMERO = '(\\d+[A-Za-z]?)';
-    // Solo letras y dígitos, así que puede ir directo dentro de la expresión.
-    const codigo = String(codigoAerolinea ?? '').toUpperCase().replace(/[^A-Z0-9]+/g, '');
-    if (codigo) {
-        const conCodigo = texto.match(new RegExp(`^${codigo}[\\s\\-/.]*${NUMERO}$`, 'i'));
-        if (conCodigo) return conCodigo[1];
-    }
-    const separado = texto.match(new RegExp(`^([A-Za-z0-9]{2,3})\\s+${NUMERO}$`));
-    if (separado && /[A-Za-z]/.test(separado[1])) return separado[2];
-    return texto;
-}
-
 // Convierte un movimiento del itinerario en una fila de la tabla, escrita
 // siempre en las columnas reales de "Conciliación Manifiestos". Antes había un
 // segundo juego de columnas sintéticas para el caso "sin esquema", pero esos
@@ -20302,7 +20210,7 @@ function _conciVueloToRow(vRow, tipo, outputCols, colm) {
     const row = {};
     outputCols.forEach(c => { row[c] = ''; });
     if (colm.tipo)      row[colm.tipo]      = tipo;
-    if (colm.vuelo)     row[colm.vuelo]      = _conciNumeroDeVuelo(isArr ? vRow['[Arr] Flight Designator'] : vRow['[Dep] Flight Designator'], sourceAirline);
+    if (colm.vuelo)     row[colm.vuelo]      = isArr ? vRow['[Arr] Flight Designator'] : vRow['[Dep] Flight Designator'];
     if (colm.aerolinea) row[colm.aerolinea]  = airlineValue;
     if (colm.optype)    row[colm.optype]     = isArr ? vRow['[Arr] Service Type']      : vRow['[Dep] Service Type'];
     if (colm.aeronave)  row[colm.aeronave]   = vRow['Aircraft type'] || '';
@@ -21572,24 +21480,15 @@ function _conciAttachDateMask(input) {
     // `notify` reemite el evento "input" que el teclado ya no dispara (se
     // intercepta con preventDefault). Sin él, el editor de la celda nunca se
     // entera de que hubo captura y no guardaría lo tecleado.
-    let ultimoTexto = '';
     const render = (digits, notify) => {
         const raw = onlyDigits(digits).slice(0, 8);
         input.dataset.conciDateDigits = raw;
-        input.value = ultimoTexto = _conciFormatDateMask(raw);
+        input.value = _conciFormatDateMask(raw);
         if (document.activeElement === input) {
             const end = input.value.length;
             input.setSelectionRange(end, end);
         }
         if (notify) input.dispatchEvent(new Event('input', { bubbles: true }));
-    };
-    // Corrección en medio de la fecha: el cursor se queda donde se editó.
-    const renderEnCursor = ({ digitos, cursor }) => {
-        input.dataset.conciDateDigits = digitos;
-        input.value = ultimoTexto = _conciFormatDateMaskSinSiglo(digitos);
-        const pos = _conciPosDespuesDeDigitos(input.value, cursor);
-        input.setSelectionRange(pos, pos);
-        input.dispatchEvent(new Event('input', { bubbles: true }));
     };
 
     // El valor con el que se abre la celda viene en ISO.
@@ -21600,14 +21499,6 @@ function _conciAttachDateMask(input) {
     // el siglo se completa solo.
     input.addEventListener('keydown', (ev) => {
         if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
-        if (/^\d$/.test(ev.key) || ev.key === 'Backspace' || ev.key === 'Delete') {
-            const edicion = _conciEditarFechaEnCursor(input, ev.key);
-            if (edicion) {
-                ev.preventDefault();
-                renderEnCursor(edicion);
-                return;
-            }
-        }
         const raw = input.dataset.conciDateDigits || '';
         const hasSelection = input.selectionStart !== input.selectionEnd;
         if (/^\d$/.test(ev.key)) {
@@ -21628,7 +21519,7 @@ function _conciAttachDateMask(input) {
 
     // Red para lo que no viene del teclado: pegar, autocompletar, etc.
     input.addEventListener('input', () => {
-        if (input.value === ultimoTexto) return;
+        if (input.value === _conciFormatDateMask(input.dataset.conciDateDigits || '')) return;
         // Ya se está propagando un "input" real; no hace falta reemitirlo.
         render(input.value, false);
     });
@@ -22107,29 +21998,39 @@ function _conciGetExportRows() {
     return rows;
 }
 
-// ─── Formato compartido de las exportaciones a Excel ───────────────────────
-// "Exportar Excel" (Total / Pasajeros / Carga) y "Exportar por capturista"
-// arman sus tablas con estas mismas piezas — tipografía, encabezado, bordes,
-// alineaciones, anchos de columna y el valor/color de cada celda según el tipo
-// de columna (aerolínea con su color, fechas y horas, puntualidad, etc.) — para
-// que los dos archivos salgan con el mismo estándar visual.
-const _CONCI_EXPORT_BORDER_SIDE = { style: 'thin', color: { argb: 'FFBFBFBF' } };
-const _CONCI_EXPORT_BORDER = {
-    top: _CONCI_EXPORT_BORDER_SIDE, left: _CONCI_EXPORT_BORDER_SIDE,
-    bottom: _CONCI_EXPORT_BORDER_SIDE, right: _CONCI_EXPORT_BORDER_SIDE,
-};
-const _CONCI_EXPORT_BASE_FONT = { name: 'Noto Sans', size: 10 };
+async function _conciExportToExcel(kind) {
+    if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
+        alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
+        return;
+    }
+    const rows = _conciGetExportRows();
+    if (!rows.length) {
+        alert('No hay datos cargados para exportar.');
+        return;
+    }
+    const columns = _conciManifestosSummaryColumns;
+    const year = _conciEditFallbackYear;
+    const cols = (Array.isArray(columns) && columns.length) ? columns : Object.keys(rows[0] || {});
+    const optypeCol  = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
+    const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
 
-// Definición de columna destino para cada encabezado de la grilla combinada;
-// un encabezado sin definición se exporta tal cual, como texto.
-function _conciExportDefsForColumns(cols) {
-    return cols.map(c => _CONCI_EXPORT_COLS_TOTAL_BY_HEADER.get(String(c).trim().toUpperCase()) || { h: c, t: 'text', a: [c] });
-}
+    const isCarga = kind === 'carga';
+    const isTotal = kind === 'total';
+    // 'total' no separa por tipo: junta pasajeros y carga en una sola hoja con
+    // las mismas columnas que se ven en la grilla (mismo criterio que usa
+    // _conciExportPorCapturista para su tabla por capturista), reutilizando el
+    // formato de Pasajeros/Carga columna por columna cuando aplica.
+    const defs = isTotal
+        ? cols.map(c => _CONCI_EXPORT_COLS_TOTAL_BY_HEADER.get(String(c).trim().toUpperCase()) || { h: c, t: 'text', a: [c] })
+        : (isCarga ? _CONCI_EXPORT_COLS_CARGA : _CONCI_EXPORT_COLS_PAX);
+    const dataRows = isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga);
+    if (!dataRows.length) {
+        // Decía "en la vista actual", lo que daba a entender que respeta los
+        // filtros de la tabla. No los respeta: exporta el día completo.
+        alert(isTotal ? 'No hay datos cargados para exportar.' : `No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
+        return;
+    }
 
-// Fábrica de la función que calcula el valor y estilo de una celda destino
-// según su tipo de columna (def.t). `isCarga` solo cambia de dónde sale el
-// código de aeropuerto para TIPO DE OPERACIÓN en la hoja de Carga.
-function _conciExportMakeCellComputer({ isCarga, year }) {
     const get = _conciExportGetField;
     const routeCity = (raw, isArr) => {
         const parts = String(raw || '').toUpperCase().split(/[-\/]+/).filter(Boolean);
@@ -22231,82 +22132,6 @@ function _conciExportMakeCellComputer({ isCarga, year }) {
                 return { value: String(rawVal || '') };
         }
     };
-    return computeCell;
-}
-
-// Llegada / salida de una fila, según su TIPO DE MANIFIESTO.
-function _conciExportRowIsArrival(row) {
-    const tipoRaw = String(_conciExportGetField(row, ['TIPO DE MANIFIESTO']) || '').toLowerCase();
-    return /lleg|arr/.test(tipoRaw);
-}
-
-// Encabezado de tabla: verde institucional, texto blanco en negritas, centrado.
-function _conciExportStyleHeaderRow(headerRow) {
-    headerRow.height = 34;
-    headerRow.eachCell((cell) => {
-        cell.font = { name: 'Noto Sans', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF15683F' } };
-        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        cell.border = _CONCI_EXPORT_BORDER;
-    });
-}
-
-// Agrega una fila de datos con el estilo de cada celda (calculado por
-// _conciExportMakeCellComputer) y va midiendo el ancho que necesita cada columna.
-function _conciExportAddDataRow(ws, cells, maxLen) {
-    const xr = ws.addRow(cells.map(c => (c.value === undefined || c.value === null) ? '' : c.value));
-    xr.eachCell((cell, colNumber) => {
-        const meta = cells[colNumber - 1] || {};
-        cell.font = { ..._CONCI_EXPORT_BASE_FONT };
-        if (meta.bold) cell.font.bold = true;
-        if (meta.fontColor) cell.font.color = { argb: meta.fontColor };
-        cell.alignment = meta.align || { vertical: 'middle', horizontal: 'center' };
-        cell.border = _CONCI_EXPORT_BORDER;
-        if (meta.fill) cell.fill = meta.fill;
-        const len = String(cell.value ?? '').length;
-        if (len > maxLen[colNumber - 1]) maxLen[colNumber - 1] = len;
-    });
-    return xr;
-}
-
-function _conciExportColumnWidth(maxLen) {
-    return Math.min(46, Math.max(11, maxLen + 2));
-}
-
-async function _conciExportToExcel(kind) {
-    if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
-        alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
-        return;
-    }
-    const rows = _conciGetExportRows();
-    if (!rows.length) {
-        alert('No hay datos cargados para exportar.');
-        return;
-    }
-    const columns = _conciManifestosSummaryColumns;
-    const year = _conciEditFallbackYear;
-    const cols = (Array.isArray(columns) && columns.length) ? columns : Object.keys(rows[0] || {});
-    const optypeCol  = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
-    const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
-
-    const isCarga = kind === 'carga';
-    const isTotal = kind === 'total';
-    // 'total' no separa por tipo: junta pasajeros y carga en una sola hoja con
-    // las mismas columnas que se ven en la grilla (mismo criterio que usa
-    // _conciExportPorCapturista para su tabla por capturista), reutilizando el
-    // formato de Pasajeros/Carga columna por columna cuando aplica.
-    const defs = isTotal
-        ? _conciExportDefsForColumns(cols)
-        : (isCarga ? _CONCI_EXPORT_COLS_CARGA : _CONCI_EXPORT_COLS_PAX);
-    const dataRows = isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga);
-    if (!dataRows.length) {
-        // Decía "en la vista actual", lo que daba a entender que respeta los
-        // filtros de la tabla. No los respeta: exporta el día completo.
-        alert(isTotal ? 'No hay datos cargados para exportar.' : `No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
-        return;
-    }
-
-    const computeCell =_conciExportMakeCellComputer({ isCarga, year });
 
     const sheetLabel = isTotal ? 'Total' : (isCarga ? 'Carga' : 'Pasajeros');
     const wb = new ExcelJS.Workbook();
@@ -22316,17 +22141,40 @@ async function _conciExportToExcel(kind) {
     const headers = defs.map(d => d.h.trim());
     ws.columns = headers.map(h => ({ header: h, key: h }));
     const maxLen = headers.map(h => h.length);
+    const thin = { style: 'thin', color: { argb: 'FFBFBFBF' } };
+    const border = { top: thin, left: thin, bottom: thin, right: thin };
+    const baseFont = { name: 'Noto Sans', size: 10 };
 
     // Header
-    _conciExportStyleHeaderRow(ws.getRow(1));
+    const headerRow = ws.getRow(1);
+    headerRow.height = 34;
+    headerRow.eachCell((cell) => {
+        cell.font = { name: 'Noto Sans', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF15683F' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        cell.border = border;
+    });
 
     // Data
     dataRows.forEach((row) => {
-        const isArr = _conciExportRowIsArrival(row);
-        _conciExportAddDataRow(ws, defs.map(d => computeCell(d, row, isArr)), maxLen);
+        const tipoRaw = String(get(row, ['TIPO DE MANIFIESTO']) || '').toLowerCase();
+        const isArr = /lleg|arr/.test(tipoRaw);
+        const cells = defs.map(d => computeCell(d, row, isArr));
+        const xr = ws.addRow(cells.map(c => (c.value === undefined || c.value === null) ? '' : c.value));
+        xr.eachCell((cell, colNumber) => {
+            const meta = cells[colNumber - 1] || {};
+            cell.font = { ...baseFont };
+            if (meta.bold) cell.font.bold = true;
+            if (meta.fontColor) cell.font.color = { argb: meta.fontColor };
+            cell.alignment = meta.align || { vertical: 'middle', horizontal: 'center' };
+            cell.border = border;
+            if (meta.fill) cell.fill = meta.fill;
+            const len = String(cell.value ?? '').length;
+            if (len > maxLen[colNumber - 1]) maxLen[colNumber - 1] = len;
+        });
     });
 
-    ws.columns.forEach((col, i) => { col.width = _conciExportColumnWidth(maxLen[i]); });
+    ws.columns.forEach((col, i) => { col.width = Math.min(46, Math.max(11, maxLen[i] + 2)); });
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
 
     const buf = await wb.xlsx.writeBuffer();
@@ -22343,9 +22191,6 @@ window.conciExportExcel = _conciExportToExcel;
 // excluyen las columnas internas). Solo entran manifiestos ya capturados —
 // HR. DE RECEPCIÓN es la misma autoridad de estado que usan los contadores y
 // el filtro "Capturados/Sin capturar" (ver _conciIsReceptionColumn).
-// El formato (encabezado, bordes, alineaciones, anchos, colores de aerolínea y
-// de puntualidad, formato de fechas y horas) sale de los mismos helpers que
-// usa "Exportar Excel" > Total (_conciExportMakeCellComputer y compañía).
 const _CONCI_EXPORT_CAPTURISTA_HIDDEN_COLS = new Set(['_fuente', '_isPax', '_validado_itinerario', '_validado_por_itinerario', 'id', 'Año', 'Mes', 'Día']);
 
 // Convierte a número cuando el texto es puramente numérico (para que sume/ordene
@@ -22395,8 +22240,9 @@ async function _conciExportPorCapturista() {
     });
 
     const wb = new ExcelJS.Workbook();
-    const defs = _conciExportDefsForColumns(cols);
-    const computeCell = _conciExportMakeCellComputer({ isCarga: false, year: _conciEditFallbackYear });
+    const thin = { style: 'thin', color: { argb: 'FFBFBFBF' } };
+    const border = { top: thin, left: thin, bottom: thin, right: thin };
+    const baseFont = { name: 'Noto Sans', size: 10 };
     const usedSheetNames = new Set();
     const sheetNameFor = (nombre) => {
         const base = nombre.replace(/[*?:\/\\\[\]]/g, ' ').trim().slice(0, 31) || 'Capturista';
@@ -22431,23 +22277,31 @@ async function _conciExportPorCapturista() {
 
         const headerRow = ws.getRow(3);
         cols.forEach((c, i) => { headerRow.getCell(i + 1).value = c; });
-        _conciExportStyleHeaderRow(headerRow);
+        headerRow.height = 30;
+        headerRow.eachCell((cell) => {
+            cell.font = { name: 'Noto Sans', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E7D32' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            cell.border = border;
+        });
 
         const maxLen = cols.map(c => c.length);
         filas.forEach(row => {
-            const isArr = _conciExportRowIsArrival(row);
-            _conciExportAddDataRow(ws, defs.map((d, i) => {
-                const cell = computeCell(d, row, isArr);
-                if (cell.value !== '' && cell.value !== undefined && cell.value !== null) return cell;
-                // Total recalcula algunas columnas (p. ej. TIPO DE OPERACIÓN a partir
-                // de la ruta) y puede quedar vacío donde la grilla sí tiene el dato
-                // capturado; aquí no se pierde: se conserva lo que ya traía la tabla.
-                const capturado = String(get(row, [cols[i]]) ?? '').trim();
-                return capturado === '' ? cell : { ...cell, value: capturado };
-            }), maxLen);
+            const values = cols.map(c => _conciExportCapturistaCellValue(get(row, [c])));
+            const xr = ws.addRow(values);
+            xr.eachCell((cell, colNumber) => {
+                const isObservaciones = /observacion/i.test(cols[colNumber - 1] || '');
+                cell.font = { ...baseFont };
+                cell.alignment = isObservaciones
+                    ? { vertical: 'middle', horizontal: 'left', wrapText: true }
+                    : { vertical: 'middle', horizontal: typeof cell.value === 'number' ? 'right' : 'center' };
+                cell.border = border;
+                const len = String(cell.value ?? '').length;
+                if (len > maxLen[colNumber - 1]) maxLen[colNumber - 1] = len;
+            });
         });
 
-        cols.forEach((_, i) => { ws.getColumn(i + 1).width = _conciExportColumnWidth(maxLen[i]); });
+        cols.forEach((_, i) => { ws.getColumn(i + 1).width = Math.min(46, Math.max(11, maxLen[i] + 2)); });
         ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: cols.length } };
     }
 
@@ -24433,11 +24287,7 @@ function _conciInitCamposFecha(raiz) {
         if (!iso) return;
         mask.dataset.conciFechaLista = '1';
 
-        // El siglo "20" que se completa solo al 6o digito ("01/10/20" -> "01/10/2020")
-        // ocupa los 10 caracteres del maxlength; mientras siga siendo el
-        // provisional, seguir tecleando el anio lo sustituye (igual que en las celdas).
-        let sigloAuto = false;
-        const sincronizar = () => { sigloAuto = false; _conciSincronizarCampoFecha(mask, iso); };
+        const sincronizar = () => _conciSincronizarCampoFecha(mask, iso);
         sincronizar();
         _conciInterceptarValorIso(iso, sincronizar);
         // El calendario nativo escribe el valor por dentro, sin pasar por el
@@ -24448,48 +24298,22 @@ function _conciInitCamposFecha(raiz) {
         // que la fecha este completa, para no recargar la tabla a media captura.
         mask.addEventListener('input', () => {
             const cursorAlFinal = mask.selectionStart === mask.value.length;
-            const digitosTecleados = mask.value.replace(/\D/g, '').length;
             mask.value = _conciFormatDateMask(mask.value);
             if (cursorAlFinal) {
                 try { mask.setSelectionRange(mask.value.length, mask.value.length); } catch (_) { /* sin soporte */ }
             }
             if (_conciMaskedDateToIso(mask.value)) _conciAplicarFechaMask(mask, iso);
-            sigloAuto = cursorAlFinal && digitosTecleados === 6;
         });
 
         // Al salir del campo se completa el anio ("11/08/26" -> "11/08/2026") y
         // se confirma. Una fecha incompleta se descarta: es mejor un campo vacio
         // que un filtro apuntando a un dia que nadie quiso.
         const confirmar = () => {
-            sigloAuto = false;
             mask.value = _conciExpandDateMaskYear(mask.value);
             _conciAplicarFechaMask(mask, iso);
         };
         mask.addEventListener('blur', confirmar);
         mask.addEventListener('keydown', (ev) => {
-            // Corrección en medio de la fecha: se edita sólo donde está el
-            // cursor (el maxlength y el reformateo no lo permitían).
-            if (!ev.ctrlKey && !ev.metaKey && !ev.altKey
-                && (/^\d$/.test(ev.key) || ev.key === 'Backspace' || ev.key === 'Delete')) {
-                const fin = mask.value.length;
-                if (sigloAuto && /^\d$/.test(ev.key) && mask.selectionStart === fin && mask.selectionEnd === fin) {
-                    ev.preventDefault();
-                    sigloAuto = false;
-                    const d = mask.value.replace(/\D/g, '');
-                    mask.value = _conciFormatDateMask(d.slice(0, 4) + d.slice(6) + ev.key);
-                    return;
-                }
-                const edicion = _conciEditarFechaEnCursor(mask, ev.key);
-                if (edicion) {
-                    ev.preventDefault();
-                    sigloAuto = false;
-                    mask.value = _conciFormatDateMaskSinSiglo(edicion.digitos);
-                    const pos = _conciPosDespuesDeDigitos(mask.value, edicion.cursor);
-                    try { mask.setSelectionRange(pos, pos); } catch (_) { /* sin soporte */ }
-                    if (edicion.digitos.length === 8 && _conciMaskedDateToIso(mask.value)) _conciAplicarFechaMask(mask, iso);
-                    return;
-                }
-            }
             if (ev.key === 'Enter') { ev.preventDefault(); confirmar(); }
             else if (ev.key === 'Escape') { sincronizar(); mask.blur(); }
         });
@@ -24535,61 +24359,6 @@ function _conciFormatDateMask(value) {
     if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
     const year = digits.slice(4);
     return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${year.length === 2 ? `20${year}` : year}`;
-}
-
-// Igual que _conciFormatDateMask pero sin completar el siglo: al corregir en
-// medio de la fecha lo que se ve debe corresponder dígito a dígito con lo
-// capturado, para que el cursor quede donde el usuario lo dejó.
-function _conciFormatDateMaskSinSiglo(value) {
-    const digits = String(value || '').replace(/\D/g, '').slice(0, 8);
-    if (digits.length <= 2) return digits;
-    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-}
-
-// Posición del cursor en el texto con máscara justo después de `n` dígitos
-// (si ahí sigue una diagonal, queda después de ella).
-function _conciPosDespuesDeDigitos(texto, n) {
-    if (n <= 0) return 0;
-    let vistos = 0;
-    for (let i = 0; i < texto.length; i++) {
-        if (/\d/.test(texto[i]) && ++vistos === n) return texto[i + 1] === '/' ? i + 2 : i + 1;
-    }
-    return texto.length;
-}
-
-// Edición en la posición del cursor: un dígito, Backspace o Delete cuando el
-// cursor está en medio de la fecha o hay una parte seleccionada. Devuelve los
-// dígitos resultantes y cuántos quedan antes del cursor, o null si el caso es
-// el de siempre (cursor al final o todo seleccionado) y lo resuelve quien llama.
-// Con la fecha completa (8 dígitos) un dígito sobrescribe el que está delante
-// del cursor, así "21/09/2026" → "20/09/2026" cambiando sólo el "1".
-function _conciEditarFechaEnCursor(input, tecla) {
-    const texto = String(input.value || '');
-    const ini = input.selectionStart;
-    const fin = input.selectionEnd;
-    if (ini == null || fin == null) return null;
-    const conSeleccion = ini !== fin;
-    if (!conSeleccion && ini >= texto.length) return null;
-    if (conSeleccion && ini === 0 && fin >= texto.length) return null;
-
-    const digitos = texto.replace(/\D/g, '');
-    const contar = (hasta) => texto.slice(0, hasta).replace(/\D/g, '').length;
-    let a = contar(ini);
-    let b = contar(fin);
-    const nuevo = /^\d$/.test(tecla) ? tecla : '';
-    if (!conSeleccion) {
-        if (tecla === 'Backspace') {
-            if (a === 0) return { digitos, cursor: 0 };
-            a -= 1;
-        } else if (tecla === 'Delete' || digitos.length >= 8) {
-            b = a + 1;
-        }
-    }
-    return {
-        digitos: (digitos.slice(0, a) + nuevo + digitos.slice(b)).slice(0, 8),
-        cursor: a + nuevo.length,
-    };
 }
 
 // Convierte lo capturado en la máscara a ISO (yyyy-mm-dd), o '' si aún no es
@@ -29732,18 +29501,6 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
     // encima de usar esas flechas para moverse entre los segmentos día/mes/año
     // del selector de fecha nativo (para eso ya sirve escribir los números,
     // que avanzan de segmento solos).
-    // Excepción en el campo de fecha: ←/→ mueven el cursor dentro de la fecha
-    // (y con Shift seleccionan) mientras no esté en el borde; en el borde
-    // siguen pasando de campo como siempre.
-    const flechaDentroDeFecha = (e) => {
-        if (e.target !== dateInput || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return false;
-        if (e.shiftKey) return true;
-        const ini = dateInput.selectionStart;
-        const fin = dateInput.selectionEnd;
-        if (ini == null || fin == null) return false;
-        if (ini !== fin) return true;
-        return e.key === 'ArrowLeft' ? ini > 0 : fin < dateInput.value.length;
-    };
     const onKeydown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -29751,8 +29508,6 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
         } else if (e.key === 'Escape') {
             e.preventDefault();
             closeEditor(false, 'stay');
-        } else if (flechaDentroDeFecha(e)) {
-            // Movimiento nativo del cursor dentro de la fecha.
         } else if (e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
             const goingBack = e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey);
             if (goingBack) {

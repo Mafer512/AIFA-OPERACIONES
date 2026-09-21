@@ -140,14 +140,6 @@ describe('el banner de inicio', () => {
   };
 
   function montarBanner() {
-    window._ndwCurrentManifestDays = {
-      '2026-09-15': { status: 'ready', count: 3, totals: {
-        comercial: { operaciones: 2, pasajeros: 240 }, carga: { operaciones: 1, toneladas: 3.5 }
-      } },
-      '2026-09-12': { status: 'ready', count: 0, totals: {
-        comercial: { operaciones: 0, pasajeros: 0 }, carga: { operaciones: 0, toneladas: 0 }
-      } }
-    };
     document.body.innerHTML = '<div id="navdeck-weekly-banner"></div>';
     document.body.className = 'navdeck-mode';
     const dias = [];
@@ -164,7 +156,6 @@ describe('el banner de inicio', () => {
     const api = new Function('detalle', 'semana', `
       const WEEKLY_OPERATIONS_DATASETS = [semana];
       const staticData = {};
-      function ndwLoadCurrentManifestDay() {}
       function getActiveWeeklyDataset() { return semana; }
       function formatWeekLabel() { return '7 al 13 de septiembre de 2026'; }
       function getWeeklyValue(d, cat, metric) { return Number((d[cat] || {})[metric] || 0); }
@@ -209,28 +200,17 @@ describe('el banner de inicio', () => {
     expect(css).toMatch(/body\.navdeck-mode\.dark-mode \.ndw-hero-media::after \{\s*background: linear-gradient\(95deg, rgba\(8, 14, 28, \.82\) 0%/);
   });
 
-  test('Actual muestra los manifiestos de hoy y permite elegir otro día sin reutilizar cifras anteriores', () => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date('2026-09-15T12:00:00'));
-    try {
+  test('Actual muestra las cifras del día más reciente con datos', () => {
     const { banner, detalle } = montarBanner();
     banner.querySelector('[data-ndw-mode="current"]').click();
     expect(banner.querySelector('.ndw-hero-kicker').textContent).toBe('Cifras del día');
-    expect(banner.querySelector('.ndw-hero-title').textContent).toBe('Martes 15 de septiembre de 2026');
+    expect(banner.querySelector('.ndw-hero-title').textContent).toBe('Domingo 13 de septiembre de 2026');
     const valores = [...banner.querySelectorAll('.ndw-card-value')].map((v) => v.textContent);
-    expect(valores[0]).toBe('2');
-    expect(valores[1]).toBe('240');
-    expect(valores[5]).toBe('0');
+    expect(valores[0]).toBe('113');
+    expect(valores[5]).toBe('43');
     expect(banner.querySelector('.ndw-card-sub').textContent).toBe('Operaciones del día');
     banner.querySelector('.ndw-card').click();
     expect(detalle).toHaveBeenCalledWith(0);
-    const input = banner.querySelector('[data-ndw-date]');
-    input.value = '2026-09-12';
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    expect(banner.querySelector('.ndw-hero-title').textContent).toBe('Sábado 12 de septiembre de 2026');
-    expect(banner.querySelector('.ndw-card-value').textContent).toBe('0');
-    expect(banner.textContent).toContain('Sin manifiestos capturados');
-    } finally { jest.useRealTimers(); }
   });
 
   test('la foto va según la hora local del sitio, en sus cuatro horarios', () => {

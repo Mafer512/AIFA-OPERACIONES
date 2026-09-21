@@ -51,7 +51,6 @@ const construir = new Function(`
   ${extraer('_conciParseDateTimeParts')}
   ${extraer('_conciPad2')}
   ${extraer('_conciResolveYear')}
-  ${extraer('_conciNumeroDeVuelo')}
   ${extraer('_conciVueloToRow')}
   ${extraer('_conciBuildEnriched')}
   return { _conciBuildEnriched, _CONCI_OUTPUT_COLUMNS };
@@ -97,7 +96,7 @@ describe('Conciliación con vuelos pero sin ningún manifiesto', () => {
     expect(llegada['# de Vuelo']).toBeUndefined();
     expect(llegada['Aerolínea']).toBeUndefined();
 
-    expect(llegada['# DE VUELO']).toBe('952');
+    expect(llegada['# DE VUELO']).toBe('W8 952');
     expect(llegada['AEROLINEA']).toBe('W8');
     expect(llegada['AERONAVE']).toBe('763');
     expect(llegada['MATRÍCULA']).toBe('CFMAJ');
@@ -116,32 +115,9 @@ describe('Conciliación con vuelos pero sin ningún manifiesto', () => {
   test('la salida toma los datos del lado de salida', () => {
     const { rows } = _conciBuildEnriched([], [VUELO], []);
     const salida = rows[1];
-    expect(salida['# DE VUELO']).toBe('951');
+    expect(salida['# DE VUELO']).toBe('W8 951');
     expect(salida['SLOT ASIGNADO']).toBe('27AUG 20:00');
     expect(salida['HR. DE OPERACIÓN']).toBe('27AUG 21:22');
-  });
-
-  test('# DE VUELO es solo el número, con cualquier forma de código de aerolínea, en pasajeros y en carga', () => {
-    const vuelo = (id, designador, codigo) => ({
-      ...VUELO, id, '[Arr] Airline code': codigo, '[Arr] Flight Designator': designador,
-      '[Dep] Airline code': '', '[Dep] Flight Designator': '',
-    });
-    const casos = [
-      // pasajeros
-      ['VB 9501', 'VB', '9501'], ['AC 7248', 'AC', '7248'], ['EK 9919', 'EK', '9919'],
-      ['E7 610', 'E7', '610'], ['6R 7089', '6R', '7089'], ['ET 3516', 'ET', '3516'],
-      ['CZ 2598', 'CZ', '2598'], ['XN 1205', 'XN', '1205'],
-      // carga
-      ['5Y 562', '5Y', '562'], ['CV 5163', 'CV', '5163'], ['5X 320', '5X', '320'],
-      // sin perder ceros a la izquierda ni el sufijo de letra
-      ['AM 001', 'AM', '001'], ['VB 9501A', 'VB', '9501A'],
-    ];
-    const { rows } = _conciBuildEnriched([], casos.map(([d, c], i) => vuelo(i + 1, d, c)), []);
-    const llegadas = rows.filter(r => r['TIPO DE MANIFIESTO'] === 'LLEGADA');
-    expect(llegadas.map(r => r['# DE VUELO'])).toEqual(casos.map(([, , numero]) => numero));
-    // El código sigue en su propia columna y en la ruta: solo sale de # DE VUELO.
-    expect(llegadas.map(r => r['AEROLINEA'])).toEqual(casos.map(([, codigo]) => codigo));
-    llegadas.forEach(r => expect(r['RUTA']).toBe('CVG-NLU-CVG'));
   });
 
   test('las columnas son las mismas haya o no manifiestos', () => {
