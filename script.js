@@ -11685,6 +11685,42 @@ function ndwGetAnnualVal(cat, metric, yearStr) {
     return total;
 }
 
+async function ndwLoadCurrentManifestDay(dateKey, force = false) {
+    const cache = window._ndwCurrentManifestDays ||= {};
+    if (cache[dateKey]?.status === 'loading' || (!force && cache[dateKey])) return;
+    cache[dateKey] = { status: 'loading' };
+    try {
+        const client = window.supabaseClient || (window.ensureSupabaseClient && await window.ensureSupabaseClient());
+        if (!client) throw new Error('No hay conexión con manifiestos');
+        const { error: refreshError } = await client.rpc('refrescar_informe_estadistico', { p_forzar: false });
+        // Antes de la migración 028 la vista es en vivo y no existe este RPC.
+        if (refreshError && !['PGRST202', '42883'].includes(refreshError.code)) throw refreshError;
+        const totals = { comercial: { operaciones: 0, pasajeros: 0 }, carga: { operaciones: 0, toneladas: 0 } };
+        let count = 0;
+        for (let offset = 0; ; offset += 1000) {
+            const { data, error } = await client.from('v_informe_manifiestos_normalizado')
+                .select('fecha_operacion,es_carga,pax_total,carga_kg')
+                .eq('fecha_operacion', dateKey).eq('capturado', true)
+                .order('manifiesto_id', { ascending: true }).range(offset, offset + 999);
+            if (error) throw error;
+            const rows = data || [];
+            rows.forEach(row => {
+                const category = row.es_carga ? 'carga' : 'comercial';
+                totals[category].operaciones += 1;
+                if (category === 'carga') totals.carga.toneladas += (Number(row.carga_kg) || 0) / 1000;
+                else totals.comercial.pasajeros += Number(row.pax_total) || 0;
+            });
+            count += rows.length;
+            if (rows.length < 1000) break;
+        }
+        cache[dateKey] = { status: 'ready', totals, count };
+    } catch (error) {
+        cache[dateKey] = { status: 'error' };
+        console.warn('[Inicio Actual] No se pudieron consultar los manifiestos:', error);
+    }
+    renderNavdeckWeeklyBanner();
+}
+
 function renderNavdeckWeeklyBanner() {
     const container = document.getElementById('navdeck-weekly-banner');
     if (!container) return;
@@ -11721,6 +11757,10 @@ function renderNavdeckWeeklyBanner() {
 
         /* ── compute preliminary / latest-data note (shared across all modes) ── */
         const _now = new Date();
+        const currentDateKey = NDW_VIEW_STATE.date || `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+        const currentDate = parseIsoDay(currentDateKey);
+        const currentManifest = window._ndwCurrentManifestDays?.[currentDateKey];
+        if (mode === 'current' && !currentManifest) ndwLoadCurrentManifestDay(currentDateKey);
         const _MONTH_NAMES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
         const _DOW_ES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
         const _capitalizar = (s) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -11771,15 +11811,17 @@ function renderNavdeckWeeklyBanner() {
         let heroIcon, heroKicker, heroTitle, periodPickerHtml = '';
 
         if (mode === 'current') {
-            /* Actual: el día más reciente con cifras capturadas. */
+            /* Actual: manifiestos de la fecha seleccionada, hoy por defecto. */
             heroIcon   = 'fas fa-bolt';
             heroKicker = 'Cifras del día';
-            heroTitle  = _lastCapDate
-                ? `${_capitalizar(_DOW_ES[_lastCapDate.getDay()])} ${_lastCapDate.getDate()} de ${_MONTH_NAMES_ES[_lastCapDate.getMonth()]} de ${_lastCapDate.getFullYear()}`
-                : 'Sin cifras capturadas';
+            heroTitle = `${_capitalizar(_DOW_ES[currentDate.getDay()])} ${currentDate.getDate()} de ${_MONTH_NAMES_ES[currentDate.getMonth()]} de ${currentDate.getFullYear()}`;
             periodPickerHtml = `
-                <p class="ndw-tap-hint" aria-label="Las tarjetas son interactivas"><i class="fas fa-hand-pointer" aria-hidden="true"></i><span>El día más reciente con cifras capturadas</span></p>
-                ${_prelimHtml}`;
+                <div class="ndw-current-picker"><label>Fecha de manifiestos <input type="date" data-ndw-date value="${currentDateKey}"></label>
+                <button type="button" data-ndw-refresh>Actualizar cifras</button></div>
+                <p class="ndw-tap-hint" aria-live="polite">${currentManifest?.status === 'ready'
+                    ? (currentManifest.count ? 'Manifiestos capturados de la fecha seleccionada · Cifras preliminares' : 'Sin manifiestos capturados para esta fecha')
+                    : currentManifest?.status === 'error' ? 'No fue posible consultar los manifiestos. Intenta actualizar.' : 'Consultando manifiestos…'}</p>
+                <p class="ndw-tap-hint">Aviación General: captura diaria de la misma fecha; 0 si no hay captura.</p>`;
         } else if (mode === 'weekly') {
             const rangeLabel = (typeof formatWeekLabel === 'function')
                 ? formatWeekLabel(weekly)
@@ -11876,9 +11918,9 @@ function renderNavdeckWeeklyBanner() {
         const subSuffix = { current: 'del día', weekly: 'semana', monthly: 'mes', annual: 'año', historic: 'histórico' }[mode] || 'histórico';
         const getCardVal = (def) => {
             if (mode === 'current') {
-                if (!_lastCapFecha) return 0;
+                if (def.cat !== 'general') return currentManifest?.status === 'ready' ? currentManifest.totals[def.cat]?.[def.metric] || 0 : null;
                 const dia = _weekSrcsShared
-                    .map((wk) => (Array.isArray(wk?.dias) ? wk.dias.find((d) => d?.fecha === _lastCapFecha) : null))
+                    .map((wk) => (Array.isArray(wk?.dias) ? wk.dias.find((d) => d?.fecha === currentDateKey) : null))
                     .find(Boolean);
                 return dia ? getWeeklyValue(dia, def.cat, def.metric) : 0;
             }
@@ -11900,7 +11942,7 @@ function renderNavdeckWeeklyBanner() {
                 <span class="ndw-card-icon"><i class="${def.icon}" aria-hidden="true"></i></span>
                 <span class="ndw-card-body">
                     <span class="ndw-card-tag">${escapeHTML(def.label)}</span>
-                    <span class="ndw-card-value">${ndwFormatValue(total, def.metric)}</span>
+                    <span class="ndw-card-value">${total === null ? '—' : ndwFormatValue(total, def.metric)}</span>
                     <span class="ndw-card-sub">${escapeHTML(sub)}</span>
                 </span>
                 <span class="ndw-card-cta" aria-hidden="true"><i class="fas fa-${(mode === 'weekly' || mode === 'current') ? 'chart-column' : 'chart-line'}"></i> ${(mode === 'weekly' || mode === 'current') ? 'Ver detalle' : 'Ver análisis'}</span>
@@ -11934,7 +11976,17 @@ function renderNavdeckWeeklyBanner() {
 
         if (!container._ndwWired) {
             container._ndwWired = true;
+            container.addEventListener('change', (ev) => {
+                if (!ev.target.matches('[data-ndw-date]') || !ev.target.value) return;
+                NDW_VIEW_STATE.date = ev.target.value;
+                renderNavdeckWeeklyBanner();
+            });
             container.addEventListener('click', (ev) => {
+                if (ev.target.closest('[data-ndw-refresh]')) {
+                    ndwLoadCurrentManifestDay(container.querySelector('[data-ndw-date]').value, true);
+                    renderNavdeckWeeklyBanner();
+                    return;
+                }
                 const modeBtn = ev.target.closest('[data-ndw-mode]');
                 if (modeBtn) {
                     NDW_VIEW_STATE.mode = modeBtn.getAttribute('data-ndw-mode');
@@ -12013,10 +12065,20 @@ function openNavdeckWeeklyDetail(idx) {
     const def = NDW_CARD_DEFS[idx];
     if (!def) return;
     const weekly = (typeof getActiveWeeklyDataset === 'function') ? getActiveWeeklyDataset() : null;
-    const days = Array.isArray(weekly?.dias) ? weekly.dias : [];
+    let days = Array.isArray(weekly?.dias) ? weekly.dias : [];
+    const isCurrent = NDW_VIEW_STATE.mode === 'current';
+    if (isCurrent) {
+        const dateKey = document.querySelector('[data-ndw-date]')?.value;
+        const manifest = window._ndwCurrentManifestDays?.[dateKey];
+        if (def.cat !== 'general' && manifest?.status !== 'ready') return;
+        const sources = [...(typeof WEEKLY_OPERATIONS_DATASETS !== 'undefined' ? WEEKLY_OPERATIONS_DATASETS : []), staticData.operacionesSemanaActual];
+        const generalDay = sources.flatMap(w => w?.dias || []).find(d => d.fecha === dateKey);
+        days = [{ fecha: dateKey, label: dateKey, comercial: manifest?.totals?.comercial,
+            carga: manifest?.totals?.carga, general: generalDay?.general || {} }];
+    }
     if (!days.length) return;
 
-    const rangeLabel = (typeof formatWeekLabel === 'function') ? formatWeekLabel(weekly) : 'Semana reciente';
+    const rangeLabel = isCurrent ? days[0].fecha : (typeof formatWeekLabel === 'function') ? formatWeekLabel(weekly) : 'Semana reciente';
     const rows = days.map(d => ({
         label: d.labelFull || d.label || d.fecha || '',
         value: getWeeklyValue(d, def.cat, def.metric)
@@ -12087,7 +12149,7 @@ function openNavdeckWeeklyDetail(idx) {
                 </div>
             </div>
             <div class="ndw-modal-kpis">
-                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(total, def.metric)}</span><span class="ndw-kpi-lbl">Total semana</span></div>
+                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(total, def.metric)}</span><span class="ndw-kpi-lbl">${isCurrent ? 'Total del día' : 'Total semana'}</span></div>
                 <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(avg, def.metric)}</span><span class="ndw-kpi-lbl">Promedio diario</span></div>
                 <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(peak?.value || 0, def.metric)}</span><span class="ndw-kpi-lbl">Día pico</span></div>
             </div>

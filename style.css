@@ -24660,3 +24660,10 @@ body.navdeck-mode:not(.dark-mode) .ndw-card-value {
    border-top: 1px solid #e9eef6;
    padding: .75rem 1.1rem;
 }
+/* Selector del día exacto para las cifras de manifiestos. */
+.ndw-current-picker { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-top: 12px; }
+.ndw-current-picker label { display: flex; flex-direction: column; gap: 4px; color: #fff; font-weight: 600; }
+.ndw-current-picker input, .ndw-current-picker button { min-height: 44px; border-radius: 12px; padding: 8px 12px; border: 1px solid #cbd5e1; }
+.ndw-current-picker input { background: #fff; color: #172b4d; color-scheme: light; max-width: 100%; }
+.ndw-current-picker button { background: #0d6efd; color: #fff; font-weight: 600; }
+.ndw-current-picker button:focus-visible, .ndw-current-picker input:focus-visible { outline: 3px solid #fbbf24; outline-offset: 3px; }
