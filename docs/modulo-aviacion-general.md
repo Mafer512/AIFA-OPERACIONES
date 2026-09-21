@@ -153,6 +153,112 @@ los 1,385 pasajeros no se mueven.
 La migración es idempotente, aborta si la llegada dejó de ser la que se documentó, y trae
 escrito el `DELETE` para deshacerla.
 
+#### 2024 no se cuenta por rotación: se cuenta por fecha real (migración 050)
+
+El reporte oficial de 2024 (*«Aviación General 2024PDFff.pdf»*, con tabla resumen mensual y
+serie diaria completa del año) **no sigue la misma convención que 2022**. Comparado mes por mes
+contra la base:
+
+| | Anclando por rotación | Contando por fecha real |
+|---|---|---|
+| Salidas 2024 | 1,379 — no cuadra | **1,372** |
+| Llegadas 2024 | 1,398 — no cuadra | **1,398** |
+
+Contando por fecha real, **los 12 meses de 2024 coinciden al dígito** contra el reporte, salvo
+dos huecos, ambos explicados por completo al conseguir el Excel maestro del año (2,777 filas,
+detalle vuelo por vuelo):
+
+| Mes | Hueco | Causa |
+|---|---|---|
+| Junio | el reporte trae 88 salidas, la base 87 | `512\|SALIDA\|04/06/2024\|N900MC`, capturada **2 veces** en el Excel de origen. Es el mismo caso que el id 3701, ya anulado por duplicado accidental confirmado por Gerencia |
+| Octubre | el reporte trae 180 llegadas, la base 174 | `1137\|LLEGADA\|31/10/2024\|XA-GIU` y `1138\|LLEGADA\|31/10/2024\|XB-MXK`, cada una capturada **4 veces** en el Excel de origen |
+
+Descontando esas 7 filas repetidas —las únicas de las 2,777 en todo el año—, el Excel maestro
+deduplicado coincide **perfecto, folio por folio**, con las 2,770 filas activas de la base. El
+reporte de GAG suma las filas del Excel tal cual, sin filtrar los duplicados; la base, con su
+antiduplicados por llave natural, ya los tenía fuera.
+
+`aviacion_general_resumen`, en modo `'rotacion'` (el que usan por omisión tanto el Resumen de
+FBO como Estadística), deja de anclar una salida cuando su fecha real cae en 2024 **o** cuando la
+llegada a la que ancharía cae en 2024 — la segunda condición evita que una salida de enero de
+2025 se cuele por atrás en el total de diciembre de 2024 (se comprobó que existen 3 así; sin la
+condición simétrica, diciembre habría dejado de cuadrar). Se comprobó que la frontera equivalente
+2023→2024 no existe en los datos reales, así que 2022 y 2023 no se mueven ni un movimiento.
+
+Es una excepción por año, escrita adentro de la función: ninguna pantalla necesitó cambiar,
+porque ambas ya la llamaban sin pasar `p_modo`. Que 2022 se cuente por rotación y 2024 por fecha
+real —dos convenciones distintas en la misma tabla— no es un capricho de este SQL: es lo que
+prueban, cada uno por su lado, los dos reportes oficiales. 2025 quedó verificado con su Excel completo y se cuenta también por fecha real
+(051 y 052, descritas abajo). 2026 conserva su criterio actual.
+
+#### 2025: conciliación completa con el Excel (migraciones 051 y 052)
+
+Fuente: **Aviación General 2025 (1).xlsx**, hoja `Data`; SHA256
+`7cf0c5440f82b452891907ba68341899146c5537ce08e9ee73248a1b942761aa`. Revisión del **15/09/2026**.
+
+Se compararon las **3,071 filas de 2025**, todos los campos operativos disponibles,
+los **12 meses y 365 días** de `Ops` y `Pax A.G.`, y los registros de Supabase.
+Las 27 filas de enero de 2026 del mismo libro quedan fuera del cierre de 2025.
+Los encabezados antiguos no definen el año: las fechas y fórmulas de estas dos
+hojas corresponden a 2025.
+
+| Mes | Salidas | Llegadas | Operaciones | Pax salida | Pax llegada | Pasajeros |
+|---|---:|---:|---:|---:|---:|---:|
+| 2025-01 | 127 | 124 | 251 | 298 | 2055 | 2353 |
+| 2025-02 | 121 | 121 | 242 | 555 | 793 | 1348 |
+| 2025-03 | 134 | 138 | 272 | 831 | 770 | 1601 |
+| 2025-04 | 127 | 122 | 249 | 1372 | 468 | 1840 |
+| 2025-05 | 112 | 114 | 226 | 1102 | 474 | 1576 |
+| 2025-06 | 104 | 105 | 209 | 1798 | 1379 | 3177 |
+| 2025-07 | 117 | 117 | 234 | 1063 | 452 | 1515 |
+| 2025-08 | 139 | 143 | 282 | 776 | 2257 | 3033 |
+| 2025-09 | 126 | 123 | 249 | 450 | 498 | 948 |
+| 2025-10 | 159 | 156 | 315 | 801 | 497 | 1298 |
+| 2025-11 | 145 | 140 | 285 | 558 | 531 | 1089 |
+| 2025-12 | 130 | 127 | 257 | 921 | 415 | 1336 |
+| **Total** | **1,541** | **1,530** | **3,071** | **10,525** | **10,589** | **21,114** |
+
+Ámbito: **2,350 nacionales / 721 internacionales**; pasajeros:
+**6,878 nacionales / 14,236 internacionales**.
+
+**Criterio solicitado por el usuario:** incluir todas las filas que cuenta el
+reporte, incluso las repetidas, y mantener los casos sin confirmar como
+`PENDIENTE`, con su motivo en observaciones y en la observación de validación.
+Estas cifras reproducen el reporte; no certifican que cada fila repetida
+represente un movimiento distinto.
+
+- **Siete filas incorporadas:** Data 1443, 2000, 2083, 2103, 2104, 2169 y 2184.
+  La primera agrega una llegada de junio sin pasajeros; las otras seis agregan
+  tres llegadas y tres salidas de septiembre, con 5 y 9 pasajeros respectivamente.
+  Explican por completo la diferencia anterior de 7 operaciones y 14 pasajeros.
+- **Nueve grupos repetidos (18 registros):** todos permanecen pendientes.
+  N652CV, salida 29/06, filas 1444/1445, difiere en 2 adultos + 1 infante frente a
+  3 adultos. N19SG, salida 29/09, filas 2196/2203, difiere en 2 adultos frente a
+  1 adulto + 1 infante. Se conservan ambas versiones conforme a lo solicitado.
+- **Dos totales contradictorios:** Data 2758 (N210ER, 24/11) reporta 4 pasajeros
+  pero desglosa 3 adultos; Data 2762 (N960T, 25/11) reporta 1 pasajero pero desglosa
+  2 adultos. Se cuenta `pax_total_reportado=4/1` y se dejan adultos/infantes
+  sin asignar; el desglose original se conserva en observaciones. Así coincide
+  también cada día de noviembre. Los cinco pasajeros quedan sin desglose confirmado.
+- **Once horas corregidas:** Data M46, L76, M184, L226, M380, L952, M1657, M1964,
+  L2010, L2081 y M2976. Las fracciones Excel 0.45/0.35 son 10:48/08:24, no
+  00:45/00:35. La hora ambigua M1300 (15.55) conserva 15:55, pendiente de confirmar.
+- **Destino recuperado:** Data K2363, HUAYACOCOTLA VERACRUZ, pasa a
+  `ciudad_origen_destino`; no se inventa un código de aeropuerto.
+- **Normalizaciones conservadas:** folio `621-2024` como `20240621`,
+  tipos de aeronave vacíos como `SIN_DATO`, hora textual `12.:01` como 12:01
+  y fracciones horarias con componente entero que ya estaban bien interpretadas.
+
+Las hojas auxiliares `GRFICOS 1` y `Tablas Res.` tienen referencias/valores
+antiguos (por ejemplo, agosto muestra 2,543 pasajeros en una gráfica y cero en
+una tabla, frente a 3,033 en Data y Pax A.G.). El libro original se conserva.
+El tablero se concilia con Data y con las series completas de Ops/Pax A.G.
+
+**051** define el conteo por fecha real. **052** contiene exclusivamente las
+correcciones anteriores, comprobación de estado previo, reejecución segura y
+verificación mensual; finaliza en `ROLLBACK` para revisar antes de aplicar.
+La aplicación conserva la auditoría mediante el mecanismo existente de la tabla.
+
 ### Tres cosas en que los datos reales desmintieron al diccionario
 
 Manda la tabla, no el documento. Las tres estaban mal implementadas en la
@@ -444,6 +550,8 @@ Todas aplicadas, en orden:
 - **049** — corrección de nueve horas de plataforma de 2023 (fracción de Excel leída como
   decimal). *Aplicada el 12/09/2026 16:43 — confirmado por auditoría: las nueve filas pasaron a
   `version=2` en la misma transacción.*
+- **050** — 2024 se cuenta por fecha real, no por rotación, dentro de `aviacion_general_resumen`.
+  *Aplicada. Verificado en vivo: 2024 da 1,372/1,398/2,770; 2022 sigue en 458.*
 
 Todas siguen la misma mecánica, por si en el futuro se agrega una nueva:
 

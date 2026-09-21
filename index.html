@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20260912-frase-1">
+    <link rel="stylesheet" href="style.css?v=20260915-actual-manifiestos-1">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -1701,6 +1701,47 @@ FF
                         <div class="d-flex align-items-center justify-content-between gap-3 header-title-row">
                             <img src="images/nlu-operacion.png" alt="Logo de Operación NLU" class="header-logo" loading="eager" decoding="async" />
                             <h1 class="main-title"><span class="main-title-app">AEROPUERTO INTERNACIONAL FELIPE ÁNGELES</span><span class="main-title-est">Consulta y analiza la operación del aeropuerto en tiempo real</span></h1>
+                            <!-- Botón de usuario (pantalla de inicio): icono, nombre, rol, dirección y
+                                 correo; despliega las opciones de la sesión (js/inicio-usuario.js). -->
+                            <div class="hdr-user" id="hdr-user">
+                                <button type="button" class="hdr-user-btn" id="hdr-user-btn" aria-haspopup="true" aria-expanded="false" aria-controls="hdr-user-menu">
+                                    <span class="hdr-user-icono" aria-hidden="true"><i class="fas fa-user"></i></span>
+                                    <span class="hdr-user-texto">
+                                        <span class="hdr-user-linea">
+                                            <b class="hdr-user-nombre" id="hdr-user-nombre">Sesión activa</b>
+                                            <span class="hdr-user-rol" id="hdr-user-rol" hidden></span>
+                                        </span>
+                                        <span class="hdr-user-linea hdr-user-linea--sub">
+                                            <span class="hdr-user-area" id="hdr-user-area" hidden><span class="hdr-user-area-punto" aria-hidden="true"></span><span id="hdr-user-area-texto"></span></span>
+                                            <span class="hdr-user-correo" id="hdr-user-correo" hidden></span>
+                                        </span>
+                                    </span>
+                                    <i class="fas fa-chevron-down hdr-user-chev" aria-hidden="true"></i>
+                                </button>
+                                <div class="hdr-user-menu" id="hdr-user-menu" hidden>
+                                    <!-- Opciones de la sesión (antes en la tarjeta de usuario de la barra): mismos ids y permisos. -->
+                                    <div id="si-user-dropdown" class="d-none">
+                                        <a class="menu-item si-link" href="#" id="cambiar-password-menu" onclick="event.preventDefault();document.getElementById('si-user-dropdown').classList.add('d-none');var c=document.getElementById('si-user-chevron');if(c)c.style.transform='';if(typeof pwOpenChangeOwn==='function')pwOpenChangeOwn();">
+                                            <i class="fas fa-key si-ico"></i><span class="si-txt">Cambiar contraseña</span>
+                                        </a>
+                                        <a class="menu-item si-link d-none" href="#" data-section="historia" id="historia-admin-menu" onclick="event.preventDefault();siUserGoToSection('historia',this);">
+                                            <i class="fas fa-history si-ico"></i><span class="si-txt">Historia</span>
+                                        </a>
+                                        <a class="menu-item si-link d-none" href="#" data-section="miscelanea" id="miscelanea-menu" aria-haspopup="dialog" aria-controls="miscelanea-modal">
+                                            <i class="fas fa-toolbox si-ico"></i><span class="si-txt">Miscelánea</span>
+                                        </a>
+                                        <a class="menu-item si-link d-none" href="#" data-section="data-management" id="data-management-menu" onclick="event.preventDefault();siUserGoToSection('data-management',this);">
+                                            <i class="fas fa-database si-ico"></i><span class="si-txt">Gestión de Datos</span>
+                                        </a>
+                                        <a class="menu-item si-link d-none" href="#" data-section="admin-usuarios" id="admin-users-menu" onclick="event.preventDefault();siUserGoToSection('admin-usuarios',this);">
+                                            <i class="fas fa-users-cog si-ico"></i><span class="si-txt">Administración</span>
+                                        </a>
+                                    </div>
+                                    <a class="menu-item logout-item hdr-user-salir" href="#" data-action="logout">
+                                        <i class="fas fa-sign-out-alt" aria-hidden="true"></i><span>Cerrar Sesión</span>
+                                    </a>
+                                </div>
+                            </div>
                             <img src="images/emblema-aviacion.png" alt="Logo de Aviación" class="header-logo" loading="eager" decoding="async" />
                         </div>
                         <div class="header-subtext">
@@ -2295,24 +2336,6 @@ FF
                     <i class="fas fa-chevron-up" id="si-user-chevron" style="font-size:.65rem;opacity:.45;margin-left:auto;transition:transform .2s;"></i>
                 </div>
 
-                <!-- Dropdown admin (oculto por defecto, solo se llena para admins) -->
-                <div id="si-user-dropdown" class="d-none">
-                    <a class="menu-item si-link" href="#" id="cambiar-password-menu" onclick="event.preventDefault();document.getElementById('si-user-dropdown').classList.add('d-none');var c=document.getElementById('si-user-chevron');if(c)c.style.transform='';if(typeof pwOpenChangeOwn==='function')pwOpenChangeOwn();">
-                        <i class="fas fa-key si-ico"></i><span class="si-txt">Cambiar contraseña</span>
-                    </a>
-                    <a class="menu-item si-link d-none" href="#" data-section="historia" id="historia-admin-menu" onclick="event.preventDefault();siUserGoToSection('historia',this);">
-                        <i class="fas fa-history si-ico"></i><span class="si-txt">Historia</span>
-                    </a>
-                    <a class="menu-item si-link d-none" href="#" data-section="miscelanea" id="miscelanea-menu" aria-haspopup="dialog" aria-controls="miscelanea-modal">
-                        <i class="fas fa-toolbox si-ico"></i><span class="si-txt">Miscelánea</span>
-                    </a>
-                    <a class="menu-item si-link d-none" href="#" data-section="data-management" id="data-management-menu" onclick="event.preventDefault();siUserGoToSection('data-management',this);">
-                        <i class="fas fa-database si-ico"></i><span class="si-txt">Gestión de Datos</span>
-                    </a>
-                    <a class="menu-item si-link d-none" href="#" data-section="admin-usuarios" id="admin-users-menu" onclick="event.preventDefault();siUserGoToSection('admin-usuarios',this);">
-                        <i class="fas fa-users-cog si-ico"></i><span class="si-txt">Administración</span>
-                    </a>
-                </div>
 
                 <a class="menu-item si-link si-link--logout logout-item" href="#" data-action="logout">
                     <i class="fas fa-sign-out-alt si-ico"></i><span class="si-txt">Cerrar Sesión</span>
@@ -23295,8 +23318,12 @@ FF
                                             </div>
                                         </div>
 
-                                        <div class="alert alert-danger d-none" id="est-error"></div>
-                                        <div class="d-none" id="est-avisos"></div>
+                                        <!-- Pie de la página: avisos y errores van abajo del todo, como texto
+                                             sobre el fondo blanco (sin recuadros de color). -->
+                                        <div class="est-pie" id="est-pie">
+                                            <div class="d-none" id="est-avisos"></div>
+                                            <div class="est-aviso est-aviso-error d-none" id="est-error" role="alert"></div>
+                                        </div>
 
                                         <div class="tab-content" id="est-subcontent">
 
@@ -23310,7 +23337,6 @@ FF
                                                         </div>
                                                     </div>
                                                     <div class="fbo-kpis" id="est-resumen-tarjetas"></div>
-                                                    <div id="est-resumen-calidad"></div>
                                                     <div class="fbo-rejilla">
                                                         <section class="fbo-panel fbo-panel-tendencia" aria-labelledby="est-resumen-t-mes">
                                                             <header class="fbo-panel-cabeza"><div><h6 id="est-resumen-t-mes">Evolución mensual</h6><p>Barras: operaciones · línea: pasajeros.</p></div></header>
@@ -23325,6 +23351,7 @@ FF
                                                             <div class="table-responsive tb-tabla"><table class="table table-sm align-middle mb-0" id="est-resumen-variaciones"><thead></thead><tbody></tbody></table></div>
                                                         </section>
                                                     </div>
+                                                    <div class="est-resumen-calidad-pie" id="est-resumen-calidad"></div>
                                                 </div>
                                             </div>
 
@@ -23792,18 +23819,15 @@ FF
                                             </button>
                                         </div>
 
-                                        <div class="alert alert-danger d-none" id="informe-est-error"></div>
-                                        <div class="alert alert-warning d-none" id="informe-est-alertas"></div>
-
                                         <div id="informe-est-root">
                                             <div class="airline-stats-summary mb-2" id="informe-est-acumulado"></div>
                                             <div class="airline-stats-summary mb-2" id="informe-est-dia"></div>
                                             <div class="airline-stats-summary mb-4" id="informe-est-proyeccion"></div>
 
-                                            <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-chart-bar me-2"></i>Operaciones por mes</h6>
-                                            <div class="mb-4" style="position:relative;height:280px;">
-                                                <canvas id="informe-est-chart-mensual"></canvas>
-                                            </div>
+                                            <section class="fbo-panel informe-est-grafica mt-4 mb-4" aria-labelledby="informe-est-t-mensual">
+                                                <header class="fbo-panel-cabeza"><div><h6 id="informe-est-t-mensual">Operaciones por mes</h6><p id="informe-est-chart-nota">Comercial, General y Carga de cada mes. Pasa el cursor sobre un mes para ver el detalle y el total.</p></div></header>
+                                                <div class="fbo-grafica"><canvas id="informe-est-chart-mensual" role="img" aria-label="Operaciones por mes: Comercial, General y Carga"></canvas></div>
+                                            </section>
 
                                             <h6 class="fw-semibold text-primary mt-4 mb-2"><i class="fas fa-table me-2"></i>Desglose mensual — Comercial / General / Carga</h6>
                                             <div class="table-responsive mb-4">
@@ -23841,6 +23865,12 @@ FF
                                                     <tbody></tbody>
                                                 </table>
                                             </div>
+                                        </div>
+
+                                        <!-- Avisos del informe: al pie, como texto sobre el fondo blanco. -->
+                                        <div class="est-pie est-pie-informe">
+                                            <div class="d-none" id="informe-est-alertas"></div>
+                                            <div class="est-aviso est-aviso-error d-none" id="informe-est-error" role="alert"></div>
                                         </div>
                                                                                 </div><!-- /est-pane-informe -->
 
@@ -38560,9 +38590,11 @@ FF
     </script>
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
-    <script src="script.js?v=20260912-tablero-ventanas-2" defer></script>
+    <script src="script.js?v=20260915-actual-manifiestos-1" defer></script>
     <!-- Campos de fecha en dd/mm/aaaa sin importar el idioma del navegador. -->
     <script src="js/fecha-ddmm.js?v=20260912-fecha-1" defer></script>
+    <!-- Botón y menú de usuario del encabezado de inicio. -->
+    <script src="js/inicio-usuario.js?v=20260915-inicio-2" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>
@@ -39841,10 +39873,12 @@ FF
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
 <script src="js/estadistico-informe-core.js?v=20260912-ag-directorio" defer></script>
 <script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>
-<script src="js/estadistico-informe.js?v=20260912-ag-directorio" defer></script>
+<!-- Override TEMPORAL de cifras oficiales para el PDF "Informe Estadístico" (ver comentario en el archivo). Quitar este <script> cuando la BD esté al corriente. -->
+<script src="js/estadistico-informe-overrides.js?v=20260915-oficial-corte-10sep" defer></script>
+<script src="js/estadistico-informe.js?v=20260915-grafica-1" defer></script>
 <!-- Modulo estadistico de operaciones (pestana Estadistica de Conciliacion) -->
-<script src="js/estadistica-motor.js?v=20260908-v1" defer></script>
-<script src="js/estadistica-panel.js?v=20260912-calidad-1" defer></script>
+<script src="js/estadistica-motor.js?v=20260915-avisos-1" defer></script>
+<script src="js/estadistica-panel.js?v=20260915-avisos-1" defer></script>
 <script src="js/estadistica-clasificacion.js?v=20260908-v1" defer></script>
 
 <!-- ═══ Aviación General · FBO (GAG · Servicios Conexos) ═══

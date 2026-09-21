@@ -448,6 +448,57 @@ describe('049 — corrección acotada de nueve horas de 2023', () => {
     });
 });
 
+describe('050 — 2024 se cuenta por fecha real, no por rotación', () => {
+    const sql050 = fs.readFileSync(
+        path.resolve(__dirname, '..', 'supabase', 'migrations', '050_aviacion_general_2024_por_fecha_real.sql'),
+        'utf8'
+    );
+    const vivo050 = sql050.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
+
+    test('no toca tablas ni datos: sólo reemplaza la función de resumen', () => {
+        expect(vivo050).not.toMatch(/\bINSERT\s+INTO\b/i);
+        expect(vivo050).not.toMatch(/\bUPDATE\s+public\.aviacion_general_operaciones\b/i);
+        expect(vivo050).not.toMatch(/\bDELETE\s+FROM\b/i);
+        expect(vivo050).toMatch(/CREATE OR REPLACE FUNCTION public\.aviacion_general_resumen/);
+    });
+
+    test('exime del anclaje cuando la fecha real cae en 2024', () => {
+        expect(vivo050).toMatch(/extract\(year FROM ba\.fecha_operacion\)::int = 2024/);
+    });
+
+    test('exime también cuando el ancla resultante caería en 2024 (frontera enero 2025 -> diciembre 2024)', () => {
+        expect(vivo050).toMatch(/extract\(year FROM ba\.ancla_bruta\)::int = 2024/);
+    });
+
+    test('el ancla se calcula una sola vez por fila, no repetida en el CASE', () => {
+        const llamadas = (vivo050.match(/aviacion_general_ancla\(/g) || []).length;
+        expect(llamadas).toBe(1);
+    });
+
+    test('las llegadas se siguen resolviendo a su propia fecha, sin excepción', () => {
+        expect(vivo050).toMatch(/WHEN ba\.tipo_operacion = 'LLEGADA'\s+THEN ba\.fecha_operacion/);
+    });
+
+    test('modo "movimiento" sigue sin tocar el ancla en absoluto', () => {
+        expect(vivo050).toMatch(/WHEN COALESCE\(p_modo, 'rotacion'\) <> 'rotacion' THEN ba\.fecha_operacion/);
+    });
+
+    test('trae la verificación mensual completa de 2024 contra el PDF oficial', () => {
+        const meses = vivo050.match(/\('2024-\d{2}',/g) || [];
+        expect(meses).toHaveLength(12);
+        expect(vivo050).toContain("('2024-06', 88, 86)");
+        expect(vivo050).toContain("('2024-10', 168, 180)");
+    });
+
+    test('verifica que 2022 no se haya movido', () => {
+        expect(vivo050).toMatch(/movimientos_2022_debe_dar_457/);
+    });
+
+    test('termina en ROLLBACK para revisión segura', () => {
+        expect(sql050.trimEnd().endsWith('ROLLBACK;')).toBe(true);
+    });
+});
+
 describe('convención de las migraciones del repositorio', () => {
     test('abre transacción y termina en ROLLBACK para poder revisarla antes de aplicar', () => {
         expect(sqlVivo).toMatch(/^\s*BEGIN;/m);

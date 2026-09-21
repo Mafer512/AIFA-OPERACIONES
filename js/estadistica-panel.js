@@ -90,6 +90,34 @@
     const puedeAdministrarReglas = () => state.nivel === 'admin';
 
     // ── Consultas ────────────────────────────────────────────────────────────
+    //
+    // anota `.oficial` (Motor.oficialOperacion) en los renglones que devuelve
+    // el RPC, SIN tocar ninguno de sus demás campos: sólo cuando no hay ningún
+    // filtro de la barra activo (el override no tiene desgloses por
+    // aerolínea/matrícula/tipo de aeronave/etc., así que aplicarlo con un
+    // filtro puesto sería fabricar un dato que no existe) y sólo para las dos
+    // formas de agregado para las que el override sí trae cifra: el total del
+    // periodo (sin dimensiones) y la serie mensual (dimensión anio_mes). Cada
+    // pantalla decide si usa `.oficial` o el campo calculado de siempre; nada
+    // se sobrescribe aquí, así que quien no lo lea sigue viendo exactamente lo
+    // que ya veía.
+    function anotarOficial(filas, dimensiones, desde, hasta, filtros) {
+        if (Object.keys(filtros || {}).length > 0) return filas;
+        const dims = dimensiones || [];
+        if (dims.length === 0) {
+            if (filas[0]) filas[0].oficial = Motor.oficialOperacion(desde, hasta);
+        } else if (dims.length === 1 && dims[0] === 'anio_mes') {
+            filas.forEach((fila) => {
+                const [anio, mes] = String(fila.d1 || '').split('-').map(Number);
+                if (!anio || !mes) return;
+                const primerDia = `${anio}-${String(mes).padStart(2, '0')}-01`;
+                const ultimoDia = `${anio}-${String(mes).padStart(2, '0')}-${String(new Date(anio, mes, 0).getDate()).padStart(2, '0')}`;
+                fila.oficial = Motor.oficialOperacion(primerDia, ultimoDia);
+            });
+        }
+        return filas;
+    }
+
     async function agregado(desde, hasta, dimensiones, filtrosExtra, limite) {
         const client = await getClient();
         const filtros = Object.assign({}, Motor.filtrosAJson(state.filtros), filtrosExtra || {});
@@ -101,14 +129,17 @@
             p_limite: limite || 5000
         });
         if (error) throw error;
-        return (data || []).map(Motor.normalizarFila);
+        const filas = (data || []).map(Motor.normalizarFila);
+        return anotarOficial(filas, dimensiones, desde, hasta, filtros);
     }
 
     const totalDe = (filas) => Motor.combinar(filas);
 
     async function totalPeriodo(desde, hasta, filtrosExtra) {
         const filas = await agregado(desde, hasta, [], filtrosExtra, 1);
-        return totalDe(filas);
+        const total = totalDe(filas);
+        total.oficial = filas[0] ? filas[0].oficial : null;
+        return total;
     }
 
     // ── Barra de estado ──────────────────────────────────────────────────────
@@ -462,7 +493,19 @@
     // horizontales con el valor al final de la barra. Todo se arma con lo que
     // ya devolvió el servidor: aquí sólo se reparten proporciones y se escribe.
     const negrita = (texto) => `<b>${esc(texto)}</b>`;
-    const periodoTexto = () => `Del ${fboFecha(desde())} al ${fboFecha(hasta())}`;
+    // El corte oficial (window.OFFICIAL_STATISTICS_OVERRIDES.corteIso) nunca
+    // tiene datos después de esa fecha: si el filtro pide hasta el 31 de
+    // diciembre pero el informe institucional corta el 14 de septiembre, el
+    // texto debe decir "al 14/09/2026", no prometer un año que no terminó.
+    // Sólo cambia lo que se MUESTRA aquí — el rango que se manda al RPC
+    // (desde()/hasta()) no se toca, así que el resto del filtro sigue igual.
+    const hastaMostrado = () => {
+        const ov = window.OFFICIAL_STATISTICS_OVERRIDES;
+        const corte = ov && ov.activo && ov.corteIso;
+        const h = hasta();
+        return (corte && h && h > corte) ? corte : h;
+    };
+    const periodoTexto = () => `Del ${fboFecha(desde())} al ${fboFecha(hastaMostrado())}`;
 
     function pintarFrase(id, html) {
         const el = $(id);
@@ -637,34 +680,62 @@
 
         const v = (campo) => Motor.variacion(totalAnterior[campo], total[campo]);
         const vAnio = (campo) => Motor.variacion(totalAnioAnterior[campo], total[campo]);
-        const chips = (campo, soloAnio) => (soloAnio ? '' : `${chipVariacion(v(campo), 'vs periodo anterior')}<br>`)
-            + chipVariacion(vAnio(campo), 'vs año anterior');
+        // Operaciones/Pasajeros/Carga: si el periodo actual trae cifra oficial
+        // (total.oficial), la variación sólo se calcula oficial-contra-oficial
+        // — si el periodo de comparación no tiene override, no hay con qué
+        // comparar y se omite el chip en vez de mezclar oficial con calculado
+        // (mismo criterio que Motor.comparar en el Comparador).
+        const CAMPO_OFICIAL = { operaciones: 'operaciones', paxTotal: 'paxTotal', cargaTotalKg: 'cargaTotalKg' };
+        const vOf = (campo, otro) => {
+            if (!CAMPO_OFICIAL[campo] || !total.oficial) return v(campo);
+            return otro.oficial ? Motor.variacion(otro.oficial[campo], total.oficial[campo]) : null;
+        };
+        const vAnioOf = (campo, otro) => {
+            if (!CAMPO_OFICIAL[campo] || !total.oficial) return vAnio(campo);
+            return otro.oficial ? Motor.variacion(otro.oficial[campo], total.oficial[campo]) : null;
+        };
+        const chips = (campo, soloAnio) => (soloAnio ? '' : `${chipVariacion(vOf(campo, totalAnterior), 'vs periodo anterior')}<br>`)
+            + chipVariacion(vAnioOf(campo, totalAnioAnterior), 'vs año anterior');
 
-        pintarFrase('est-resumen-frase', `${periodoTexto()} se ${fboUno(total.operaciones, 'registró', 'registraron')} `
-            + `${negrita(Motor.fmtEntero(total.operaciones))} ${fboUno(total.operaciones, 'operación', 'operaciones')} `
-            + `(${fboCuenta(total.operacionesLlegada, 'llegada', 'llegadas')} y ${fboCuenta(total.operacionesSalida, 'salida', 'salidas')}) `
-            + `con ${negrita(Motor.fmtEntero(total.paxTotal))} pasajeros y ${negrita(Motor.fmtToneladas(total.cargaTotalKg))} de carga.`
+        // total.oficial (Motor.oficialOperacion, vía agregado()/totalPeriodo())
+        // es la MISMA fuente que ya usa el PDF Informe Estadístico
+        // (OFFICIAL_STATISTICS_OVERRIDES): si el periodo pedido es cubrible,
+        // Operaciones/Pasajeros/Carga se muestran con la cifra oficial; si no,
+        // se sigue mostrando lo que calcula estadistica_agregado, igual que
+        // antes. El resto de los campos (llegadas/salidas, ocupación,
+        // puntualidad, coberturas) NUNCA sale de aquí: el informe oficial no
+        // trae ese desglose, así que se sigue calculando de los datos crudos.
+        const opsMostrado = total.oficial ? total.oficial.operaciones : total.operaciones;
+        const paxMostrado = total.oficial ? total.oficial.paxTotal : total.paxTotal;
+        const cargaMostrado = total.oficial ? total.oficial.cargaTotalKg : total.cargaTotalKg;
+
+        pintarFrase('est-resumen-frase', `${periodoTexto()} se ${fboUno(opsMostrado, 'registró', 'registraron')} `
+            + `${negrita(Motor.fmtEntero(opsMostrado))} ${fboUno(opsMostrado, 'operación', 'operaciones')} `
+            + (total.oficial ? '' : `(${fboCuenta(total.operacionesLlegada, 'llegada', 'llegadas')} y ${fboCuenta(total.operacionesSalida, 'salida', 'salidas')}) `)
+            + `con ${negrita(Motor.fmtEntero(paxMostrado))} pasajeros y ${negrita(Motor.fmtToneladas(cargaMostrado))} de carga.`
             + (total.factorOcupacion === null || total.factorOcupacion === undefined ? ''
-                : ` El factor de ocupación fue de ${negrita(Motor.fmtPorcentaje(total.factorOcupacion))}.`)
+                : ` El factor de ocupación fue de ${negrita(Motor.fmtPorcentaje(total.factorOcupacion))} (cálculo del sistema para este periodo).`)
             + (total.puntualidadPorcentaje === null || total.puntualidadPorcentaje === undefined ? ''
                 : ` El ${negrita(Motor.fmtPorcentaje(total.puntualidadPorcentaje))} de las operaciones evaluables cumplió la ventana del slot.`)
-            + cambioTexto(vAnio('operaciones'), 'las operaciones'));
+            + cambioTexto(vAnioOf('operaciones', totalAnioAnterior), 'las operaciones'));
 
+        const notaOficial = total.oficial ? 'Cifra oficial · ' : '';
+        const notaDisponibles = total.oficial ? ' (de los registros disponibles)' : '';
         $('est-resumen-tarjetas').innerHTML = [
-            kpiFbo({ icono: 'fa-plane', color: '#0d6efd', titulo: 'Operaciones', valor: Motor.fmtEntero(total.operaciones),
-                detalle: `Llegadas ${Motor.fmtEntero(total.operacionesLlegada)} · Salidas ${Motor.fmtEntero(total.operacionesSalida)}`,
+            kpiFbo({ icono: 'fa-plane', color: '#0d6efd', titulo: 'Operaciones', valor: Motor.fmtEntero(opsMostrado),
+                detalle: `${notaOficial}Llegadas ${Motor.fmtEntero(total.operacionesLlegada)} · Salidas ${Motor.fmtEntero(total.operacionesSalida)}${notaDisponibles}`,
                 variacion: chips('operaciones') }),
-            kpiFbo({ icono: 'fa-users', color: '#20c997', titulo: 'Pasajeros', valor: Motor.fmtEntero(total.paxTotal),
-                detalle: `Llegada ${Motor.fmtEntero(total.paxLlegada)} · Salida ${Motor.fmtEntero(total.paxSalida)}`,
+            kpiFbo({ icono: 'fa-users', color: '#20c997', titulo: 'Pasajeros', valor: Motor.fmtEntero(paxMostrado),
+                detalle: `${notaOficial}Llegada ${Motor.fmtEntero(total.paxLlegada)} · Salida ${Motor.fmtEntero(total.paxSalida)}${notaDisponibles}`,
                 variacion: chips('paxTotal') }),
-            kpiFbo({ icono: 'fa-box', color: '#fd7e14', titulo: 'Carga transportada', valor: Motor.fmtToneladas(total.cargaTotalKg),
-                detalle: `Nacional ${Motor.fmtToneladas(total.cargaNacionalKg)} · Internacional ${Motor.fmtToneladas(total.cargaInternacionalKg)}`,
+            kpiFbo({ icono: 'fa-box', color: '#fd7e14', titulo: 'Carga transportada', valor: Motor.fmtToneladas(cargaMostrado),
+                detalle: `${notaOficial}Nacional ${Motor.fmtToneladas(total.cargaNacionalKg)} · Internacional ${Motor.fmtToneladas(total.cargaInternacionalKg)}${notaDisponibles}`,
                 variacion: chips('cargaTotalKg') }),
             kpiFbo({ icono: 'fa-chair', color: '#6f42c1', titulo: 'Factor de ocupación', valor: Motor.fmtPorcentaje(total.factorOcupacion),
-                detalle: `${Motor.fmtEntero(total.ocupacionPax)} pasajeros sobre ${Motor.fmtEntero(total.ocupacionCapacidad)} asientos`,
+                detalle: `${Motor.fmtEntero(total.ocupacionPax)} pasajeros sobre ${Motor.fmtEntero(total.ocupacionCapacidad)} asientos · cálculo del sistema, no el índice del informe oficial`,
                 variacion: chips('factorOcupacion', true) }),
             kpiFbo({ icono: 'fa-clock', color: '#198754', titulo: 'Puntualidad', valor: Motor.fmtPorcentaje(total.puntualidadPorcentaje),
-                detalle: `${Motor.fmtEntero(total.operacionesPuntuales)} a tiempo de ${Motor.fmtEntero(total.operacionesEvaluablesPuntualidad)} evaluables`,
+                detalle: `${Motor.fmtEntero(total.operacionesPuntuales)} a tiempo de ${Motor.fmtEntero(total.operacionesEvaluablesPuntualidad)} evaluables · cálculo del sistema`,
                 variacion: chips('puntualidadPorcentaje', true) })
         ].join('');
 
@@ -686,8 +757,12 @@
             data: {
                 labels: mensual.map((f) => fboMes(f.d1)),
                 datasets: [
-                    { type: 'bar', label: 'Operaciones', data: mensual.map((f) => f.operaciones), backgroundColor: '#0d6efd', borderRadius: 4, maxBarThickness: 48, yAxisID: 'y' },
-                    { type: 'line', label: 'Pasajeros', data: mensual.map((f) => f.paxTotal), borderColor: '#20c997', backgroundColor: '#20c997', tension: 0.3, pointRadius: 3, yAxisID: 'y1' }
+                    // Cada mes usa su propia cifra oficial (f.oficial, anotada
+                    // por agregado() vía Motor.oficialOperacion) cuando existe
+                    // — así septiembre no aparece con lo poco que ya se
+                    // capturó localmente en vez del total oficial a la fecha.
+                    { type: 'bar', label: 'Operaciones', data: mensual.map((f) => f.oficial ? f.oficial.operaciones : f.operaciones), backgroundColor: '#0d6efd', borderRadius: 4, maxBarThickness: 48, yAxisID: 'y' },
+                    { type: 'line', label: 'Pasajeros', data: mensual.map((f) => f.oficial ? f.oficial.paxTotal : f.paxTotal), borderColor: '#20c997', backgroundColor: '#20c997', tension: 0.3, pointRadius: 3, yAxisID: 'y1' }
                 ]
             },
             options: opcionesGrafica({
@@ -718,12 +793,16 @@
             ])
         ]);
 
+        // Con un año completo, el periodo inmediato anterior y el mismo periodo
+        // del año pasado son el mismo (p. ej. 2025 y 2025): se muestra una sola
+        // columna, con su variación, en lugar de dos iguales.
+        const mismoRango = rangoAnterior.desde === rangoAnioAnterior.desde && rangoAnterior.hasta === rangoAnioAnterior.hasta;
         const columnas = [
             { titulo: 'Indicador', clave: 'etiqueta' },
             { titulo: Motor.etiquetaRango(rangoAnioAnterior.desde, rangoAnioAnterior.hasta), clave: 'anioAnterior' },
-            { titulo: Motor.etiquetaRango(rangoAnterior.desde, rangoAnterior.hasta), clave: 'anterior' },
+            ...(mismoRango ? [] : [{ titulo: Motor.etiquetaRango(rangoAnterior.desde, rangoAnterior.hasta), clave: 'anterior' }]),
             { titulo: Motor.etiquetaRango(desde(), hasta()), clave: 'actual' },
-            { titulo: 'vs periodo anterior', clave: 'varAnterior', html: (f) => f.varAnterior },
+            ...(mismoRango ? [] : [{ titulo: 'vs periodo anterior', clave: 'varAnterior', html: (f) => f.varAnterior }]),
             { titulo: 'vs año anterior', clave: 'varAnio', html: (f) => f.varAnio }
         ];
         const indicadores = [
@@ -733,13 +812,16 @@
             ['Factor de ocupación', 'factorOcupacion', 'porcentaje'],
             ['Puntualidad', 'puntualidadPorcentaje', 'porcentaje']
         ];
+        // Mismo criterio que las tarjetas: Operaciones/Pasajeros/Carga usan la
+        // cifra oficial de cada columna cuando ese periodo la tiene.
+        const valorTabla = (t, campo) => (CAMPO_OFICIAL[campo] && t.oficial) ? t.oficial[campo] : t[campo];
         pintarTabla('est-resumen-variaciones', columnas, indicadores.map(([etiqueta, campo, tipo]) => ({
             etiqueta,
-            anioAnterior: Motor.formatearPorTipo(totalAnioAnterior[campo], tipo),
-            anterior: Motor.formatearPorTipo(totalAnterior[campo], tipo),
-            actual: Motor.formatearPorTipo(total[campo], tipo),
-            varAnterior: chipVariacion(Motor.variacion(totalAnterior[campo], total[campo]), ''),
-            varAnio: chipVariacion(Motor.variacion(totalAnioAnterior[campo], total[campo]), '')
+            anioAnterior: Motor.formatearPorTipo(valorTabla(totalAnioAnterior, campo), tipo),
+            anterior: Motor.formatearPorTipo(valorTabla(totalAnterior, campo), tipo),
+            actual: Motor.formatearPorTipo(valorTabla(total, campo), tipo),
+            varAnterior: chipVariacion(vOf(campo, totalAnterior), ''),
+            varAnio: chipVariacion(vAnioOf(campo, totalAnioAnterior), '')
         })));
     }
 
@@ -1266,18 +1348,26 @@
         const toneladas = (kg) => fboNum(Motor.kgAToneladas(kg));
         const fmtT = (t) => `${Motor.fmtDecimal(t)} t`;
 
+        // Misma fuente oficial que Resumen (total.oficial, vía
+        // Motor.oficialOperacion): sólo se usa para el TOTAL de la tarjeta y
+        // la frase. El desglose nacional/internacional, el detalle por
+        // aerolínea y el resto de las tarjetas (descargada/embarcada/tránsito/
+        // correo/importación-exportación/equipaje) siguen siendo lo que ya
+        // capturó el sistema — el informe oficial no los trae por separado.
+        const cargaMostrada = total.oficial ? total.oficial.cargaTotalKg : total.cargaTotalKg;
         pintarFrase('est-carga-frase', `${periodoTexto()} se ${fboUno(total.operacionesConCarga, 'transportó', 'transportaron')} `
-            + `${negrita(Motor.fmtToneladas(total.cargaTotalKg))} de carga`
+            + `${negrita(Motor.fmtToneladas(cargaMostrada))} de carga`
             + (fboNum(total.cargaNacionalKg) + fboNum(total.cargaInternacionalKg) > 0
-                ? `: ${esc(Motor.fmtToneladas(total.cargaNacionalKg))} nacional y ${esc(Motor.fmtToneladas(total.cargaInternacionalKg))} internacional, en `
+                ? `: ${esc(Motor.fmtToneladas(total.cargaNacionalKg))} nacional y ${esc(Motor.fmtToneladas(total.cargaInternacionalKg))} internacional`
+                    + (total.oficial ? ' (de los registros disponibles)' : '') + ', en '
                 : ' (sin desglose nacional/internacional capturado), en ')
             + `${fboCuenta(total.operacionesConCarga, 'operación con carga', 'operaciones con carga')}.`
-            + (conCarga[0] ? ` La aerolínea con más carga fue ${negrita(conCarga[0].d1)}, con `
-                + `${negrita(fboPctTexto(fboNum(conCarga[0].cargaTotalKg), fboNum(total.cargaTotalKg)))} del total.` : ''));
+            + (conCarga[0] ? ` La aerolínea con más carga ${total.oficial ? 'capturada' : ''} fue ${negrita(conCarga[0].d1)}, con `
+                + `${negrita(fboPctTexto(fboNum(conCarga[0].cargaTotalKg), fboNum(total.cargaTotalKg)))} ${total.oficial ? 'de la carga con aerolínea identificada' : 'del total'}.` : ''));
 
         $('est-carga-tarjetas').innerHTML = [
-            kpiFbo({ icono: 'fa-box', color: '#fd7e14', titulo: 'Carga transportada', valor: Motor.fmtToneladas(total.cargaTotalKg),
-                detalle: `Nacional ${Motor.fmtToneladas(total.cargaNacionalKg)} · Internacional ${Motor.fmtToneladas(total.cargaInternacionalKg)}` }),
+            kpiFbo({ icono: 'fa-box', color: '#fd7e14', titulo: 'Carga transportada', valor: Motor.fmtToneladas(cargaMostrada),
+                detalle: `${total.oficial ? 'Cifra oficial · ' : ''}Nacional ${Motor.fmtToneladas(total.cargaNacionalKg)} · Internacional ${Motor.fmtToneladas(total.cargaInternacionalKg)}${total.oficial ? ' (de los registros disponibles)' : ''}` }),
             kpiFbo({ icono: 'fa-arrow-down', color: '#0d6efd', titulo: 'Descargada en AIFA', valor: Motor.fmtToneladas(total.cargaDescargadaKg),
                 detalle: 'Movimientos de llegada' }),
             kpiFbo({ icono: 'fa-arrow-up', color: '#20c997', titulo: 'Embarcada en AIFA', valor: Motor.fmtToneladas(total.cargaEmbarcadaKg),
@@ -1310,19 +1400,24 @@
             }
         }
 
+        // Cada mes usa su propia cifra oficial (f.oficial) cuando existe, para
+        // que septiembre no aparezca con lo poco que ya se capturó localmente.
         // Sin desglose nacional/internacional capturado, apilar esas dos series
         // deja la gráfica en blanco: entonces las barras son la carga
         // transportada. Con desglose parcial, lo que falta para el total va en
-        // un tramo gris "Sin desglose", para que cada barra llegue a su total.
-        const sinDesgloseMes = (f) => Math.max(0, toneladas(f.cargaTotalKg) - toneladas(f.cargaNacionalKg) - toneladas(f.cargaInternacionalKg));
+        // un tramo gris "Sin desglose" — con cifra oficial, ese mismo tramo
+        // absorbe también la diferencia con lo oficial, para que la barra
+        // siga llegando exactamente a su total.
+        const totalMes = (f) => toneladas(f.oficial ? f.oficial.cargaTotalKg : f.cargaTotalKg);
+        const sinDesgloseMes = (f) => Math.max(0, totalMes(f) - toneladas(f.cargaNacionalKg) - toneladas(f.cargaInternacionalKg));
         const hayDesglose = mensual.some((f) => fboNum(f.cargaNacionalKg) + fboNum(f.cargaInternacionalKg) > 0);
         const seriesCarga = hayDesglose
             ? [
                 { etiqueta: 'Nacional (t)', valor: (f) => Motor.kgAToneladas(f.cargaNacionalKg), color: '#0d6efd' },
                 { etiqueta: 'Internacional (t)', valor: (f) => Motor.kgAToneladas(f.cargaInternacionalKg), color: '#fd7e14' }
             ].concat(mensual.some((f) => sinDesgloseMes(f) >= 0.001) ? [{ etiqueta: 'Sin desglose (t)', valor: sinDesgloseMes, color: FBO_GRIS }] : [])
-            : [{ etiqueta: 'Carga transportada (t)', valor: (f) => Motor.kgAToneladas(f.cargaTotalKg), color: '#fd7e14' }];
-        pintarTendencia('est-carga-chart', mensual, seriesCarga, { total: (f) => Motor.kgAToneladas(f.cargaTotalKg), formato: fmtT });
+            : [{ etiqueta: 'Carga transportada (t)', valor: totalMes, color: '#fd7e14' }];
+        pintarTendencia('est-carga-chart', mensual, seriesCarga, { total: totalMes, formato: fmtT });
 
         pintarComposicion('est-carga-composicion', [
             barraComposicion('Ámbito (t)', [

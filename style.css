@@ -21751,10 +21751,15 @@ body.conci-estadistica-workspace .conci-workspace-shell {
    order: 1;
 }
 
-#pane-conci-estadistica > #est-avisos {
+#pane-conci-estadistica > .est-pie {
    order: 2;
    margin-top: auto;
-   padding-top: 1rem;
+}
+
+/* Pie de avisos (todas las ventanas de Estadística y el Informe oficial):
+   advertencias y errores como texto sobre el fondo blanco. */
+.est-pie > :not(.d-none):not([hidden]) {
+   margin-top: 1rem;
 }
 
 .est-aviso {
@@ -21795,6 +21800,24 @@ body.dark-mode .est-aviso {
 
 body.dark-mode .est-aviso-error {
    color: #fca5a5;
+}
+
+/* Resumen: la calidad del dato va al pie del tablero, como notas sobre el
+   fondo blanco (sin recuadros). */
+.est-resumen-calidad-pie {
+   margin-top: 1rem;
+}
+
+.est-resumen-calidad-pie .fbo-destacados {
+   gap: .35rem 1.5rem;
+}
+
+.est-resumen-calidad-pie .fbo-destacado,
+body.dark-mode .est-resumen-calidad-pie .fbo-destacado {
+   padding: .2rem 0;
+   border: 0;
+   border-radius: 0;
+   background: transparent;
 }
 
 /* ==========================================================================
@@ -22593,6 +22616,11 @@ body.dark-mode .fbo-sin-dato {
 
 #est-pane-informe .table-bordered > :not(caption) > * > * {
    border-color: rgba(14, 55, 99, .08);
+}
+
+/* La gráfica mensual del informe, en un panel como las demás ventanas. */
+#est-pane-informe .informe-est-grafica .fbo-grafica {
+   height: 19rem;
 }
 
 body.dark-mode .tb-tabla thead th,
@@ -23523,6 +23551,663 @@ body.dark-mode .fecha-ddmm > .fecha-ddmm-calendario {
    color: #cbd5e1;
 }
 
+/* ==========================================================================
+   Inicio · interfaz nueva: encabezado de un renglon con boton de usuario,
+   banner con bienvenida y tarjeta del periodo, tarjetas de cifras claras con
+   la foto a la derecha, accesos rapidos y subdirecciones como la referencia.
+   Solo cambia la presentacion: ids, secciones y permisos siguen igual.
+   ========================================================================== */
+/* Boton y menu de usuario (solo en el tablero; Estadistica conserva el suyo). */
+.hdr-user {
+   display: none;
+   position: relative;
+   flex: 0 0 auto;
+}
+
+body.navdeck-mode:not(.conci-estadistica-workspace) .hdr-user {
+   display: block;
+   margin-left: auto;
+}
+
+body.conci-estadistica-workspace .hdr-user {
+   display: none !important;
+}
+
+.hdr-user-btn {
+   display: flex;
+   align-items: center;
+   gap: .6rem;
+   max-width: 23rem;
+   padding: .3rem .75rem .3rem .35rem;
+   border: 1px solid rgba(14, 55, 99, .12);
+   border-radius: 12px;
+   background: #fff;
+   color: #1a2f55;
+   text-align: left;
+   cursor: pointer;
+   box-shadow: 0 4px 12px -10px rgba(15, 23, 42, .35);
+   transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.hdr-user-btn:hover,
+.hdr-user-btn.is-open {
+   border-color: #93b8f5;
+   background: #f8fafc;
+   box-shadow: 0 8px 18px -12px rgba(13, 110, 253, .45);
+}
+
+.hdr-user-icono {
+   display: grid;
+   place-items: center;
+   flex: 0 0 auto;
+   width: 2.15rem;
+   height: 2.15rem;
+   border-radius: 50%;
+   background: #e8f0fe;
+   color: #0d6efd;
+   font-size: .95rem;
+}
+
+body.dark-mode .hdr-user-btn {
+   border-color: rgba(255, 255, 255, .12);
+   background: rgba(15, 23, 42, .55);
+   color: #e2e8f0;
+}
+
+body.dark-mode .hdr-user-btn:hover,
+body.dark-mode .hdr-user-btn.is-open {
+   background: rgba(30, 41, 59, .9);
+}
+
+body.dark-mode .hdr-user-icono {
+   background: rgba(13, 110, 253, .2);
+   color: #93c5fd;
+}
+
+body.dark-mode .hdr-user-rol {
+   background: rgba(99, 102, 241, .22);
+   color: #c7d2fe;
+}
+
+body.dark-mode .hdr-user-correo,
+body.dark-mode .hdr-user-chev {
+   color: #94a3b8;
+}
+
+.hdr-user-texto {
+   display: flex;
+   flex-direction: column;
+   gap: .2rem;
+   min-width: 0;
+   line-height: 1.15;
+}
+
+.hdr-user-linea {
+   display: flex;
+   align-items: center;
+   gap: .4rem;
+   min-width: 0;
+}
+
+.hdr-user-nombre {
+   overflow: hidden;
+   font-size: .84rem;
+   font-weight: 700;
+   white-space: nowrap;
+   text-overflow: ellipsis;
+}
+
+.hdr-user-rol {
+   flex: 0 0 auto;
+   padding: .08rem .5rem;
+   border-radius: 999px;
+   background: #eef2ff;
+   color: #3730a3;
+   font-size: .62rem;
+   font-weight: 700;
+   letter-spacing: .03em;
+}
+
+.hdr-user-area {
+   display: inline-flex;
+   flex: 0 0 auto;
+   align-items: center;
+   gap: .3rem;
+   padding: .08rem .5rem;
+   border-radius: 999px;
+   background: color-mix(in srgb, var(--hdr-area, #16a34a) 20%, #fff);
+   color: color-mix(in srgb, var(--hdr-area, #16a34a) 75%, #000);
+   font-size: .6rem;
+   font-weight: 700;
+   white-space: nowrap;
+}
+
+.hdr-user-area[hidden],
+.hdr-user-rol[hidden],
+.hdr-user-correo[hidden] {
+   display: none;
+}
+
+.hdr-user-area-punto {
+   width: .42rem;
+   height: .42rem;
+   border-radius: 50%;
+   background: var(--hdr-area, #16a34a);
+}
+
+.hdr-user-correo {
+   overflow: hidden;
+   color: #64748b;
+   font-size: .64rem;
+   white-space: nowrap;
+   text-overflow: ellipsis;
+}
+
+.hdr-user-chev {
+   flex: 0 0 auto;
+   margin-left: .2rem;
+   color: #64748b;
+   font-size: .6rem;
+   transition: transform .15s ease;
+}
+
+.hdr-user-btn.is-open .hdr-user-chev {
+   transform: rotate(180deg);
+}
+
+.hdr-user-menu {
+   position: absolute;
+   top: calc(100% + .45rem);
+   right: 0;
+   z-index: 1450;
+   width: 17.5rem;
+   padding: .35rem;
+   border: 1px solid rgba(14, 55, 99, .12);
+   border-radius: 14px;
+   background: #fff;
+   box-shadow: 0 22px 44px -18px rgba(15, 23, 42, .45);
+   text-align: left;
+}
+
+.hdr-user-menu[hidden] {
+   display: none;
+}
+
+/* La lista de opciones siempre se ve dentro del menu; cada opcion conserva
+   su propio d-none, que es el que manejan los permisos. */
+.hdr-user-menu #si-user-dropdown,
+.hdr-user-menu #si-user-dropdown.d-none {
+   display: block !important;
+}
+
+.hdr-user-menu a.menu-item {
+   display: flex !important;
+   align-items: center;
+   gap: .7rem;
+   margin: 0 !important;
+   padding: .56rem .75rem !important;
+   border: 0 !important;
+   border-radius: 9px !important;
+   background: transparent !important;
+   color: #1f2d45 !important;
+   font-size: .85rem;
+   font-weight: 500;
+   text-decoration: none;
+}
+
+.hdr-user-menu a.menu-item.d-none {
+   display: none !important;
+}
+
+.hdr-user-menu a.menu-item:hover,
+.hdr-user-menu a.menu-item:focus-visible {
+   background: #f1f5f9 !important;
+}
+
+.hdr-user-menu a.menu-item > i,
+.hdr-user-menu a.menu-item .si-ico {
+   width: 1.1rem;
+   margin: 0 !important;
+   color: #64748b !important;
+   text-align: center;
+}
+
+.hdr-user-menu a.hdr-user-salir {
+   margin-top: .3rem !important;
+   border-top: 1px solid rgba(14, 55, 99, .1) !important;
+   border-radius: 0 0 9px 9px !important;
+   color: #dc2626 !important;
+   font-weight: 600;
+}
+
+.hdr-user-menu a.hdr-user-salir > i {
+   color: #dc2626 !important;
+}
+
+body.dark-mode .hdr-user-menu {
+   border-color: rgba(255, 255, 255, .1);
+   background: #1e293b;
+}
+
+body.dark-mode .hdr-user-menu a.menu-item {
+   color: #e2e8f0 !important;
+}
+
+body.dark-mode .hdr-user-menu a.menu-item:hover,
+body.dark-mode .hdr-user-menu a.menu-item:focus-visible {
+   background: rgba(255, 255, 255, .06) !important;
+}
+
+/* La tarjeta de usuario y Cerrar Sesion de la barra pasan al boton del encabezado. */
+body.navdeck-mode .sidebar.nav-deck > .si-user-card,
+body.navdeck-mode .sidebar.nav-deck > .si-link--logout {
+   display: none !important;
+}
+
+/* Encabezado de un renglon: logos, titulo, usuario, emblema, horas y acciones. */
+@media (min-width: 992px) {
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header {
+      margin-bottom: .75rem;
+      padding: .5rem 1.1rem !important;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) #flying-plane {
+      display: none;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-content {
+      flex-wrap: nowrap;
+      gap: .9rem;
+      min-height: 0;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-brand-block {
+      padding-right: .9rem;
+      border-right: 1px solid rgba(14, 55, 99, .14);
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .aifa-logo {
+      width: 78px;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content {
+      flex-direction: row;
+      align-items: center;
+      min-width: 0;
+      padding: 0;
+      text-align: left;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content .header-title-row {
+      justify-content: flex-start;
+      gap: .8rem;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content .header-title-row .main-title {
+      max-width: none;
+      margin: 0;
+      font-size: clamp(1.05rem, .55rem + .8vw, 1.45rem);
+      text-align: left;
+      white-space: nowrap;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-logo {
+      height: 38px;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content .header-subtext {
+      display: none;
+   }
+}
+
+/* En pantallas angostas el boton se reduce al icono. */
+@media (max-width: 991.98px) {
+   .hdr-user-texto,
+   .hdr-user-chev {
+      display: none;
+   }
+
+   .hdr-user-btn {
+      padding: .3rem;
+      border-radius: 50%;
+   }
+}
+
+/* Banner: foto a lo ancho, bienvenida, tarjeta del periodo translucida, fecha
+   abajo y el selector de vista arriba a la derecha. */
+body.navdeck-mode .ndw-hero {
+   align-items: stretch;
+   min-height: 15rem;
+   padding: 1.25rem 1.5rem;
+}
+
+/* La torre completa (images/banner.png, 1701 x 925): la foto se escala por
+   alto para que la torre quepa entera y centrada, con cielo arriba y su base
+   abajo; los lados se rellenan con la misma foto desenfocada y los bordes de
+   la nitida se funden con ese fondo. Sin zoom lento: sacaria la torre. */
+body.navdeck-mode .ndw-hero-media {
+   overflow: hidden;
+   background-image: none;
+   transform: none;
+   animation: none;
+}
+
+body.navdeck-mode .ndw-hero-media::before {
+   position: absolute;
+   inset: -40px;
+   background: var(--ndw-hero-img) center 42% / cover no-repeat;
+   content: "";
+   filter: blur(22px) saturate(1.15) brightness(.9);
+}
+
+.ndw-hero-foto {
+   display: none;
+}
+
+body.navdeck-mode .ndw-hero-foto {
+   position: absolute;
+   top: -75%;
+   left: 50%;
+   display: block;
+   height: 220%;
+   aspect-ratio: 1701 / 925;
+   background: var(--ndw-hero-img) center / cover no-repeat;
+   transform: translateX(-50%);
+   -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
+   mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
+}
+
+.ndw-hero-main {
+   position: relative;
+   z-index: 1;
+   display: flex;
+   flex-direction: column;
+   justify-content: space-between;
+   gap: .75rem;
+   min-width: 0;
+}
+
+.ndw-hero-welcome,
+.ndw-hero-fecha {
+   color: #fff;
+   font-size: .84rem;
+   font-weight: 600;
+   text-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+}
+
+.ndw-hero-fecha {
+   display: inline-flex;
+   align-items: center;
+   gap: .45rem;
+}
+
+/* Sin recuadro: el icono y el texto del periodo van sobre la foto. */
+.ndw-hero-card {
+   display: flex;
+   align-items: center;
+   gap: 1rem;
+   max-width: 44rem;
+}
+
+body.navdeck-mode .ndw-hero-card .ndw-hero-icon {
+   width: 3.5rem;
+   height: 3.5rem;
+   border-radius: 14px;
+   background: rgba(255, 255, 255, .16);
+   color: #fff;
+   font-size: 1.45rem;
+   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .45), 0 6px 16px rgba(0, 0, 0, .25);
+}
+
+body.navdeck-mode .ndw-hero-card .ndw-hero-title {
+   color: #fff !important;
+   text-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+}
+
+body.navdeck-mode .ndw-hero-card .ndw-hero-kicker,
+body.navdeck-mode .ndw-hero-card .ndw-tap-hint {
+   color: rgba(255, 255, 255, .9) !important;
+   text-shadow: 0 1px 3px rgba(0, 0, 0, .45);
+}
+
+/* Sobre la foto, las pastillas del periodo y el selector de mes y año
+   necesitan fondo propio para leerse en tema claro. */
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-prelim-banner-note,
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-prelim-last-date,
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-month-stepper,
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-period-chip {
+   background: rgba(255, 255, 255, .92) !important;
+   text-shadow: none;
+   box-shadow: 0 4px 12px -8px rgba(15, 23, 42, .55);
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-period-chip.is-active {
+   background: #0d6efd !important;
+   color: #fff !important;
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-hero-media::after {
+   background: linear-gradient(95deg, rgba(8, 20, 45, .62) 0%, rgba(8, 20, 45, .3) 36%, rgba(8, 20, 45, 0) 56%);
+}
+
+/* En oscuro, el velo tambien se queda del lado del texto: la torre se ve,
+   apenas atenuada para no deslumbrar. */
+body.navdeck-mode.dark-mode .ndw-hero-media::after {
+   background: linear-gradient(95deg, rgba(8, 14, 28, .82) 0%, rgba(8, 14, 28, .5) 36%, rgba(8, 14, 28, .22) 58%, rgba(8, 14, 28, .32) 100%);
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-view-toggle {
+   border-color: rgba(255, 255, 255, .65);
+   background: rgba(255, 255, 255, .75);
+   box-shadow: 0 10px 26px -16px rgba(15, 23, 42, .55);
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-view-btn {
+   color: #475569;
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-view-btn:hover {
+   background: rgba(13, 110, 253, .08);
+   color: #0d6efd;
+}
+
+body.navdeck-mode .ndw-view-btn.is-active,
+body.navdeck-mode:not(.dark-mode) .ndw-view-btn.is-active {
+   background: #0d6efd;
+   color: #fff;
+}
+
+/* Tarjetas de cifras: claras, con icono, cifra y la foto desvanecida a la derecha. */
+body.navdeck-mode .ndw-card {
+   flex-direction: row;
+   align-items: center;
+   justify-content: flex-start;
+   gap: .75rem;
+   min-height: 5.6rem;
+   padding: .75rem .9rem;
+   border: 1px solid rgba(20, 33, 61, .1);
+   border-bottom: 3px solid var(--ndw-accent, #3b82f6);
+   background-color: #fff;
+   background-image: linear-gradient(90deg, #fff 0%, #fff 46%, rgba(255, 255, 255, .78) 66%, rgba(255, 255, 255, .15) 100%), var(--ndw-img) !important;
+   background-position: center, right center !important;
+   background-size: cover !important;
+   color: #0f172a;
+   box-shadow: 0 8px 20px -14px rgba(15, 23, 42, .4);
+}
+
+body.navdeck-mode .ndw-card:hover {
+   box-shadow: 0 14px 26px -14px rgba(15, 23, 42, .45);
+}
+
+body.navdeck-mode .ndw-card::after {
+   position: absolute;
+   top: .5rem;
+   right: .6rem;
+   color: #94a3b8;
+   content: "\f054";
+   font-family: "Font Awesome 6 Free";
+   font-size: .62rem;
+   font-weight: 900;
+}
+
+body.navdeck-mode .ndw-card-overlay,
+body.navdeck-mode .ndw-card-cta {
+   display: none;
+}
+
+body.navdeck-mode .ndw-card-icon {
+   position: static;
+   flex: 0 0 auto;
+   width: 2.5rem;
+   height: 2.5rem;
+   border-radius: .8rem;
+   font-size: 1.05rem;
+   box-shadow: 0 8px 16px -10px var(--ndw-accent, #3b82f6);
+}
+
+body.navdeck-mode .ndw-card-tag {
+   color: #64748b;
+}
+
+body.navdeck-mode .ndw-card-value {
+   color: #0f172a;
+   font-size: 1.4rem;
+   text-shadow: none;
+}
+
+body.navdeck-mode .ndw-card-sub {
+   color: #64748b;
+}
+
+body.navdeck-mode.dark-mode .ndw-card {
+   border-color: rgba(255, 255, 255, .08);
+   background-color: #1e293b;
+   background-image: linear-gradient(90deg, #1e293b 0%, #1e293b 40%, rgba(30, 41, 59, .65) 68%, rgba(30, 41, 59, .15) 100%), var(--ndw-img) !important;
+   color: #e2e8f0;
+}
+
+body.navdeck-mode.dark-mode .ndw-card-value {
+   color: #f8fafc;
+}
+
+body.navdeck-mode.dark-mode .ndw-card-tag,
+body.navdeck-mode.dark-mode .ndw-card-sub {
+   color: #94a3b8;
+}
+
+/* Accesos rapidos: tarjetas blancas con icono de color. */
+body.navdeck-mode:not(.dark-mode) .si-nav > a.si-link.si-quick {
+   border: 1px solid rgba(20, 33, 61, .1);
+   background: #fff !important;
+   color: #1f2d45 !important;
+   box-shadow: 0 6px 16px -12px rgba(15, 23, 42, .4);
+}
+
+body.navdeck-mode:not(.dark-mode) .si-nav > a.si-link.si-quick:hover {
+   border-color: var(--qc, #60a5fa);
+   background: color-mix(in srgb, var(--qc, #60a5fa) 10%, #fff) !important;
+   color: #1f2d45 !important;
+}
+
+/* Subdirecciones: encabezado de color en un renglon (icono y nombre) y
+   gerencias como renglones blancos con su flecha. */
+body.navdeck-mode:not(.dark-mode) .si-group--sub {
+   background: #fff;
+}
+
+body.navdeck-mode .sidebar.nav-deck .si-grp-btn--sub {
+   flex-direction: row !important;
+   align-items: center !important;
+   justify-content: flex-start;
+   gap: .75rem;
+   margin: 0 0 .6rem !important;
+   padding: .8rem 1rem !important;
+   text-align: left;
+}
+
+body.navdeck-mode .sidebar.nav-deck .si-grp-btn--sub .si-grp-lbl::before {
+   content: none !important;
+}
+
+body.navdeck-mode .sidebar.nav-deck .si-grp-btn--sub .si-sub-ico {
+   width: 2.6rem;
+   height: 2.6rem;
+   margin: 0;
+   border-radius: .8rem;
+   font-size: 1.2rem;
+}
+
+body.navdeck-mode .sidebar.nav-deck .si-grp-btn--sub .si-grp-lbl {
+   font-size: 1rem;
+}
+
+body.navdeck-mode:not(.dark-mode) .si-group--ger {
+   border-color: rgba(20, 33, 61, .1);
+   background: #fff;
+   box-shadow: 0 3px 10px -8px rgba(15, 23, 42, .35);
+}
+
+body.navdeck-mode:not(.dark-mode) .si-group--ger:hover {
+   background: color-mix(in srgb, var(--sub-c, #60a5fa) 8%, #fff);
+}
+
+/* La flecha apunta a la derecha cerrada y hacia abajo al desplegar. */
+body.navdeck-mode .sidebar.nav-deck .si-grp-btn--ger > .si-chev {
+   transition: transform .15s ease;
+}
+
+body.navdeck-mode .sidebar.nav-deck .si-grp-btn--ger.collapsed > .si-chev {
+   transform: rotate(-90deg);
+}
+
+/* El tema claro anterior pintaba el texto de las tarjetas de blanco con
+   !important (para leerse sobre la foto); ahora va sobre fondo claro. */
+body.navdeck-mode:not(.dark-mode) .ndw-card-tag,
+body.navdeck-mode:not(.dark-mode) .ndw-card-sub {
+   color: #64748b !important;
+   opacity: 1;
+   text-shadow: none;
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-card-value {
+   color: #0f172a !important;
+   text-shadow: none;
+}
+
+/* Con el menu de usuario abierto, el encabezado queda por encima de la franja
+   de agenda, que lleva z-index 1310 para que su globo gane al encabezado. */
+.header.hdr-menu-abierto {
+   z-index: 1320;
+}
+
+/* Si el renglon no alcanza, el titulo cede con puntos suspensivos en vez de
+   encimarse con el boton de usuario o las horas. */
+@media (min-width: 992px) {
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content .header-title-row {
+      min-width: 0;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content .header-title-row .main-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+   }
+}
+
+@media (min-width: 992px) and (max-width: 1499.98px) {
+   body.navdeck-mode:not(.conci-estadistica-workspace) .hdr-user-correo {
+      display: none;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) #btn-global-refresh > span {
+      display: none !important;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content .header-title-row .main-title {
+      font-size: 1.05rem;
+   }
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    PASADA MÓVIL — TELÉFONOS
    Las medidas de tableta (≥ 576 px) ya estaban resueltas y no se tocan: todo
@@ -23975,3 +24660,10 @@ body.dark-mode .fecha-ddmm > .fecha-ddmm-calendario {
    border-top: 1px solid #e9eef6;
    padding: .75rem 1.1rem;
 }
+/* Selector del día exacto para las cifras de manifiestos. */
+.ndw-current-picker { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-top: 12px; }
+.ndw-current-picker label { display: flex; flex-direction: column; gap: 4px; color: #fff; font-weight: 600; }
+.ndw-current-picker input, .ndw-current-picker button { min-height: 44px; border-radius: 12px; padding: 8px 12px; border: 1px solid #cbd5e1; }
+.ndw-current-picker input { background: #fff; color: #172b4d; color-scheme: light; max-width: 100%; }
+.ndw-current-picker button { background: #0d6efd; color: #fff; font-weight: 600; }
+.ndw-current-picker button:focus-visible, .ndw-current-picker input:focus-visible { outline: 3px solid #fbbf24; outline-offset: 3px; }

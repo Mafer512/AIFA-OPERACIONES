@@ -11685,6 +11685,42 @@ function ndwGetAnnualVal(cat, metric, yearStr) {
     return total;
 }
 
+async function ndwLoadCurrentManifestDay(dateKey, force = false) {
+    const cache = window._ndwCurrentManifestDays ||= {};
+    if (cache[dateKey]?.status === 'loading' || (!force && cache[dateKey])) return;
+    cache[dateKey] = { status: 'loading' };
+    try {
+        const client = window.supabaseClient || (window.ensureSupabaseClient && await window.ensureSupabaseClient());
+        if (!client) throw new Error('No hay conexión con manifiestos');
+        const { error: refreshError } = await client.rpc('refrescar_informe_estadistico', { p_forzar: false });
+        // Antes de la migración 028 la vista es en vivo y no existe este RPC.
+        if (refreshError && !['PGRST202', '42883'].includes(refreshError.code)) throw refreshError;
+        const totals = { comercial: { operaciones: 0, pasajeros: 0 }, carga: { operaciones: 0, toneladas: 0 } };
+        let count = 0;
+        for (let offset = 0; ; offset += 1000) {
+            const { data, error } = await client.from('v_informe_manifiestos_normalizado')
+                .select('fecha_operacion,es_carga,pax_total,carga_kg')
+                .eq('fecha_operacion', dateKey).eq('capturado', true)
+                .order('manifiesto_id', { ascending: true }).range(offset, offset + 999);
+            if (error) throw error;
+            const rows = data || [];
+            rows.forEach(row => {
+                const category = row.es_carga ? 'carga' : 'comercial';
+                totals[category].operaciones += 1;
+                if (category === 'carga') totals.carga.toneladas += (Number(row.carga_kg) || 0) / 1000;
+                else totals.comercial.pasajeros += Number(row.pax_total) || 0;
+            });
+            count += rows.length;
+            if (rows.length < 1000) break;
+        }
+        cache[dateKey] = { status: 'ready', totals, count };
+    } catch (error) {
+        cache[dateKey] = { status: 'error' };
+        console.warn('[Inicio Actual] No se pudieron consultar los manifiestos:', error);
+    }
+    renderNavdeckWeeklyBanner();
+}
+
 function renderNavdeckWeeklyBanner() {
     const container = document.getElementById('navdeck-weekly-banner');
     if (!container) return;
@@ -11721,8 +11757,14 @@ function renderNavdeckWeeklyBanner() {
 
         /* ── compute preliminary / latest-data note (shared across all modes) ── */
         const _now = new Date();
+        const currentDateKey = NDW_VIEW_STATE.date || `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+        const currentDate = parseIsoDay(currentDateKey);
+        const currentManifest = window._ndwCurrentManifestDays?.[currentDateKey];
+        if (mode === 'current' && !currentManifest) ndwLoadCurrentManifestDay(currentDateKey);
         const _MONTH_NAMES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
         const _DOW_ES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+        const _capitalizar = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+        const _hoyTexto = `${_capitalizar(_DOW_ES[_now.getDay()])}, ${_now.getDate()} de ${_MONTH_NAMES_ES[_now.getMonth()]} de ${_now.getFullYear()}`;
         const _allCapDays = [];
         const _seenCapFechas = new Set();
         const _weekSrcsShared = [
@@ -11768,7 +11810,19 @@ function renderNavdeckWeeklyBanner() {
         /* ── hero content per mode ── */
         let heroIcon, heroKicker, heroTitle, periodPickerHtml = '';
 
-        if (mode === 'weekly') {
+        if (mode === 'current') {
+            /* Actual: manifiestos de la fecha seleccionada, hoy por defecto. */
+            heroIcon   = 'fas fa-bolt';
+            heroKicker = 'Cifras del día';
+            heroTitle = `${_capitalizar(_DOW_ES[currentDate.getDay()])} ${currentDate.getDate()} de ${_MONTH_NAMES_ES[currentDate.getMonth()]} de ${currentDate.getFullYear()}`;
+            periodPickerHtml = `
+                <div class="ndw-current-picker"><label>Fecha de manifiestos <input type="date" data-ndw-date value="${currentDateKey}"></label>
+                <button type="button" data-ndw-refresh>Actualizar cifras</button></div>
+                <p class="ndw-tap-hint" aria-live="polite">${currentManifest?.status === 'ready'
+                    ? (currentManifest.count ? 'Manifiestos capturados de la fecha seleccionada · Cifras preliminares' : 'Sin manifiestos capturados para esta fecha')
+                    : currentManifest?.status === 'error' ? 'No fue posible consultar los manifiestos. Intenta actualizar.' : 'Consultando manifiestos…'}</p>
+                <p class="ndw-tap-hint">Aviación General: captura diaria de la misma fecha; 0 si no hay captura.</p>`;
+        } else if (mode === 'weekly') {
             const rangeLabel = (typeof formatWeekLabel === 'function')
                 ? formatWeekLabel(weekly)
                 : (weekly?.rango?.descripcion || 'Semana reciente');
@@ -11837,9 +11891,15 @@ function renderNavdeckWeeklyBanner() {
                 ${_prelimHtml}`;
         }
 
+        /* ── foto del banner: va según la hora local (ver ndwHeroImgPorHora) ── */
+        const heroImg = ndwHeroImgPorHora();
+
         /* ── view toggle ── */
         const viewToggleHtml = `
             <div class="ndw-view-toggle" role="group" aria-label="Seleccionar vista">
+                <button type="button" class="ndw-view-btn${mode === 'current' ? ' is-active' : ''}" data-ndw-mode="current" aria-pressed="${mode === 'current'}">
+                    <i class="fas fa-bolt" aria-hidden="true"></i>Actual
+                </button>
                 <button type="button" class="ndw-view-btn${mode === 'weekly'  ? ' is-active' : ''}" data-ndw-mode="weekly"  aria-pressed="${mode === 'weekly'}">
                     <i class="fas fa-calendar-week" aria-hidden="true"></i>Semanal
                 </button>
@@ -11855,8 +11915,15 @@ function renderNavdeckWeeklyBanner() {
             </div>`;
 
         /* ── card values per mode ── */
-        const subSuffix = { weekly: 'semana', monthly: 'mes', annual: 'año', historic: 'histórico' }[mode] || 'histórico';
+        const subSuffix = { current: 'del día', weekly: 'semana', monthly: 'mes', annual: 'año', historic: 'histórico' }[mode] || 'histórico';
         const getCardVal = (def) => {
+            if (mode === 'current') {
+                if (def.cat !== 'general') return currentManifest?.status === 'ready' ? currentManifest.totals[def.cat]?.[def.metric] || 0 : null;
+                const dia = _weekSrcsShared
+                    .map((wk) => (Array.isArray(wk?.dias) ? wk.dias.find((d) => d?.fecha === currentDateKey) : null))
+                    .find(Boolean);
+                return dia ? getWeeklyValue(dia, def.cat, def.metric) : 0;
+            }
             if (mode === 'weekly')  return days.reduce((acc, d) => acc + getWeeklyValue(d, def.cat, def.metric), 0);
             if (mode === 'monthly') return ndwGetMonthlyVal(def.cat, def.metric, selYear, selMonthIdx);
             if (mode === 'annual')  return ndwGetAnnualVal(def.cat, def.metric, selYear);
@@ -11869,36 +11936,57 @@ function renderNavdeckWeeklyBanner() {
             const sub   = def.sub.replace('semana', subSuffix);
             return `
             <button type="button" class="ndw-card ndw-card--${def.cat}" data-ndw-idx="${idx}"
-                    style="--ndw-accent:${def.accent};background-image:url('${def.img}');background-position:${def.bgPos || 'center center'};"
+                    style="--ndw-accent:${def.accent};--ndw-img:url('${def.img}');background-image:url('${def.img}');background-position:${def.bgPos || 'center center'};"
                     aria-label="${escapeHTML(def.label)} — ${escapeHTML(sub)}">
                 <span class="ndw-card-overlay" aria-hidden="true"></span>
                 <span class="ndw-card-icon"><i class="${def.icon}" aria-hidden="true"></i></span>
                 <span class="ndw-card-body">
                     <span class="ndw-card-tag">${escapeHTML(def.label)}</span>
-                    <span class="ndw-card-value">${ndwFormatValue(total, def.metric)}</span>
+                    <span class="ndw-card-value">${total === null ? '—' : ndwFormatValue(total, def.metric)}</span>
                     <span class="ndw-card-sub">${escapeHTML(sub)}</span>
                 </span>
-                <span class="ndw-card-cta" aria-hidden="true"><i class="fas fa-${mode === 'weekly' ? 'chart-column' : 'chart-line'}"></i> ${mode === 'weekly' ? 'Ver detalle' : 'Ver análisis'}</span>
+                <span class="ndw-card-cta" aria-hidden="true"><i class="fas fa-${(mode === 'weekly' || mode === 'current') ? 'chart-column' : 'chart-line'}"></i> ${(mode === 'weekly' || mode === 'current') ? 'Ver detalle' : 'Ver análisis'}</span>
             </button>`;
         }).join('');
 
         container.innerHTML = `
-            <div class="ndw-hero ndw-hero--${mode}" style="--ndw-hero-img:url('images/torre.jpg')">
-                <div class="ndw-hero-media" aria-hidden="true"></div>
-                <span class="ndw-hero-icon" aria-hidden="true"><i class="${heroIcon}"></i></span>
-                <div class="ndw-hero-text">
-                    <span class="ndw-hero-kicker">${escapeHTML(heroKicker)}</span>
-                    <span class="ndw-hero-title">${escapeHTML(heroTitle)}</span>
-                    ${periodPickerHtml}
+            <div class="ndw-hero ndw-hero--${mode}" style="--ndw-hero-img:url('${heroImg}')" data-ndw-hero-img="${heroImg}">
+                <div class="ndw-hero-media" aria-hidden="true"><span class="ndw-hero-foto"></span></div>
+                <div class="ndw-hero-main">
+                    <span class="ndw-hero-welcome">Bienvenido al sistema</span>
+                    <div class="ndw-hero-card">
+                        <span class="ndw-hero-icon" aria-hidden="true"><i class="${heroIcon}"></i></span>
+                        <div class="ndw-hero-text">
+                            <span class="ndw-hero-kicker">${escapeHTML(heroKicker)}</span>
+                            <span class="ndw-hero-title">${escapeHTML(heroTitle)}</span>
+                            ${periodPickerHtml}
+                        </div>
+                    </div>
+                    <span class="ndw-hero-fecha"><i class="far fa-calendar" aria-hidden="true"></i>${escapeHTML(_hoyTexto)}</span>
                 </div>
                 ${viewToggleHtml}
             </div>
             <div class="ndw-cards">${cardsHtml}</div>
         `;
 
+        // La foto sigue al reloj: cada segundo revisa si la hora cruzó un horario.
+        if (!container._ndwFotoReloj) {
+            container._ndwFotoReloj = setInterval(ndwActualizarFotoPorHora, 1000);
+        }
+
         if (!container._ndwWired) {
             container._ndwWired = true;
+            container.addEventListener('change', (ev) => {
+                if (!ev.target.matches('[data-ndw-date]') || !ev.target.value) return;
+                NDW_VIEW_STATE.date = ev.target.value;
+                renderNavdeckWeeklyBanner();
+            });
             container.addEventListener('click', (ev) => {
+                if (ev.target.closest('[data-ndw-refresh]')) {
+                    ndwLoadCurrentManifestDay(container.querySelector('[data-ndw-date]').value, true);
+                    renderNavdeckWeeklyBanner();
+                    return;
+                }
                 const modeBtn = ev.target.closest('[data-ndw-mode]');
                 if (modeBtn) {
                     NDW_VIEW_STATE.mode = modeBtn.getAttribute('data-ndw-mode');
@@ -11939,7 +12027,7 @@ function renderNavdeckWeeklyBanner() {
                 if (!card) return;
                 const idx = Number(card.getAttribute('data-ndw-idx'));
                 if (!Number.isFinite(idx)) return;
-                if (NDW_VIEW_STATE.mode === 'weekly')       openNavdeckWeeklyDetail(idx);
+                if (NDW_VIEW_STATE.mode === 'weekly' || NDW_VIEW_STATE.mode === 'current') openNavdeckWeeklyDetail(idx);
                 else if (NDW_VIEW_STATE.mode === 'monthly') openNavdeckMonthlyDetail(idx);
                 else                                        openNavdeckAnnualDetail(idx);
             });
@@ -11947,14 +12035,50 @@ function renderNavdeckWeeklyBanner() {
     } catch (e) { /* ignore */ }
 }
 
+/* Foto del banner de inicio según la hora local que muestra el reloj del
+   encabezado (la del navegador):
+     06:00:01 a 15:00:00  images/banner4.png  (día)
+     15:00:01 a 17:00:00  images/banner.png   (tarde)
+     17:00:01 a 20:00:00  images/banner2.png  (anochecer)
+     20:00:01 a 06:00:00  images/banner3.png  (noche) */
+function ndwHeroImgPorHora(fecha) {
+    const d = fecha || new Date();
+    const s = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+    if (s > 6 * 3600 && s <= 15 * 3600) return 'images/banner4.png';
+    if (s > 15 * 3600 && s <= 17 * 3600) return 'images/banner.png';
+    if (s > 17 * 3600 && s <= 20 * 3600) return 'images/banner2.png';
+    return 'images/banner3.png';
+}
+
+/* Cuando la hora cruza uno de esos horarios, cambia la foto del banner ya
+   pintado (sin volver a pintarlo). */
+function ndwActualizarFotoPorHora() {
+    const hero = document.querySelector('#navdeck-weekly-banner .ndw-hero');
+    if (!hero) return;
+    const img = ndwHeroImgPorHora();
+    if (hero.getAttribute('data-ndw-hero-img') === img) return;
+    hero.setAttribute('data-ndw-hero-img', img);
+    hero.setAttribute('style', `--ndw-hero-img:url('${img}')`);
+}
+
 function openNavdeckWeeklyDetail(idx) {
     const def = NDW_CARD_DEFS[idx];
     if (!def) return;
     const weekly = (typeof getActiveWeeklyDataset === 'function') ? getActiveWeeklyDataset() : null;
-    const days = Array.isArray(weekly?.dias) ? weekly.dias : [];
+    let days = Array.isArray(weekly?.dias) ? weekly.dias : [];
+    const isCurrent = NDW_VIEW_STATE.mode === 'current';
+    if (isCurrent) {
+        const dateKey = document.querySelector('[data-ndw-date]')?.value;
+        const manifest = window._ndwCurrentManifestDays?.[dateKey];
+        if (def.cat !== 'general' && manifest?.status !== 'ready') return;
+        const sources = [...(typeof WEEKLY_OPERATIONS_DATASETS !== 'undefined' ? WEEKLY_OPERATIONS_DATASETS : []), staticData.operacionesSemanaActual];
+        const generalDay = sources.flatMap(w => w?.dias || []).find(d => d.fecha === dateKey);
+        days = [{ fecha: dateKey, label: dateKey, comercial: manifest?.totals?.comercial,
+            carga: manifest?.totals?.carga, general: generalDay?.general || {} }];
+    }
     if (!days.length) return;
 
-    const rangeLabel = (typeof formatWeekLabel === 'function') ? formatWeekLabel(weekly) : 'Semana reciente';
+    const rangeLabel = isCurrent ? days[0].fecha : (typeof formatWeekLabel === 'function') ? formatWeekLabel(weekly) : 'Semana reciente';
     const rows = days.map(d => ({
         label: d.labelFull || d.label || d.fecha || '',
         value: getWeeklyValue(d, def.cat, def.metric)
@@ -12025,7 +12149,7 @@ function openNavdeckWeeklyDetail(idx) {
                 </div>
             </div>
             <div class="ndw-modal-kpis">
-                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(total, def.metric)}</span><span class="ndw-kpi-lbl">Total semana</span></div>
+                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(total, def.metric)}</span><span class="ndw-kpi-lbl">${isCurrent ? 'Total del día' : 'Total semana'}</span></div>
                 <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(avg, def.metric)}</span><span class="ndw-kpi-lbl">Promedio diario</span></div>
                 <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(peak?.value || 0, def.metric)}</span><span class="ndw-kpi-lbl">Día pico</span></div>
             </div>
@@ -20132,6 +20256,36 @@ function _conciRowIsCargo(row, optypeCol, airlineCol) {
     return false;
 }
 
+// Número de vuelo de un designador de aerolínea ("VB 9501" -> "9501").
+//
+// El itinerario solo guarda el designador completo en "[Arr]/[Dep] Flight
+// Designator": no hay una columna aparte con el número. La base ya define qué
+// es el número —_aifa_flight_number, migración 010: al designador se le quita
+// el código de aerolínea de la propia fila y lo que sigue es el número— y esto
+// hace lo mismo sin depender de la forma del código: 2 letras ("VB"), letra y
+// dígito ("E7"), dígito y letra ("6R", "5Y") o ICAO de 3 letras ("TNO").
+//   1) Con el código de aerolínea de la fila, se quita del inicio del designador.
+//   2) Sin ese código (o si el designador no empieza con él), solo se separa
+//      cuando ya viene separado por un espacio y lo de la izquierda tiene forma
+//      de código de aerolínea ("E7 610").
+// El número se devuelve como texto, sin convertirlo: conserva los ceros a la
+// izquierda ("AM 001" -> "001") y un sufijo de letra ("9501A"). Si no hay forma
+// segura de separarlo (p. ej. ya es solo el número), el valor queda tal cual.
+function _conciNumeroDeVuelo(designador, codigoAerolinea) {
+    const texto = String(designador ?? '').trim();
+    if (!texto) return texto;
+    const NUMERO = '(\\d+[A-Za-z]?)';
+    // Solo letras y dígitos, así que puede ir directo dentro de la expresión.
+    const codigo = String(codigoAerolinea ?? '').toUpperCase().replace(/[^A-Z0-9]+/g, '');
+    if (codigo) {
+        const conCodigo = texto.match(new RegExp(`^${codigo}[\\s\\-/.]*${NUMERO}$`, 'i'));
+        if (conCodigo) return conCodigo[1];
+    }
+    const separado = texto.match(new RegExp(`^([A-Za-z0-9]{2,3})\\s+${NUMERO}$`));
+    if (separado && /[A-Za-z]/.test(separado[1])) return separado[2];
+    return texto;
+}
+
 // Convierte un movimiento del itinerario en una fila de la tabla, escrita
 // siempre en las columnas reales de "Conciliación Manifiestos". Antes había un
 // segundo juego de columnas sintéticas para el caso "sin esquema", pero esos
@@ -20148,7 +20302,7 @@ function _conciVueloToRow(vRow, tipo, outputCols, colm) {
     const row = {};
     outputCols.forEach(c => { row[c] = ''; });
     if (colm.tipo)      row[colm.tipo]      = tipo;
-    if (colm.vuelo)     row[colm.vuelo]      = isArr ? vRow['[Arr] Flight Designator'] : vRow['[Dep] Flight Designator'];
+    if (colm.vuelo)     row[colm.vuelo]      = _conciNumeroDeVuelo(isArr ? vRow['[Arr] Flight Designator'] : vRow['[Dep] Flight Designator'], sourceAirline);
     if (colm.aerolinea) row[colm.aerolinea]  = airlineValue;
     if (colm.optype)    row[colm.optype]     = isArr ? vRow['[Arr] Service Type']      : vRow['[Dep] Service Type'];
     if (colm.aeronave)  row[colm.aeronave]   = vRow['Aircraft type'] || '';
@@ -21953,39 +22107,29 @@ function _conciGetExportRows() {
     return rows;
 }
 
-async function _conciExportToExcel(kind) {
-    if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
-        alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
-        return;
-    }
-    const rows = _conciGetExportRows();
-    if (!rows.length) {
-        alert('No hay datos cargados para exportar.');
-        return;
-    }
-    const columns = _conciManifestosSummaryColumns;
-    const year = _conciEditFallbackYear;
-    const cols = (Array.isArray(columns) && columns.length) ? columns : Object.keys(rows[0] || {});
-    const optypeCol  = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
-    const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
+// ─── Formato compartido de las exportaciones a Excel ───────────────────────
+// "Exportar Excel" (Total / Pasajeros / Carga) y "Exportar por capturista"
+// arman sus tablas con estas mismas piezas — tipografía, encabezado, bordes,
+// alineaciones, anchos de columna y el valor/color de cada celda según el tipo
+// de columna (aerolínea con su color, fechas y horas, puntualidad, etc.) — para
+// que los dos archivos salgan con el mismo estándar visual.
+const _CONCI_EXPORT_BORDER_SIDE = { style: 'thin', color: { argb: 'FFBFBFBF' } };
+const _CONCI_EXPORT_BORDER = {
+    top: _CONCI_EXPORT_BORDER_SIDE, left: _CONCI_EXPORT_BORDER_SIDE,
+    bottom: _CONCI_EXPORT_BORDER_SIDE, right: _CONCI_EXPORT_BORDER_SIDE,
+};
+const _CONCI_EXPORT_BASE_FONT = { name: 'Noto Sans', size: 10 };
 
-    const isCarga = kind === 'carga';
-    const isTotal = kind === 'total';
-    // 'total' no separa por tipo: junta pasajeros y carga en una sola hoja con
-    // las mismas columnas que se ven en la grilla (mismo criterio que usa
-    // _conciExportPorCapturista para su tabla por capturista), reutilizando el
-    // formato de Pasajeros/Carga columna por columna cuando aplica.
-    const defs = isTotal
-        ? cols.map(c => _CONCI_EXPORT_COLS_TOTAL_BY_HEADER.get(String(c).trim().toUpperCase()) || { h: c, t: 'text', a: [c] })
-        : (isCarga ? _CONCI_EXPORT_COLS_CARGA : _CONCI_EXPORT_COLS_PAX);
-    const dataRows = isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga);
-    if (!dataRows.length) {
-        // Decía "en la vista actual", lo que daba a entender que respeta los
-        // filtros de la tabla. No los respeta: exporta el día completo.
-        alert(isTotal ? 'No hay datos cargados para exportar.' : `No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
-        return;
-    }
+// Definición de columna destino para cada encabezado de la grilla combinada;
+// un encabezado sin definición se exporta tal cual, como texto.
+function _conciExportDefsForColumns(cols) {
+    return cols.map(c => _CONCI_EXPORT_COLS_TOTAL_BY_HEADER.get(String(c).trim().toUpperCase()) || { h: c, t: 'text', a: [c] });
+}
 
+// Fábrica de la función que calcula el valor y estilo de una celda destino
+// según su tipo de columna (def.t). `isCarga` solo cambia de dónde sale el
+// código de aeropuerto para TIPO DE OPERACIÓN en la hoja de Carga.
+function _conciExportMakeCellComputer({ isCarga, year }) {
     const get = _conciExportGetField;
     const routeCity = (raw, isArr) => {
         const parts = String(raw || '').toUpperCase().split(/[-\/]+/).filter(Boolean);
@@ -22087,6 +22231,82 @@ async function _conciExportToExcel(kind) {
                 return { value: String(rawVal || '') };
         }
     };
+    return computeCell;
+}
+
+// Llegada / salida de una fila, según su TIPO DE MANIFIESTO.
+function _conciExportRowIsArrival(row) {
+    const tipoRaw = String(_conciExportGetField(row, ['TIPO DE MANIFIESTO']) || '').toLowerCase();
+    return /lleg|arr/.test(tipoRaw);
+}
+
+// Encabezado de tabla: verde institucional, texto blanco en negritas, centrado.
+function _conciExportStyleHeaderRow(headerRow) {
+    headerRow.height = 34;
+    headerRow.eachCell((cell) => {
+        cell.font = { name: 'Noto Sans', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF15683F' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        cell.border = _CONCI_EXPORT_BORDER;
+    });
+}
+
+// Agrega una fila de datos con el estilo de cada celda (calculado por
+// _conciExportMakeCellComputer) y va midiendo el ancho que necesita cada columna.
+function _conciExportAddDataRow(ws, cells, maxLen) {
+    const xr = ws.addRow(cells.map(c => (c.value === undefined || c.value === null) ? '' : c.value));
+    xr.eachCell((cell, colNumber) => {
+        const meta = cells[colNumber - 1] || {};
+        cell.font = { ..._CONCI_EXPORT_BASE_FONT };
+        if (meta.bold) cell.font.bold = true;
+        if (meta.fontColor) cell.font.color = { argb: meta.fontColor };
+        cell.alignment = meta.align || { vertical: 'middle', horizontal: 'center' };
+        cell.border = _CONCI_EXPORT_BORDER;
+        if (meta.fill) cell.fill = meta.fill;
+        const len = String(cell.value ?? '').length;
+        if (len > maxLen[colNumber - 1]) maxLen[colNumber - 1] = len;
+    });
+    return xr;
+}
+
+function _conciExportColumnWidth(maxLen) {
+    return Math.min(46, Math.max(11, maxLen + 2));
+}
+
+async function _conciExportToExcel(kind) {
+    if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
+        alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
+        return;
+    }
+    const rows = _conciGetExportRows();
+    if (!rows.length) {
+        alert('No hay datos cargados para exportar.');
+        return;
+    }
+    const columns = _conciManifestosSummaryColumns;
+    const year = _conciEditFallbackYear;
+    const cols = (Array.isArray(columns) && columns.length) ? columns : Object.keys(rows[0] || {});
+    const optypeCol  = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
+    const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
+
+    const isCarga = kind === 'carga';
+    const isTotal = kind === 'total';
+    // 'total' no separa por tipo: junta pasajeros y carga en una sola hoja con
+    // las mismas columnas que se ven en la grilla (mismo criterio que usa
+    // _conciExportPorCapturista para su tabla por capturista), reutilizando el
+    // formato de Pasajeros/Carga columna por columna cuando aplica.
+    const defs = isTotal
+        ? _conciExportDefsForColumns(cols)
+        : (isCarga ? _CONCI_EXPORT_COLS_CARGA : _CONCI_EXPORT_COLS_PAX);
+    const dataRows = isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga);
+    if (!dataRows.length) {
+        // Decía "en la vista actual", lo que daba a entender que respeta los
+        // filtros de la tabla. No los respeta: exporta el día completo.
+        alert(isTotal ? 'No hay datos cargados para exportar.' : `No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
+        return;
+    }
+
+    const computeCell =_conciExportMakeCellComputer({ isCarga, year });
 
     const sheetLabel = isTotal ? 'Total' : (isCarga ? 'Carga' : 'Pasajeros');
     const wb = new ExcelJS.Workbook();
@@ -22096,40 +22316,17 @@ async function _conciExportToExcel(kind) {
     const headers = defs.map(d => d.h.trim());
     ws.columns = headers.map(h => ({ header: h, key: h }));
     const maxLen = headers.map(h => h.length);
-    const thin = { style: 'thin', color: { argb: 'FFBFBFBF' } };
-    const border = { top: thin, left: thin, bottom: thin, right: thin };
-    const baseFont = { name: 'Noto Sans', size: 10 };
 
     // Header
-    const headerRow = ws.getRow(1);
-    headerRow.height = 34;
-    headerRow.eachCell((cell) => {
-        cell.font = { name: 'Noto Sans', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF15683F' } };
-        cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        cell.border = border;
-    });
+    _conciExportStyleHeaderRow(ws.getRow(1));
 
     // Data
     dataRows.forEach((row) => {
-        const tipoRaw = String(get(row, ['TIPO DE MANIFIESTO']) || '').toLowerCase();
-        const isArr = /lleg|arr/.test(tipoRaw);
-        const cells = defs.map(d => computeCell(d, row, isArr));
-        const xr = ws.addRow(cells.map(c => (c.value === undefined || c.value === null) ? '' : c.value));
-        xr.eachCell((cell, colNumber) => {
-            const meta = cells[colNumber - 1] || {};
-            cell.font = { ...baseFont };
-            if (meta.bold) cell.font.bold = true;
-            if (meta.fontColor) cell.font.color = { argb: meta.fontColor };
-            cell.alignment = meta.align || { vertical: 'middle', horizontal: 'center' };
-            cell.border = border;
-            if (meta.fill) cell.fill = meta.fill;
-            const len = String(cell.value ?? '').length;
-            if (len > maxLen[colNumber - 1]) maxLen[colNumber - 1] = len;
-        });
+        const isArr = _conciExportRowIsArrival(row);
+        _conciExportAddDataRow(ws, defs.map(d => computeCell(d, row, isArr)), maxLen);
     });
 
-    ws.columns.forEach((col, i) => { col.width = Math.min(46, Math.max(11, maxLen[i] + 2)); });
+    ws.columns.forEach((col, i) => { col.width = _conciExportColumnWidth(maxLen[i]); });
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
 
     const buf = await wb.xlsx.writeBuffer();
@@ -22146,6 +22343,9 @@ window.conciExportExcel = _conciExportToExcel;
 // excluyen las columnas internas). Solo entran manifiestos ya capturados —
 // HR. DE RECEPCIÓN es la misma autoridad de estado que usan los contadores y
 // el filtro "Capturados/Sin capturar" (ver _conciIsReceptionColumn).
+// El formato (encabezado, bordes, alineaciones, anchos, colores de aerolínea y
+// de puntualidad, formato de fechas y horas) sale de los mismos helpers que
+// usa "Exportar Excel" > Total (_conciExportMakeCellComputer y compañía).
 const _CONCI_EXPORT_CAPTURISTA_HIDDEN_COLS = new Set(['_fuente', '_isPax', '_validado_itinerario', '_validado_por_itinerario', 'id', 'Año', 'Mes', 'Día']);
 
 // Convierte a número cuando el texto es puramente numérico (para que sume/ordene
@@ -22195,9 +22395,8 @@ async function _conciExportPorCapturista() {
     });
 
     const wb = new ExcelJS.Workbook();
-    const thin = { style: 'thin', color: { argb: 'FFBFBFBF' } };
-    const border = { top: thin, left: thin, bottom: thin, right: thin };
-    const baseFont = { name: 'Noto Sans', size: 10 };
+    const defs = _conciExportDefsForColumns(cols);
+    const computeCell = _conciExportMakeCellComputer({ isCarga: false, year: _conciEditFallbackYear });
     const usedSheetNames = new Set();
     const sheetNameFor = (nombre) => {
         const base = nombre.replace(/[*?:\/\\\[\]]/g, ' ').trim().slice(0, 31) || 'Capturista';
@@ -22232,31 +22431,23 @@ async function _conciExportPorCapturista() {
 
         const headerRow = ws.getRow(3);
         cols.forEach((c, i) => { headerRow.getCell(i + 1).value = c; });
-        headerRow.height = 30;
-        headerRow.eachCell((cell) => {
-            cell.font = { name: 'Noto Sans', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E7D32' } };
-            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-            cell.border = border;
-        });
+        _conciExportStyleHeaderRow(headerRow);
 
         const maxLen = cols.map(c => c.length);
         filas.forEach(row => {
-            const values = cols.map(c => _conciExportCapturistaCellValue(get(row, [c])));
-            const xr = ws.addRow(values);
-            xr.eachCell((cell, colNumber) => {
-                const isObservaciones = /observacion/i.test(cols[colNumber - 1] || '');
-                cell.font = { ...baseFont };
-                cell.alignment = isObservaciones
-                    ? { vertical: 'middle', horizontal: 'left', wrapText: true }
-                    : { vertical: 'middle', horizontal: typeof cell.value === 'number' ? 'right' : 'center' };
-                cell.border = border;
-                const len = String(cell.value ?? '').length;
-                if (len > maxLen[colNumber - 1]) maxLen[colNumber - 1] = len;
-            });
+            const isArr = _conciExportRowIsArrival(row);
+            _conciExportAddDataRow(ws, defs.map((d, i) => {
+                const cell = computeCell(d, row, isArr);
+                if (cell.value !== '' && cell.value !== undefined && cell.value !== null) return cell;
+                // Total recalcula algunas columnas (p. ej. TIPO DE OPERACIÓN a partir
+                // de la ruta) y puede quedar vacío donde la grilla sí tiene el dato
+                // capturado; aquí no se pierde: se conserva lo que ya traía la tabla.
+                const capturado = String(get(row, [cols[i]]) ?? '').trim();
+                return capturado === '' ? cell : { ...cell, value: capturado };
+            }), maxLen);
         });
 
-        cols.forEach((_, i) => { ws.getColumn(i + 1).width = Math.min(46, Math.max(11, maxLen[i] + 2)); });
+        cols.forEach((_, i) => { ws.getColumn(i + 1).width = _conciExportColumnWidth(maxLen[i]); });
         ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: cols.length } };
     }
 
