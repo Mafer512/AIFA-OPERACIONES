@@ -36,6 +36,9 @@ const api = new Function('document', 'HTMLInputElement', 'Event', `
   ${extraer('_conciMaskedDateToIso')}
   ${extraer('_conciIsoToMaskedDate')}
   ${extraer('_conciExpandDateMaskYear')}
+  ${extraer('_conciFormatDateMaskSinSiglo')}
+  ${extraer('_conciPosDespuesDeDigitos')}
+  ${extraer('_conciEditarFechaEnCursor')}
   ${extraer('_conciSincronizarCampoFecha')}
   ${extraer('_conciInterceptarValorIso')}
   ${extraer('_conciAplicarFechaMask')}
@@ -186,5 +189,70 @@ describe('marcado en la página', () => {
 
   test('se inicializa al arrancar el módulo', () => {
     expect(source).toContain('_conciInitCamposFecha(document);');
+  });
+});
+
+describe('correccion en medio de la fecha (filtros)', () => {
+  function tecla(input, key, ini, fin = ini) {
+    if (ini !== undefined) input.setSelectionRange(ini, fin);
+    const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    input.dispatchEvent(ev);
+    return ev;
+  }
+
+  test('cambia solo el dia y el filtro toma la fecha corregida', () => {
+    const { mask, iso } = montar('filter-conci-fecha-desde', '2026-09-21');
+    const alCambiar = jest.fn();
+    iso.addEventListener('change', alCambiar);
+    mask.focus();
+    tecla(mask, '0', 1);
+    expect(mask.value).toBe('20/09/2026');
+    expect(iso.value).toBe('2026-09-20');
+    expect(alCambiar).toHaveBeenCalledTimes(1);
+  });
+
+  test('Backspace en medio no mueve el filtro hasta completar la fecha', () => {
+    const { mask, iso } = montar('filter-conci-fecha-desde', '2026-09-21');
+    mask.focus();
+    tecla(mask, 'Backspace', 5);
+    expect(mask.value).toBe('21/02/026');
+    expect(iso.value).toBe('2026-09-21');
+    tecla(mask, '8');
+    expect(mask.value).toBe('21/08/2026');
+    expect(iso.value).toBe('2026-08-21');
+  });
+
+  test('al final se sigue escribiendo como antes (no se intercepta)', () => {
+    const { mask } = montar('filter-conci-fecha-desde', '2026-09-21');
+    mask.focus();
+    expect(tecla(mask, '5', 10).defaultPrevented).toBe(false);
+    mask.select();
+    expect(tecla(mask, '5').defaultPrevented).toBe(false);
+  });
+});
+
+describe('año de 4 dígitos en el filtro', () => {
+  test('tras el siglo provisional (01/10/2020) se sigue tecleando el año', () => {
+    const { mask, iso } = montar();
+    mask.focus();
+    teclear(mask, '011020');
+    expect(mask.value).toBe('01/10/2020');
+    mask.setSelectionRange(10, 10);
+    const ev = new KeyboardEvent('keydown', { key: '2', bubbles: true, cancelable: true });
+    mask.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(true);
+    expect(mask.value).toBe('01/10/202');
+    teclear(mask, '01/10/2026');
+    expect(iso.value).toBe('2026-10-01');
+  });
+
+  test('una fecha ya cargada no se toma como siglo provisional', () => {
+    const { mask } = montar('filter-conci-fecha-desde', '2026-10-01');
+    mask.focus();
+    mask.setSelectionRange(10, 10);
+    const ev = new KeyboardEvent('keydown', { key: '5', bubbles: true, cancelable: true });
+    mask.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(mask.value).toBe('01/10/2026');
   });
 });

@@ -29,6 +29,7 @@ const validators = new Function(
      _conciIsValidIsoDateInput,
      _conciFormatDateMask, _conciMaskedDateToIso,
      _conciIsoToMaskedDate, _conciExpandDateMaskYear,
+     _conciFormatDateMaskSinSiglo, _conciPosDespuesDeDigitos, _conciEditarFechaEnCursor,
    };`
 )(value => String(value).padStart(2, '0'));
 
@@ -45,11 +46,15 @@ const colTypes = new Function(
 
 const attachDateMask = new Function(
   '_conciFormatDateMask', '_conciExpandDateMaskYear', '_conciIsoToMaskedDate',
+  '_conciFormatDateMaskSinSiglo', '_conciPosDespuesDeDigitos', '_conciEditarFechaEnCursor',
   `${maskSnippet}; return _conciAttachDateMask;`
 )(
   validators._conciFormatDateMask,
   validators._conciExpandDateMaskYear,
-  validators._conciIsoToMaskedDate
+  validators._conciIsoToMaskedDate,
+  validators._conciFormatDateMaskSinSiglo,
+  validators._conciPosDespuesDeDigitos,
+  validators._conciEditarFechaEnCursor
 );
 
 const editorSnippet = sourceBetween(
@@ -340,5 +345,88 @@ describe('validacion de fecha y hora en Conciliacion > Manifiestos', () => {
     expect(commitCell).toHaveBeenCalledWith(
       td, '29JUL 00:32', 'next', '29/07/2026 00:32'
     );
+  });
+});
+
+describe('correccion en medio de la fecha (celdas de Conciliacion)', () => {
+  // Coloca el cursor (o la seleccion) y presiona una tecla como el capturista.
+  function tecla(input, key, ini, fin = ini, extra = {}) {
+    if (ini !== undefined) input.setSelectionRange(ini, fin);
+    const ev = new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...extra });
+    input.dispatchEvent(ev);
+    return ev;
+  }
+  const cursor = input => [input.selectionStart, input.selectionEnd];
+
+  function abrirFecha(iso = '2026-09-21') {
+    document.body.innerHTML = `<input id=f value="${iso}">`;
+    const input = document.getElementById('f');
+    attachDateMask(input);
+    input.focus();
+    return input;
+  }
+
+  test('cambia solo el "1" de 21/09/2026 por "0"', () => {
+    const input = abrirFecha();
+    tecla(input, '0', 1);
+    expect(input.value).toBe('20/09/2026');
+    expect(cursor(input)).toEqual([3, 3]); // queda despues de la diagonal, en el mes
+  });
+
+  test('cambia solo el mes y solo un digito del anio', () => {
+    const input = abrirFecha();
+    tecla(input, '1', 3);
+    tecla(input, '0');
+    expect(input.value).toBe('21/10/2026');
+    tecla(input, '7', 9);
+    expect(input.value).toBe('21/10/2027');
+  });
+
+  test('reemplaza solo la parte seleccionada', () => {
+    const input = abrirFecha();
+    tecla(input, '2', 0, 2);
+    tecla(input, '0');
+    expect(input.value).toBe('20/09/2026');
+    tecla(input, '1', 3, 5);
+    tecla(input, '1');
+    expect(input.value).toBe('20/11/2026');
+  });
+
+  test('Backspace y Delete en medio solo quitan un digito', () => {
+    const input = abrirFecha();
+    tecla(input, 'Backspace', 2);
+    expect(input.value).toBe('20/92/026');
+    expect(cursor(input)).toEqual([1, 1]);
+    tecla(input, '1');
+    expect(input.value).toBe('21/09/2026');
+
+    tecla(input, 'Delete', 1);
+    expect(input.value).toBe('20/92/026');
+    expect(cursor(input)).toEqual([1, 1]);
+    tecla(input, '0');
+    expect(input.value).toBe('20/09/2026');
+  });
+
+  test('escribir desde cero y seleccionar todo siguen igual', () => {
+    const input = abrirFecha();
+    input.select();
+    '200926'.split('').forEach(k => tecla(input, k));
+    expect(input.value).toBe('20/09/2026');
+  });
+
+  test('en la celda, las flechas se mueven dentro de la fecha y en el borde cambian de campo', () => {
+    const commitCell = jest.fn();
+    const activateEditor = loadDateTimeEditor(commitCell);
+    const td = createCell('21/09/2026');
+    activateEditor(td, { withTime: false, parts: { year: 2026, month: 9, day: 21 }, currentRaw: '21/09/2026' });
+    const dateInput = td.querySelector('.conci-dt-date');
+
+    expect(tecla(dateInput, 'ArrowLeft', 5).defaultPrevented).toBe(false);
+    expect(tecla(dateInput, 'ArrowRight', 5).defaultPrevented).toBe(false);
+    expect(tecla(dateInput, 'ArrowLeft', 0, 3, { shiftKey: true }).defaultPrevented).toBe(false);
+    expect(commitCell).not.toHaveBeenCalled();
+
+    expect(tecla(dateInput, 'ArrowRight', 10).defaultPrevented).toBe(true);
+    expect(commitCell).toHaveBeenCalledWith(td, '21/09/2026', 'next', expect.anything());
   });
 });

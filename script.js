@@ -21418,15 +21418,24 @@ function _conciAttachDateMask(input) {
     // `notify` reemite el evento "input" que el teclado ya no dispara (se
     // intercepta con preventDefault). Sin él, el editor de la celda nunca se
     // entera de que hubo captura y no guardaría lo tecleado.
+    let ultimoTexto = '';
     const render = (digits, notify) => {
         const raw = onlyDigits(digits).slice(0, 8);
         input.dataset.conciDateDigits = raw;
-        input.value = _conciFormatDateMask(raw);
+        input.value = ultimoTexto = _conciFormatDateMask(raw);
         if (document.activeElement === input) {
             const end = input.value.length;
             input.setSelectionRange(end, end);
         }
         if (notify) input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    // Corrección en medio de la fecha: el cursor se queda donde se editó.
+    const renderEnCursor = ({ digitos, cursor }) => {
+        input.dataset.conciDateDigits = digitos;
+        input.value = ultimoTexto = _conciFormatDateMaskSinSiglo(digitos);
+        const pos = _conciPosDespuesDeDigitos(input.value, cursor);
+        input.setSelectionRange(pos, pos);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
     };
 
     // El valor con el que se abre la celda viene en ISO.
@@ -21437,6 +21446,14 @@ function _conciAttachDateMask(input) {
     // el siglo se completa solo.
     input.addEventListener('keydown', (ev) => {
         if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+        if (/^\d$/.test(ev.key) || ev.key === 'Backspace' || ev.key === 'Delete') {
+            const edicion = _conciEditarFechaEnCursor(input, ev.key);
+            if (edicion) {
+                ev.preventDefault();
+                renderEnCursor(edicion);
+                return;
+            }
+        }
         const raw = input.dataset.conciDateDigits || '';
         const hasSelection = input.selectionStart !== input.selectionEnd;
         if (/^\d$/.test(ev.key)) {
@@ -21457,7 +21474,7 @@ function _conciAttachDateMask(input) {
 
     // Red para lo que no viene del teclado: pegar, autocompletar, etc.
     input.addEventListener('input', () => {
-        if (input.value === _conciFormatDateMask(input.dataset.conciDateDigits || '')) return;
+        if (input.value === ultimoTexto) return;
         // Ya se está propagando un "input" real; no hace falta reemitirlo.
         render(input.value, false);
     });
@@ -24225,7 +24242,11 @@ function _conciInitCamposFecha(raiz) {
         if (!iso) return;
         mask.dataset.conciFechaLista = '1';
 
-        const sincronizar = () => _conciSincronizarCampoFecha(mask, iso);
+        // El siglo "20" que se completa solo al 6o digito ("01/10/20" -> "01/10/2020")
+        // ocupa los 10 caracteres del maxlength; mientras siga siendo el
+        // provisional, seguir tecleando el anio lo sustituye (igual que en las celdas).
+        let sigloAuto = false;
+        const sincronizar = () => { sigloAuto = false; _conciSincronizarCampoFecha(mask, iso); };
         sincronizar();
         _conciInterceptarValorIso(iso, sincronizar);
         // El calendario nativo escribe el valor por dentro, sin pasar por el
@@ -24236,22 +24257,48 @@ function _conciInitCamposFecha(raiz) {
         // que la fecha este completa, para no recargar la tabla a media captura.
         mask.addEventListener('input', () => {
             const cursorAlFinal = mask.selectionStart === mask.value.length;
+            const digitosTecleados = mask.value.replace(/\D/g, '').length;
             mask.value = _conciFormatDateMask(mask.value);
             if (cursorAlFinal) {
                 try { mask.setSelectionRange(mask.value.length, mask.value.length); } catch (_) { /* sin soporte */ }
             }
             if (_conciMaskedDateToIso(mask.value)) _conciAplicarFechaMask(mask, iso);
+            sigloAuto = cursorAlFinal && digitosTecleados === 6;
         });
 
         // Al salir del campo se completa el anio ("11/08/26" -> "11/08/2026") y
         // se confirma. Una fecha incompleta se descarta: es mejor un campo vacio
         // que un filtro apuntando a un dia que nadie quiso.
         const confirmar = () => {
+            sigloAuto = false;
             mask.value = _conciExpandDateMaskYear(mask.value);
             _conciAplicarFechaMask(mask, iso);
         };
         mask.addEventListener('blur', confirmar);
         mask.addEventListener('keydown', (ev) => {
+            // Corrección en medio de la fecha: se edita sólo donde está el
+            // cursor (el maxlength y el reformateo no lo permitían).
+            if (!ev.ctrlKey && !ev.metaKey && !ev.altKey
+                && (/^\d$/.test(ev.key) || ev.key === 'Backspace' || ev.key === 'Delete')) {
+                const fin = mask.value.length;
+                if (sigloAuto && /^\d$/.test(ev.key) && mask.selectionStart === fin && mask.selectionEnd === fin) {
+                    ev.preventDefault();
+                    sigloAuto = false;
+                    const d = mask.value.replace(/\D/g, '');
+                    mask.value = _conciFormatDateMask(d.slice(0, 4) + d.slice(6) + ev.key);
+                    return;
+                }
+                const edicion = _conciEditarFechaEnCursor(mask, ev.key);
+                if (edicion) {
+                    ev.preventDefault();
+                    sigloAuto = false;
+                    mask.value = _conciFormatDateMaskSinSiglo(edicion.digitos);
+                    const pos = _conciPosDespuesDeDigitos(mask.value, edicion.cursor);
+                    try { mask.setSelectionRange(pos, pos); } catch (_) { /* sin soporte */ }
+                    if (edicion.digitos.length === 8 && _conciMaskedDateToIso(mask.value)) _conciAplicarFechaMask(mask, iso);
+                    return;
+                }
+            }
             if (ev.key === 'Enter') { ev.preventDefault(); confirmar(); }
             else if (ev.key === 'Escape') { sincronizar(); mask.blur(); }
         });
@@ -24297,6 +24344,61 @@ function _conciFormatDateMask(value) {
     if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
     const year = digits.slice(4);
     return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${year.length === 2 ? `20${year}` : year}`;
+}
+
+// Igual que _conciFormatDateMask pero sin completar el siglo: al corregir en
+// medio de la fecha lo que se ve debe corresponder dígito a dígito con lo
+// capturado, para que el cursor quede donde el usuario lo dejó.
+function _conciFormatDateMaskSinSiglo(value) {
+    const digits = String(value || '').replace(/\D/g, '').slice(0, 8);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+// Posición del cursor en el texto con máscara justo después de `n` dígitos
+// (si ahí sigue una diagonal, queda después de ella).
+function _conciPosDespuesDeDigitos(texto, n) {
+    if (n <= 0) return 0;
+    let vistos = 0;
+    for (let i = 0; i < texto.length; i++) {
+        if (/\d/.test(texto[i]) && ++vistos === n) return texto[i + 1] === '/' ? i + 2 : i + 1;
+    }
+    return texto.length;
+}
+
+// Edición en la posición del cursor: un dígito, Backspace o Delete cuando el
+// cursor está en medio de la fecha o hay una parte seleccionada. Devuelve los
+// dígitos resultantes y cuántos quedan antes del cursor, o null si el caso es
+// el de siempre (cursor al final o todo seleccionado) y lo resuelve quien llama.
+// Con la fecha completa (8 dígitos) un dígito sobrescribe el que está delante
+// del cursor, así "21/09/2026" → "20/09/2026" cambiando sólo el "1".
+function _conciEditarFechaEnCursor(input, tecla) {
+    const texto = String(input.value || '');
+    const ini = input.selectionStart;
+    const fin = input.selectionEnd;
+    if (ini == null || fin == null) return null;
+    const conSeleccion = ini !== fin;
+    if (!conSeleccion && ini >= texto.length) return null;
+    if (conSeleccion && ini === 0 && fin >= texto.length) return null;
+
+    const digitos = texto.replace(/\D/g, '');
+    const contar = (hasta) => texto.slice(0, hasta).replace(/\D/g, '').length;
+    let a = contar(ini);
+    let b = contar(fin);
+    const nuevo = /^\d$/.test(tecla) ? tecla : '';
+    if (!conSeleccion) {
+        if (tecla === 'Backspace') {
+            if (a === 0) return { digitos, cursor: 0 };
+            a -= 1;
+        } else if (tecla === 'Delete' || digitos.length >= 8) {
+            b = a + 1;
+        }
+    }
+    return {
+        digitos: (digitos.slice(0, a) + nuevo + digitos.slice(b)).slice(0, 8),
+        cursor: a + nuevo.length,
+    };
 }
 
 // Convierte lo capturado en la máscara a ISO (yyyy-mm-dd), o '' si aún no es
@@ -29439,6 +29541,18 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
     // encima de usar esas flechas para moverse entre los segmentos día/mes/año
     // del selector de fecha nativo (para eso ya sirve escribir los números,
     // que avanzan de segmento solos).
+    // Excepción en el campo de fecha: ←/→ mueven el cursor dentro de la fecha
+    // (y con Shift seleccionan) mientras no esté en el borde; en el borde
+    // siguen pasando de campo como siempre.
+    const flechaDentroDeFecha = (e) => {
+        if (e.target !== dateInput || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return false;
+        if (e.shiftKey) return true;
+        const ini = dateInput.selectionStart;
+        const fin = dateInput.selectionEnd;
+        if (ini == null || fin == null) return false;
+        if (ini !== fin) return true;
+        return e.key === 'ArrowLeft' ? ini > 0 : fin < dateInput.value.length;
+    };
     const onKeydown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -29446,6 +29560,8 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
         } else if (e.key === 'Escape') {
             e.preventDefault();
             closeEditor(false, 'stay');
+        } else if (flechaDentroDeFecha(e)) {
+            // Movimiento nativo del cursor dentro de la fecha.
         } else if (e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
             const goingBack = e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey);
             if (goingBack) {
