@@ -31155,7 +31155,15 @@ async function _conciAutoSaveRow(tr, options = {}) {
     // datos sin depender de que alguien lo escriba a mano. No aplica al
     // ajuste trivial de aerolínea sobre una fila "Solo Vuelos" (no crea
     // manifiesto), y nunca sobreescribe un capturista ya asignado.
-    if (Object.keys(payload).length) {
+    //
+    // "Captura real" es una celda que el usuario tocó (dirty), no un payload
+    // con contenido: el payload lleva TODAS las columnas con valor, las haya
+    // cambiado o no, porque la fila se reenvía entera en cada autoguardado.
+    // Y el autoguardado corre al cerrarse cualquier editor, aunque nadie
+    // escribiera nada. Con la condición vieja bastaba con atravesar la fila
+    // —Tab, flechas o un clic de celda en celda— para que quedara firmada por
+    // quien sólo pasó por ahí. Vaciar una celda sí cuenta: es una captura.
+    if (dirtyCols.size) {
         const airlineEntryForCapturo = _conciAirlinePayloadEntry(payload);
         const onlyAirlineDirtyForCapturo = tr.dataset.rowFuente === 'Solo Vuelos' && airlineEntryForCapturo
             && dirtyCols.size > 0 && [...dirtyCols].every(col => col === airlineEntryForCapturo.key);

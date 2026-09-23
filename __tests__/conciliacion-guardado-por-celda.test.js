@@ -450,3 +450,36 @@ describe('el módulo protege lo capturado antes de repintar la tabla', () => {
     expect(commit).toContain('_conciBorradorQuitarCelda(td)');
   });
 });
+
+describe('CAPTURÓ señala a quien capturó, no a quien pasó por la fila', () => {
+  // El autoguardado corre al cerrarse cualquier editor, y reenvía la fila
+  // entera. Tomar eso por "captura" firmaba filas que nadie tocó.
+  const FILA = { ...VUELO, 'TOTAL PAX': '150' };
+
+  test('atravesar la fila sin cambiar nada no le pone capturista', async () => {
+    const tr = pintarFila({ rowId: '88', fuente: 'Manifiestos + Vuelos', valores: FILA });
+
+    await api._conciAutoSaveRow(tr);
+
+    actualizados.forEach(({ payload }) => expect(payload).not.toHaveProperty('CAPTURÓ'));
+    expect(celda(tr, 'CAPTURÓ').dataset.raw || '').toBe('');
+  });
+
+  test('en cuanto se captura algo, sí queda el nombre', async () => {
+    const tr = pintarFila({ rowId: '88', fuente: 'Manifiestos + Vuelos', valores: FILA });
+    capturar(tr, 'OBSERVACIONES', 'Llegó con demora');
+
+    await api._conciAutoSaveRow(tr);
+
+    expect(actualizados.at(-1).payload['CAPTURÓ']).toBe('MJ');
+  });
+
+  test('vaciar una celda también es capturar', async () => {
+    const tr = pintarFila({ rowId: '88', fuente: 'Manifiestos + Vuelos', valores: FILA });
+    capturar(tr, 'TOTAL PAX', '');
+
+    await api._conciAutoSaveRow(tr);
+
+    expect(actualizados.at(-1).payload['CAPTURÓ']).toBe('MJ');
+  });
+});
