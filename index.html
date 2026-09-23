@@ -23012,6 +23012,14 @@ FF
                                                             <i class="fas fa-inbox me-1"></i>Solicitudes
                                                             <span class="badge bg-danger rounded-pill d-none" id="badge-conci-solicitudes-pendientes">0</span>
                                                         </button>
+                                                        <button class="btn btn-sm btn-outline-danger d-none position-relative" id="btn-conci-alerta30h-pendientes" title="Vuelos con más de 30 horas sin manifiesto capturado (alerta informativa)">
+                                                            <i class="fas fa-triangle-exclamation me-1"></i>&gt; 30 h sin manifiesto
+                                                            <span class="badge bg-danger rounded-pill" id="badge-conci-alerta30h-pendientes">0</span>
+                                                        </button>
+                                                        <div class="form-check form-switch d-none align-self-center ms-1" id="conci-alerta30h-toggle-wrap" title="Activa o desactiva la alerta de vuelos sin manifiesto tras 30 horas para todos los usuarios">
+                                                            <input class="form-check-input" type="checkbox" role="switch" id="conci-alerta30h-toggle" checked>
+                                                            <label class="form-check-label small" for="conci-alerta30h-toggle">Alerta 30 h</label>
+                                                        </div>
                                                         <button class="btn btn-sm btn-outline-success d-none" id="btn-conci-add-row" title="Agregar una fila en blanco para capturar directamente en la tabla">
                                                             <i class="fas fa-plus me-1"></i>Agregar fila
                                                         </button>
@@ -39895,6 +39903,7 @@ FF
 <script src="js/conci-manifiestos-captura.js?v=20260727-v1" defer></script>
 <script src="js/conci-manifiestos-historial.js?v=20260727-insert-chips" defer></script>
 <script src="js/conci-cierre-subsecretaria.js?v=20260922-lote" defer></script>
+<script src="js/conci-alerta-30h.js?v=20260923-alerta30h" defer></script>
 <!-- Reportes de Conciliación (Carga / Pasajeros) -->
 <script src="js/conci-reportes.js?v=20260911-v1" defer></script>
 <script src="js/conci-reportes-edicion.js?v=20260911-v1" defer></script>

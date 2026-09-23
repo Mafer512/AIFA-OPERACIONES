@@ -19838,6 +19838,24 @@ function _conciDemoraMinutos(slotAsignadoRaw, slotCoordinadoRaw, opRaw, fallback
     return Number.isFinite(minutes) ? minutes : null;
 }
 
+// Alerta de 30 horas (js/conci-alerta-30h.js): horas transcurridas desde el
+// SLOT de referencia hasta "ahora", para un vuelo SIN manifiesto real
+// capturado. Reutiliza el mismo parseo (_conciParseDateTimeParts/
+// _conciPartsToDate) y la MISMA prioridad SLOT COORDINADO > SLOT ASIGNADO que
+// ya usa _conciDemoraMinutos — no se inventa una segunda regla de cuál slot
+// vale más. Si faltan ambos, o no son una fecha/hora válida, devuelve null:
+// nunca se inventa un vencimiento.
+function _conciHorasDesdeSlot(slotAsignadoRaw, slotCoordinadoRaw, fallbackYear, ahora) {
+    const referenceRaw = String(slotCoordinadoRaw || '').trim() || String(slotAsignadoRaw || '').trim();
+    if (!referenceRaw) return null;
+    const slotDate = _conciPartsToDate(_conciParseDateTimeParts(referenceRaw, fallbackYear));
+    if (!slotDate) return null;
+    const ahoraDate = (ahora instanceof Date && !Number.isNaN(ahora.getTime())) ? ahora : new Date();
+    const horas = (ahoraDate.getTime() - slotDate.getTime()) / 3600000;
+    return Number.isFinite(horas) ? horas : null;
+}
+window._conciHorasDesdeSlot = _conciHorasDesdeSlot;
+
 function _conciDemoraHorasMinutos(value) {
     if (!Number.isFinite(value)) return '';
     const absolute = Math.abs(Math.trunc(value));
@@ -23397,6 +23415,12 @@ function _updateManifiestosSummaryStrip(data, columns) {
     // para que calcule PREVIO sin duplicar la lógica de cruce con vuelos.
     if (typeof window._conciCierreOnSummaryData === 'function') {
         try { window._conciCierreOnSummaryData(rows, cols); } catch (_) {}
+    }
+    // Mismo patrón para js/conci-alerta-30h.js: le llegan las MISMAS filas
+    // enriquecidas (manifiestos reales + "Solo Vuelos"), así que la alerta de
+    // 30 horas tampoco duplica el cruce con Itinerario.
+    if (typeof window._conciAlerta30hOnSummaryData === 'function') {
+        try { window._conciAlerta30hOnSummaryData(rows, cols); } catch (_) {}
     }
 }
 
