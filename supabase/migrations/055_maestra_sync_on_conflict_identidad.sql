@@ -1,5 +1,5 @@
 -- =============================================================================
--- 054 · La sincronización a maestra_operaciones vuelve a funcionar
+-- 055 · La sincronización a maestra_operaciones vuelve a funcionar
 --
 -- SÍNTOMA
 --   El log de Postgres se llena de advertencias, una por cada guardado:
