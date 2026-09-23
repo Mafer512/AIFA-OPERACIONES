@@ -65,6 +65,7 @@ function montar({ dias, filas }) {
     'const applyAndRender = () => {',
     '    pintados.push({ filas: currentData.length, dia: latestDataDate, mensaje: _mensajeTablaVacia() });',
     '};',
+    trozo('function _claveDeHoy('),
     trozo('function _fechaLegible('),
     trozo('function _mensajeTablaVacia('),
     trozo('async function loadFlights()'),
@@ -125,5 +126,73 @@ describe('el filtro de fecha del Itinerario', () => {
     expect(ultimo.filas).toBe(0);
     expect(ultimo.mensaje).toContain('25/09/2026');
     expect(ultimo.mensaje).toContain('30/09/2026');
+  });
+});
+
+describe('la sonda de días del Itinerario', () => {
+  // Los valores no traen año ("22SEP 09:16"): el año lo pone quien los lee.
+  const MESES = {
+    JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+    JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+  };
+
+  function sondaCon(filas) {
+    const supabase = { from: () => ({ select: () => Promise.resolve({ data: filas, error: null }) }) };
+    const cuerpo = [
+      'let _flightProbeCache = null;',
+      'const _FLIGHT_PROBE_TTL_MS = 0;',
+      'const lastImportYear = new Date().getFullYear();',
+      "const EDIT_TABLE_NAME = 'vuelos_itinerario';",
+      'const MONTHS = MESES;',
+      trozo('function parseOpsDateTime('),
+      trozo('function deriveDateKeyFromValue('),
+      trozo('function _claveDeHoy('),
+      trozo('function _claveDiaCercana('),
+      trozo('async function _buildFlightProbeCache('),
+      'return _buildFlightProbeCache;',
+    ].join('\n');
+    return new Function('MESES', cuerpo)(MESES)(supabase);
+  }
+
+  test('un día futuro con vuelos entra en la lista de días', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-22T12:00:00'));
+    try {
+      const sonda = await sondaCon([
+        { id: 1, '[Arr] SIBT': '22SEP 09:16', '[Dep] SOBT': '' },
+        { id: 2, '[Arr] SIBT': '27SEP 06:00', '[Dep] SOBT': '' },
+      ]);
+      expect([...sonda.dayIdMap.keys()].sort()).toEqual(['2026-09-22', '2026-09-27']);
+      expect(sonda.dayIdMap.get('2026-09-27')).toEqual([2]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('diciembre leído en enero cae en el año anterior, no once meses adelante', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-01-05T12:00:00'));
+    try {
+      const sonda = await sondaCon([{ id: 9, '[Arr] SIBT': '31DEC 23:40', '[Dep] SOBT': '' }]);
+      expect([...sonda.dayIdMap.keys()]).toEqual(['2025-12-31']);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('sin fecha elegida no se abre en un día futuro', async () => {
+    const api = montar({
+      dias: [['2026-09-21', [10]], ['2026-09-22', [11, 12]], ['2026-09-27', [13]]],
+      filas: [{ id: 10 }, { id: 11 }, { id: 12 }, { id: 13 }],
+    });
+    jest.useFakeTimers().setSystemTime(new Date('2026-09-22T12:00:00'));
+    try {
+      document.getElementById('conci-date-picker').value = '';
+
+      await api.loadFlights();
+
+      expect(api.ultimo().dia).toBe('2026-09-22');
+      expect(api.ultimo().filas).toBe(2);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
