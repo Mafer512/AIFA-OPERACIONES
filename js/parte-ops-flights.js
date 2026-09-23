@@ -144,6 +144,9 @@
     let absEnd = '';
     let lastImportYear = new Date().getFullYear();
     let latestDataDate = null;
+    // Qué día (o periodo) pidió el usuario cuando no hay vuelos que mostrar.
+    // Vacío cuando sí hay datos o cuando nadie eligió fecha.
+    let _peticionSinVuelos = '';
     let peakChart = null;
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -365,6 +368,20 @@
         return `${parseInt(p[2], 10)}${ABBR[parseInt(p[1], 10) - 1] || ''}`;
     }
 
+    // La fecha como la escribe el área: 2026-09-27 -> 27/09/2026.
+    function _fechaLegible(key) {
+        const p = String(key || '').split('-');
+        return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : String(key || '');
+    }
+
+    // Mensaje de la tabla cuando no hay filas. Si se pidió un día o un
+    // periodo que no tiene vuelos cargados, se dice cuál: antes se mostraba
+    // el último día con datos y desde afuera parecía que el filtro no servía.
+    function _mensajeTablaVacia() {
+        if (!_peticionSinVuelos) return 'No hay registros para mostrar.';
+        return `No hay vuelos cargados para ${_peticionSinVuelos}.`;
+    }
+
     async function _buildFlightProbeCache(supabase) {
         const probeFresh = _flightProbeCache && (Date.now() - _flightProbeCache.ts) < _FLIGHT_PROBE_TTL_MS;
         if (probeFresh) return _flightProbeCache;
@@ -401,6 +418,7 @@
         }
 
         try {
+            _peticionSinVuelos = '';
             const supabase = window.supabaseClient;
             if (!supabase) throw new Error('Cliente Supabase no disponible');
 
@@ -428,6 +446,22 @@
                     }
                 }
                 latestDataDate = effectiveEndKey || pickedDate;
+                if (!targetIds.length) {
+                    _peticionSinVuelos = `el periodo del ${_fechaLegible(pickedDate)} al ${_fechaLegible(endDate)}`;
+                }
+            } else if (pickedDate && !probe.dayIdMap.has(pickedDate)) {
+                // El día elegido no tiene vuelos cargados. Antes se caía al
+                // último día con datos, y desde afuera parecía que el filtro
+                // no funcionaba: se pedía el 27 y se seguía viendo el 22, con
+                // el conteo de ese otro día. Ahora se respeta la fecha y se
+                // dice que ese día no tiene nada.
+                currentData = [];
+                latestDataDate = pickedDate;
+                _peticionSinVuelos = `el ${_fechaLegible(pickedDate)}`;
+                _dateWindowUserActivated = false;
+                initCsvExcelFilterButtons();
+                applyAndRender();
+                return;
             } else {
                 // ── Single-day mode: pick the specific date or the latest available ──
                 const targetKey = (pickedDate && probe.dayIdMap.has(pickedDate))
@@ -1236,7 +1270,7 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
         if (!tbody) return;
 
         if (!rows || rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="26" class="text-center text-muted py-4">No hay registros para mostrar.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="26" class="text-center text-muted py-4">${escapeHtml(_mensajeTablaVacia())}</td></tr>`;
             updateFlightCountBadge(0);
             return;
         }
