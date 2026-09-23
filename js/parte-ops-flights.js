@@ -387,10 +387,6 @@
         if (probeFresh) return _flightProbeCache;
 
         const year = lastImportYear || new Date().getFullYear();
-        const todayKey = (() => {
-            const t = new Date();
-            return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
-        })();
 
         // Fetch only id + 2 date columns (much smaller than all 24 columns)
         const { data: probe, error } = await supabase
@@ -400,9 +396,9 @@
 
         const dayIdMap = new Map(); // 'YYYY-MM-DD' → [id, ...]
         (probe || []).forEach(row => {
-            const key = deriveDateKeyFromValue(row['[Arr] SIBT'], year)
-                || deriveDateKeyFromValue(row['[Dep] SOBT'], year);
-            if (!key || key > todayKey) return;
+            const key = _claveDiaCercana(row['[Arr] SIBT'], year)
+                || _claveDiaCercana(row['[Dep] SOBT'], year);
+            if (!key) return;
             if (!dayIdMap.has(key)) dayIdMap.set(key, []);
             dayIdMap.get(key).push(row.id);
         });
@@ -464,9 +460,17 @@
                 return;
             } else {
                 // ── Single-day mode: pick the specific date or the latest available ──
+                // Sin fecha elegida se abre en el día más reciente que NO sea
+                // futuro: ahora que los vuelos programados sí entran, los de la
+                // próxima semana no deben robarle la vista a la operación de hoy.
+                const hoyClave = _claveDeHoy();
+                const hastaHoy = sortedKeys.filter(clave => clave <= hoyClave);
+                const porOmision = hastaHoy.length
+                    ? hastaHoy[hastaHoy.length - 1]
+                    : (sortedKeys.length ? sortedKeys[0] : null);
                 const targetKey = (pickedDate && probe.dayIdMap.has(pickedDate))
                     ? pickedDate
-                    : (sortedKeys.length ? sortedKeys[sortedKeys.length - 1] : null);
+                    : porOmision;
 
                 if (!targetKey) {
                     currentData = [];
@@ -2340,6 +2344,36 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
         const m = String(dt.getMonth() + 1).padStart(2, '0');
         const d = String(dt.getDate()).padStart(2, '0');
         return `${y}-${m}-${d}`;
+    }
+
+    // El día de hoy como clave, para comparar contra las claves derivadas.
+    function _claveDeHoy() {
+        const t = new Date();
+        return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    }
+
+    // Los valores del itinerario no traen año ("22SEP 09:16"): el año lo pone
+    // quien los lee. Con el año actual, una fecha de diciembre leída en enero
+    // cae once meses adelante, y para tapar eso la sonda de días descartaba
+    // TODO lo posterior a hoy. De paso tiraba los vuelos programados, que por
+    // definición son futuros: se importaba el 27, Conciliación sí los veía y
+    // el Itinerario salía vacío.
+    //
+    // En vez de descartar, se elige el año que deja la fecha más cerca de hoy
+    // (el anterior, el mismo o el siguiente). Así diciembre leído en enero
+    // vuelve al año pasado y los días de las próximas semanas se quedan donde
+    // van.
+    function _claveDiaCercana(value, year) {
+        let mejor = '';
+        let distancia = Infinity;
+        const hoy = Date.now();
+        [year - 1, year, year + 1].forEach(candidato => {
+            const clave = deriveDateKeyFromValue(value, candidato);
+            if (!clave) return;
+            const dias = Math.abs(new Date(`${clave}T12:00:00`).getTime() - hoy) / 86400000;
+            if (dias < distancia) { distancia = dias; mejor = clave; }
+        });
+        return mejor;
     }
 
     // Returns true if ANY of the row's time fields falls within [startKey, endKey]
