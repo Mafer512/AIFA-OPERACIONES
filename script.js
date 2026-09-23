@@ -22060,6 +22060,66 @@ function _conciGetExportRows() {
     return rows;
 }
 
+// Proyección exclusiva del Excel de Carga; no modifica las filas capturadas.
+function _conciExportCargoRow(row, year) {
+    const get = aliases => _conciExportGetField(row, aliases);
+    const has = value => value !== undefined && value !== null && String(value).trim() !== '';
+    const number = value => Number(String(value).replace(/,/g, '').trim());
+    const isArr = /lleg|arr/i.test(get(['TIPO DE MANIFIESTO']));
+    const isDep = /sal|dep/i.test(get(['TIPO DE MANIFIESTO']));
+    const route = String(get(['RUTA', 'ROUTING']) || get(['DESTINO / ORIGEN'])).trim();
+    const parts = route.split(/[-/]+/).map(p => p.trim()).filter(Boolean);
+    const origen = has(row.ORIGEN) ? row.ORIGEN : (parts.length > 1 || isArr ? parts[0] || '' : (parts.length && isDep ? 'NLU' : ''));
+    const destino = has(row.DESTINO) ? row.DESTINO : (parts.length > 1 || isDep ? parts[parts.length - 1] || '' : (parts.length && isArr ? 'NLU' : ''));
+    const escala = has(row.ESCALA) ? row.ESCALA : parts.slice(1, -1).join('-');
+    const country = raw => String(raw || '').split(/[-/]+/).map(code => {
+        const iata = code.trim().toUpperCase();
+        return _conciAirportCountryByIata.get(iata) || (window._iataToCountry ? window._iataToCountry(iata) : '');
+    }).filter(Boolean).join(' / ');
+    const operacion = get(['TIPO DE OPERACIÓN']) || _conciOperacionNacInt(isArr ? origen : destino);
+    let nacional = get(['KGS. DE CARGA NACIONAL']);
+    let internacional = get(['KGS. DE CARGA INTERNACIONAL']);
+    const total = get(['KG DE CARGA TOTAL', 'KGS. DE CARGA']);
+    if (!has(nacional) && !has(internacional) && has(total)) {
+        if (/internacional/i.test(operacion)) internacional = total;
+        else if (/^nacional$/i.test(String(operacion).trim())) nacional = total;
+    }
+    // Cada desglose conserva su naturaleza, incluso en operaciones mixtas.
+    const importacion = get(['IMPORTACIÓN']);
+    const llegada = get(['KGS CARGA LLEGADA NLU', 'KGS. CARGA LLEGADA', 'KGS LLEGADA']);
+    const exportacion = get(['EXPORTACIÓN']);
+    const salida = get(['KG. DE CARGA SALIDA NLU', 'KGS CARGA SALIDA NLU', 'KGS SALIDA']);
+    const carga = [
+        has(importacion) ? importacion : (isArr ? internacional : ''),
+        has(llegada) ? llegada : (isArr ? nacional : ''),
+        has(exportacion) ? exportacion : (isDep ? internacional : ''),
+        has(salida) ? salida : (isDep ? nacional : ''),
+    ];
+    const date = value => _conciPartsToDate(_conciParseDateTimeParts(value, year));
+    const op = date(_conciFormatDisplayValue('HR. DE OPERACIÓN', get(['HR. DE OPERACIÓN']), row, 'FECHA', year));
+    const slot = date(_conciFormatDisplayValue('SLOT ASIGNADO', get(['SLOT ASIGNADO']), row, 'FECHA', year));
+    const recepcion = date(_conciFormatDisplayValue('HR. DE RECEPCIÓN', get(['HR. DE RECEPCIÓN']), row, 'FECHA', year));
+    const maxima = date(_conciHrMaximaEntrega(get(['HR. DE OPERACIÓN']), row, 'FECHA', year));
+    const totalDia = get(['Total dia']);
+    const demora = get(['TIEMPO DE DEMORA / ANTICIPACIÓN']);
+    return {
+        ...row,
+        'CIERRE DE PRESENTACIÓN': get(['CIERRE DE PRESENTACIÓN', 'DATOS SUBSECRETARIA', 'CIERRE SUBSECRETARIA']),
+        'TIPO DE OPERACIÓN': operacion,
+        ORIGEN: origen, ESCALA: escala, DESTINO: destino,
+        'IMPORTACIÓN': carga[0], 'KGS CARGA LLEGADA NLU': carga[1],
+        'EXPORTACIÓN': carga[2], 'KG. DE CARGA SALIDA NLU': carga[3],
+        'Total dia': has(totalDia) ? totalDia : (carga.some(has) ? carga.reduce((sum, v) => sum + (has(v) && Number.isFinite(number(v)) ? number(v) : 0), 0) : total),
+        'DEMORA +-15': String(get(['DEMORA +-15', 'DEMORA +-15 MIN', 'DEMORA +- 15 MIN.'])),
+        'EXTEMPORANEO': get(['EXTEMPORANEO']) || (recepcion && maxima ? (recepcion > maxima ? 'EXTEMPORANEO' : 'EN TIEMPO') : ''),
+        'TIEMPO DE DEMORA / ANTICIPACIÓN': has(demora) ? demora : (op && slot ? Math.abs(op - slot) / 86400000 : ''),
+        // En BASE DE CARGA estos tres encabezados son PAÍSES, no códigos IATA.
+        Origen: has(row.Origen) ? row.Origen : country(origen),
+        Destino: has(row.Destino) ? row.Destino : country(destino),
+        escala: has(row.escala) ? row.escala : country(escala),
+    };
+}
+
 async function _conciExportToExcel(kind) {
     if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
         alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
@@ -22084,7 +22144,33 @@ async function _conciExportToExcel(kind) {
     // formato de Pasajeros/Carga columna por columna cuando aplica.
     const defs = isTotal
         ? cols.map(c => _CONCI_EXPORT_COLS_TOTAL_BY_HEADER.get(String(c).trim().toUpperCase()) || { h: c, t: 'text', a: [c] })
-        : (isCarga ? _CONCI_EXPORT_COLS_CARGA : _CONCI_EXPORT_COLS_PAX);
+        : (isCarga ? _CONCI_EXPORT_COLS_CARGA.flatMap(d => {
+            // El catálogo original sigue intacto para Total y por capturista.
+            const def = d.h === 'DATOS SUBSECRETARIA'
+                ? { ...d, h: 'CIERRE DE PRESENTACIÓN', a: ['CIERRE DE PRESENTACIÓN'] }
+                : d.h === 'DEMORA +-15 MIN'
+                    ? { ...d, h: 'DEMORA +-15', a: ['DEMORA +-15'] }
+                    : d.h === 'TIPO DE OPERACIÓN'
+                        ? { ...d, t: 'text', a: ['TIPO DE OPERACIÓN'] } : d;
+            return d.h === 'TRANSITO' ? [def, { h: 'Total dia', t: 'num', a: ['Total dia'] }] : [def];
+        }).concat([
+            { h: 'EXTEMPORANEO', t: 'text', a: ['EXTEMPORANEO'] },
+            { h: 'TIEMPO DE DEMORA / ANTICIPACIÓN', t: 'num', a: ['TIEMPO DE DEMORA / ANTICIPACIÓN'] },
+            { h: 'Origen', t: 'text', a: ['Origen'] },
+            { h: 'Destino', t: 'text', a: ['Destino'] },
+            { h: 'escala', t: 'text', a: ['escala'] },
+        ]) : _CONCI_EXPORT_COLS_PAX
+            // Solo Pasajeros: estructura DATA; conservar los alias de origen y
+            // el catálogo compartido con Total y la exportación por capturista.
+            .filter(d => !['RUTA', 'KGS. DE CARGA NACIONAL', 'KGS. DE CARGA INTERNACIONAL'].includes(d.h))
+            .map(d => ({
+                ...d,
+                h: ({
+                    'PAX QUE PAGAN TUA': 'PAX. QUE PAGAN TUA',
+                    'KG DE CARGA TOTAL': 'KGS. DE CARGA',
+                    'DEMORA +- 15 MIN.': 'DEMORA 15 MIN.',
+                })[d.h] || d.h,
+            })));
     const dataRows = isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga);
     if (!dataRows.length) {
         // Decía "en la vista actual", lo que daba a entender que respeta los
@@ -22219,9 +22305,14 @@ async function _conciExportToExcel(kind) {
 
     // Data
     dataRows.forEach((row) => {
+        if (isCarga) row = _conciExportCargoRow(row, year);
         const tipoRaw = String(get(row, ['TIPO DE MANIFIESTO']) || '').toLowerCase();
         const isArr = /lleg|arr/.test(tipoRaw);
-        const cells = defs.map(d => computeCell(d, row, isArr));
+        const cells = defs.map(d =>
+            // Distinguir los códigos (ORIGEN/DESTINO/ESCALA) de sus países.
+            isCarga && ['ORIGEN', 'DESTINO', 'ESCALA', 'Origen', 'Destino', 'escala', 'TIEMPO DE DEMORA / ANTICIPACIÓN'].includes(d.h)
+                ? { value: row[d.h] ?? '' } : computeCell(d, row, isArr)
+        );
         const xr = ws.addRow(cells.map(c => (c.value === undefined || c.value === null) ? '' : c.value));
         xr.eachCell((cell, colNumber) => {
             const meta = cells[colNumber - 1] || {};
@@ -22236,6 +22327,7 @@ async function _conciExportToExcel(kind) {
         });
     });
 
+    if (isCarga) ws.getColumn('TIEMPO DE DEMORA / ANTICIPACIÓN').numFmt = 'hh:mm:ss';
     ws.columns.forEach((col, i) => { col.width = Math.min(46, Math.max(11, maxLen[i] + 2)); });
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
 
