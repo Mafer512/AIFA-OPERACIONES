@@ -19591,7 +19591,7 @@ async function _conciFetchLatestManifestDate(client, year) {
 // date. When the table has no numeric "Día" column the day is filtered in JS by
 // parsing the Fecha column. Falls back to a full fetch only when no date columns
 // can be detected at all.
-async function _conciFetchManifestsForDate(client, year, month, day, dayEnd) {
+async function _conciFetchManifestsForDate(client, year, month, day, dayEnd, ventana) {
     const info = await _conciGetManifestColInfo(client);
     if (!info || (!info.portalDateKey && !info.mKey && !info.dKey && !info.fKey)) {
         return _concifetchAllRows(client, 'Conciliación Manifiestos', {
@@ -19615,7 +19615,13 @@ async function _conciFetchManifestsForDate(client, year, month, day, dayEnd) {
         // acota luego por día programado U operado, igual que filteredVuelos.
         let startIso;
         let endIso;
-        if (day) {
+        if (ventana) {
+            // La ventana manda tal cual (±1 día por los cruces de medianoche):
+            // así un rango que cambia de mes —del 28 de septiembre al 3 de
+            // octubre— se pide completo y no sólo alrededor de su arranque.
+            startIso = _conciIsoDesplazado(ventana.desde, -1);
+            endIso = _conciIsoDesplazado(ventana.hasta, 1);
+        } else if (day) {
             const lastDay = (dayEnd && dayEnd > day) ? dayEnd : day;
             const startDate = new Date(year, (month || 1) - 1, day);
             startDate.setDate(startDate.getDate() - 1);
@@ -20200,6 +20206,77 @@ function _conciBuildSortDate(row, columns, fallbackYear) {
 // OPERACIÓN. Si esa columna no tiene un valor con fecha, cae a SLOT ASIGNADO y luego
 // a FECHA. Cuando ninguna columna aporta una fecha parseable, la fila se conserva
 // (para no ocultar manifiestos sin hora de operación capturada).
+// Ventana de fechas pedida en el filtro, como fechas completas (AAAA-MM-DD).
+// Con un rango —del 16 al 20— los filtros de esta pantalla comparaban contra
+// UN solo día y se quedaban con el primero: la consulta traía los cinco días
+// y la tabla mostraba uno. Devuelve null cuando no hay fecha en el filtro.
+function _conciVentanaDelFiltro() {
+    const desdeEl = document.getElementById('filter-conci-fecha-desde');
+    const hastaEl = document.getElementById('filter-conci-fecha-hasta');
+    const desde = desdeEl && desdeEl.value ? desdeEl.value : '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(desde)) return null;
+    const hastaCrudo = hastaEl && hastaEl.value ? hastaEl.value : '';
+    const hasta = /^\d{4}-\d{2}-\d{2}$/.test(hastaCrudo) && hastaCrudo >= desde ? hastaCrudo : desde;
+    return { desde, hasta };
+}
+
+// Una fecha ISO movida N días, para ampliar la ventana de la consulta.
+function _conciIsoDesplazado(iso, dias) {
+    const partes = String(iso || '').split('-').map(Number);
+    if (partes.length !== 3 || partes.some(n => !Number.isFinite(n))) return iso;
+    const f = new Date(partes[0], partes[1] - 1, partes[2]);
+    f.setDate(f.getDate() + dias);
+    return _conciIsoDateKey(f.getFullYear(), f.getMonth() + 1, f.getDate());
+}
+
+// Los vuelos guardan la fecha sin año ("16SEP 09:16"): se prueba con los años
+// que toca la ventana (casi siempre uno solo).
+function _conciIsoDentroDeVentana(mes, dia, ventana) {
+    if (!ventana || !Number.isFinite(mes) || !Number.isFinite(dia)) return false;
+    const anios = new Set([Number(ventana.desde.slice(0, 4)), Number(ventana.hasta.slice(0, 4))]);
+    for (const anio of anios) {
+        const iso = _conciIsoDateKey(anio, mes, dia);
+        if (iso >= ventana.desde && iso <= ventana.hasta) return true;
+    }
+    return false;
+}
+
+// ¿El vuelo del itinerario cae dentro de la ventana? Se mira su día
+// PROGRAMADO y su día de OPERACIÓN, igual que con un solo día.
+function _conciVueloEnVentana(vuelo, year, ventana) {
+    for (const isArr of [true, false]) {
+        const dp = _conciExtractVueloDateParts(vuelo, isArr);
+        if (dp && _conciIsoDentroDeVentana(parseInt(dp.month, 10), parseInt(dp.day, 10), ventana)) return true;
+        const op = _conciParseDateTimeParts(_conciGetOperationHour(vuelo, isArr), year);
+        if (op && _conciIsoDentroDeVentana(op.month, op.day, ventana)) return true;
+    }
+    return false;
+}
+
+// Igual que _conciRowMatchesOperationDay, pero contra la ventana completa:
+// se conserva la fila si su día PROGRAMADO o su día de OPERACIÓN cae dentro.
+function _conciRowMatchesWindow(row, columns, year, ventana) {
+    if (!ventana) return true;
+    const keys = Array.isArray(columns) && columns.length ? columns : Object.keys(row || {});
+    const opCol    = keys.find(c => /hr\.?\s*de\s*oper/i.test(c));
+    const slotCol  = keys.find(c => /slot\s*asignad/i.test(c));
+    const fechaCol = keys.find(c => /(^|\b)fecha(\b|$)/i.test(c));
+    let sawParseable = false;
+    for (const col of [opCol, slotCol, fechaCol]) {
+        if (!col) continue;
+        const val = row[col];
+        if (val === null || val === undefined || String(val).trim() === '') continue;
+        const parts = _conciParseDateTimeParts(val, year);
+        if (parts && Number.isFinite(parts.day) && Number.isFinite(parts.month)) {
+            sawParseable = true;
+            const anio = Number.isFinite(parts.year) ? parts.year : year;
+            const iso = _conciIsoDateKey(anio, parts.month, parts.day);
+            if (iso >= ventana.desde && iso <= ventana.hasta) return true;
+        }
+    }
+    return !sawParseable;
+}
+
 function _conciRowMatchesOperationDay(row, columns, year, month, day) {
     if (!day) return true;
     const keys = Array.isArray(columns) && columns.length ? columns : Object.keys(row || {});
@@ -20745,7 +20822,11 @@ async function loadConciliacionManifiestos(options = {}) {
         day = dayEl && dayEl.value ? parseInt(dayEl.value, 10) : null;
     }
 
-    let cacheKey = `${year}|${month || 0}|${day || 0}|${dayEnd || 0}`;
+    // Ventana pedida, en fechas completas. Entra también en la clave de la
+    // caché: sin ella, "16 de septiembre" y "del 16 de septiembre al 3 de
+    // octubre" compartían clave y se pintaba lo del otro filtro.
+    const ventana = _conciVentanaDelFiltro();
+    let cacheKey = `${year}|${month || 0}|${day || 0}|${dayEnd || 0}|${ventana ? ventana.hasta : ''}`;
 
     // When auto-detecting the latest date we skip the render-cache short-circuit
     // because we don’t know the effective key until we scan the raw data.
@@ -20869,7 +20950,7 @@ async function loadConciliacionManifiestos(options = {}) {
             return;
         }
 
-        const mResult = await _conciFetchManifestsForDate(client, year, month, day, dayEnd);
+        const mResult = await _conciFetchManifestsForDate(client, year, month, day, dayEnd, ventana);
         if (requestSeq !== _conciLoadRequestSeq) return;
         if (mResult.error) throw mResult.error;
         manifestRows = mResult.data || [];
@@ -20882,6 +20963,7 @@ async function loadConciliacionManifiestos(options = {}) {
         // tras el cruce de medianoche (p. ej. programado 27 pero operado 28). El filtro fino
         // por HR. DE OPERACIÓN se aplica más abajo sobre las filas ya enriquecidas.
         const filteredVuelos = vuelosRows.filter(r => {
+            if (ventana) return _conciVueloEnVentana(r, year, ventana);
             if (!month && !day) return true;
             for (const isArr of [true, false]) {
                 const dp = _conciExtractVueloDateParts(r, isArr);
@@ -20935,9 +21017,11 @@ async function loadConciliacionManifiestos(options = {}) {
         // día seleccionado (con respaldo a SLOT ASIGNADO / FECHA cuando no hay hora de
         // operación). Esto corrige el caso en que un vuelo programado un día opera en otro
         // tras el cruce de medianoche y aparecía en el día equivocado.
-        const dayFilteredRows = day
-            ? rows.filter(r => _conciRowMatchesOperationDay(r, columns, year, month, day))
-            : rows;
+        const dayFilteredRows = ventana
+            ? rows.filter(r => _conciRowMatchesWindow(r, columns, year, ventana))
+            : (day
+                ? rows.filter(r => _conciRowMatchesOperationDay(r, columns, year, month, day))
+                : rows);
 
         // Decorate-sort-undecorate: compute sort key once per row instead of n·log(n) times.
         // Mismo criterio que Itinerario de Vuelos: agrupa por Status (orden
