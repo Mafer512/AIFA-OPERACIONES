@@ -18132,6 +18132,21 @@ body.dark-mode .conci-manifest-toolbar #badge-conci-manifiestos-count {
    color: #cbd5e1;
 }
 
+/* El aviso "N capturas guardándose" ya no empuja la barra.
+
+   Aparece y desaparece solo mientras se teclea, y cada vez que salía movía
+   de sitio los botones de la fila de herramientas. Es información que ya
+   está en otro lado: el botón "Guardar todo" lleva su propia cuenta de lo
+   pendiente, y la fila sigue marcada mientras se escribe.
+
+   Lo que NO se oculta es la otra cara del mismo aviso: las capturas que se
+   quedaron a medias en OTRA computadora (clase conci-pendientes-ajenos).
+   Esa no se va sola, pide un clic para aplicarlas, y perderla de vista sí
+   costaría datos. */
+#conci-pendientes-indicador:not(.conci-pendientes-ajenos) {
+   display: none !important;
+}
+
 /* ==========================================================================
    Conciliación · Manifiestos: densidad alta.
 
