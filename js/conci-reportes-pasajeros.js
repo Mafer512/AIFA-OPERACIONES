@@ -39,20 +39,50 @@
 (function () {
     'use strict';
 
-    const TABLA = 'Conciliación Manifiestos';
+    // Fuente reportable, no la tabla viva. Ver supabase/migrations/053_…:
+    //   · fila legacy o abierta  → la fila viva, igual que siempre;
+    //   · fila ya cerrada        → SIEMPRE su snapshot, de modo que corregir
+    //                              hoy un manifiesto de ayer no cambia el
+    //                              oficio de ayer al regenerarlo;
+    //   · ajuste aplicado        → DOS filas sintéticas, _signo −1 con los
+    //                              valores anteriores y _signo +1 con los
+    //                              nuevos, ambas fechadas en "CIERRE
+    //                              SUBSECRETARIA" con el corte que las aplicó.
+    // Por eso este archivo multiplica TODO por _signo: pasajeros y también el
+    // conteo de operaciones. Una corrección de 150 → 180 aporta −150 +180
+    // pasajeros (+30 netos) y −1 +1 operaciones (0 netas, sin inventar un
+    // vuelo); una reclasificación mueve la operación de un bucket al otro.
+    const TABLA = 'v_conciliacion_manifiestos_reportable';
     const PAGINA = 1000;
 
     const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
         'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
 
-    let cache = null;      // { hasta, filas, columnas }
+    let cache = null;      // { hasta, filas, columnas, epoch }
+    let cacheEpoch = 0;
     let reporteActivo = 'subsecretaria';
+
+    // La caché sólo compara la fecha pedida, así que por sí sola sobreviviría a
+    // un cierre, a una corrección o a cualquier captura: el reporte se
+    // regeneraría con las filas de antes. Quien escribe en Manifiestos emite
+    // este evento tras confirmar la escritura (script.js y
+    // js/conci-cierre-subsecretaria.js), y aquí se tira la caché. Se conserva
+    // el resto del tiempo: lo que no puede es sobrevivir a una modificación.
+    window.addEventListener('conciliacion:manifiestos-cambiaron', () => { cache = null; });
+    window.addEventListener('conciliacion:manifiestos-cambiaron', () => { cacheEpoch++; });
 
     /* ── utilidades ─────────────────────────────────────────────────────── */
 
     const el = id => document.getElementById(id);
-    const numero = n => Number(n || 0).toLocaleString('es-MX');
-    const decimal = n => Number(n || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 });
+    const valorNumerico = n => {
+        if (typeof n === 'number') return Number.isFinite(n) ? n : 0;
+        const limpio = String(n ?? '').trim().replace(/\s/g, '').replace(/,/g, '');
+        if (!limpio) return 0;
+        const v = Number(limpio);
+        return Number.isFinite(v) ? v : 0;
+    };
+    const numero = n => valorNumerico(n).toLocaleString('es-MX');
+    const decimal = n => valorNumerico(n).toLocaleString('es-MX', { maximumFractionDigits: 0 });
 
     function escapar(texto) {
         return String(texto ?? '').replace(/[&<>"']/g, c => (
@@ -137,7 +167,16 @@
             operacion: buscar(/TIPO\s+DE\s+OPERACION/),
             aerolinea: buscar(/AEROLINEA|AIRLINE/),
             pax: buscar(/^TOTAL\s+PAX$/) || buscar(/TOTAL\s+PAX/),
-            portal: claves.find(c => c === '_portal_flight_date') || null
+            portal: claves.find(c => c === '_portal_flight_date') || null,
+            // Metadatos de la vista reportable. Se buscan por nombre exacto y
+            // no por patrón: son columnas del sistema, no capturas. Si la base
+            // todavía no tiene la migración 053 no existen, y entonces cada
+            // fila cuenta con signo +1, que es el comportamiento de siempre.
+            signo: claves.find(c => c === '_signo') || null,
+            esAjuste: claves.find(c => c === '_es_ajuste') || null,
+            uid: claves.find(c => c === '_uid') || null,
+            esCargaReportado: claves.find(c => c === 'cierre_es_carga_reportado') || null,
+            aerolineaReportada: claves.find(c => c === 'cierre_aerolinea_reportada') || null
         };
     }
 
@@ -156,13 +195,29 @@
      * tiempo de espera sin aportar nada al reporte.
      */
     async function descargar(hastaIso, avisar) {
-        if (cache && cache.hasta === hastaIso) return cache;
+        if (cache && cache.hasta === hastaIso && cache.epoch === cacheEpoch) return cache;
 
         const client = cliente();
+        const epoch = cacheEpoch;
+        // La RPC devuelve una sola fotografía MVCC. Subsecretaría se filtra por
+        // CIERRE SUBSECRETARIA; los ajustes se incluyen por el corte que los
+        // consumió, de modo que nunca se separa -ANTES/+DESPUÉS por FECHA.
+        if (typeof client.rpc === 'function') {
+            const respuesta = await client.rpc('conciliacion_reporte_reportable', { p_hasta: hastaIso });
+            if (respuesta.error) throw respuesta.error;
+            const filasRpc = Array.isArray(respuesta.data) ? respuesta.data
+                : (Array.isArray(respuesta.data?.filas) ? respuesta.data.filas : []);
+            const columnasRpc = detectarColumnas(filasRpc[0] || {});
+            const resultadoRpc = { hasta: hastaIso, filas: filasRpc, columnas: columnasRpc, epoch };
+            if (epoch === cacheEpoch) cache = resultadoRpc;
+            return resultadoRpc;
+        }
         const muestra = await client.from(TABLA).select('*').limit(1);
         if (muestra.error) throw muestra.error;
         if (!muestra.data || !muestra.data.length) {
-            return (cache = { hasta: hastaIso, filas: [], columnas: detectarColumnas({}) });
+            const vacio = { hasta: hastaIso, filas: [], columnas: detectarColumnas({}), epoch };
+            if (epoch === cacheEpoch) cache = vacio;
+            return vacio;
         }
 
         const columnas = detectarColumnas(muestra.data[0]);
@@ -170,17 +225,34 @@
         const select = pedidas.map(c => `"${c}"`).join(',');
 
         const filas = [];
+        // El orden tiene que ser TOTAL y estable para paginar con .range(): en
+        // la vista reportable una fila sintética de ajuste comparte "id" con su
+        // manifiesto, y ordenar por una clave repetida se salta o duplica filas
+        // en los bordes de página. _uid es único por fila de la vista.
+        const orden = columnas.uid || 'id';
+        let ultimo = null;
         for (let desde = 0; ; desde += PAGINA) {
-            let q = client.from(TABLA).select(select).order('id', { ascending: true })
-                .range(desde, desde + PAGINA - 1);
-            if (columnas.portal) q = q.lte(columnas.portal, hastaIso);
+            let q = client.from(TABLA).select(select).order(orden, { ascending: true });
+            if (ultimo !== null && typeof q.gt === 'function') q = q.gt(orden, ultimo).limit(PAGINA);
+            else if (ultimo !== null) q = q.range(desde, desde + PAGINA - 1); // clientes antiguos sin cursor
+            else if (typeof q.limit === 'function') q = q.limit(PAGINA);
+            else q = q.range(desde, desde + PAGINA - 1); // compatibilidad con clientes antiguos
             const { data, error } = await q;
             if (error) throw error;
-            filas.push(...(data || []));
+            const pagina = (data || []).filter(fila => {
+                const cierre = aIso(columnas.cierre ? fila[columnas.cierre] : '');
+                if (cierre) return cierre <= hastaIso;
+                const vuelo = aIso(columnas.portal ? fila[columnas.portal] : '') || aIso(columnas.fecha ? fila[columnas.fecha] : '');
+                return !vuelo || vuelo <= hastaIso;
+            });
+            filas.push(...pagina);
+            if (data?.length) ultimo = data[data.length - 1][orden];
             if (avisar) avisar(filas.length);
             if (!data || data.length < PAGINA) break;
         }
-        return (cache = { hasta: hastaIso, filas, columnas });
+        const resultado = { hasta: hastaIso, filas, columnas, epoch };
+        if (epoch === cacheEpoch) cache = resultado;
+        return resultado;
     }
 
     /* ── agregación ─────────────────────────────────────────────────────── */
@@ -232,16 +304,38 @@
         }));
 
         let descartadosCarga = 0;
+        let invalidos = 0;
 
         for (const fila of filas) {
             // La tabla mezcla pasajeros y carga; estos reportes son de pasajeros.
-            if (typeof window._conciRowIsCargo === 'function'
-                && window._conciRowIsCargo(fila, columnas.operacion, columnas.aerolinea)) {
+            const congelada = columnas.esCargaReportado
+                && fila[columnas.esCargaReportado] !== null
+                && fila[columnas.esCargaReportado] !== undefined;
+            const esCargo = congelada
+                ? (fila[columnas.esCargaReportado] === true || fila[columnas.esCargaReportado] === 'true')
+                : (typeof window._conciRowIsCargo === 'function'
+                    && window._conciRowIsCargo(fila, columnas.operacion, columnas.aerolinea));
+            if (esCargo) {
                 descartadosCarga++;
                 continue;
             }
 
-            const pax = Number(columnas.pax ? fila[columnas.pax] : 0) || 0;
+            // +1 para una fila normal; −1 / +1 para las dos contribuciones de
+            // un ajuste aplicado. Multiplica por igual las cifras y el conteo
+            // de operaciones: así una corrección numérica no inventa una
+            // operación (−1 +1 = 0) y una reclasificación la mueve de bucket.
+            const signo = columnas.signo ? (Number(fila[columnas.signo]) || 1) : 1;
+            const esAjuste = columnas.esAjuste
+                ? (fila[columnas.esAjuste] === true || fila[columnas.esAjuste] === 'true')
+                : false;
+
+            const paxBruto = columnas.pax ? fila[columnas.pax] : 0;
+            const paxTexto = String(paxBruto ?? '').trim();
+            if (paxTexto && !Number.isFinite(Number(paxTexto.replace(/\s/g, '').replace(/,/g, '')))) {
+                invalidos++;
+                continue;
+            }
+            const pax = signo * (Number(valorNumerico(paxBruto)) || 0);
             const tipo = columnas.tipo ? fila[columnas.tipo] : '';
             const operacion = columnas.operacion ? fila[columnas.operacion] : '';
             const llegada = esLlegada(tipo);
@@ -255,14 +349,14 @@
                 const carril = llegada ? 'LLEGADA' : 'SALIDA';
                 const columna = esInternacional(operacion) ? 'INTERNACIONAL' : 'NACIONAL';
                 // El libro cuenta AEROLINEA, no filas.
-                const cuentaOp = cuentaSiHay(columnas.aerolinea ? fila[columnas.aerolinea] : '');
+                const opDelta = cuentaSiHay(columnas.aerolinea ? fila[columnas.aerolinea] : '') ? signo : 0;
                 for (const clave of ['anterior', 'actual']) {
                     const corte = cierres[clave];
                     if (cierre > corte) continue;
                     const suma = alcance => {
                         const c = sub[clave][alcance][carril][columna];
                         c.pax += pax;
-                        if (cuentaOp) c.ops++;
+                        c.ops += opDelta;
                     };
                     suma('historico');
                     if (cierre.slice(0, 4) === corte.slice(0, 4)) suma('anio');
@@ -272,17 +366,36 @@
             }
 
             // ── Plantillas 1 y 2: se agrupan por FECHA ──
+            //
+            // Aquí se PARAN las contribuciones sintéticas de un ajuste, y es
+            // deliberado. Un ajuste corrige un manifiesto YA CERRADO, o sea de
+            // una fecha cuyo informe ya se emitió. Dejarlo entrar recalcularía
+            // ese día: la Plantilla del día A pasaría de los 150 que se
+            // reportaron a 180, y un reporte histórico regenerado dejaría de
+            // coincidir con el que se entregó. El ajuste se cobra donde
+            // corresponde —en el oficio de SUBSECRETARÍA del corte que lo
+            // consumió, que se agrupa por CIERRE SUBSECRETARIA y ya quedó
+            // arriba—, no reescribiendo el pasado.
+            //
+            // Las filas normales de un día cerrado siguen viniendo del
+            // snapshot, así que estos bloques ven exactamente lo que se
+            // reportó. La fila viva corregida sigue en la tabla para el
+            // expediente operativo; simplemente no reescribe un informe.
+            if (esAjuste) continue;
+
             const fecha = aIso(columnas.fecha ? fila[columnas.fecha] : '');
             if (!fecha || fecha > fechaIso) continue;
 
             if (fecha.startsWith(prefijoAnio)) {
                 anioPlantillas.pax += pax;
-                if (cuentaSiHay(tipo)) anioPlantillas.ops++;
+                anioPlantillas.ops += cuentaSiHay(tipo) ? signo : 0;
             }
 
             if (fecha === fechaIso || fecha.startsWith(prefijoMes)) {
                 const bruto = String(columnas.aerolinea ? fila[columnas.aerolinea] : '').trim();
-                const aerolinea = nombreAerolinea(bruto);
+                const aerolinea = columnas.aerolineaReportada && fila[columnas.aerolineaReportada]
+                    ? String(fila[columnas.aerolineaReportada]).trim().toUpperCase()
+                    : nombreAerolinea(bruto);
                 if (aerolinea) {
                     const anota = alcance => {
                         const mapa = porAerolinea[alcance];
@@ -290,7 +403,7 @@
                         acc.pax += pax;
                         // El libro cuenta TIPO DE OPERACIÓN en el bloque del día
                         // y AEROLINEA en el acumulado; aquí ambos existen.
-                        if (alcance === 'dia' ? cuentaSiHay(operacion) : true) acc.ops++;
+                        acc.ops += (alcance === 'dia' ? cuentaSiHay(operacion) : true) ? signo : 0;
                         // El código capturado se guarda para el tooltip, igual
                         // que hace la celda de aerolínea en la tabla.
                         if (bruto && bruto.toUpperCase() !== aerolinea) acc.codigos.add(bruto.toUpperCase());
@@ -307,7 +420,7 @@
                 if (casilla) {
                     const carril = llegada ? 'llegada' : 'salida';
                     casilla.pax[carril] += pax;
-                    if (cuentaSiHay(tipo)) casilla.ops[carril]++;
+                    casilla.ops[carril] += cuentaSiHay(tipo) ? signo : 0;
                     casilla.hayDatos = true;
                 }
             }
@@ -316,7 +429,7 @@
         return {
             sub, cierres, anioSub, mesSub,
             porAerolinea, porDia, anioPlantillas,
-            anio, mes, fechaIso, descartadosCarga, totalFilas: filas.length
+            anio, mes, fechaIso, descartadosCarga, invalidos, totalFilas: filas.length
         };
     }
 
@@ -485,12 +598,27 @@
     /* ── Plantilla 1: numeralia por aerolínea ───────────────────────────── */
 
     /**
+     * Renglones de un mapa por aerolínea, ordenados y sin los que un ajuste
+     * dejó en cero neto: una reclasificación de AEROLINEA resta −1 operación y
+     * −X pasajeros del renglón anterior, y ese renglón fantasma no aporta nada
+     * al informe. Un renglón con operaciones sí se imprime aunque lleve cero
+     * pasajeros: ése es un vuelo real sin pasaje.
+     * Se usa en los tres sitios que dibujan o cuentan esos renglones (pantalla,
+     * Excel y el cálculo de los offsets data-xl), para que no puedan divergir.
+     */
+    function entradasVisibles(mapa) {
+        return [...mapa.entries()]
+            .filter(([, v]) => v.pax !== 0 || v.ops !== 0)
+            .sort((a, b) => a[0].localeCompare(b[0], 'es'));
+    }
+
+    /**
      * `inicio` es el renglón del Excel (filasPlantilla1) donde va el encabezado
      * de este bloque: debajo van los títulos, una fila por aerolínea y TOTAL.
      */
     function tablaAerolineas(mapa, inicio) {
         const xl = (r, c) => (inicio === undefined ? '' : ` data-xl="${r},${c}"`);
-        const filas = [...mapa.entries()].sort((a, b) => a[0].localeCompare(b[0], 'es'));
+        const filas = entradasVisibles(mapa);
         const totalPax = filas.reduce((a, [, v]) => a + v.pax, 0);
         const totalOps = filas.reduce((a, [, v]) => a + v.ops, 0);
         const cuerpo = filas.length
@@ -528,8 +656,11 @@
         const { porAerolinea, fechaIso, anio, mes } = datos;
         const mesTitulo = MESES[mes - 1].charAt(0) + MESES[mes - 1].slice(1).toLowerCase();
         // Renglones del Excel: título, fecha y un blanco; luego cada bloque ocupa
-        // encabezado, títulos, sus aerolíneas, TOTAL y otro blanco.
-        const bloque2 = 7 + porAerolinea.dia.size;
+        // encabezado, títulos, sus aerolíneas, TOTAL y otro blanco. Se cuentan
+        // las aerolíneas VISIBLES (no el tamaño del mapa): si un ajuste dejó un
+        // renglón en cero neto no se imprime, y los offsets deben cuadrar con
+        // lo que realmente se dibuja.
+        const bloque2 = 7 + entradasVisibles(porAerolinea.dia).length;
         const cuerpo = `
             ${tablaAerolineas(porAerolinea.dia, 3)}
             <p class="conci-rep-acumuladas" data-xl="${bloque2},0">Cifras acumuladas: <strong><u>${escapar(mesTitulo)}</u></strong></p>
@@ -539,7 +670,7 @@
             `Fecha de actualización: <strong><u>${fechaLarga(fechaIso)}</u></strong>`,
             cuerpo,
             false,
-            { nota: bloque2 + 4 + porAerolinea.mes.size }
+            { nota: bloque2 + 4 + entradasVisibles(porAerolinea.mes).length }
         );
     }
 
@@ -691,10 +822,9 @@
             ultimo = agregar(datos, fechaIso);
             if (edicion) await edicion.cargar(fechaIso);
             pintar();
-            const carga = ultimo.descartadosCarga
-                ? ` · ${numero(ultimo.descartadosCarga)} de carga descartados`
-                : '';
-            estado(`${numero(ultimo.totalFilas)} manifiestos leídos${carga}`);
+                const carga = ultimo.descartadosCarga ? ` · ${numero(ultimo.descartadosCarga)} de carga descartados` : '';
+                const invalidos = ultimo.invalidos ? ` · ${numero(ultimo.invalidos)} inválidos omitidos` : '';
+                estado(`${numero(ultimo.totalFilas)} manifiestos leídos${carga}${invalidos}`);
         } catch (e) {
             console.error('[Reportes Pasajeros]', e);
             error(`No se pudieron calcular los reportes: ${e.message || e}`);
@@ -738,7 +868,7 @@
 
     function filasPlantilla1(datos) {
         const bloque = (mapa, encabezado) => {
-            const filas = [...mapa.entries()].sort((a, b) => a[0].localeCompare(b[0], 'es'));
+            const filas = entradasVisibles(mapa);
             return [
                 [encabezado],
                 ['AEROLÍNEA', 'PAX TRANSPORTADOS', 'NÚMERO DE OPERACIONES'],

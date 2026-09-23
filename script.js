@@ -20309,6 +20309,10 @@ function _conciRowMatchesOperationDay(row, columns, year, month, day) {
 // (F/H = carga; el resto pasajeros) y, como respaldo, el catálogo de aerolíneas de
 // carga conocidas.
 function _conciRowIsCargo(row, optypeCol, airlineCol) {
+    if (row && Object.prototype.hasOwnProperty.call(row, 'cierre_es_carga_reportado')
+        && row.cierre_es_carga_reportado !== null && row.cierre_es_carga_reportado !== undefined) {
+        return row.cierre_es_carga_reportado === true || row.cierre_es_carga_reportado === 'true';
+    }
     if (airlineCol) {
         try {
             const meta = (typeof _conciResolveAirlineMeta === 'function') ? _conciResolveAirlineMeta(row[airlineCol]) : null;
@@ -22847,7 +22851,12 @@ const _CONCI_IMPORT_FALLBACK_COLUMNS = [
 ];
 const _CONCI_IMPORT_IGNORED_COLUMNS = new Set([
     'id', 'created_at', 'updated_at', '_fuente', '_ispax', '_validadoitinerario',
-    '_validadoporitinerario', '_concivueloid', '_concivuelodireccion', 'movement_key'
+    '_validadoporitinerario', '_concivueloid', '_concivuelodireccion', 'movement_key',
+    // Columnas del Cierre de Subsecretaría (migración 053): las escribe el
+    // servidor —cierre_capturado_en lo sella el trigger en cada INSERT— y una
+    // importación nunca debe mandarlas. Si llegaran, el trigger las ignoraría
+    // igual, pero mejor no ensuciar el payload.
+    'cierre_id', 'cierre_capturado_en', 'cierre_subsecretaria'
 ]);
 const _CONCI_IMPORT_HEADER_ALIASES = {
     datos_subsecretaria: 'cierre_subsecretaria',
@@ -23305,6 +23314,21 @@ function _conciGetLiveSummaryRows() {
     return rows;
 }
 
+// Cuando una fila "Solo Vuelos" se materializa, el DOM recibe el id nuevo,
+// pero el arreglo enriquecido todavía conserva _fuente='Solo Vuelos'. Mantén
+// un override por índice para que FIJO/PREVIO se actualicen sin recargar toda
+// la tabla.
+function _conciMarcarVueloMaterializado(tr, persistedId) {
+    if (!tr) return;
+    const index = String(tr.dataset.rowIndex || '');
+    if (!/^\d+$/.test(index)) return;
+    const actual = _conciSummaryLiveOverrides.get(index) || {};
+    actual.id = persistedId;
+    actual._fuente = 'Manifiestos + Vuelos';
+    _conciSummaryLiveOverrides.set(index, actual);
+    _conciRefreshSummaryCardsLive();
+}
+
 function _conciRefreshSummaryCardsLive() {
     const rows = _conciGetLiveSummaryRows();
     _conciUpdateResumen(rows, _conciManifestosSummaryColumns);
@@ -23367,6 +23391,13 @@ function _updateManifiestosSummaryStrip(data, columns) {
     // cero, se muestra 0: es un dato, no una ausencia de dato.
     setEl('mf-sum-kgs-carga', kgsCapturados ? fmt(Math.round(kgsCarga)) : 'N/D');
     strip.classList.remove('d-none');
+
+    // Hook opcional para js/conci-cierre-subsecretaria.js: le pasa el mismo
+    // conjunto de filas ya enriquecido (con _fuente) que usan estas tarjetas,
+    // para que calcule PREVIO sin duplicar la lógica de cruce con vuelos.
+    if (typeof window._conciCierreOnSummaryData === 'function') {
+        try { window._conciCierreOnSummaryData(rows, cols); } catch (_) {}
+    }
 }
 
 // Ajusta el alto del contenedor con scroll (#conci-manifiestos-scroll) al
@@ -25095,10 +25126,20 @@ function _conciNormalizedColumnName(column) {
 }
 
 // Antes MES/FECHA quedaban bloqueados en toda la tabla (no solo en filas
-// nuevas). El usuario pidió que todos los campos sean editables, así que
-// esta protección queda desactivada.
-function _conciIsProtectedEditColumn(_column) {
-    return false;
+// nuevas). El usuario pidió que todos los campos sean editables, así que esa
+// protección quedó desactivada y sigue desactivada: la única columna que vuelve
+// a estar bloqueada es "CIERRE SUBSECRETARIA", y por una razón distinta (ya no
+// es un dato de captura, sino la fecha del corte que escribe el servidor).
+function _conciIsProtectedEditColumn(column) {
+    // "CIERRE SUBSECRETARIA" dejó de ser captura libre: la escribe el Cierre de
+    // Subsecretaría con la FECHA DEL CORTE (migración 053). El trigger la deja
+    // vacía en cada INSERT y la conserva intacta en cada UPDATE de una fila del
+    // nuevo mecanismo, así que teclearla aquí no serviría de nada — y peor:
+    // mientras la fila siguiera ABIERTA aparecería en el oficio de esa fecha
+    // sin haberse cerrado nunca, que es justo el descuadre que el mecanismo
+    // existe para impedir. Se bloquea en la interfaz para que el capturista vea
+    // por qué, en vez de escribir algo que el servidor va a ignorar.
+    return _conciNormalizedColumnName(column) === 'cierre subsecretaria';
 }
 
 // Columnas que el propio cliente calcula (fórmula) a partir de otras
@@ -27365,6 +27406,11 @@ function _conciHandleRemoteCellSaved(payload) {
             todoAplicado = false;
         }
     });
+    // Una escritura confirmada desde otra pestaña también invalida los
+    // reportes oficiales. El evento local por sí solo no alcanza esta ruta.
+    if (todoAplicado && typeof _conciNotificarManifiestosCambiaron === 'function') {
+        _conciNotificarManifiestosCambiaron();
+    }
     // Si todo se pudo aplicar aqui, la recarga completa que Postgres anuncia
     // en un momento ya no aporta nada y solo haria parpadear la pantalla.
     if (todoAplicado) _conciUltimoParcheTs = Date.now();
@@ -27509,7 +27555,16 @@ function _conciHandleRemoteCellInput(payload) {
 // compañero. Si hay un editor de celda abierto ahora mismo, difiere el
 // refresco para no interrumpir la captura en curso; se reintenta al cerrar
 // esa celda (ver _conciCommitCellRaw / _conciAutoSaveRow).
+//
+// Esto llega aunque la tabla de Conciliación Manifiestos no esté en pantalla
+// (por ejemplo, con un reporte de pasajeros o de carga abierto), así que la
+// invalidación de esos reportes va ANTES del early-return de abajo. Si no,
+// un capturista modificando en otra pestaña nunca tira la caché de quien está
+// viendo reportes, y el reporte se queda mostrando datos de antes del cambio.
 function _conciHandleRemoteTableChange() {
+    if (typeof _conciNotificarManifiestosCambiaron === 'function') {
+        _conciNotificarManifiestosCambiaron();
+    }
     if (!document.getElementById('table-conci-manifiestos')) return;
     _conciPendingRemoteRefresh = true;
     _conciMaybeApplyDeferredRemoteRefresh();
@@ -30554,6 +30609,22 @@ function _conciDatabaseValueEquals(expected, actual) {
     return String(actual ?? '').trim() === String(expected).trim();
 }
 
+// Avisa de que los datos de "Conciliación Manifiestos" cambiaron de verdad
+// (escritura o borrado ya CONFIRMADOS por la base, no simplemente intentados).
+//
+// Lo escuchan js/conci-reportes-pasajeros.js y js/conci-reportes-carga.js para
+// tirar su caché: esa caché sólo compara la fecha pedida, así que sin este
+// aviso un reporte regenerado después de un cierre o de una corrección seguiría
+// mostrando las filas que descargó antes. No se emite en refrescos de sólo
+// lectura: la idea es que la caché no sobreviva a una MODIFICACIÓN, no dejar de
+// cachear.
+function _conciNotificarManifiestosCambiaron() {
+    try {
+        window.dispatchEvent(new CustomEvent('conciliacion:manifiestos-cambiaron'));
+    } catch (_) { /* nunca debe tumbar el guardado que acaba de funcionar */ }
+}
+window._conciNotificarManifiestosCambiaron = _conciNotificarManifiestosCambiaron;
+
 function _conciPersistenceMismatch(persistedRow, expectedPayload) {
     if (!persistedRow || typeof persistedRow !== 'object') return ['id'];
     return Object.keys(expectedPayload || {}).filter(column =>
@@ -30871,6 +30942,15 @@ async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
         }
 
         if (!result.error) {
+            // Escritura confirmada por la base (ya se comprobaron los valores
+            // devueltos): los reportes deben tirar su caché. El typeof es la
+            // misma guarda que usan los demás hooks opcionales del archivo —
+            // varios arneses de prueba extraen esta función sola, sin el resto
+            // de script.js, y un aviso de caché no puede hacer fallar un
+            // guardado que ya funcionó.
+            if (typeof _conciNotificarManifiestosCambiaron === 'function') {
+                _conciNotificarManifiestosCambiaron();
+            }
             return {
                 ok: true,
                 adjusted: attempt > 0 || recoveredRowId !== null,
@@ -31041,6 +31121,11 @@ function _conciFillRowActionCell(actionTd, persistedId) {
         del.innerHTML = '<i class="fas fa-trash-alt"></i>';
         del.dataset.rowId = persistedId;
         group.appendChild(del);
+    }
+    // Hook opcional para js/conci-cierre-subsecretaria.js: agrega un icono de
+    // candado cuando este manifiesto pertenece a un Cierre de Subsecretaría.
+    if (typeof window._conciCierreExtraRowAction === 'function') {
+        try { window._conciCierreExtraRowAction(group, persistedId); } catch (_) {}
     }
     actionTd.appendChild(group);
 }
@@ -31225,6 +31310,7 @@ function _conciAdoptarFilaPersistida(tr, result) {
     if (tr.dataset.rowFuente === 'Solo Vuelos') {
         tr.dataset.rowFuente = 'Manifiestos + Vuelos';
         tr.classList.remove('conci-missing-manifiesto');
+        if (typeof _conciMarcarVueloMaterializado === 'function') _conciMarcarVueloMaterializado(tr, id);
     }
     const actionTd = tr.querySelector('td.conci-row-action-col');
     if (actionTd && typeof _conciFillRowActionCell === 'function') _conciFillRowActionCell(actionTd, String(id));
@@ -31503,6 +31589,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
                     _conciBorradorTrasladarFilaNueva(tr, inserted.id);
                     tr.dataset.rowId = String(inserted.id);
                     tr.dataset.rowFuente = 'Manifiestos + Vuelos';
+                    if (typeof _conciMarcarVueloMaterializado === 'function') _conciMarcarVueloMaterializado(tr, inserted.id);
                     tr.classList.remove('conci-missing-manifiesto');
                     const actionTd = tr.querySelector('td.conci-row-action-col');
                     if (actionTd) _conciFillRowActionCell(actionTd, String(inserted.id));
@@ -31593,6 +31680,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 tr.dataset.rowId = String(inserted.id);
                 tr.dataset.conciSummaryPersisted = '1';
                 tr.removeAttribute('data-conci-new');
+                if (typeof _conciMarcarVueloMaterializado === 'function') _conciMarcarVueloMaterializado(tr, inserted.id);
                 // La fila ya es un registro real: su celda de acciones pasa a ser
                 // la misma que la del resto de filas guardadas (historial +
                 // eliminar según permisos). Antes sólo se le cambiaba la clase al
@@ -31793,6 +31881,10 @@ async function _conciEliminarRegistro(rowId) {
     // re-filtrar la misma fecha reviviría la fila borrada.
     _conciRenderCache.clear();
     _conciRenderedKey = '';
+    // Y por la misma razón, la caché de Reportes tampoco puede sobrevivir.
+    if (typeof _conciNotificarManifiestosCambiaron === 'function') {
+        _conciNotificarManifiestosCambiaron();
+    }
     return true;
 }
 

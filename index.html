@@ -23002,6 +23002,16 @@ FF
                                                         <button class="btn btn-sm btn-outline-secondary d-none" id="btn-conci-historial" title="Ver historial de cambios">
                                                             <i class="fas fa-history me-1"></i>Historial
                                                         </button>
+                                                        <button class="btn btn-sm btn-warning d-none" id="btn-conci-cierre-subsecretaria" title="Cierre de Subsecretaría: corte diario que congela el informe">
+                                                            <i class="fas fa-lock me-1"></i>Cierre de Subsecretaría
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-warning d-none" id="btn-conci-corregir-cerrado" title="Corregir o solicitar corrección de un manifiesto ya cerrado">
+                                                            <i class="fas fa-unlock-alt me-1"></i>Corregir cerrado
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-warning d-none position-relative" id="btn-conci-solicitudes-pendientes" title="Solicitudes de corrección pendientes de autorización">
+                                                            <i class="fas fa-inbox me-1"></i>Solicitudes
+                                                            <span class="badge bg-danger rounded-pill d-none" id="badge-conci-solicitudes-pendientes">0</span>
+                                                        </button>
                                                         <button class="btn btn-sm btn-outline-success d-none" id="btn-conci-add-row" title="Agregar una fila en blanco para capturar directamente en la tabla">
                                                             <i class="fas fa-plus me-1"></i>Agregar fila
                                                         </button>
@@ -23061,6 +23071,27 @@ FF
                                                                 <div class="ops-kpi-content">
                                                                     <div class="ops-kpi-value" id="mf-sum-kgs-carga">—</div>
                                                                     <div class="ops-kpi-sub">KGS capturados</div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="ops-kpi-card ops-kpi-pax2 d-none" id="mf-cierre-card-fijo" title="Lote pendiente del próximo Cierre de Subsecretaría: manifiestos capturados y aún no cerrados, más el efecto neto de los ajustes autorizados de cortes anteriores">
+                                                                <div class="ops-kpi-icon"><i class="fas fa-lock"></i></div>
+                                                                <div class="ops-kpi-content">
+                                                                    <div class="ops-kpi-value" id="mf-cierre-fijo">—</div>
+                                                                    <div class="ops-kpi-sub">FIJO (PAX)</div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="ops-kpi-card ops-kpi-cargo d-none" id="mf-cierre-card-previo" title="Operaciones con vuelo programado pero sin manifiesto capturado todavía">
+                                                                <div class="ops-kpi-icon"><i class="fas fa-hourglass-half"></i></div>
+                                                                <div class="ops-kpi-content">
+                                                                    <div class="ops-kpi-value" id="mf-cierre-previo">—</div>
+                                                                    <div class="ops-kpi-sub">PREVIO (PAX)</div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="ops-kpi-card ops-kpi-kg d-none" id="mf-cierre-card-total" title="FIJO + PREVIO">
+                                                                <div class="ops-kpi-icon"><i class="fas fa-calculator"></i></div>
+                                                                <div class="ops-kpi-content">
+                                                                    <div class="ops-kpi-value" id="mf-cierre-total">—</div>
+                                                                    <div class="ops-kpi-sub">TOTAL (PAX)</div>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -39863,13 +39894,14 @@ FF
 <script src="js/conci-manifiestos-table.js?v=1" defer></script>
 <script src="js/conci-manifiestos-captura.js?v=20260727-v1" defer></script>
 <script src="js/conci-manifiestos-historial.js?v=20260727-insert-chips" defer></script>
+<script src="js/conci-cierre-subsecretaria.js?v=20260922-lote" defer></script>
 <!-- Reportes de Conciliación (Carga / Pasajeros) -->
 <script src="js/conci-reportes.js?v=20260911-v1" defer></script>
 <script src="js/conci-reportes-edicion.js?v=20260911-v1" defer></script>
-<script src="js/conci-reportes-pasajeros.js?v=20260911-v1" defer></script>
+<script src="js/conci-reportes-pasajeros.js?v=20260922-reportable" defer></script>
 <script src="js/conci-carga-catalogo.js?v=20260910-v1" defer></script>
 <script src="js/conci-presentacion-carga.js?v=20260911-v1" defer></script>
-<script src="js/conci-reportes-carga.js?v=20260911-v1" defer></script>
+<script src="js/conci-reportes-carga.js?v=20260922-reportable" defer></script>
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
 <script src="js/estadistico-informe-core.js?v=20260912-ag-directorio" defer></script>
 <script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>

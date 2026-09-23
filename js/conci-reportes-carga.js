@@ -47,7 +47,19 @@
 (function () {
     'use strict';
 
-    const TABLA = 'Conciliación Manifiestos';
+    // Fuente reportable, no la tabla viva. Ver supabase/migrations/053_…:
+    //   · fila legacy o abierta  → la fila viva, igual que siempre;
+    //   · fila ya cerrada        → SIEMPRE su snapshot, para que el reporte de
+    //                              carga y la presentación de un periodo ya
+    //                              cerrado no cambien al regenerarse;
+    //   · ajuste aplicado        → DOS filas sintéticas, _signo −1 con los
+    //                              kilos anteriores y _signo +1 con los nuevos,
+    //                              ambas fechadas en "CIERRE SUBSECRETARIA" con
+    //                              el corte que las aplicó.
+    // Por eso este archivo multiplica por _signo tanto los kilos como el conteo
+    // de operaciones: una corrección de carga no inventa un vuelo (−1 +1 = 0) y
+    // una reclasificación nacional↔internacional mueve la operación de bucket.
+    const TABLA = 'v_conciliacion_manifiestos_reportable';
     const PAGINA = 1000;
 
     const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
@@ -62,14 +74,31 @@
     const CAT = () => window.ConciCargaCatalogo;
 
     let cache = null;
+    let cacheEpoch = 0;
     let reporteActivo = 'subsecretaria';
     let ultimo = null;
+
+    // La caché sólo compara la fecha pedida, así que por sí sola sobreviviría a
+    // un cierre, a una corrección o a cualquier captura: el reporte se
+    // regeneraría con las filas de antes. Quien escribe en Manifiestos emite
+    // este evento tras confirmar la escritura (script.js y
+    // js/conci-cierre-subsecretaria.js), y aquí se tira la caché. Se conserva
+    // el resto del tiempo: lo que no puede es sobrevivir a una modificación.
+    window.addEventListener('conciliacion:manifiestos-cambiaron', () => { cache = null; });
+    window.addEventListener('conciliacion:manifiestos-cambiaron', () => { cacheEpoch++; });
 
     /* ── utilidades ─────────────────────────────────────────────────────── */
 
     const el = id => document.getElementById(id);
-    const entero = n => Math.round(Number(n) || 0).toLocaleString('es-MX');
-    const dosDec = n => Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const valorNumerico = n => {
+        if (typeof n === 'number') return Number.isFinite(n) ? n : 0;
+        const limpio = String(n ?? '').trim().replace(/\s/g, '').replace(/,/g, '');
+        if (!limpio) return 0;
+        const v = Number(limpio);
+        return Number.isFinite(v) ? v : 0;
+    };
+    const entero = n => Math.round(valorNumerico(n)).toLocaleString('es-MX');
+    const dosDec = n => valorNumerico(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     function escapar(texto) {
         return String(texto ?? '').replace(/[&<>"']/g, c => (
@@ -176,7 +205,15 @@
             cargaNac: buscar(/CARGA\s+NACIONAL/),
             cargaInt: buscar(/CARGA\s+INTERNACIONAL/),
             cargaTotal: buscar(/CARGA\s+TOTAL/) || buscar(/^KGS\.?\s+DE\s+CARGA$/),
-            portal: claves.find(c => c === '_portal_flight_date') || null
+            portal: claves.find(c => c === '_portal_flight_date') || null,
+            // Metadatos de la vista reportable (nombre exacto: son columnas del
+            // sistema, no capturas). Sin la migración 053 no existen y cada
+            // fila cuenta con signo +1, el comportamiento de siempre.
+            signo: claves.find(c => c === '_signo') || null,
+            esAjuste: claves.find(c => c === '_es_ajuste') || null,
+            uid: claves.find(c => c === '_uid') || null,
+            esCargaReportado: claves.find(c => c === 'cierre_es_carga_reportado') || null,
+            aerolineaReportada: claves.find(c => c === 'cierre_aerolinea_reportada') || null
         };
     }
 
@@ -189,29 +226,57 @@
     }
 
     async function descargar(hastaIso, avisar) {
-        if (cache && cache.hasta === hastaIso) return cache;
+        if (cache && cache.hasta === hastaIso && cache.epoch === cacheEpoch) return cache;
         const client = cliente();
+        const epoch = cacheEpoch;
+        if (typeof client.rpc === 'function') {
+            const respuesta = await client.rpc('conciliacion_reporte_reportable', { p_hasta: hastaIso });
+            if (respuesta.error) throw respuesta.error;
+            const filasRpc = Array.isArray(respuesta.data) ? respuesta.data
+                : (Array.isArray(respuesta.data?.filas) ? respuesta.data.filas : []);
+            const resultadoRpc = { hasta: hastaIso, filas: filasRpc, columnas: detectarColumnas(filasRpc[0] || {}), epoch };
+            if (epoch === cacheEpoch) cache = resultadoRpc;
+            return resultadoRpc;
+        }
         const muestra = await client.from(TABLA).select('*').limit(1);
         if (muestra.error) throw muestra.error;
         if (!muestra.data || !muestra.data.length) {
-            return (cache = { hasta: hastaIso, filas: [], columnas: detectarColumnas({}) });
+            const vacio = { hasta: hastaIso, filas: [], columnas: detectarColumnas({}), epoch };
+            if (epoch === cacheEpoch) cache = vacio;
+            return vacio;
         }
         const columnas = detectarColumnas(muestra.data[0]);
         const pedidas = [...new Set(Object.values(columnas).filter(Boolean))];
         const select = pedidas.map(c => `"${c}"`).join(',');
 
         const filas = [];
+        // Orden total y estable para paginar con .range(): una fila sintética
+        // de ajuste comparte "id" con su manifiesto, así que ordenar por id se
+        // saltaría o duplicaría filas en los bordes de página. _uid es único.
+        const orden = columnas.uid || 'id';
+        let ultimo = null;
         for (let desde = 0; ; desde += PAGINA) {
-            let q = client.from(TABLA).select(select).order('id', { ascending: true })
-                .range(desde, desde + PAGINA - 1);
-            if (columnas.portal) q = q.lte(columnas.portal, hastaIso);
+            let q = client.from(TABLA).select(select).order(orden, { ascending: true });
+            if (ultimo !== null && typeof q.gt === 'function') q = q.gt(orden, ultimo).limit(PAGINA);
+            else if (ultimo !== null) q = q.range(desde, desde + PAGINA - 1); // clientes antiguos sin cursor
+            else if (typeof q.limit === 'function') q = q.limit(PAGINA);
+            else q = q.range(desde, desde + PAGINA - 1); // compatibilidad con clientes antiguos
             const { data, error } = await q;
             if (error) throw error;
-            filas.push(...(data || []));
+            const pagina = (data || []).filter(fila => {
+                const cierre = aIso(columnas.cierre ? fila[columnas.cierre] : '');
+                if (cierre) return cierre <= hastaIso;
+                const vuelo = aIso(columnas.portal ? fila[columnas.portal] : '') || aIso(columnas.fecha ? fila[columnas.fecha] : '');
+                return !vuelo || vuelo <= hastaIso;
+            });
+            filas.push(...pagina);
+            if (data?.length) ultimo = data[data.length - 1][orden];
             if (avisar) avisar(filas.length);
             if (!data || data.length < PAGINA) break;
         }
-        return (cache = { hasta: hastaIso, filas, columnas });
+        const resultado = { hasta: hastaIso, filas, columnas, epoch };
+        if (epoch === cacheEpoch) cache = resultado;
+        return resultado;
     }
 
     /* ── agregación ─────────────────────────────────────────────────────── */
@@ -251,11 +316,18 @@
         const anioActual = { ops: 0, kg: 0 };          // presentación
         const delDia = { ops: 0, kg: 0 };
         let descartadosPax = 0;
+        let invalidos = 0;
 
         for (const fila of filas) {
             // Estos son los reportes de carga: los de pasajeros no entran.
-            if (typeof window._conciRowIsCargo === 'function'
-                && !window._conciRowIsCargo(fila, columnas.operacion, columnas.aerolinea)) {
+            const congelada = columnas.esCargaReportado
+                && fila[columnas.esCargaReportado] !== null
+                && fila[columnas.esCargaReportado] !== undefined;
+            const esCargo = congelada
+                ? (fila[columnas.esCargaReportado] === true || fila[columnas.esCargaReportado] === 'true')
+                : (typeof window._conciRowIsCargo === 'function'
+                    && window._conciRowIsCargo(fila, columnas.operacion, columnas.aerolinea));
+            if (!esCargo) {
                 descartadosPax++;
                 continue;
             }
@@ -267,16 +339,38 @@
 
             const operacion = columnas.operacion ? fila[columnas.operacion] : '';
             const bruto = String(columnas.aerolinea ? fila[columnas.aerolinea] : '').trim();
-            const cuentaOp = cuentaSiHay(bruto);
+            // +1 para una fila normal; −1 / +1 para las dos contribuciones de
+            // un ajuste aplicado. opDelta es el mismo signo, y 0 si la fila no
+            // cuenta como operación (sin AEROLINEA), igual que en el libro.
+            const signo = columnas.signo ? (Number(fila[columnas.signo]) || 1) : 1;
+            const opDelta = cuentaSiHay(bruto) ? signo : 0;
+            const esAjuste = columnas.esAjuste
+                ? (fila[columnas.esAjuste] === true || fila[columnas.esAjuste] === 'true')
+                : false;
 
-            let nacKg = Number(columnas.cargaNac ? fila[columnas.cargaNac] : 0) || 0;
-            let intKg = Number(columnas.cargaInt ? fila[columnas.cargaInt] : 0) || 0;
+            let nacKg = valorNumerico(columnas.cargaNac ? fila[columnas.cargaNac] : 0);
+            let intKg = valorNumerico(columnas.cargaInt ? fila[columnas.cargaInt] : 0);
+            const revisarNumero = valor => {
+                const txt = String(valor ?? '').trim();
+                return !txt || Number.isFinite(Number(txt.replace(/\s/g, '').replace(/,/g, '')));
+            };
+            if (!revisarNumero(columnas.cargaNac ? fila[columnas.cargaNac] : '')
+                || !revisarNumero(columnas.cargaInt ? fila[columnas.cargaInt] : '')
+                || (columnas.cargaTotal && !revisarNumero(fila[columnas.cargaTotal]))) {
+                invalidos++;
+                continue;
+            }
             // Captura vieja: solo el total. Se atribuye por tipo de operación,
             // que es lo único que hay para decidir de qué lado va.
             if (!nacKg && !intKg && columnas.cargaTotal) {
-                const total = Number(fila[columnas.cargaTotal]) || 0;
+                const total = valorNumerico(fila[columnas.cargaTotal]);
                 if (esInternacional(operacion)) intKg = total; else nacKg = total;
             }
+            // El signo se aplica DESPUÉS de resolver el reparto nacional /
+            // internacional, para que la atribución siga siendo la misma en la
+            // contribución negativa y en la positiva.
+            nacKg *= signo;
+            intKg *= signo;
             const kg = nacKg + intKg;
 
             // ── Subsecretaría: por Cierre Subsecretaria ──
@@ -292,10 +386,8 @@
                         c.INTERNACIONAL.kg += intKg;
                         // El libro cuenta AEROLINEA, y la operación cae del
                         // lado que diga TIPO DE OPERACIÓN, no de los kilos.
-                        if (cuentaOp) {
-                            if (esInternacional(operacion)) c.INTERNACIONAL.ops++;
-                            else c.NACIONAL.ops++;
-                        }
+                        if (esInternacional(operacion)) c.INTERNACIONAL.ops += opDelta;
+                        else c.NACIONAL.ops += opDelta;
                     };
                     suma('historico');
                     if (cierre.slice(0, 4) === corte.slice(0, 4)) suma('anio');
@@ -305,41 +397,57 @@
             }
 
             // ── Hoja 1, Hoja 2, Reporte de Carga y presentación: por FECHA ──
+            //
+            // Aquí se PARAN las contribuciones sintéticas de un ajuste, igual
+            // que en el reporte de pasajeros y por la misma razón: un ajuste
+            // corrige un manifiesto YA CERRADO, de una fecha cuyo informe ya se
+            // emitió. Dejarlo entrar reescribiría la Hoja 1, la Hoja 2, el
+            // Reporte de Carga y la presentación de un periodo ya reportado. El
+            // ajuste se cobra en el oficio de SUBSECRETARÍA del corte que lo
+            // consumió (bloque de arriba, agrupado por CIERRE SUBSECRETARIA).
+            //
+            // Las filas normales de un periodo cerrado vienen del snapshot, así
+            // que estos bloques ven exactamente lo que se reportó.
+            if (esAjuste) continue;
+
             const fecha = aIso(columnas.fecha ? fila[columnas.fecha] : '');
             if (!fecha || fecha > fechaIso) continue;
 
             if (fecha.startsWith(prefijoAnio)) {
-                const aerolinea = nombreAerolinea(bruto);
+                const aerolinea = columnas.aerolineaReportada && fila[columnas.aerolineaReportada]
+                    ? String(fila[columnas.aerolineaReportada]).trim().toUpperCase()
+                    : nombreAerolinea(bruto);
                 if (aerolinea) {
                     const acc = porAerolinea.get(aerolinea) || { kg: 0, ops: 0, iata: iataDe(bruto) };
                     acc.kg += kg;
-                    if (cuentaOp) acc.ops++;
+                    acc.ops += opDelta;
                     porAerolinea.set(aerolinea, acc);
                 }
                 anioActual.kg += kg;
-                if (cuentaOp) anioActual.ops++;
+                anioActual.ops += opDelta;
 
                 const casilla = porMes[Number(fecha.slice(5, 7)) - 1];
                 if (casilla) {
                     if (llegada) casilla.impKg += intKg; else casilla.expKg += intKg;
                     // El reporte no considera operaciones mixtas: solo cuenta
                     // las que el manifiesto declara internacionales.
-                    if (esInternacional(operacion) && cuentaOp) {
-                        if (llegada) casilla.opsIntLlegada++; else casilla.opsIntSalida++;
+                    if (esInternacional(operacion)) {
+                        if (llegada) casilla.opsIntLlegada += opDelta;
+                        else casilla.opsIntSalida += opDelta;
                     }
                 }
             }
 
             if (fecha === fechaIso) {
                 delDia.kg += kg;
-                if (cuentaOp) delDia.ops++;
+                delDia.ops += opDelta;
             }
         }
 
         return {
             sub, cierres, anioSub, mesSub,
             porAerolinea, porMes, anioActual, delDia,
-            anio, mes, fechaIso, descartadosPax, totalFilas: filas.length
+            anio, mes, fechaIso, descartadosPax, invalidos, totalFilas: filas.length
         };
     }
 
@@ -373,9 +481,13 @@
         return { exactas: { nacional: nac, internacional: int, total: nac + int }, enteras: repartirEnteros(nac, int) };
     }
 
-    /** Filas de la Hoja 1: aerolínea, operaciones y toneladas de presentación. */
+    /** Filas de la Hoja 1: aerolínea, operaciones y toneladas de presentación.
+     *  Se descartan los renglones que un ajuste dejó en cero neto: una
+     *  reclasificación de AEROLINEA resta −1 operación y −X kilos del renglón
+     *  anterior, y ese renglón fantasma no aporta nada al informe. */
     function filasHoja1(datos) {
         return [...datos.porAerolinea.entries()]
+            .filter(([, v]) => v.kg !== 0 || v.ops !== 0)
             .sort((a, b) => a[0].localeCompare(b[0], 'es'))
             .map(([aerolinea, v]) => ({
                 aerolinea,
@@ -977,7 +1089,8 @@
             if (edicion) await edicion.cargar(fechaIso);
             pintar();
             const pax = ultimo.descartadosPax ? ` · ${entero(ultimo.descartadosPax)} de pasajeros descartados` : '';
-            estado(`${entero(ultimo.totalFilas)} manifiestos leídos${pax}`);
+            const invalidos = ultimo.invalidos ? ` · ${entero(ultimo.invalidos)} inválidos omitidos` : '';
+            estado(`${entero(ultimo.totalFilas)} manifiestos leídos${pax}${invalidos}`);
         } catch (e) {
             console.error('[Reportes Carga]', e);
             error(`No se pudieron calcular los reportes: ${e.message || e}`);
