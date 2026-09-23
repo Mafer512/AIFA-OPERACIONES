@@ -21542,15 +21542,28 @@ function _conciAttachDateMask(input) {
     // `notify` reemite el evento "input" que el teclado ya no dispara (se
     // intercepta con preventDefault). Sin él, el editor de la celda nunca se
     // entera de que hubo captura y no guardaría lo tecleado.
+    let ultimoTexto = '';
     const render = (digits, notify) => {
         const raw = onlyDigits(digits).slice(0, 8);
         input.dataset.conciDateDigits = raw;
-        input.value = _conciFormatDateMask(raw);
+        input.value = ultimoTexto = _conciFormatDateMask(raw);
         if (document.activeElement === input) {
             const end = input.value.length;
             input.setSelectionRange(end, end);
         }
         if (notify) input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    // Corrección en medio de la fecha: cada lugar de DD/MM/AAAA se queda donde
+    // está y el cursor no se mueve de donde lo dejó el usuario. Mientras haya
+    // huecos el campo no es una fecha todavía, así que no se guardan dígitos
+    // sueltos en el dataset: la captura de abajo sólo corre sin huecos.
+    const renderEnCursor = ({ slots, slot }) => {
+        const hayHuecos = slots.includes(_CONCI_FECHA_HUECO);
+        input.dataset.conciDateDigits = hayHuecos ? '' : slots;
+        input.value = ultimoTexto = _conciFechaSlotsATexto(slots);
+        const pos = _conciFechaPosDeSlot(slot);
+        input.setSelectionRange(pos, pos);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
     };
 
     // El valor con el que se abre la celda viene en ISO.
@@ -21561,6 +21574,17 @@ function _conciAttachDateMask(input) {
     // el siglo se completa solo.
     input.addEventListener('keydown', (ev) => {
         if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+        // Corrección puntual: el cursor está en medio de la fecha o hay una
+        // parte seleccionada. Devuelve null en los casos de siempre (cursor al
+        // final o todo seleccionado), que resuelve la captura de abajo tal cual.
+        if (/^\d$/.test(ev.key) || ev.key === 'Backspace' || ev.key === 'Delete') {
+            const edicion = _conciEditarFechaEnCursor(input, ev.key, input.dataset.conciDateDigits);
+            if (edicion) {
+                ev.preventDefault();
+                renderEnCursor(edicion);
+                return;
+            }
+        }
         const raw = input.dataset.conciDateDigits || '';
         const hasSelection = input.selectionStart !== input.selectionEnd;
         if (/^\d$/.test(ev.key)) {
@@ -21581,7 +21605,7 @@ function _conciAttachDateMask(input) {
 
     // Red para lo que no viene del teclado: pegar, autocompletar, etc.
     input.addEventListener('input', () => {
-        if (input.value === _conciFormatDateMask(input.dataset.conciDateDigits || '')) return;
+        if (input.value === ultimoTexto) return;
         // Ya se está propagando un "input" real; no hace falta reemitirlo.
         render(input.value, false);
     });
@@ -21590,6 +21614,10 @@ function _conciAttachDateMask(input) {
     // editor de la celda ya tiene su propio ciclo de confirmación y este blur
     // corre antes que él.
     input.addEventListener('blur', () => {
+        // Una fecha a medio corregir se deja tal cual: reacomodarla aquí es
+        // justo lo que movía los dígitos de un segmento a otro. Quien valida
+        // es el editor de la celda al confirmar, no cada tecla ni cada salida.
+        if (input.value.includes(_CONCI_FECHA_HUECO)) return;
         // Si se deja el DÍA o el MES a medias con un solo dígito ambiguo
         // (ej. "3" sin segundo dígito) al salir del campo, se completa con
         // cero a la izquierda igual que si el dígito no hubiera sido
@@ -24515,11 +24543,102 @@ function _conciFormatDateMask(value) {
     return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${year.length === 2 ? `20${year}` : year}`;
 }
 
+// ── Corrección de la fecha sin mover nada de sitio ───────────────────────────
+// Mientras se corrige, la fecha NO es una lista de dígitos que se recorre: es
+// una plantilla de 8 lugares fijos, DDMMAAAA. Borrar el día deja su lugar
+// vacío ("__/09/2026") en vez de jalar el mes y el año hacia la izquierda,
+// que es lo que convertía 21/09/2026 en 09/20/26. El día siempre ocupa DD, el
+// mes MM, el año AAAA y las diagonales nunca se mueven.
+const _CONCI_FECHA_HUECO = '_';
+
+// Texto con máscara → los 8 lugares de DDMMAAAA (cada uno dígito o hueco).
+function _conciFechaSlots(texto) {
+    const crudo = String(texto || '').replace(/[^\d_]/g, '');
+    return (crudo + _CONCI_FECHA_HUECO.repeat(8)).slice(0, 8);
+}
+
+// Los 8 lugares → lo que se ve, con las diagonales en su posición de siempre.
+function _conciFechaSlotsATexto(slots) {
+    return `${slots.slice(0, 2)}/${slots.slice(2, 4)}/${slots.slice(4)}`;
+}
+
+// Lugar (0-8) → índice del cursor en el texto, saltando las diagonales.
+function _conciFechaPosDeSlot(i) {
+    return i + (i >= 2 ? 1 : 0) + (i >= 4 ? 1 : 0);
+}
+
+// Índice del cursor en el texto → lugar (0-8). Sobre una diagonal cuenta como
+// el primer lugar del segmento que sigue.
+function _conciFechaSlotEnPos(p) {
+    if (p <= 2) return Math.min(p, 2);
+    if (p <= 5) return Math.min(p - 1, 4);
+    return Math.min(Math.max(p - 2, 0), 8);
+}
+
+// Aplica un dígito, Backspace o Delete sobre el lugar donde está el cursor (o
+// sobre los lugares seleccionados), sin recorrer nada. Devuelve los 8 lugares
+// resultantes y en cuál queda el cursor, o null cuando el caso es el de
+// siempre —seguir capturando al final de una celda nueva, o reescribir la
+// celda entera con todo seleccionado— que resuelve tal cual la lógica de
+// captura de abajo.
+//
+// `capturados` son los dígitos que el usuario tecleó de verdad. Con menos de
+// 8 la fecha se está capturando y el siglo "20" que aparece solo al 6º dígito
+// es de adorno, no un lugar tecleado: al final del campo se sigue capturando
+// como siempre. Con los 8 puestos ya no hay captura que respetar, sólo
+// corrección, así que los lugares mandan y el año nunca se encoge.
+function _conciEditarFechaEnCursor(input, tecla, capturados) {
+    const texto = String(input.value || '');
+    const ini = input.selectionStart;
+    const fin = input.selectionEnd;
+    if (ini == null || fin == null) return null;
+    const conSeleccion = ini !== fin;
+    if (conSeleccion && ini === 0 && fin >= texto.length) return null;
+    const conHuecos = texto.includes(_CONCI_FECHA_HUECO);
+    const capturando = !conHuecos && String(capturados || '').length < 8;
+    if (!conSeleccion && capturando && ini >= texto.length) return null;
+
+    const slots = _conciFechaSlots(texto).split('');
+    const listo = (slot) => ({ slots: slots.join(''), slot });
+    let a = _conciFechaSlotEnPos(ini);
+
+    if (conSeleccion) {
+        // Lo seleccionado se vacía en su sitio; un dígito entra en el primero.
+        for (let i = a; i < _conciFechaSlotEnPos(fin); i++) slots[i] = _CONCI_FECHA_HUECO;
+        if (/^\d$/.test(tecla) && a < 8) slots[a++] = tecla;
+        return listo(a);
+    }
+    if (tecla === 'Backspace') {
+        if (a === 0) return listo(0);
+        slots[a - 1] = _CONCI_FECHA_HUECO;
+        return listo(a - 1);
+    }
+    if (tecla === 'Delete') {
+        if (a < 8) slots[a] = _CONCI_FECHA_HUECO;
+        return listo(a);
+    }
+    // Un dígito sobrescribe el lugar que está delante del cursor. Tecleado al
+    // final cae en el primer lugar vacío, o sobre el último del año si ya no
+    // queda ninguno ("21/09/2026" + "5" al final → "21/09/2025").
+    let destino = a;
+    if (destino >= 8) {
+        const hueco = slots.indexOf(_CONCI_FECHA_HUECO);
+        destino = hueco >= 0 ? hueco : 7;
+    }
+    slots[destino] = tecla;
+    return listo(destino + 1);
+}
+
 // Convierte lo capturado en la máscara a ISO (yyyy-mm-dd), o '' si aún no es
 // una fecha real. El año se toma con 2 dígitos como 20XX ("26" → 2026), que es
 // el caso normal de captura; con 4 dígitos se respeta tal cual, para poder
 // registrar cualquier otro año sin salirse del mismo campo.
 function _conciMaskedDateToIso(value) {
+    // Un lugar vacío (_CONCI_FECHA_HUECO, aquí literal porque esta función se
+    // lee suelta desde las pruebas) significa fecha a medio corregir: no se
+    // interpreta lo que quedó ("__/09/2026" no es el 9 del mes 20), se rechaza
+    // y el editor de la celda la pide completa, como cualquier otra incompleta.
+    if (/_/.test(String(value || ''))) return '';
     const digits = String(value || '').replace(/\D/g, '');
     if (digits.length !== 6 && digits.length !== 8) return '';
     const day = parseInt(digits.slice(0, 2), 10);
@@ -29655,6 +29774,18 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
     // encima de usar esas flechas para moverse entre los segmentos día/mes/año
     // del selector de fecha nativo (para eso ya sirve escribir los números,
     // que avanzan de segmento solos).
+    // Excepción en el campo de fecha: ←/→ mueven el cursor dentro de la fecha
+    // (y con Shift seleccionan) mientras no esté en el borde; en el borde
+    // siguen pasando de campo como siempre.
+    const flechaDentroDeFecha = (e) => {
+        if (e.target !== dateInput || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return false;
+        if (e.shiftKey) return true;
+        const ini = dateInput.selectionStart;
+        const fin = dateInput.selectionEnd;
+        if (ini == null || fin == null) return false;
+        if (ini !== fin) return true;
+        return e.key === 'ArrowLeft' ? ini > 0 : fin < dateInput.value.length;
+    };
     const onKeydown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -29662,6 +29793,8 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
         } else if (e.key === 'Escape') {
             e.preventDefault();
             closeEditor(false, 'stay');
+        } else if (flechaDentroDeFecha(e)) {
+            // Movimiento nativo del cursor dentro de la fecha.
         } else if (e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
             const goingBack = e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey);
             if (goingBack) {

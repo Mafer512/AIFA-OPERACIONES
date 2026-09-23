@@ -29,6 +29,8 @@ const validators = new Function(
      _conciIsValidIsoDateInput,
      _conciFormatDateMask, _conciMaskedDateToIso,
      _conciIsoToMaskedDate, _conciExpandDateMaskYear,
+     _CONCI_FECHA_HUECO, _conciFechaSlots, _conciFechaSlotsATexto,
+     _conciFechaPosDeSlot, _conciFechaSlotEnPos, _conciEditarFechaEnCursor,
    };`
 )(value => String(value).padStart(2, '0'));
 
@@ -45,11 +47,16 @@ const colTypes = new Function(
 
 const attachDateMask = new Function(
   '_conciFormatDateMask', '_conciExpandDateMaskYear', '_conciIsoToMaskedDate',
+  '_CONCI_FECHA_HUECO', '_conciFechaSlotsATexto', '_conciFechaPosDeSlot', '_conciEditarFechaEnCursor',
   `${maskSnippet}; return _conciAttachDateMask;`
 )(
   validators._conciFormatDateMask,
   validators._conciExpandDateMaskYear,
-  validators._conciIsoToMaskedDate
+  validators._conciIsoToMaskedDate,
+  validators._CONCI_FECHA_HUECO,
+  validators._conciFechaSlotsATexto,
+  validators._conciFechaPosDeSlot,
+  validators._conciEditarFechaEnCursor
 );
 
 const editorSnippet = sourceBetween(
@@ -340,5 +347,164 @@ describe('validacion de fecha y hora en Conciliacion > Manifiestos', () => {
     expect(commitCell).toHaveBeenCalledWith(
       td, '29JUL 00:32', 'next', '29/07/2026 00:32'
     );
+  });
+});
+
+describe('corregir la fecha sin mover nada de sitio (celdas de Conciliacion)', () => {
+  // Coloca el cursor (o la seleccion) y presiona una tecla como el capturista.
+  function tecla(input, key, ini, fin = ini, extra = {}) {
+    if (ini !== undefined) input.setSelectionRange(ini, fin);
+    const ev = new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...extra });
+    input.dispatchEvent(ev);
+    return ev;
+  }
+  const cursor = input => [input.selectionStart, input.selectionEnd];
+
+  function abrirFecha(iso = '2026-09-21') {
+    document.body.innerHTML = `<input id=f value="${iso}">`;
+    const input = document.getElementById('f');
+    attachDateMask(input);
+    input.focus();
+    return input;
+  }
+
+  // Los cuatro cambios que se hacen todos los dias en la tabla.
+  test('1. 21/09/2026 -> 20/09/2026 cambiando solo el dia', () => {
+    const input = abrirFecha();
+    tecla(input, '0', 1);
+    expect(input.value).toBe('20/09/2026');
+    expect(cursor(input)).toEqual([3, 3]);
+  });
+
+  test('2. 21/09/2026 -> 22/09/2026', () => {
+    const input = abrirFecha();
+    tecla(input, '2', 1);
+    expect(input.value).toBe('22/09/2026');
+  });
+
+  test('3. 21/09/2026 -> 21/10/2026 cambiando solo el mes', () => {
+    const input = abrirFecha();
+    tecla(input, '1', 3, 5); // el mes seleccionado
+    expect(input.value).toBe('21/1_/2026'); // el dia y el anio no se movieron
+    tecla(input, '0');
+    expect(input.value).toBe('21/10/2026');
+  });
+
+  test('4. 21/09/2026 -> 21/09/2025 cambiando solo el ultimo digito del anio', () => {
+    const input = abrirFecha();
+    tecla(input, '5', 9);
+    expect(input.value).toBe('21/09/2025');
+  });
+
+  // Lo que provocaba 09/20/26: borrar un segmento corria los demas.
+  test('5. borrar el dia deja __/09/2026, con el mes y el anio en su lugar', () => {
+    const input = abrirFecha();
+    tecla(input, 'Backspace', 0, 2);
+    expect(input.value).toBe('__/09/2026');
+    expect(cursor(input)).toEqual([0, 0]);
+  });
+
+  test('6. borrar el mes deja 21/__/2026, con el dia y el anio en su lugar', () => {
+    const input = abrirFecha();
+    tecla(input, 'Delete', 3, 5);
+    expect(input.value).toBe('21/__/2026');
+  });
+
+  test('7. borrar el anio deja 21/09/____, con el dia y el mes en su lugar', () => {
+    const input = abrirFecha();
+    tecla(input, 'Backspace', 6, 10);
+    expect(input.value).toBe('21/09/____');
+  });
+
+  test('8. nunca aparece 09/20/26: las diagonales no se mueven y nada se recorre', () => {
+    const input = abrirFecha();
+    ['Backspace', 'Delete'].forEach(borrar => {
+      for (let pos = 0; pos <= 10; pos++) {
+        abrirFecha();
+        const campo = document.getElementById('f');
+        tecla(campo, borrar, pos);
+        expect(campo.value).toMatch(/^[\d_]{2}\/[\d_]{2}\/[\d_]{4}$/);
+        expect(campo.value[2]).toBe('/');
+        expect(campo.value[5]).toBe('/');
+      }
+    });
+  });
+
+  test('9. el anio se queda en cuatro lugares aunque se borre entero', () => {
+    const input = abrirFecha();
+    tecla(input, 'Backspace', 10);
+    tecla(input, 'Backspace', 9);
+    tecla(input, 'Backspace', 8);
+    tecla(input, 'Backspace', 7);
+    expect(input.value).toBe('21/09/____');
+    expect(input.value.length).toBe(10);
+  });
+
+  test('el dia se corrige digito por digito: 21 -> 2_ -> 20', () => {
+    const input = abrirFecha();
+    tecla(input, 'Backspace', 2);
+    expect(input.value).toBe('2_/09/2026');
+    expect(cursor(input)).toEqual([1, 1]);
+    tecla(input, '0');
+    expect(input.value).toBe('20/09/2026');
+    expect(cursor(input)).toEqual([3, 3]);
+  });
+
+  test('una fecha a medio corregir no se guarda ni se reinterpreta', () => {
+    // "__/09/2026" no es el dia 09 del mes 20: es una fecha incompleta.
+    expect(validators._conciMaskedDateToIso('__/09/2026')).toBe('');
+    expect(validators._conciMaskedDateToIso('21/__/2026')).toBe('');
+    expect(validators._conciMaskedDateToIso('21/09/____')).toBe('');
+    expect(validators._conciMaskedDateToIso('21/09/2026')).toBe('2026-09-21');
+  });
+
+  test('salir del campo a medio corregir no reacomoda la fecha', () => {
+    const input = abrirFecha();
+    tecla(input, 'Backspace', 0, 2);
+    input.dispatchEvent(new window.Event('blur'));
+    expect(input.value).toBe('__/09/2026');
+  });
+
+  test('la celda no acepta una fecha a medio corregir y la deja abierta', () => {
+    const commitCell = jest.fn();
+    const activateEditor = loadDateTimeEditor(commitCell);
+    const td = createCell('21/09/2026');
+    activateEditor(td, { withTime: false, parts: { year: 2026, month: 9, day: 21 }, currentRaw: '21/09/2026' });
+    const dateInput = td.querySelector('.conci-dt-date');
+
+    tecla(dateInput, 'Backspace', 0, 2);
+    expect(dateInput.value).toBe('__/09/2026');
+    tecla(dateInput, 'Enter');
+    expect(commitCell).not.toHaveBeenCalled();
+
+    // Al completarla vuelve a guardar igual que siempre.
+    tecla(dateInput, '2', 0);
+    tecla(dateInput, '0');
+    expect(dateInput.value).toBe('20/09/2026');
+    tecla(dateInput, 'Enter');
+    expect(commitCell).toHaveBeenCalledWith(td, '20/09/2026', 'next', expect.anything());
+  });
+
+  test('escribir desde cero y seleccionar todo siguen igual', () => {
+    const input = abrirFecha();
+    input.select();
+    '200926'.split('').forEach(k => tecla(input, k));
+    expect(input.value).toBe('20/09/2026');
+  });
+
+  test('en la celda, las flechas se mueven dentro de la fecha y en el borde cambian de campo', () => {
+    const commitCell = jest.fn();
+    const activateEditor = loadDateTimeEditor(commitCell);
+    const td = createCell('21/09/2026');
+    activateEditor(td, { withTime: false, parts: { year: 2026, month: 9, day: 21 }, currentRaw: '21/09/2026' });
+    const dateInput = td.querySelector('.conci-dt-date');
+
+    expect(tecla(dateInput, 'ArrowLeft', 5).defaultPrevented).toBe(false);
+    expect(tecla(dateInput, 'ArrowRight', 5).defaultPrevented).toBe(false);
+    expect(tecla(dateInput, 'ArrowLeft', 0, 3, { shiftKey: true }).defaultPrevented).toBe(false);
+    expect(commitCell).not.toHaveBeenCalled();
+
+    expect(tecla(dateInput, 'ArrowRight', 10).defaultPrevented).toBe(true);
+    expect(commitCell).toHaveBeenCalledWith(td, '21/09/2026', 'next', expect.anything());
   });
 });
