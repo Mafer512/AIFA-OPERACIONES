@@ -18002,6 +18002,311 @@ body.dark-mode #table-conci-manifiestos tr.conci-row-overcapacity>td {
    display: none;
 }
 
+/* ==========================================================================
+   Conciliación · Manifiestos: la barra de herramientas, ordenada por peso.
+
+   Con el Cierre de Subsecretaría la barra pasó de ocho a doce botones, todos
+   del mismo tamaño y del mismo color: nada guiaba la vista y la fila se
+   partía en dos. Aquí no se quita ni se mueve ningún botón —el marcado y los
+   ids siguen intactos—, sólo se agrupa y se jerarquiza:
+
+     · CONSULTA (Reportes, los dos catálogos, Historial): tono neutro, porque
+       se usan de vez en cuando y no deben competir con la captura.
+     · CIERRE (cerrar, corregir, solicitudes): ámbar, juntos y separados del
+       resto por un respiro, para que se lean como un bloque.
+     · CAPTURA (Agregar fila, Guardar todo, Deshacer): el verde de siempre.
+     · El conteo de registros se va al extremo derecho, como un dato y no
+       como un botón más.
+   ========================================================================== */
+
+/* Al partirse en dos renglones, que el segundo no quede pegado al primero. */
+.conci-manifest-toolbar {
+   row-gap: .4rem;
+}
+
+/* Consulta: borde y texto neutros; el color se reserva para lo que actúa. */
+.conci-manifest-toolbar #btn-conci-reportes,
+.conci-manifest-toolbar #btn-conci-airline-colors,
+.conci-manifest-toolbar #btn-conci-matricula-catalog,
+.conci-manifest-toolbar #btn-conci-historial {
+   border-color: #dbe1ea;
+   background: #fff;
+   color: #475569;
+}
+
+.conci-manifest-toolbar #btn-conci-reportes:hover,
+.conci-manifest-toolbar #btn-conci-airline-colors:hover,
+.conci-manifest-toolbar #btn-conci-matricula-catalog:hover,
+.conci-manifest-toolbar #btn-conci-historial:hover {
+   border-color: #94a3b8;
+   background: #f8fafc;
+   color: #0f172a;
+}
+
+/* Cierre: un respiro antes del bloque y un ámbar que no grita. */
+.conci-manifest-toolbar #btn-conci-cierre-subsecretaria {
+   margin-left: .55rem;
+   border-color: #d97706;
+   background: #f59e0b;
+   color: #422006;
+   font-weight: 600;
+}
+
+.conci-manifest-toolbar #btn-conci-cierre-subsecretaria:hover {
+   border-color: #b45309;
+   background: #d97706;
+   color: #fff;
+}
+
+.conci-manifest-toolbar #btn-conci-corregir-cerrado,
+.conci-manifest-toolbar #btn-conci-solicitudes-pendientes {
+   border-color: #fcd34d;
+   background: #fffbeb;
+   color: #b45309;
+}
+
+.conci-manifest-toolbar #btn-conci-corregir-cerrado:hover,
+.conci-manifest-toolbar #btn-conci-solicitudes-pendientes:hover {
+   border-color: #d97706;
+   background: #fef3c7;
+   color: #92400e;
+}
+
+/* El contador de solicitudes pendientes, pegado a su botón y no encimado. */
+.conci-manifest-toolbar #badge-conci-solicitudes-pendientes {
+   margin-left: .3rem;
+   padding: .15rem .4rem;
+   font-size: .65rem;
+}
+
+/* Captura: otro respiro, para que se vea dónde empieza lo que escribe. */
+.conci-manifest-toolbar #btn-conci-add-row {
+   margin-left: .55rem;
+}
+
+/* El conteo no es un botón: va al final, discreto. */
+.conci-manifest-toolbar #badge-conci-manifiestos-count {
+   margin-left: auto;
+   border: 1px solid #e2e8f0;
+   background: #f1f5f9 !important;
+   color: #475569;
+   font-weight: 600;
+}
+
+/* Las tres fichas del cierre repetían los colores de PAX, carga y KGS, así
+   que parecían lo mismo. Se les da su propia familia —pizarra y ámbar— y un
+   respiro que las separa del resumen del día. */
+#manifiestos-summary-strip #mf-cierre-card-fijo {
+   margin-left: .4rem;
+   background: linear-gradient(135deg, #334155 0%, #475569 100%);
+}
+
+#manifiestos-summary-strip #mf-cierre-card-previo {
+   background: linear-gradient(135deg, #b45309 0%, #d97706 100%);
+}
+
+#manifiestos-summary-strip #mf-cierre-card-total {
+   background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+}
+
+/* Tema oscuro: los neutros se invierten; el ámbar y las fichas ya se leen. */
+body.dark-mode .conci-manifest-toolbar #btn-conci-reportes,
+body.dark-mode .conci-manifest-toolbar #btn-conci-airline-colors,
+body.dark-mode .conci-manifest-toolbar #btn-conci-matricula-catalog,
+body.dark-mode .conci-manifest-toolbar #btn-conci-historial {
+   border-color: rgba(255, 255, 255, .16);
+   background: #1e293b;
+   color: #cbd5e1;
+}
+
+body.dark-mode .conci-manifest-toolbar #btn-conci-corregir-cerrado,
+body.dark-mode .conci-manifest-toolbar #btn-conci-solicitudes-pendientes {
+   border-color: #b45309;
+   background: rgba(245, 158, 11, .14);
+   color: #fcd34d;
+}
+
+body.dark-mode .conci-manifest-toolbar #badge-conci-manifiestos-count {
+   border-color: rgba(255, 255, 255, .12);
+   background: rgba(255, 255, 255, .06) !important;
+   color: #cbd5e1;
+}
+
+/* ==========================================================================
+   Conciliación · Manifiestos: densidad alta.
+
+   La pantalla es para capturar durante horas: lo que importa es ver muchos
+   vuelos a la vez, no tener controles grandes. Se aprieta todo el área —
+   barra, fichas, filtros y tabla— alrededor de un 15 %, con dos efectos:
+   el título y los doce botones caben en UN renglón, y entran varias filas
+   más sin desplazarse.
+
+   Sólo cambian tamaños y espacios: ni un elemento se mueve de lugar ni se
+   oculta, así que todo sigue donde el capturista ya lo busca.
+   ========================================================================== */
+
+body.conci-manifest-workspace .conci-manifest-toolbar,
+body.conci-manifest-workspace .conci-manifest-filters {
+   padding: .28rem .5rem !important;
+   gap: .3rem !important;
+   row-gap: .3rem;
+}
+
+body.conci-manifest-workspace .conci-manifest-toolbar h6 {
+   font-size: .82rem;
+}
+
+/* El título y los botones, en el MISMO renglón.
+
+   La barra tiene sólo dos cajas: el título y otra con los doce botones.
+   Siendo cajas, nunca pueden compartir línea: si los botones no caben,
+   baja el bloque entero y el título se queda solo arriba, desperdiciando
+   un renglón completo en una pantalla de captura.
+
+   Con display:contents la caja de acciones deja de dibujarse y sus botones
+   pasan a ser hijos directos de la barra: fluyen junto al título y, cuando
+   no caben, saltan de uno en uno. El marcado no cambia.
+
+   La barra deja de separar sus dos bloques a los extremos (eso repartiría
+   huecos enormes entre doce botones); el conteo de registros conserva su
+   margen automático, así que sigue pegado a la derecha. */
+body.conci-manifest-workspace .conci-manifest-toolbar {
+   justify-content: flex-start;
+}
+
+body.conci-manifest-workspace .conci-manifest-toolbar > div:nth-child(2) {
+   /* .d-flex de Bootstrap trae display:flex !important: sin el !important de
+      aqui la caja seguiria existiendo y el titulo se quedaria solo arriba. */
+   display: contents !important;
+}
+
+body.conci-manifest-workspace .conci-manifest-toolbar .btn,
+body.conci-manifest-workspace .conci-manifest-filters .btn,
+body.conci-manifest-workspace .conci-manifest-toolbar .form-control,
+body.conci-manifest-workspace .conci-manifest-filters .form-control,
+body.conci-manifest-workspace .conci-manifest-toolbar .input-group-text,
+body.conci-manifest-workspace .conci-manifest-filters .input-group-text {
+   min-height: 26px;
+   padding: .1rem .45rem;
+   font-size: .7rem;
+}
+
+body.conci-manifest-workspace .conci-manifest-toolbar .badge,
+body.conci-manifest-workspace .conci-manifest-filters .badge {
+   font-size: .6rem;
+}
+
+/* Las pastillas de conteo traen sus medidas en el propio marcado. */
+body.conci-manifest-workspace .conci-count-pill {
+   padding: 1px 6px !important;
+   font-size: .66rem !important;
+}
+
+body.conci-manifest-workspace .conci-count-pill .badge {
+   padding: .16em .42em;
+   font-size: .58rem;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip {
+   gap: 6px;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip .ops-kpi-card {
+   gap: 9px;
+   padding: 5px 15px;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip .ops-kpi-value {
+   font-size: 1.05rem;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip .ops-kpi-sub {
+   font-size: .6rem;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip .ops-kpi-icon {
+   font-size: .95rem;
+}
+
+/* La tabla: encabezado, fila de filtros y celdas. */
+body.conci-manifest-workspace #table-conci-manifiestos thead th.conci-th {
+   padding: 3px 8px;
+   font-size: .68rem;
+}
+
+body.conci-manifest-workspace #table-conci-manifiestos thead tr.conci-filter-row .conci-col-filter {
+   min-height: 21px;
+   padding: 0 .35rem;
+   font-size: .65rem;
+}
+
+body.conci-manifest-workspace #table-conci-manifiestos tbody td {
+   padding: .1rem .4rem;
+   font-size: .72rem;
+   line-height: 1.15;
+}
+
+/* Lo que va dentro de una celda —aerolínea, tipo de operación, estatus—
+   sigue el mismo tamaño para que la fila no vuelva a crecer. */
+body.conci-manifest-workspace #table-conci-manifiestos tbody td .badge,
+body.conci-manifest-workspace #table-conci-manifiestos tbody td .conci-chip {
+   font-size: .64rem;
+   padding: .16em .45em;
+}
+
+/* Las dos filas de filtros, de orilla a orilla.
+
+   Esa franja tiene dos cajas —los conteos con sus fichas, y los filtros de
+   captura con el buscador y las exportaciones— repartidas a los extremos.
+   Como juntas no caben, bajan una debajo de otra y cada una queda apretada
+   a la izquierda, con la mitad derecha vacía.
+
+   Se les da un renglón completo a cada una y, dentro, algo que crezca: las
+   fichas del resumen en la primera y el buscador en la segunda. Así las dos
+   filas llegan hasta el borde derecho sin que nada se encime. */
+body.conci-manifest-workspace .conci-manifest-filters > div {
+   flex: 1 1 100%;
+}
+
+/* Primera fila: las pastillas conservan su tamaño y las siete fichas del
+   resumen se reparten en partes iguales lo que sobra. */
+
+/* Las pastillas de conteo tambien se reparten el renglon: antes conservaban
+   su tamano y solo crecian las fichas, asi que la fila quedaba con un hueco
+   entre Sobrecupo y el resumen. Crecen desde su tamano natural, nunca por
+   debajo, y su contenido se centra al ensancharse. */
+body.conci-manifest-workspace .conci-manifest-filters .conci-count-pill {
+   /* Once elementos —cinco pastillas y seis fichas— repartiéndose el renglón
+      en partes iguales: todos parten de cero y crecen lo mismo, así que
+      terminan del mismo ancho. El min-width impide que alguno se angoste por
+      debajo de su contenido y recorte una cifra. */
+   flex: 1 1 0;
+   justify-content: center;
+   min-width: max-content;
+   /* Tope para el que salta de renglon en pantallas angostas: sin el, un
+      elemento solo en su linea se estiraba a todo lo ancho. */
+   max-width: 18rem;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip .ops-kpi-card {
+   /* Partes iguales dentro de la franja. El min-width es la red: la ficha de
+      "309,177 KGS capturados" nunca se angosta hasta recortar la cifra. */
+   flex: 1 1 0;
+   justify-content: center;
+   min-width: max-content;
+   /* Tope para el que salta de renglon en pantallas angostas: sin el, un
+      elemento solo en su linea se estiraba a todo lo ancho. */
+   max-width: 18rem;
+}
+
+/* Segunda fila: el buscador toma el espacio libre —es donde más se agradece
+   tener ancho— y las exportaciones quedan alineadas a la derecha. */
+body.conci-manifest-workspace #conci-quick-flight-group {
+   flex: 1 1 auto;
+   width: auto !important;
+   min-width: 14rem;
+}
+
 #manifiestos-summary-strip .ops-kpi-icon {
    font-size: 1rem;
 }
@@ -20410,7 +20715,16 @@ body.conci-manifest-workspace .conci-manifest-toolbar .input-group-text {
 }
 
 body.conci-manifest-workspace #manifiestos-summary-strip {
-   flex: 0 0 auto;
+   /* La franja es UN elemento que contiene las fichas, así que para que cada
+      ficha termine del mismo ancho que una pastilla, la franja crece tanto
+      como fichas lleva (siete con el cierre activo).
+
+      min-width: 0 es imprescindible: por omisión una caja flexible no puede
+      angostarse por debajo de su contenido, así que la franja se quedaba con
+      el ancho natural de sus siete fichas y el sobrante se lo repartían las
+      pastillas, que acababan más anchas que las propias fichas. */
+   flex: 7 1 0;
+   min-width: 0;
 }
 
 body.conci-manifest-workspace #conci-manifiestos-loading,
