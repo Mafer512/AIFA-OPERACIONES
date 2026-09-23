@@ -25236,6 +25236,23 @@ function _conciIsRoutingColumn(column) {
         || /destino.*origen|origen.*destino/.test(key);
 }
 
+// Valor crudo de una celda: lo que se guardaría en la base, no lo que se ve.
+// En DESTINO / ORIGEN la celda muestra la ciudad del extremo que toca
+// ("BOGOTÁ") mientras el valor real vive en routeRaw ("BOG-NLU-LAX").
+// Comparar contra lo que se ve daba por cambiada una celda que sólo se
+// atravesó: el editor devuelve la ruta al cerrarse, la ruta no es igual a la
+// ciudad, y la fila quedaba sucia —y firmada en CAPTURÓ— sin que nadie la
+// tocara. Las demás columnas muestran lo mismo que guardan, así que para
+// ellas no cambia nada.
+function _conciCeldaValorCrudo(td) {
+    if (!td || !td.dataset) return '';
+    if (td.dataset.pendingRaw !== undefined) return td.dataset.pendingRaw;
+    if (_conciIsRoutingColumn(td.dataset.col)) {
+        return td.dataset.routeRaw ?? td.dataset.raw ?? td.textContent ?? '';
+    }
+    return td.dataset.raw || td.textContent || '';
+}
+
 function _conciIsAeronaveColumn(column) {
     return _conciNormalizedColumnName(column) === 'aeronave';
 }
@@ -29403,7 +29420,7 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     const previousRaw = _conciNormalizeEditableCellText(
         td._conciEditorStartRaw !== undefined
             ? td._conciEditorStartRaw
-            : (td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || td.textContent))
+            : _conciCeldaValorCrudo(td)
     );
     delete td._conciEditorStartRaw;
     const hasOriginalValue = td.dataset.origRaw !== undefined;
@@ -30814,7 +30831,7 @@ function _conciFillRowActionCell(actionTd, persistedId) {
 // Limpia el estado "dirty"/warning de una fila tras un guardado exitoso.
 function _conciMarkRowSaved(tr, cells) {
     cells.forEach(td => {
-        const raw = _conciNormalizeEditableCellText(td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent);
+        const raw = _conciNormalizeEditableCellText(_conciCeldaValorCrudo(td));
         td.dataset.origRaw = raw;
         td.removeAttribute('data-dirty');
     });
