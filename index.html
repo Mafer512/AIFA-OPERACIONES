@@ -23002,6 +23002,13 @@ FF
                                                                 <i class="fas fa-circle-xmark me-1"></i>Sin capturar <span class="badge bg-danger ms-1" id="conci-count-sin-capturar">0</span>
                                                             </button>
                                                         </div>
+                                                        <button class="btn btn-sm btn-outline-secondary shadow-sm" type="button"
+                                                                id="btn-conci-captura-ayuda"
+                                                                aria-label="Cómo se determina si un manifiesto está capturado"
+                                                                title="¿Cómo sabemos qué manifiestos están capturados?"
+                                                                onclick="new bootstrap.Modal(document.getElementById('modalConciCapturaAyuda')).show()">
+                                                            <i class="fas fa-circle-question" aria-hidden="true"></i>
+                                                        </button>
                                                         <div class="input-group input-group-sm shadow-sm" id="conci-quick-flight-group" style="width:240px">
                                                             <span class="input-group-text bg-white text-primary" title="Buscador rápido de vuelo"><i class="fas fa-magnifying-glass"></i></span>
                                                             <input type="text" class="form-control" id="conci-quick-flight"
@@ -28650,24 +28657,16 @@ FF
                             <div class="px-4 py-2 d-flex align-items-center gap-3 border-bottom bg-white flex-wrap">
                                 <span class="small text-muted fw-semibold"><i class="fas fa-calendar-alt me-1 text-primary"></i>Período:</span>
                                 <div class="btn-group btn-group-sm shadow-sm" role="group" aria-label="Seleccionar período">
-                                    <button type="button" class="btn btn-primary mdb-period-btn" data-table="Base de datos Manifiestos 2025" id="mdb-period-2025">
+                                    <button type="button" class="btn btn-outline-primary mdb-period-btn" data-table="Base de datos Manifiestos 2025" id="mdb-period-2025"
+                                        title="Todo 2025. Usa el filtro Mes para ver un mes en concreto.">
                                         <i class="fas fa-layer-group me-1"></i>2025 · Anual
                                     </button>
-                                    <button type="button" class="btn btn-outline-primary mdb-period-btn" data-table="Base de Datos Manifiestos Febrero 2026" id="mdb-period-feb2026">
-                                        <i class="fas fa-calendar-day me-1"></i>Febrero 2026
-                                    </button>
-                                     <button type="button" class="btn btn-outline-primary mdb-period-btn" data-table="Manifiestos" id="mdb-period-abr2026">
-                                        <i class="fas fa-calendar-day me-1"></i>Abril 2026
-                                    </button>
-                                    <button type="button" class="btn btn-outline-primary mdb-period-btn" data-table="Manifiestos Junio 2026" id="mdb-period-jun2026">
-                                        <i class="fas fa-calendar-day me-1"></i>Junio 2026
-                                    </button>
-                                    <button type="button" class="btn btn-outline-primary mdb-period-btn" data-table="maestra_operaciones" id="mdb-period-maestra"
-                                        title="Operaciones de mayo de 2026 en adelante, directo de la maestra de operaciones">
-                                        <i class="fas fa-database me-1"></i>Mayo 2026 →
+                                    <button type="button" class="btn btn-primary mdb-period-btn" data-table="maestra_operaciones" id="mdb-period-2026"
+                                        title="Todo 2026, directo de la maestra de operaciones. Usa el filtro Mes para ver un mes en concreto.">
+                                        <i class="fas fa-layer-group me-1"></i>2026 · Anual
                                     </button>
                                 </div>
-                                <span class="badge bg-light text-secondary border fw-normal small" id="mdb-period-label">Manifiestos 2025 — Datos anuales</span>
+                                <span class="badge bg-light text-secondary border fw-normal small" id="mdb-period-label">2026 — Año completo</span>
                                 <!-- Botón importar  solo admin / editor -->
                                 <div id="mdb-admin-btns" style="display:none!important" class="d-flex align-items-center gap-2 ms-auto">
                                     <button type="button" class="btn btn-sm btn-outline-primary"
@@ -28790,14 +28789,37 @@ FF
                                             <div style="width:1px;height:38px;background:#d0d5ea;margin-bottom:2px;"></div>
                                         </div>
 
-                                        <!-- Aerolínea -->
+                                        <!-- Aerolíneas — selección múltiple.
+                                             El <input hidden> guarda la selección como lista separada
+                                             por "|" y es lo que sigue contando el badge de filtros
+                                             activos; la lista de abajo es la interfaz de verdad. -->
                                         <div class="col-auto">
                                             <label class="d-flex align-items-center gap-1 form-label small fw-semibold mb-1 text-secondary">
-                                                <i class="fas fa-plane text-warning"></i> Aerolínea
+                                                <i class="fas fa-plane text-warning"></i> Aerolíneas
                                             </label>
-                                            <select class="form-select form-select-sm shadow-sm" id="mdb-filter-airline" aria-label="Aerolínea" style="width:175px;border-color:#c5cbe8;">
-                                                <option value="">Todas las aerolíneas</option>
-                                            </select>
+                                            <input type="hidden" id="mdb-filter-airline" value="">
+                                            <div class="mdb-al" id="mdb-airline-picker">
+                                                <button type="button" class="mdb-al-trigger" id="mdb-airline-trigger"
+                                                        aria-haspopup="listbox" aria-expanded="false"
+                                                        aria-controls="mdb-airline-panel">
+                                                    <span class="mdb-al-logos" id="mdb-airline-logos"></span>
+                                                    <span class="mdb-al-label" id="mdb-airline-label">Todas las aerolíneas</span>
+                                                    <i class="fas fa-chevron-down mdb-al-caret"></i>
+                                                </button>
+                                                <div class="mdb-al-panel" id="mdb-airline-panel" role="listbox" aria-multiselectable="true" hidden>
+                                                    <div class="mdb-al-search">
+                                                        <i class="fas fa-search"></i>
+                                                        <input type="text" id="mdb-airline-search" placeholder="Buscar aerolínea..." autocomplete="off" aria-label="Buscar aerolínea">
+                                                    </div>
+                                                    <div class="mdb-al-actions">
+                                                        <button type="button" class="mdb-al-act" data-mdb-al-act="todas"><i class="fas fa-check-double"></i>Todas</button>
+                                                        <button type="button" class="mdb-al-act" data-mdb-al-act="ninguna"><i class="fas fa-eraser"></i>Limpiar</button>
+                                                        <span class="mdb-al-count" id="mdb-airline-count"></span>
+                                                    </div>
+                                                    <div class="mdb-al-list" id="mdb-airline-list"></div>
+                                                </div>
+                                            </div>
+                                            <div class="mdb-al-chips" id="mdb-airline-chips"></div>
                                         </div>
 
                                         <!-- Registros — sólo aplica a la maestra de operaciones, donde
@@ -28821,9 +28843,6 @@ FF
 
                                         <!-- Acciones -->
                                         <div class="col-auto d-flex gap-2">
-                                            <button class="btn btn-primary btn-sm px-3 shadow-sm" id="mdb-btn-apply-filters" title="Aplicar los filtros seleccionados">
-                                                <i class="fas fa-search me-1"></i>Aplicar
-                                            </button>
                                             <button class="btn btn-outline-secondary btn-sm" id="mdb-btn-clear-filters" title="Limpiar todos los filtros">
                                                 <i class="fas fa-times me-1"></i>Limpiar
                                             </button>
@@ -28832,6 +28851,98 @@ FF
                                     </div>
                                 </div>
                             </div>
+
+                            <!-- Selector de aerolíneas: estilos propios, acotados a .mdb-al -->
+                            <style>
+                            .mdb-al { position: relative; width: 240px; }
+                            .mdb-al-trigger {
+                                display: flex; align-items: center; gap: .5rem;
+                                width: 100%; padding: .32rem .6rem; min-height: 31px;
+                                background: #fff; border: 1px solid #c5cbe8; border-radius: .375rem;
+                                font-size: .8125rem; color: #344054; text-align: left; cursor: pointer;
+                                box-shadow: 0 1px 2px rgba(16,24,40,.05);
+                                transition: border-color .15s, box-shadow .15s;
+                            }
+                            .mdb-al-trigger:hover { border-color: #9aa5d4; }
+                            .mdb-al-trigger:focus-visible,
+                            .mdb-al.is-open .mdb-al-trigger {
+                                outline: none; border-color: #1e3a8a;
+                                box-shadow: 0 0 0 3px rgba(30,58,138,.14);
+                            }
+                            .mdb-al-label { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                            .mdb-al-caret { font-size: .65rem; color: #8a93b8; transition: transform .18s; }
+                            .mdb-al.is-open .mdb-al-caret { transform: rotate(180deg); }
+
+                            /* Logos encimados en el botón, como una baraja */
+                            .mdb-al-logos { display: inline-flex; flex: 0 0 auto; }
+                            .mdb-al-logos:empty { display: none; }
+                            .mdb-al-logos > * { margin-left: -7px; border: 2px solid #fff; border-radius: 50%; }
+                            .mdb-al-logos > *:first-child { margin-left: 0; }
+
+                            .mdb-al-panel {
+                                position: absolute; z-index: 1060; top: calc(100% + 6px); left: 0;
+                                width: 320px; max-width: 86vw; background: #fff;
+                                border: 1px solid #dfe3f3; border-radius: .6rem;
+                                box-shadow: 0 18px 40px -12px rgba(16,24,40,.28), 0 0 0 1px rgba(30,58,138,.04);
+                                overflow: hidden;
+                            }
+                            .mdb-al-search { position: relative; padding: .55rem .6rem .45rem; border-bottom: 1px solid #eef0f8; }
+                            .mdb-al-search i { position: absolute; left: 1.15rem; top: 50%; transform: translateY(-50%); font-size: .75rem; color: #98a2b3; }
+                            .mdb-al-search input {
+                                width: 100%; padding: .32rem .5rem .32rem 1.85rem;
+                                border: 1px solid #e3e6f2; border-radius: .375rem;
+                                font-size: .8125rem; background: #f8f9ff;
+                            }
+                            .mdb-al-search input:focus { outline: none; border-color: #1e3a8a; background: #fff; }
+
+                            .mdb-al-actions { display: flex; align-items: center; gap: .4rem; padding: .4rem .6rem; border-bottom: 1px solid #eef0f8; }
+                            .mdb-al-act {
+                                display: inline-flex; align-items: center; gap: .3rem;
+                                border: 1px solid #dfe3f3; background: #f8f9ff; color: #3a4a7a;
+                                border-radius: 999px; padding: .15rem .55rem; font-size: .7rem; font-weight: 600; cursor: pointer;
+                            }
+                            .mdb-al-act:hover { background: #eef1fb; border-color: #c5cbe8; }
+                            .mdb-al-count { margin-left: auto; font-size: .68rem; color: #8a93b8; font-weight: 600; }
+
+                            .mdb-al-list { max-height: 268px; overflow-y: auto; padding: .25rem; }
+                            .mdb-al-row {
+                                display: flex; align-items: center; gap: .55rem; width: 100%;
+                                padding: .35rem .45rem; border: 0; background: transparent;
+                                border-radius: .4rem; cursor: pointer; text-align: left; font-size: .8125rem; color: #344054;
+                            }
+                            .mdb-al-row:hover { background: #f4f6ff; }
+                            .mdb-al-row.is-on { background: #eef2ff; color: #1e3a8a; font-weight: 600; }
+                            .mdb-al-box {
+                                flex: 0 0 auto; width: 16px; height: 16px; border-radius: .25rem;
+                                border: 1.5px solid #c5cbe8; background: #fff;
+                                display: inline-flex; align-items: center; justify-content: center;
+                                font-size: .6rem; color: #fff;
+                            }
+                            .mdb-al-row.is-on .mdb-al-box { background: #1e3a8a; border-color: #1e3a8a; }
+                            .mdb-al-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                            .mdb-al-n { flex: 0 0 auto; font-size: .68rem; font-weight: 700; color: #667085; font-variant-numeric: tabular-nums; }
+                            .mdb-al-row.is-on .mdb-al-n { color: #1e3a8a; }
+                            .mdb-al-empty { padding: .9rem .6rem; text-align: center; color: #98a2b3; font-size: .78rem; }
+
+                            /* Iniciales cuando la aerolínea no tiene logo */
+                            .mdb-al-ini {
+                                flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+                                width: 22px; height: 22px; border-radius: 50%;
+                                font-size: .58rem; font-weight: 800; color: #fff; letter-spacing: .02em;
+                            }
+
+                            .mdb-al-chips { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .3rem; max-width: 240px; }
+                            .mdb-al-chips:empty { display: none; }
+                            .mdb-al-chip {
+                                display: inline-flex; align-items: center; gap: .25rem;
+                                background: #eef2ff; border: 1px solid #d5ddfb; color: #1e3a8a;
+                                border-radius: 999px; padding: .08rem .45rem .08rem .25rem;
+                                font-size: .68rem; font-weight: 600; max-width: 150px;
+                            }
+                            .mdb-al-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                            .mdb-al-chip button { border: 0; background: transparent; color: #5c6ab5; cursor: pointer; padding: 0 0 0 .1rem; line-height: 1; font-size: .7rem; }
+                            .mdb-al-chip button:hover { color: #b42318; }
+                            </style>
 
                             <!-- Script inline para los botones toggle de filtros -->
                             <script>
@@ -28847,6 +28958,9 @@ FF
                                             });
                                             this.className = this.className.replace(outlineClass, activeClass);
                                             sel.value = this.dataset.val;
+                                            // El <select> está oculto: cambiarlo a mano no dispara
+                                            // "change", y es ahí donde el módulo vuelve a filtrar.
+                                            sel.dispatchEvent(new Event('change', { bubbles: true }));
                                             updateActiveFilterCount();
                                         });
                                     });
@@ -38309,6 +38423,70 @@ FF
 </div>
 
 
+
+<!-- MODAL: CÓMO SE DETERMINA EL ESTADO DE CAPTURA DE UN MANIFIESTO -->
+<div class="modal fade" id="modalConciCapturaAyuda" tabindex="-1" aria-labelledby="modalConciCapturaAyudaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header" style="background:linear-gradient(135deg,#1a3a5c,#2563a8);color:#fff;">
+                <h5 class="modal-title" id="modalConciCapturaAyudaLabel">
+                    <i class="fas fa-circle-question me-2"></i>¿Cómo sabemos qué manifiestos están capturados?
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="alert alert-primary d-flex align-items-start gap-2 py-2 px-3 small mb-3">
+                    <i class="fas fa-key mt-1"></i>
+                    <span>Una sola columna decide el estado: <strong>HR. DE RECEPCIÓN</strong>. Si esa celda tiene algo escrito, el manifiesto cuenta como <strong>capturado</strong>; si está vacía, cuenta como <strong>sin capturar</strong>. No hay ningún otro criterio.</span>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 h-100" style="border-color:#a5d6a7 !important;background:#f1f8f2">
+                            <div class="fw-bold text-success mb-2"><i class="fas fa-circle-check me-1"></i>Capturados</div>
+                            <p class="small mb-2">La fila tiene <strong>HR. DE RECEPCIÓN</strong> con valor.</p>
+                            <p class="small text-muted mb-0">Ejemplo: <code>05/09/2026 14:35</code> — no importa el formato, basta con que la celda no esté vacía.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="border rounded p-3 h-100" style="border-color:#ef9a9a !important;background:#fdf3f3">
+                            <div class="fw-bold text-danger mb-2"><i class="fas fa-circle-xmark me-1"></i>Sin capturar</div>
+                            <p class="small mb-2">La celda de <strong>HR. DE RECEPCIÓN</strong> está vacía.</p>
+                            <p class="small text-muted mb-0">Una celda con puros espacios o saltos de línea también se lee como vacía.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <h6 class="text-uppercase small fw-bold text-muted mb-2"><i class="fas fa-triangle-exclamation me-1 text-warning"></i>Lo que conviene tener claro</h6>
+                <ul class="small mb-3 ps-3">
+                    <li class="mb-1"><strong>CIERRE SUBSECRETARIA no cuenta.</strong> Aunque esa columna tenga valor, si falta HR. DE RECEPCIÓN el manifiesto sigue apareciendo como <em>sin capturar</em>.</li>
+                    <li class="mb-1"><strong>Lo que acabas de escribir ya cuenta,</strong> aunque todavía no hayas guardado: en cuanto tecleas la hora de recepción, la fila cambia de grupo.</li>
+                    <li class="mb-1"><strong>Los números son del periodo cargado</strong> (el año y mes seleccionados), no sólo de las filas que ves en pantalla. Capturados + Sin capturar siempre suma el total de manifiestos del periodo.</li>
+                    <li class="mb-0"><strong>Son un interruptor.</strong> Un clic filtra, otro clic al mismo botón quita el filtro; también puedes usar <em>Limpiar filtros</em>.</li>
+                </ul>
+
+                <h6 class="text-uppercase small fw-bold text-muted mb-2"><i class="fas fa-layer-group me-1 text-primary"></i>Cómo se combinan con los demás filtros</h6>
+                <p class="small mb-2">Todos los filtros de esta barra se suman (se aplican juntos). Por ejemplo, <em>Carga</em> + <em>Sin capturar</em> muestra sólo los manifiestos de carga que aún no tienen hora de recepción.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle mb-0" style="font-size:.82rem">
+                        <thead class="table-dark text-uppercase" style="font-size:.72rem">
+                            <tr><th style="width:34%">Filtro</th><th>En qué se basa</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><span class="badge" style="background:#3949ab">Llegadas</span> / <span class="badge" style="background:#00695c">Salidas</span></td><td>La columna <strong>TIPO DE MANIFIESTO</strong> (llegada o salida).</td></tr>
+                            <tr><td><span class="badge" style="background:#5e35b1">Pasajeros</span> / <span class="badge" style="background:#e65100">Carga</span></td><td>La <strong>aerolínea</strong> del vuelo según el catálogo de aerolíneas. Si la aerolínea no está dada de alta, se usa el <strong>tipo de servicio</strong> del itinerario (F y H son carga). Nunca se decide por los kilogramos.</td></tr>
+                            <tr><td><span class="badge" style="background:#c62828">Sobrecupo</span></td><td><strong>TOTAL PAX</strong> mayor que la capacidad de la matrícula registrada en el catálogo. El botón sólo aparece si hay algún caso.</td></tr>
+                            <tr><td><span class="badge bg-success">Capturados</span> / <span class="badge bg-danger">Sin capturar</span></td><td><strong>HR. DE RECEPCIÓN</strong> con valor o vacía.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 <!-- MODAL: CATLOGO TIPO DE SERVICIO -->
 <div class="modal fade" id="modalFlightServiceType" tabindex="-1" aria-labelledby="modalFlightServiceTypeLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">

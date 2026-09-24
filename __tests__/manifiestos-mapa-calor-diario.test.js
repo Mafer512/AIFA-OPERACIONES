@@ -55,6 +55,7 @@ function supabaseDeMentiras() {
                 _tabla: tabla, _head: false,
                 select(_cols, opciones) { q._head = !!(opciones && opciones.head); return q; },
                 gte() { return q; },
+                lte() { return q; },
                 order() { return q; },
                 limit() { return q; },
                 range(desde, hasta) { q._desde = desde; q._hasta = hasta; return q; },
@@ -75,8 +76,8 @@ function supabaseDeMentiras() {
 const FIXTURE = `
   <div id="mdb-overlay" class="d-none"><span id="mdb-overlay-text"></span></div>
   <div class="btn-group" aria-label="Seleccionar período">
-    <button class="btn btn-primary mdb-period-btn" data-table="Base de datos Manifiestos 2025"></button>
-    <button class="btn btn-outline-primary mdb-period-btn" data-table="maestra_operaciones" id="mdb-period-maestra"></button>
+    <button class="btn btn-outline-primary mdb-period-btn" data-table="Base de datos Manifiestos 2025"></button>
+    <button class="btn btn-primary mdb-period-btn" data-table="maestra_operaciones" id="mdb-period-2026"></button>
   </div>
   <span id="mdb-period-label"></span>
   <select id="mdb-filter-year"><option value="" selected></option></select>
@@ -135,8 +136,7 @@ beforeAll(async () => {
     require(path.join(raiz, 'js/manifiestos-analisis.js'));
     document.dispatchEvent(new window.Event('DOMContentLoaded'));
 
-    // El período por omisión es la tabla anual; se cambia al de la maestra.
-    document.getElementById('mdb-period-maestra').click();
+    // 2026 ya es el período por omisión: no hay que cambiar de botón.
 
     mapaOps = document.getElementById('mdb-ops-heatmap-ops');
     mapaPax = document.getElementById('mdb-ops-heatmap-pax');

@@ -7,19 +7,35 @@
 (function () {
   'use strict';
 
+  /* Un botón por AÑO, no por mes.
+   *
+   * Antes eran cinco: 2025, Febrero 2026, Abril 2026, Junio 2026 y "Mayo 2026
+   * en adelante". Cuatro de ellos eran 2026 partido en pedazos, cada uno en su
+   * propia tabla, y no había forma de ver el año completo ni de comparar un mes
+   * contra otro sin cambiar de botón y perder el contexto. Ahora 2026 es uno
+   * solo y los meses salen del filtro "Mes", que es donde se esperan.
+   *
+   * 2026 se lee de maestra_operaciones, que se llena sola con lo que se captura
+   * en Conciliación, el itinerario del AODB y el portal. Los Excel mensuales que
+   * se importaron antes de que existiera la maestra siguen listados en
+   * respaldoMensual: si a la maestra le falta alguno de esos meses, se rellena
+   * con ellos en vez de dejar el hueco (ver rellenaMesesFaltantes). */
   const TABLES = {
-    '2025':      { name: 'Base de datos Manifiestos 2025',          label: 'Manifiestos 2025 — Datos anuales' },
-    'feb2026':   { name: 'Base de Datos Manifiestos Febrero 2026',   label: 'Febrero 2026 — Datos mensuales' },
-    'abr2026':   { name: 'Manifiestos',                              label: 'Abril 2026 — Datos mensuales' },
-    'jun2026':   { name: 'Manifiestos Junio 2026',                   label: 'Junio 2026 — Datos mensuales' },
-    // De mayo de 2026 en adelante el dato bueno ya no se importa de un
-    // Excel mensual: sale de maestra_operaciones, que se llena sola con lo
-    // que se captura en Conciliación, el itinerario del AODB y el portal.
-    // Por eso este período no tiene fecha de corte superior: crece solo.
-    'maestra':   { name: 'maestra_operaciones',                      label: 'Mayo 2026 en adelante — Maestra de operaciones',
-                   fuente: 'maestra', desde: '2026-05-01' }
+    '2025': { name: 'Base de datos Manifiestos 2025', label: '2025 — Año completo' },
+    '2026': {
+      name: 'maestra_operaciones',
+      label: '2026 — Año completo',
+      fuente: 'maestra',
+      desde: '2026-01-01',
+      hasta: '2026-12-31',
+      respaldoMensual: {
+        2: 'Base de Datos Manifiestos Febrero 2026',
+        4: 'Manifiestos',
+        6: 'Manifiestos Junio 2026'
+      }
+    }
   };
-  let _activeTableKey = '2025';
+  let _activeTableKey = '2026';
   const getTableName  = () => TABLES[_activeTableKey].name;
   const getTableLabel = () => TABLES[_activeTableKey].label;
   const PAGE_SIZE = 50;
@@ -92,6 +108,9 @@
     'volaris': 'images/airlines/logo_volaris.png',
     'mexicana': 'images/airlines/logo_mexicana.png',
     'mexicana de aviacion': 'images/airlines/logo_mexicana.png',
+    'mexicana de aviación': 'images/airlines/logo_mexicana.png',
+    'aeromexico': 'images/airlines/logo_aeromexico.png',
+    'aeromexico connect': 'images/airlines/logo_aeromexico.png',
     'aerolitoral': 'images/airlines/logo_aeromexico.png',
     'aerovias': 'images/airlines/logo_aeromexico.png',
     'aerovias de mexico': 'images/airlines/logo_aeromexico.png',
@@ -110,6 +129,53 @@
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/\s+/g, ' ');
   }
+
+  /* Aerolíneas que son la misma empresa con otra razón social.
+   *
+   * En el manifiesto el capturista escribe lo que dice el documento, y lo que
+   * dice es la razón social: los vuelos de Aeroméxico entran como "AEROVÍAS"
+   * (Aerovías de México) y como "AEROLITORAL" (Aeroméxico Connect). Contados
+   * aparte, la aerolínea más grande del aeropuerto salía partida en pedazos y
+   * ninguno decía lo que opera de verdad.
+   *
+   * El catálogo administrable (tabla airlines, Gestión de Datos → Aerolíneas)
+   * ya resuelve aerolitoral y los "connect" por sus alias. Esta tabla cubre lo
+   * que al catálogo le falta y sirve de respaldo mientras carga, que es
+   * asíncrono: sin ella, el primer dibujado mostraría los nombres sin agrupar.
+   */
+  const AEROLINEAS_MISMA_EMPRESA = {
+    'aerovias': 'Aeroméxico',
+    'aerovias de mexico': 'Aeroméxico',
+    'aerovias de mexico sa de cv': 'Aeroméxico',
+  };
+
+  const _nombreAerolineaCache = new Map();
+
+  /* El nombre bueno de una aerolínea. getAirline lo llama una vez por renglón y
+     por gráfica —decenas de miles de veces—, así que se memoiza. */
+  function nombreCanonicoAerolinea(valor) {
+    const bruto = String(valor === null || valor === undefined ? '' : valor).trim();
+    if (!bruto) return '(Sin nombre)';
+    const enCache = _nombreAerolineaCache.get(bruto);
+    if (enCache) return enCache;
+
+    const desdeTabla = AEROLINEAS_MISMA_EMPRESA[normalizeAirlineKey(bruto)];
+    if (desdeTabla) { _nombreAerolineaCache.set(bruto, desdeTabla); return desdeTabla; }
+
+    const catalogo = window.AifaAerolineas;
+    // Sin catálogo todavía se devuelve el nombre crudo y NO se guarda: en
+    // cuanto cargue hay que poder resolverlo bien.
+    if (!catalogo || !catalogo.cargado) return bruto;
+    const bueno = catalogo.canonico(bruto) || bruto;
+    _nombreAerolineaCache.set(bruto, bueno);
+    return bueno;
+  }
+
+  // El catálogo llega por su cuenta; cuando llega, se rehace la agrupación.
+  window.addEventListener('aifa:catalogo-aerolineas', () => {
+    _nombreAerolineaCache.clear();
+    if (_loaded && _allData.length) { poblarAerolineas(_allData); applyFilters(); }
+  });
 
   function getIATA(airlineName) {
     const k = normalizeAirlineKey(airlineName);
@@ -184,8 +250,103 @@
     }
   };
   // Registrar el plugin globalmente
-  if (window.Chart) Chart.register(airlineLogoPlugin);
-  else document.addEventListener('DOMContentLoaded', () => { if (window.Chart) Chart.register(airlineLogoPlugin); });
+  if (window.Chart) { Chart.register(airlineLogoPlugin); aplicaTemaCharts(); }
+  else document.addEventListener('DOMContentLoaded', () => {
+    if (window.Chart) { Chart.register(airlineLogoPlugin); aplicaTemaCharts(); }
+  });
+
+  /* -------------------------------------------------------
+     UN SOLO AIRE PARA TODAS LAS GRÁFICAS
+
+     Eran veinte gráficas y cada una repetía sus propias opciones, así que ni
+     las rejillas ni los tooltips ni las tipografías coincidían entre pestañas.
+     Esto se toca una vez y las alcanza a todas; lo que una gráfica necesite
+     distinto lo sigue pudiendo pedir en sus propias opciones.
+  ------------------------------------------------------- */
+  function aplicaTemaCharts() {
+    if (!window.Chart || !Chart.defaults || !Chart.defaults.font) return;
+    const C = Chart.defaults;
+
+    C.font.family = "'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif";
+    C.font.size = 11;
+    C.color = '#667085';
+    C.borderColor = 'rgba(16,24,40,.07)';
+    C.maintainAspectRatio = false;
+
+    // Entrada corta: lo justo para que se sienta viva sin hacer esperar.
+    C.animation.duration = 650;
+    C.animation.easing = 'easeOutQuart';
+
+    // Leyendas de puntitos en vez de rectángulos: pesan menos en pantalla.
+    Object.assign(C.plugins.legend.labels, {
+      usePointStyle: true, pointStyle: 'circle',
+      boxWidth: 8, boxHeight: 8, padding: 14,
+      font: { size: 11, weight: '600' }
+    });
+
+    // Tooltip oscuro flotante: se lee sobre cualquier color de barra.
+    Object.assign(C.plugins.tooltip, {
+      backgroundColor: 'rgba(16,24,40,.93)',
+      titleColor: '#ffffff',
+      titleFont: { size: 12, weight: '700' },
+      bodyColor: '#e4e7ec',
+      bodyFont: { size: 11.5 },
+      footerColor: '#98a2b3',
+      footerFont: { size: 10.5, weight: '600' },
+      padding: 11,
+      cornerRadius: 9,
+      boxPadding: 5,
+      usePointStyle: true,
+      borderColor: 'rgba(255,255,255,.09)',
+      borderWidth: 1
+    });
+
+    C.elements.bar.borderRadius = 6;
+    C.elements.bar.borderSkipped = false;
+    C.elements.line.tension = 0.35;
+    C.elements.line.borderWidth = 2.5;
+    C.elements.point.radius = 3;
+    C.elements.point.hoverRadius = 6;
+    C.elements.point.hoverBorderWidth = 2;
+
+    // Rejilla apenas insinuada y sin el marco del eje: la referencia se
+    // agradece, el encierro no.
+    if (C.scale) {
+      if (C.scale.grid) {
+        C.scale.grid.color = 'rgba(16,24,40,.055)';
+        C.scale.grid.drawTicks = false;
+      }
+      if (C.scale.border) C.scale.border.display = false;
+      if (C.scale.ticks) C.scale.ticks.padding = 8;
+    }
+  }
+
+  /* Degradado para las barras: el color plano se ve chato, y con el relleno
+     más intenso arriba la barra "pesa" hacia donde está el dato.
+     Se usa como función porque en el primer dibujado todavía no hay área. */
+  function conAlfa(hex, alfa) {
+    const m = String(hex).trim().match(/^#?([0-9a-f]{6})$/i);
+    if (!m) return hex;
+    const n = parseInt(m[1], 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + alfa + ')';
+  }
+
+  function degradado(chart, hex, horizontal) {
+    const area = chart && chart.chartArea;
+    if (!area) return conAlfa(hex, .85);
+    const g = horizontal
+      ? chart.ctx.createLinearGradient(area.left, 0, area.right, 0)
+      : chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+    g.addColorStop(0, conAlfa(hex, horizontal ? .60 : .98));
+    g.addColorStop(1, conAlfa(hex, horizontal ? .98 : .58));
+    return g;
+  }
+
+  /* backgroundColor listo para pasarle a un dataset. */
+  const relleno    = (hex) => (c) => degradado(c.chart, hex, false);
+  const rellenoH   = (hex) => (c) => degradado(c.chart, hex, true);
+  const rellenoPal = (pal) => (c) => degradado(c.chart, pal[c.dataIndex % pal.length], true);
+
 
   /* -------------------------------------------------------
      COLUMNAS REALES
@@ -193,7 +354,7 @@
   const col = (r, ...keys) => { for (const k of keys) { const v = r[k]; if (v !== undefined && v !== null && v !== '') return v; } return null; };
 
   const getDir      = r => col(r, 'TIPO DE MANIFIESTO') || '';
-  const getAirline  = r => col(r, 'AEROLINEA', 'aerolinea') || '(Sin nombre)';
+  const getAirline  = r => nombreCanonicoAerolinea(col(r, 'AEROLINEA', 'aerolinea'));
   const getOpType   = r => col(r, 'TIPO DE OPERACION', 'TIPO DE OPERACION ') || col(r, 'TIPO DE OPERACI\u00d3N') || col(r, 'TIPO DE OPERACI\u00f3N') || '';
   const getFlight   = r => col(r, '# DE VUELO') || '';
   const getRoute    = r => col(r, 'DESTINO / ORIGEN') || '';
@@ -379,9 +540,7 @@
     });
     const lbl = document.getElementById('mdb-period-label');
     if (lbl) lbl.textContent = getTableLabel();
-    // Reset airline dropdown
-    const sel = document.getElementById('mdb-filter-airline');
-    if (sel) while (sel.options.length > 1) sel.remove(1);
+    limpiarAerolineas();
     syncOrigenFilter(_allData);
     // Reload
     load();
@@ -396,14 +555,20 @@
       Chart.unregister(ChartDataLabels);
     }
 
+    // El botón "Aplicar" ya no existe; el listener se queda por si alguna
+    // pantalla vieja todavía lo trae.
     document.getElementById('mdb-btn-apply-filters')?.addEventListener('click', applyFilters);
     document.getElementById('mdb-btn-clear-filters')?.addEventListener('click', clearFilters);
+    // Año, mes, dirección, tipo de operación y registros: al cambiarlos se
+    // filtra solo. Dirección y tipo son botones que escriben en un <select>
+    // oculto, por eso avisan con un evento "change" desde index.html.
+    ['mdb-filter-year', 'mdb-filter-month', 'mdb-filter-direction', 'mdb-filter-optype', 'mdb-filter-origen']
+      .forEach(id => document.getElementById(id)?.addEventListener('change', applyFiltersPronto));
     document.getElementById('mdb-btn-export')?.addEventListener('click', exportExcel);
     document.getElementById('mdb-btn-reload')?.addEventListener('click', () => {
       _loaded = false; _allData = [];
       delete _dataCache[_activeTableKey];
-      const sel = document.getElementById('mdb-filter-airline');
-      if (sel) while (sel.options.length > 1) sel.remove(1);
+      limpiarAerolineas();
       load();
     });
     document.querySelectorAll('.mdb-period-btn').forEach(btn => {
@@ -424,6 +589,7 @@
     document.querySelectorAll('#mdb-sub-tabs button[data-bs-toggle="tab"]').forEach(btn => {
       btn.addEventListener('shown.bs.tab', () => { if (_loaded && _filtered.length > 0) renderActiveSubTab(); });
     });
+    initAerolineasPicker();
     setTimeout(tryPreload, 100);
   });
 
@@ -462,12 +628,7 @@
       syncOrigenFilter(all);
       if (all.length === 0) { showBanner('info', 'No hay registros para este período, o RLS bloquea la lectura.'); hideOverlay(); return; }
       preloadAirlineLogos(all);
-      const airlines = [...new Set(all.map(r => getAirline(r)))].sort();
-      const sel = document.getElementById('mdb-filter-airline');
-      if (sel) {
-        while (sel.options.length > 1) sel.remove(1);
-        airlines.forEach(a => { const o = document.createElement('option'); o.value = a; o.textContent = a; sel.appendChild(o); });
-      }
+      poblarAerolineas(all);
       applyFilters();
     } catch (err) {
       console.error('[ManifiestosBD]', err);
@@ -507,11 +668,16 @@
    * las ocho sub-pestañas no se enteran de que cambió la fuente. */
   async function fetchMaestra(client, periodo) {
     const BS = 1000;
-    setOverlayText('Consultando operaciones desde ' + periodo.desde + '...');
-    const { count, error: countErr } = await client
-      .from(periodo.name)
-      .select('id', { count: 'exact', head: true })
-      .gte('fecha_operacion', periodo.desde);
+    setOverlayText('Consultando operaciones de ' + periodo.label + '...');
+    // El período es un año cerrado: sin el tope de arriba, "2026" arrastraría
+    // también lo que ya se haya capturado de 2027.
+    const acota = (q) => {
+      q = q.gte('fecha_operacion', periodo.desde);
+      return periodo.hasta ? q.lte('fecha_operacion', periodo.hasta) : q;
+    };
+    const { count, error: countErr } = await acota(
+      client.from(periodo.name).select('id', { count: 'exact', head: true })
+    );
     if (countErr) throw countErr;
     const total = Math.min(count || 0, 200000);
     if (!total) return [];
@@ -520,10 +686,7 @@
     setOverlayText('Descargando ' + total.toLocaleString() + ' operaciones en ' + pages + ' lotes...');
     const columnas = ManifiestosMaestra.COLUMNAS.join(',');
     const requests = Array.from({ length: pages }, (_, i) =>
-      client
-        .from(periodo.name)
-        .select(columnas)
-        .gte('fecha_operacion', periodo.desde)
+      acota(client.from(periodo.name).select(columnas))
         // El orden tiene que ser total y estable: los lotes se piden en
         // paralelo y sin un desempate (el id) dos de ellos pueden traer el
         // mismo renglón y dejar otro fuera.
@@ -542,10 +705,45 @@
     if (catalogo && typeof catalogo.cargar === 'function') {
       try { await catalogo.cargar(client); } catch (_) { /* el catálogo ayuda, no bloquea */ }
     }
-    return ManifiestosMaestra.mapearFilas(crudas, {
+    const filas = ManifiestosMaestra.mapearFilas(crudas, {
       nombreAerolinea: catalogo ? (n => catalogo.canonico(n)) : null,
       paisesPorIata
     });
+    return rellenaMesesFaltantes(client, periodo, filas);
+  }
+
+  /* Los meses que la maestra no tiene, traídos de su Excel de entonces.
+   *
+   * La maestra empezó a llenarse a media 2026; los meses anteriores viven en
+   * las tablas que se importaron una por una. En vez de obligar a cambiar de
+   * botón para verlos, se rellenan los huecos: sólo se pide la tabla del mes
+   * si la maestra no trajo NI UN renglón de ese mes, así que no hay forma de
+   * contar un vuelo dos veces. */
+  async function rellenaMesesFaltantes(client, periodo, filas) {
+    const respaldo = periodo.respaldoMensual;
+    if (!respaldo) return filas;
+
+    const conDatos = new Set(filas.map(r => (r['FECHA'] || '').slice(0, 7)).filter(Boolean));
+    const anio = periodo.desde.slice(0, 4);
+    const faltantes = Object.keys(respaldo)
+      .map(Number)
+      .filter(mes => !conDatos.has(anio + '-' + String(mes).padStart(2, '0')));
+    if (!faltantes.length) return filas;
+
+    setOverlayText('Completando ' + faltantes.length + ' mes(es) desde los Excel importados...');
+    const extra = await Promise.all(faltantes.map(async (mes) => {
+      try {
+        const datos = await fetchTablaImportada(client, respaldo[mes]);
+        console.info('[ManifiestosBD] La maestra no tiene ' + MONTHS_ES[mes - 1] + ' ' + anio
+          + '; se completó con "' + respaldo[mes] + '" (' + datos.length + ' registros).');
+        return datos;
+      } catch (err) {
+        // Que falte un respaldo no puede tumbar el año entero.
+        console.warn('[ManifiestosBD] No se pudo leer el respaldo de ' + MONTHS_ES[mes - 1] + ':', err.message || err);
+        return [];
+      }
+    }));
+    return filas.concat(...extra);
   }
 
   /* IATA → país, para saber si una operación fue nacional o internacional
@@ -578,7 +776,7 @@
     wrap.classList.toggle('d-none', !esMaestra);
     if (!esMaestra) { sel.value = ''; return; }
 
-    const conManifiesto = (rows || []).filter(r => r._origen === 'manifiesto').length;
+    const conManifiesto = (rows || []).filter(r => !r._origen || r._origen === 'manifiesto').length;
     const programados = (rows || []).length - conManifiesto;
     const etiqueta = (base, n) => base + ' (' + fmt(n) + ')';
     [...sel.options].forEach(o => {
@@ -597,7 +795,10 @@
     const monthN  = document.getElementById('mdb-filter-month')?.value   || '';
     const dir     = document.getElementById('mdb-filter-direction')?.value || '';
     const optype  = document.getElementById('mdb-filter-optype')?.value  || '';
-    const airline = document.getElementById('mdb-filter-airline')?.value || '';
+    // Las marcadas viajan en el input oculto separadas por "|": así el badge
+    // de filtros activos las sigue contando sin saber nada de este selector.
+    const aerolineas = (document.getElementById('mdb-filter-airline')?.value || '')
+      .split('|').filter(Boolean);
     const origen  = document.getElementById('mdb-filter-origen')?.value  || '';
     const monthName = monthN ? MONTHS_ES[parseInt(monthN, 10) - 1] : '';
 
@@ -616,7 +817,7 @@
         const quiereInt = optype.toLowerCase().includes('int');
         if (quiereInt ? !isInt(r) : !isDom(r)) return false;
       }
-      if (airline && getAirline(r) !== airline) return false;
+      if (aerolineas.length && aerolineas.indexOf(getAirline(r)) === -1) return false;
       // _origen sólo lo traen los renglones de la maestra; en las tablas
       // importadas viene indefinido y el filtro no les aplica.
       if (origen && r._origen && r._origen !== origen) return false;
@@ -626,20 +827,210 @@
     renderAll();
   }
 
+  let _tFiltros = null;
+
+  /* Los filtros ya no necesitan botón: se aplican al moverlos.
+     Se agrupan con un respiro corto para no redibujar todas las gráficas dos
+     veces cuando alguien cambia dos selectores seguidos, que sobre cincuenta
+     mil renglones se nota. */
+  function applyFiltersPronto() {
+    clearTimeout(_tFiltros);
+    _tFiltros = setTimeout(applyFilters, 60);
+  }
+
   function clearFilters() {
-    ['mdb-filter-year','mdb-filter-month','mdb-filter-direction','mdb-filter-optype','mdb-filter-airline']
+    ['mdb-filter-year','mdb-filter-month','mdb-filter-direction','mdb-filter-optype']
       .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    limpiarAerolineas();
     const s = document.getElementById('mdb-search-input'); if (s) s.value = '';
     const origen = document.getElementById('mdb-filter-origen');
     if (origen) origen.value = TABLES[_activeTableKey].fuente === 'maestra' ? 'manifiesto' : '';
     applyFilters();
   }
 
+  /* -------------------------------------------------------
+     SELECTOR DE AEROLÍNEAS (varias a la vez)
+
+     Antes era un <select> de una sola opción: para comparar Volaris contra
+     Viva Aerobús había que mirar dos veces y sumar a mano. Ahora se marcan las
+     que se quieran y todas las gráficas responden a esa selección.
+  ------------------------------------------------------- */
+  let _aerolineasSel = new Set();   // nombres canónicos marcados
+  let _aerolineasDisp = [];         // [{ nombre, vuelos }] del período cargado
+  let _aerolineasBusqueda = '';
+
+  const elAerolineas = () => ({
+    caja:    document.getElementById('mdb-airline-picker'),
+    oculto:  document.getElementById('mdb-filter-airline'),
+    boton:   document.getElementById('mdb-airline-trigger'),
+    panel:   document.getElementById('mdb-airline-panel'),
+    etiqueta:document.getElementById('mdb-airline-label'),
+    logos:   document.getElementById('mdb-airline-logos'),
+    lista:   document.getElementById('mdb-airline-list'),
+    chips:   document.getElementById('mdb-airline-chips'),
+    buscar:  document.getElementById('mdb-airline-search'),
+    conteo:  document.getElementById('mdb-airline-count')
+  });
+
+  /* Logo de la aerolínea y, si no tiene, sus iniciales sobre el color de la
+     marca: un renglón de puro texto se pierde entre los demás. */
+  function aerolineaAvatarHTML(nombre, tam) {
+    const logo = airlineLogoHTML(nombre, tam);
+    if (logo) return logo;
+    const catalogo = window.AifaAerolineas;
+    const iniciales = catalogo ? catalogo.iniciales(nombre) : String(nombre || '?').slice(0, 3).toUpperCase();
+    const color = (catalogo && catalogo.color(nombre)) || '#8a93b8';
+    return '<span class="mdb-al-ini" style="width:' + tam + 'px;height:' + tam + 'px;background:' + escHtml(color) + '">'
+      + escHtml(iniciales) + '</span>';
+  }
+
+  /* Arma la lista del período cargado, con cuántos vuelos trae cada una: el
+     número es lo que dice de un vistazo a quién vale la pena mirar. */
+  function poblarAerolineas(rows) {
+    const conteo = new Map();
+    (rows || []).forEach(r => {
+      const nombre = getAirline(r);
+      conteo.set(nombre, (conteo.get(nombre) || 0) + 1);
+    });
+    _aerolineasDisp = [...conteo.entries()]
+      .map(([nombre, vuelos]) => ({ nombre, vuelos }))
+      .sort((a, b) => b.vuelos - a.vuelos || a.nombre.localeCompare(b.nombre, 'es'));
+
+    // Al cambiar de período puede desaparecer una aerolínea que estaba marcada.
+    const existentes = new Set(_aerolineasDisp.map(a => a.nombre));
+    _aerolineasSel = new Set([..._aerolineasSel].filter(n => existentes.has(n)));
+    renderAerolineas();
+  }
+
+  function renderAerolineas() {
+    const el = elAerolineas();
+    if (!el.caja || !el.lista) return;
+
+    const marcadas = [..._aerolineasSel];
+    if (el.oculto) el.oculto.value = marcadas.join('|');
+
+    // Botón: hasta dos logos encimados y el texto de la selección.
+    if (el.logos) {
+      el.logos.innerHTML = marcadas.slice(0, 3).map(n => aerolineaAvatarHTML(n, 18)).join('');
+    }
+    if (el.etiqueta) {
+      el.etiqueta.textContent = marcadas.length === 0
+        ? 'Todas las aerolíneas'
+        : (marcadas.length === 1 ? marcadas[0] : marcadas.length + ' aerolíneas');
+    }
+    if (el.conteo) {
+      el.conteo.textContent = marcadas.length
+        ? marcadas.length + ' de ' + _aerolineasDisp.length
+        : _aerolineasDisp.length + ' en el período';
+    }
+
+    // Chips: se ve cuáles son y se quitan de una sin abrir el panel.
+    if (el.chips) {
+      el.chips.innerHTML = marcadas.length < 2 ? '' : marcadas.map(n =>
+        '<span class="mdb-al-chip">' + aerolineaAvatarHTML(n, 14)
+        + '<span>' + escHtml(n) + '</span>'
+        + '<button type="button" data-mdb-al-quitar="' + escHtml(n) + '" aria-label="Quitar ' + escHtml(n) + '">'
+        + '<i class="fas fa-times"></i></button></span>'
+      ).join('');
+    }
+
+    const q = normalizeAirlineKey(_aerolineasBusqueda);
+    const visibles = q ? _aerolineasDisp.filter(a => normalizeAirlineKey(a.nombre).includes(q)) : _aerolineasDisp;
+    el.lista.innerHTML = visibles.length ? visibles.map(a => {
+      const on = _aerolineasSel.has(a.nombre);
+      return '<button type="button" role="option" aria-selected="' + on + '"'
+        + ' class="mdb-al-row' + (on ? ' is-on' : '') + '" data-mdb-al="' + escHtml(a.nombre) + '">'
+        + '<span class="mdb-al-box">' + (on ? '<i class="fas fa-check"></i>' : '') + '</span>'
+        + aerolineaAvatarHTML(a.nombre, 22)
+        + '<span class="mdb-al-name">' + escHtml(a.nombre) + '</span>'
+        + '<span class="mdb-al-n">' + fmt(a.vuelos) + '</span>'
+        + '</button>';
+    }).join('') : '<div class="mdb-al-empty">Ninguna aerolínea coincide con la búsqueda.</div>';
+  }
+
+  function abrirAerolineas(abrir) {
+    const el = elAerolineas();
+    if (!el.caja || !el.panel || !el.boton) return;
+    el.caja.classList.toggle('is-open', abrir);
+    el.panel.hidden = !abrir;
+    el.boton.setAttribute('aria-expanded', String(abrir));
+    if (abrir && el.buscar) setTimeout(() => el.buscar.focus(), 0);
+  }
+
+  function limpiarAerolineas() {
+    _aerolineasSel = new Set();
+    _aerolineasBusqueda = '';
+    const el = elAerolineas();
+    if (el.buscar) el.buscar.value = '';
+    renderAerolineas();
+  }
+
+  function initAerolineasPicker() {
+    const el = elAerolineas();
+    if (!el.caja) return;
+
+    el.boton?.addEventListener('click', () => abrirAerolineas(el.panel.hidden));
+
+    // Marcar y desmarcar sin que se cierre el panel: la gracia es elegir varias.
+    el.lista?.addEventListener('click', (ev) => {
+      const fila = ev.target.closest('[data-mdb-al]');
+      if (!fila) return;
+      const nombre = fila.dataset.mdbAl;
+      if (_aerolineasSel.has(nombre)) _aerolineasSel.delete(nombre);
+      else _aerolineasSel.add(nombre);
+      renderAerolineas();
+      applyFiltersPronto();
+    });
+
+    el.chips?.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('[data-mdb-al-quitar]');
+      if (!btn) return;
+      _aerolineasSel.delete(btn.dataset.mdbAlQuitar);
+      renderAerolineas();
+      applyFiltersPronto();
+    });
+
+    el.panel?.querySelectorAll('[data-mdb-al-act]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (btn.dataset.mdbAlAct === 'todas') {
+          // "Todas" marca lo que se está viendo, que con búsqueda activa es el
+          // subconjunto filtrado; sin búsqueda, todas.
+          const q = normalizeAirlineKey(_aerolineasBusqueda);
+          _aerolineasDisp
+            .filter(a => !q || normalizeAirlineKey(a.nombre).includes(q))
+            .forEach(a => _aerolineasSel.add(a.nombre));
+        } else {
+          _aerolineasSel = new Set();
+        }
+        renderAerolineas();
+        applyFiltersPronto();
+      });
+    });
+
+    let _tb;
+    el.buscar?.addEventListener('input', (ev) => {
+      clearTimeout(_tb);
+      _aerolineasBusqueda = ev.target.value;
+      _tb = setTimeout(renderAerolineas, 120);
+    });
+
+    document.addEventListener('click', (ev) => {
+      if (!el.caja.contains(ev.target)) abrirAerolineas(false);
+    });
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && !el.panel.hidden) { abrirAerolineas(false); el.boton.focus(); }
+    });
+
+    renderAerolineas();
+  }
+
   function filterTable(query) {
     if (!query) { renderTable(_filtered); return; }
     const q = query.toLowerCase();
     const res = _filtered.filter(r =>
-      getAirline(r).toLowerCase().includes(q) || getFlight(r).toLowerCase().includes(q) ||
+      getAirline(r).toLowerCase().includes(q) ||
+      String(col(r, 'AEROLINEA', 'aerolinea') || '').toLowerCase().includes(q) ||
+      getFlight(r).toLowerCase().includes(q) ||
       getDir(r).toLowerCase().includes(q)     || getFecha(r).includes(q) ||
       getOpType(r).toLowerCase().includes(q)  || getRoute(r).toLowerCase().includes(q)
     );
@@ -735,8 +1126,8 @@
       type: 'bar',
       plugins: window.ChartDataLabels ? [ChartDataLabels] : [],
       data: { labels: MONTHS_ES, datasets: [
-        { label: 'Llegadas', data: arrM, backgroundColor: 'rgba(214,51,132,0.78)', stack: 'S', borderRadius: { topLeft:0, topRight:0, bottomLeft:4, bottomRight:4 } },
-        { label: 'Salidas',  data: depM, backgroundColor: 'rgba(102,16,242,0.78)', stack: 'S', borderRadius: { topLeft:4, topRight:4, bottomLeft:0, bottomRight:0 } }
+        { label: 'Llegadas', data: arrM, backgroundColor: relleno('#d63384'), stack: 'S', borderRadius: { topLeft:0, topRight:0, bottomLeft:4, bottomRight:4 } },
+        { label: 'Salidas',  data: depM, backgroundColor: relleno('#6610f2'), stack: 'S', borderRadius: { topLeft:4, topRight:4, bottomLeft:0, bottomRight:0 } }
       ]},
       options: {
         responsive: true, maintainAspectRatio: false,
@@ -786,7 +1177,7 @@
     _charts.airlinePax = new Chart(ctx, {
       type: 'bar',
       plugins: window.ChartDataLabels ? [ChartDataLabels] : [],
-      data: { labels: sorted.map(([n]) => n), datasets: [{ label: 'Pasajeros', data: sorted.map(([,p]) => p), backgroundColor: PAL_12.concat(PAL_12).slice(0, sorted.length), borderRadius: 4, borderSkipped: false }] },
+      data: { labels: sorted.map(([n]) => n), datasets: [{ label: 'Pasajeros', data: sorted.map(([,p]) => p), backgroundColor: rellenoPal(PAL_12.concat(PAL_12)), borderRadius: 4, borderSkipped: false }] },
       options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
         layout: { padding: { left: sorted.some(([n]) => getIATA(n)) ? 32 : 4, right: 60 } },
         plugins: {
@@ -957,9 +1348,9 @@
       type: 'bar',
       plugins: window.ChartDataLabels ? [ChartDataLabels] : [],
       data: { labels: MONTHS_ES, datasets: [
-        { label: 'Infantes',   data: infM,  backgroundColor: 'rgba(253,126,20,0.78)',  stack: 'S' },
-        { label: 'Tr\u00e1nsitos',  data: tranM, backgroundColor: 'rgba(32,201,151,0.78)',  stack: 'S' },
-        { label: 'Conexiones', data: cnxM,  backgroundColor: 'rgba(13,202,240,0.78)', stack: 'S' }
+        { label: 'Infantes',   data: infM,  backgroundColor: relleno('#fd7e14'),  stack: 'S' },
+        { label: 'Tr\u00e1nsitos',  data: tranM, backgroundColor: relleno('#20c997'),  stack: 'S' },
+        { label: 'Conexiones', data: cnxM,  backgroundColor: relleno('#0dcaf0'), stack: 'S' }
       ]},
       options: { responsive: true, maintainAspectRatio: false,
         plugins: {
@@ -1037,8 +1428,8 @@
       type: 'bar',
       plugins: window.ChartDataLabels ? [ChartDataLabels] : [],
       data: { labels: sorted.map(x => x.n), datasets: [
-        { label: 'Dom\u00e9stica',     data: sorted.map(x => x.dom), backgroundColor: 'rgba(253,126,20,0.82)',  stack: 'S', borderRadius: 4 },
-        { label: 'Internacional', data: sorted.map(x => x.int), backgroundColor: 'rgba(32,201,151,0.82)', stack: 'S', borderRadius: 4 }
+        { label: 'Dom\u00e9stica',     data: sorted.map(x => x.dom), backgroundColor: relleno('#fd7e14'),  stack: 'S', borderRadius: 4 },
+        { label: 'Internacional', data: sorted.map(x => x.int), backgroundColor: relleno('#20c997'), stack: 'S', borderRadius: 4 }
       ]},
       options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
         layout: { padding: { left: sorted.some(x => getIATA(x.n)) ? 32 : 4, right: 50 } },
@@ -1124,7 +1515,7 @@
     _charts.routes = new Chart(ctx, {
       type: 'bar',
       plugins: window.ChartDataLabels ? [ChartDataLabels] : [],
-      data: { labels: sorted.map(([n]) => n), datasets: [{ label: 'Pasajeros', data: sorted.map(([,p]) => p), backgroundColor: PAL_12.concat(PAL_12).slice(0, sorted.length), borderRadius: 4, borderSkipped: false }] },
+      data: { labels: sorted.map(([n]) => n), datasets: [{ label: 'Pasajeros', data: sorted.map(([,p]) => p), backgroundColor: rellenoPal(PAL_12.concat(PAL_12)), borderRadius: 4, borderSkipped: false }] },
       options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
         layout: { padding: { right: 75 } },
         plugins: {
@@ -1239,8 +1630,8 @@
       type: 'bar',
       plugins: window.ChartDataLabels ? [ChartDataLabels] : [],
       data: { labels: MONTHS_ES, datasets: [
-        { label: 'Llegadas', data: arrM, backgroundColor: 'rgba(214,51,132,0.78)', stack: 'S' },
-        { label: 'Salidas',  data: depM, backgroundColor: 'rgba(102,16,242,0.78)', stack: 'S' }
+        { label: 'Llegadas', data: arrM, backgroundColor: relleno('#d63384'), stack: 'S' },
+        { label: 'Salidas',  data: depM, backgroundColor: relleno('#6610f2'), stack: 'S' }
       ]},
       options: { responsive: true, maintainAspectRatio: false,
         plugins: {
@@ -1287,7 +1678,7 @@
     _charts.kgsAirline = new Chart(ctx, {
       type: 'bar',
       plugins: window.ChartDataLabels ? [ChartDataLabels] : [],
-      data: { labels: sorted.map(([n]) => n), datasets: [{ label: 'Kgs Equipaje', data: sorted.map(([,k]) => k), backgroundColor: PAL_12.concat(PAL_12).slice(0, sorted.length), borderRadius: 4, borderSkipped: false }] },
+      data: { labels: sorted.map(([n]) => n), datasets: [{ label: 'Kgs Equipaje', data: sorted.map(([,k]) => k), backgroundColor: rellenoPal(PAL_12.concat(PAL_12)), borderRadius: 4, borderSkipped: false }] },
       options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
         layout: { padding: { left: sorted.some(([n]) => getIATA(n)) ? 32 : 4, right: 75 } },
         plugins: {
@@ -1396,8 +1787,8 @@
       _charts.opsMonthly = new Chart(ctxBar, {
         type: 'bar',
         data: { labels, datasets: [
-          { label: 'Nacional',       data: nacData, backgroundColor: 'rgba(253,126,20,0.8)',   stack: 'S', borderRadius: { topLeft:0, topRight:0, bottomLeft:4, bottomRight:4 } },
-          { label: 'Internacional', data: intData, backgroundColor: 'rgba(32,201,151,0.8)',   stack: 'S', borderRadius: { topLeft:4, topRight:4, bottomLeft:0, bottomRight:0 } }
+          { label: 'Nacional',       data: nacData, backgroundColor: relleno('#fd7e14'),   stack: 'S', borderRadius: { topLeft:0, topRight:0, bottomLeft:4, bottomRight:4 } },
+          { label: 'Internacional', data: intData, backgroundColor: relleno('#20c997'),   stack: 'S', borderRadius: { topLeft:4, topRight:4, bottomLeft:0, bottomRight:0 } }
         ]},
         options: {
           responsive: true, maintainAspectRatio: false,
@@ -1813,8 +2204,8 @@
         type: 'bar',
         plugins: window.ChartDataLabels ? [ChartDataLabels] : [],
         data: { labels, datasets: [
-          { label: 'Llegadas', data: arrData, backgroundColor: 'rgba(214,51,132,0.78)', stack: 'S', borderRadius: { topLeft:0, topRight:0, bottomLeft:4, bottomRight:4 } },
-          { label: 'Salidas',  data: depData, backgroundColor: 'rgba(102,16,242,0.78)', stack: 'S', borderRadius: { topLeft:4, topRight:4, bottomLeft:0, bottomRight:0 } }
+          { label: 'Llegadas', data: arrData, backgroundColor: relleno('#d63384'), stack: 'S', borderRadius: { topLeft:0, topRight:0, bottomLeft:4, bottomRight:4 } },
+          { label: 'Salidas',  data: depData, backgroundColor: relleno('#6610f2'), stack: 'S', borderRadius: { topLeft:4, topRight:4, bottomLeft:0, bottomRight:0 } }
         ]},
         options: {
           responsive: true, maintainAspectRatio: false,
@@ -1963,8 +2354,8 @@
       type: 'bar',
       plugins: window.ChartDataLabels ? [ChartDataLabels] : [],
       data: { labels, datasets: [
-        { label: 'Llegadas', data: arrH, backgroundColor: 'rgba(214,51,132,0.78)', stack: 'S', borderRadius: { topLeft:0, topRight:0, bottomLeft:3, bottomRight:3 } },
-        { label: 'Salidas',  data: depH, backgroundColor: 'rgba(102,16,242,0.78)', stack: 'S', borderRadius: { topLeft:3, topRight:3, bottomLeft:0, bottomRight:0 } }
+        { label: 'Llegadas', data: arrH, backgroundColor: relleno('#d63384'), stack: 'S', borderRadius: { topLeft:0, topRight:0, bottomLeft:3, bottomRight:3 } },
+        { label: 'Salidas',  data: depH, backgroundColor: relleno('#6610f2'), stack: 'S', borderRadius: { topLeft:3, topRight:3, bottomLeft:0, bottomRight:0 } }
       ]},
       options: {
         responsive: true, maintainAspectRatio: false,
@@ -2152,8 +2543,8 @@
         type: 'bar',
         plugins: window.ChartDataLabels ? [ChartDataLabels] : [],
         data: { labels: top15.map(([n]) => n), datasets: [
-          { label: 'Llegadas', data: top15.map(([, v]) => v.arrPax), backgroundColor: 'rgba(214,51,132,0.82)', stack: 'S', borderRadius: { topLeft:0, topRight:0, bottomLeft:4, bottomRight:4 } },
-          { label: 'Salidas',  data: top15.map(([, v]) => v.depPax), backgroundColor: 'rgba(102,16,242,0.82)', stack: 'S', borderRadius: { topLeft:4, topRight:4, bottomLeft:0, bottomRight:0 } }
+          { label: 'Llegadas', data: top15.map(([, v]) => v.arrPax), backgroundColor: relleno('#d63384'), stack: 'S', borderRadius: { topLeft:0, topRight:0, bottomLeft:4, bottomRight:4 } },
+          { label: 'Salidas',  data: top15.map(([, v]) => v.depPax), backgroundColor: relleno('#6610f2'), stack: 'S', borderRadius: { topLeft:4, topRight:4, bottomLeft:0, bottomRight:0 } }
         ]},
         options: {
           indexAxis: 'y', responsive: true, maintainAspectRatio: false,
@@ -2524,9 +2915,9 @@
             data: {
               labels: labels3,
               datasets: [
-                { label: 'Llegadas', data: arrH, backgroundColor: 'rgba(214,51,132,0.82)', stack: 'S',
+                { label: 'Llegadas', data: arrH, backgroundColor: relleno('#d63384'), stack: 'S',
                   borderRadius: { topLeft: 0, topRight: 0, bottomLeft: 3, bottomRight: 3 } },
-                { label: 'Salidas',  data: depH, backgroundColor: 'rgba(102,16,242,0.82)', stack: 'S',
+                { label: 'Salidas',  data: depH, backgroundColor: relleno('#6610f2'), stack: 'S',
                   borderRadius: { topLeft: 3, topRight: 3, bottomLeft: 0, bottomRight: 0 } }
               ]
             },
@@ -2739,8 +3130,7 @@
   window.manifiestoReload = function () {
     _loaded = false; _allData = [];
     delete _dataCache[_activeTableKey];
-    const sel = document.getElementById('mdb-filter-airline');
-    if (sel) while (sel.options.length > 1) sel.remove(1);
+    limpiarAerolineas();
     load();
   };
 

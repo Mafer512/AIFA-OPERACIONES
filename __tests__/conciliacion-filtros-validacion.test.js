@@ -151,6 +151,17 @@ describe('limpieza conjunta de filtros de Manifiestos', () => {
     expect(indexSource).toContain('id="conci-count-sin-capturar"');
   });
 
+  test('ofrece una ayuda que explica en que se basa el estado de captura', () => {
+    expect(indexSource).toContain('id="btn-conci-captura-ayuda"');
+    expect(indexSource).toContain('id="modalConciCapturaAyuda"');
+    // La ayuda debe nombrar la columna que realmente decide el estado y
+    // desmentir a CIERRE SUBSECRETARIA, que es la confusion habitual.
+    const ayuda = indexSource.slice(indexSource.indexOf('id="modalConciCapturaAyuda"'));
+    const cuerpo = ayuda.slice(0, ayuda.indexOf('id="modalFlightServiceType"'));
+    expect(cuerpo).toContain('HR. DE RECEPCIÓN');
+    expect(cuerpo).toContain('CIERRE SUBSECRETARIA');
+  });
+
   test('borra filtros de texto, Excel y pills, y vuelve a mostrar las filas', () => {
     document.body.innerHTML = `
       <span id="conci-pill-llegadas"></span>
