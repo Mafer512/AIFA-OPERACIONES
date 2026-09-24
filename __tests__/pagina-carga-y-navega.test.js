@@ -204,6 +204,81 @@ describe('la página carga entera', () => {
   });
 });
 
+describe('Conciliación · el modo hoja de cálculo se apaga fuera de sus pestañas', () => {
+  // Itinerario y Manifiestos usan un layout de altura fija que fija la página a
+  // 100vh y le pone overflow:hidden (body.conci-manifest-workspace). Estadística
+  // NO: su contenido es largo y tiene que poder recorrerse con el scroll normal.
+  // Si al cambiar de pestaña ese modo se queda encendido, el módulo se ve
+  // cortado a media pantalla y no baja — que es justo lo que se reportó.
+  const mostrarPestana = async (id) => {
+    const boton = win.document.getElementById(id);
+    win.bootstrap.Tab.getOrCreateInstance(boton).show();
+    await esperar(120);
+  };
+
+  test('al pasar de Itinerario a Estadística la página vuelve a poder recorrerse', async () => {
+    const entrada = win.document.querySelector('a.menu-item[data-section="conciliacion"]');
+    await abrir(entrada);
+    await mostrarPestana('tab-conci-itinerario');
+    expect(win.document.body.classList.contains('conci-manifest-workspace')).toBe(true);
+
+    await mostrarPestana('tab-conci-estadistica');
+    expect(win.document.getElementById('pane-conci-estadistica').classList.contains('active')).toBe(true);
+    expect(win.document.body.classList.contains('conci-manifest-workspace')).toBe(false);
+    expect(win.document.body.classList.contains('conci-itinerary-workspace')).toBe(false);
+  });
+
+  test('y al volver a Manifiestos se enciende otra vez', async () => {
+    await mostrarPestana('tab-conci-comercial');
+    expect(win.document.body.classList.contains('conci-manifest-workspace')).toBe(true);
+    await mostrarPestana('tab-conci-estadistica');
+    expect(win.document.body.classList.contains('conci-manifest-workspace')).toBe(false);
+  });
+
+  // Estadística va a pantalla completa —encabezado del aeropuerto arriba, las
+  // pestañas de Conciliación con su Menú debajo, sin barra lateral ni Menú
+  // flotante— con su propio modo, que no fija la altura: así no se repite el
+  // tablero cortado que se reportó.
+  test('Estadística enciende su pantalla completa y Manifiestos la apaga', async () => {
+    const body = win.document.body;
+    await mostrarPestana('tab-conci-estadistica');
+    expect(body.classList.contains('conci-estadistica-workspace')).toBe(true);
+    await mostrarPestana('tab-conci-comercial');
+    expect(body.classList.contains('conci-estadistica-workspace')).toBe(false);
+    expect(body.classList.contains('conci-manifest-workspace')).toBe(true);
+    await mostrarPestana('tab-conci-estadistica');
+    expect(body.classList.contains('conci-estadistica-workspace')).toBe(true);
+  });
+
+  test('su pantalla completa deja el encabezado, quita el Menú flotante y no bloquea el scroll', () => {
+    const css = fs.readFileSync(path.join(raiz, 'style.css'), 'utf8').replace(/\r\n/g, '\n');
+    const reglas = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+      .filter(([, selector]) => selector.includes('body.conci-estadistica-workspace'));
+    expect(reglas.length).toBeGreaterThan(0);
+    // El encabezado del aeropuerto se ve (compacto): ninguna regla del modo lo oculta.
+    const ocultaEncabezado = reglas.some(([, selector, cuerpo]) => /display:\s*none/.test(cuerpo)
+      && selector.split(',').some(s => /\.header$/.test(s.trim())));
+    expect(ocultaEncabezado).toBe(false);
+    // El Menú flotante de abajo sí se oculta: arriba ya está el de las pestañas.
+    const oculta = reglas.find(([selector]) => /body\.conci-estadistica-workspace #navdeck-back\b/.test(selector));
+    expect(oculta && oculta[2]).toMatch(/display:\s*none\s*!important/);
+    // Lo que no puede pasar es que se bloquee el scroll de la PÁGINA: se revisan
+    // sus contenedores, no piezas como el título, que recorta su texto con "…".
+    const contenedor = /body\.conci-estadistica-workspace(\s*>?\s*(#main-app|\.app-body|\.main-content|#conciliacion-section\S*|\.conci-workspace-shell))?\s*$/;
+    const deContenedor = reglas.filter(([, selector]) => selector.split(',').some(s => contenedor.test(s.trim())));
+    expect(deContenedor.length).toBeGreaterThan(0);
+    for (const [, , cuerpo] of deContenedor) {
+      expect(cuerpo).not.toMatch(/height:\s*100vh/);
+      expect(cuerpo).not.toMatch(/overflow:\s*hidden/);
+    }
+  });
+
+  test('el botón Menú de Conciliación la apaga', () => {
+    win.conciReturnToMainMenu();
+    expect(win.document.body.classList.contains('conci-estadistica-workspace')).toBe(false);
+  });
+});
+
 describe('cada entrada del menú abre lo que dice', () => {
   test('todas, sin excepción', async () => {
     const fallos = [];

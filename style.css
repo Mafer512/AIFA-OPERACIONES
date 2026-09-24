@@ -184,6 +184,17 @@ body.dark-mode ::-webkit-scrollbar-thumb:hover {
 }
 /* ------------------------------------------- */
 
+/* Scrollbar más gruesa (opt-in): agregar la clase .thick-scrollbar al
+   contenedor con overflow. Solo cambia el grosor; color, track y hover
+   se heredan de las reglas ::-webkit-scrollbar-* de arriba. */
+.thick-scrollbar {
+   scrollbar-width: auto;
+}
+.thick-scrollbar::-webkit-scrollbar {
+   width: 15px;
+   height: 15px;
+}
+
 body.dark-mode {
    --primary-color: #4dabf7;
    --primary-color-dark: #1e88e5;
@@ -15632,6 +15643,8 @@ body.navdeck-mode .si-nav > a.si-link.si-quick--frec { --qc: #a855f7; --qcb: rgb
 body.navdeck-mode .si-nav > a.si-link.si-quick--punc { --qc: #22c55e; --qcb: rgba(34, 197, 94, .16); }
 body.navdeck-mode .si-nav > a.si-link.si-quick--demo { --qc: #ef4444; --qcb: rgba(239, 68, 68, .16); }
 body.navdeck-mode .si-nav > a.si-link.si-quick--conci { --qc: #f97316; --qcb: rgba(249, 115, 22, .16); }
+/* Aviación General · FBO — cian, el mismo acento de la página de la terminal. */
+body.navdeck-mode .si-nav > a.si-link.si-quick--agen { --qc: #0891b2; --qcb: rgba(8, 145, 178, .16); }
 
 /* Accesos rápidos deshabilitados temporalmente. El !important es necesario
    porque el modo navdeck fuerza .si-link a display:flex !important. */
@@ -17964,6 +17977,354 @@ body.dark-mode #table-conci-manifiestos tr.conci-row-overcapacity>td {
       gap: 10px;
       min-height: 76px;
    }
+}
+
+/* ── Resumen KPI de Conciliación Manifiestos, en chips dentro de la fila de
+   Llegadas/Salidas/Pasajeros/Carga/Sobrecupo (antes era una fila ancha propia).
+   La especificidad de #manifiestos-summary-strip .ops-kpi-card gana sobre las
+   reglas genéricas .ops-kpi-card de arriba, así que no hace falta !important. ── */
+#manifiestos-summary-strip {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: center;
+   gap: 8px;
+}
+
+#manifiestos-summary-strip .ops-kpi-card {
+   min-height: 0;
+   gap: 10px;
+   padding: 6px 16px;
+   border-radius: 999px;
+   box-shadow: 0 2px 8px rgba(0, 0, 0, .14);
+}
+
+#manifiestos-summary-strip .ops-kpi-card::after {
+   display: none;
+}
+
+/* ==========================================================================
+   Conciliación · Manifiestos: la barra de herramientas, ordenada por peso.
+
+   Con el Cierre de Subsecretaría la barra pasó de ocho a doce botones, todos
+   del mismo tamaño y del mismo color: nada guiaba la vista y la fila se
+   partía en dos. Aquí no se quita ni se mueve ningún botón —el marcado y los
+   ids siguen intactos—, sólo se agrupa y se jerarquiza:
+
+     · CONSULTA (Reportes, los dos catálogos, Historial): tono neutro, porque
+       se usan de vez en cuando y no deben competir con la captura.
+     · CIERRE (cerrar, corregir, solicitudes): ámbar, juntos y separados del
+       resto por un respiro, para que se lean como un bloque.
+     · CAPTURA (Agregar fila, Guardar todo, Deshacer): el verde de siempre.
+     · El conteo de registros se va al extremo derecho, como un dato y no
+       como un botón más.
+   ========================================================================== */
+
+/* Al partirse en dos renglones, que el segundo no quede pegado al primero. */
+.conci-manifest-toolbar {
+   row-gap: .4rem;
+}
+
+/* Consulta: borde y texto neutros; el color se reserva para lo que actúa. */
+.conci-manifest-toolbar #btn-conci-reportes,
+.conci-manifest-toolbar #btn-conci-airline-colors,
+.conci-manifest-toolbar #btn-conci-matricula-catalog,
+.conci-manifest-toolbar #btn-conci-historial {
+   border-color: #dbe1ea;
+   background: #fff;
+   color: #475569;
+}
+
+.conci-manifest-toolbar #btn-conci-reportes:hover,
+.conci-manifest-toolbar #btn-conci-airline-colors:hover,
+.conci-manifest-toolbar #btn-conci-matricula-catalog:hover,
+.conci-manifest-toolbar #btn-conci-historial:hover {
+   border-color: #94a3b8;
+   background: #f8fafc;
+   color: #0f172a;
+}
+
+/* Cierre: un respiro antes del bloque y un ámbar que no grita. */
+.conci-manifest-toolbar #btn-conci-cierre-subsecretaria {
+   margin-left: .55rem;
+   border-color: #d97706;
+   background: #f59e0b;
+   color: #422006;
+   font-weight: 600;
+}
+
+.conci-manifest-toolbar #btn-conci-cierre-subsecretaria:hover {
+   border-color: #b45309;
+   background: #d97706;
+   color: #fff;
+}
+
+.conci-manifest-toolbar #btn-conci-corregir-cerrado,
+.conci-manifest-toolbar #btn-conci-solicitudes-pendientes {
+   border-color: #fcd34d;
+   background: #fffbeb;
+   color: #b45309;
+}
+
+.conci-manifest-toolbar #btn-conci-corregir-cerrado:hover,
+.conci-manifest-toolbar #btn-conci-solicitudes-pendientes:hover {
+   border-color: #d97706;
+   background: #fef3c7;
+   color: #92400e;
+}
+
+/* El contador de solicitudes pendientes, pegado a su botón y no encimado. */
+.conci-manifest-toolbar #badge-conci-solicitudes-pendientes {
+   margin-left: .3rem;
+   padding: .15rem .4rem;
+   font-size: .65rem;
+}
+
+/* Captura: otro respiro, para que se vea dónde empieza lo que escribe. */
+.conci-manifest-toolbar #btn-conci-add-row {
+   margin-left: .55rem;
+}
+
+/* El conteo no es un botón: va al final, discreto. */
+.conci-manifest-toolbar #badge-conci-manifiestos-count {
+   margin-left: auto;
+   border: 1px solid #e2e8f0;
+   background: #f1f5f9 !important;
+   color: #475569;
+   font-weight: 600;
+}
+
+/* Las tres fichas del cierre repetían los colores de PAX, carga y KGS, así
+   que parecían lo mismo. Se les da su propia familia —pizarra y ámbar— y un
+   respiro que las separa del resumen del día. */
+#manifiestos-summary-strip #mf-cierre-card-fijo {
+   margin-left: .4rem;
+   background: linear-gradient(135deg, #334155 0%, #475569 100%);
+}
+
+#manifiestos-summary-strip #mf-cierre-card-previo {
+   background: linear-gradient(135deg, #b45309 0%, #d97706 100%);
+}
+
+#manifiestos-summary-strip #mf-cierre-card-total {
+   background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+}
+
+/* Tema oscuro: los neutros se invierten; el ámbar y las fichas ya se leen. */
+body.dark-mode .conci-manifest-toolbar #btn-conci-reportes,
+body.dark-mode .conci-manifest-toolbar #btn-conci-airline-colors,
+body.dark-mode .conci-manifest-toolbar #btn-conci-matricula-catalog,
+body.dark-mode .conci-manifest-toolbar #btn-conci-historial {
+   border-color: rgba(255, 255, 255, .16);
+   background: #1e293b;
+   color: #cbd5e1;
+}
+
+body.dark-mode .conci-manifest-toolbar #btn-conci-corregir-cerrado,
+body.dark-mode .conci-manifest-toolbar #btn-conci-solicitudes-pendientes {
+   border-color: #b45309;
+   background: rgba(245, 158, 11, .14);
+   color: #fcd34d;
+}
+
+body.dark-mode .conci-manifest-toolbar #badge-conci-manifiestos-count {
+   border-color: rgba(255, 255, 255, .12);
+   background: rgba(255, 255, 255, .06) !important;
+   color: #cbd5e1;
+}
+
+/* ==========================================================================
+   Conciliación · Manifiestos: densidad alta.
+
+   La pantalla es para capturar durante horas: lo que importa es ver muchos
+   vuelos a la vez, no tener controles grandes. Se aprieta todo el área —
+   barra, fichas, filtros y tabla— alrededor de un 15 %, con dos efectos:
+   el título y los doce botones caben en UN renglón, y entran varias filas
+   más sin desplazarse.
+
+   Sólo cambian tamaños y espacios: ni un elemento se mueve de lugar ni se
+   oculta, así que todo sigue donde el capturista ya lo busca.
+   ========================================================================== */
+
+body.conci-manifest-workspace .conci-manifest-toolbar,
+body.conci-manifest-workspace .conci-manifest-filters {
+   padding: .28rem .5rem !important;
+   gap: .3rem !important;
+   row-gap: .3rem;
+}
+
+body.conci-manifest-workspace .conci-manifest-toolbar h6 {
+   font-size: .82rem;
+}
+
+/* El título y los botones, en el MISMO renglón.
+
+   La barra tiene sólo dos cajas: el título y otra con los doce botones.
+   Siendo cajas, nunca pueden compartir línea: si los botones no caben,
+   baja el bloque entero y el título se queda solo arriba, desperdiciando
+   un renglón completo en una pantalla de captura.
+
+   Con display:contents la caja de acciones deja de dibujarse y sus botones
+   pasan a ser hijos directos de la barra: fluyen junto al título y, cuando
+   no caben, saltan de uno en uno. El marcado no cambia.
+
+   La barra deja de separar sus dos bloques a los extremos (eso repartiría
+   huecos enormes entre doce botones); el conteo de registros conserva su
+   margen automático, así que sigue pegado a la derecha. */
+body.conci-manifest-workspace .conci-manifest-toolbar {
+   justify-content: flex-start;
+}
+
+body.conci-manifest-workspace .conci-manifest-toolbar > div:nth-child(2) {
+   /* .d-flex de Bootstrap trae display:flex !important: sin el !important de
+      aqui la caja seguiria existiendo y el titulo se quedaria solo arriba. */
+   display: contents !important;
+}
+
+body.conci-manifest-workspace .conci-manifest-toolbar .btn,
+body.conci-manifest-workspace .conci-manifest-filters .btn,
+body.conci-manifest-workspace .conci-manifest-toolbar .form-control,
+body.conci-manifest-workspace .conci-manifest-filters .form-control,
+body.conci-manifest-workspace .conci-manifest-toolbar .input-group-text,
+body.conci-manifest-workspace .conci-manifest-filters .input-group-text {
+   min-height: 26px;
+   padding: .1rem .45rem;
+   font-size: .7rem;
+}
+
+body.conci-manifest-workspace .conci-manifest-toolbar .badge,
+body.conci-manifest-workspace .conci-manifest-filters .badge {
+   font-size: .6rem;
+}
+
+/* Las pastillas de conteo traen sus medidas en el propio marcado. */
+body.conci-manifest-workspace .conci-count-pill {
+   padding: 1px 6px !important;
+   font-size: .66rem !important;
+}
+
+body.conci-manifest-workspace .conci-count-pill .badge {
+   padding: .16em .42em;
+   font-size: .58rem;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip {
+   gap: 6px;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip .ops-kpi-card {
+   gap: 9px;
+   padding: 5px 15px;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip .ops-kpi-value {
+   font-size: 1.05rem;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip .ops-kpi-sub {
+   font-size: .6rem;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip .ops-kpi-icon {
+   font-size: .95rem;
+}
+
+/* La tabla: encabezado, fila de filtros y celdas. */
+body.conci-manifest-workspace #table-conci-manifiestos thead th.conci-th {
+   padding: 3px 8px;
+   font-size: .68rem;
+}
+
+body.conci-manifest-workspace #table-conci-manifiestos thead tr.conci-filter-row .conci-col-filter {
+   min-height: 21px;
+   padding: 0 .35rem;
+   font-size: .65rem;
+}
+
+body.conci-manifest-workspace #table-conci-manifiestos tbody td {
+   padding: .1rem .4rem;
+   font-size: .72rem;
+   line-height: 1.15;
+}
+
+/* Lo que va dentro de una celda —aerolínea, tipo de operación, estatus—
+   sigue el mismo tamaño para que la fila no vuelva a crecer. */
+body.conci-manifest-workspace #table-conci-manifiestos tbody td .badge,
+body.conci-manifest-workspace #table-conci-manifiestos tbody td .conci-chip {
+   font-size: .64rem;
+   padding: .16em .45em;
+}
+
+/* Las dos filas de filtros, de orilla a orilla.
+
+   Esa franja tiene dos cajas —los conteos con sus fichas, y los filtros de
+   captura con el buscador y las exportaciones— repartidas a los extremos.
+   Como juntas no caben, bajan una debajo de otra y cada una queda apretada
+   a la izquierda, con la mitad derecha vacía.
+
+   Se les da un renglón completo a cada una y, dentro, algo que crezca: las
+   fichas del resumen en la primera y el buscador en la segunda. Así las dos
+   filas llegan hasta el borde derecho sin que nada se encime. */
+body.conci-manifest-workspace .conci-manifest-filters > div {
+   flex: 1 1 100%;
+}
+
+/* Primera fila: las pastillas conservan su tamaño y las siete fichas del
+   resumen se reparten en partes iguales lo que sobra. */
+
+/* Las pastillas de conteo tambien se reparten el renglon: antes conservaban
+   su tamano y solo crecian las fichas, asi que la fila quedaba con un hueco
+   entre Sobrecupo y el resumen. Crecen desde su tamano natural, nunca por
+   debajo, y su contenido se centra al ensancharse. */
+body.conci-manifest-workspace .conci-manifest-filters .conci-count-pill {
+   /* Once elementos —cinco pastillas y seis fichas— repartiéndose el renglón
+      en partes iguales: todos parten de cero y crecen lo mismo, así que
+      terminan del mismo ancho. El min-width impide que alguno se angoste por
+      debajo de su contenido y recorte una cifra. */
+   flex: 1 1 0;
+   justify-content: center;
+   min-width: max-content;
+   /* Tope para el que salta de renglon en pantallas angostas: sin el, un
+      elemento solo en su linea se estiraba a todo lo ancho. */
+   max-width: 18rem;
+}
+
+body.conci-manifest-workspace #manifiestos-summary-strip .ops-kpi-card {
+   /* Partes iguales dentro de la franja. El min-width es la red: la ficha de
+      "309,177 KGS capturados" nunca se angosta hasta recortar la cifra. */
+   flex: 1 1 0;
+   justify-content: center;
+   min-width: max-content;
+   /* Tope para el que salta de renglon en pantallas angostas: sin el, un
+      elemento solo en su linea se estiraba a todo lo ancho. */
+   max-width: 18rem;
+}
+
+/* Segunda fila: el buscador toma el espacio libre —es donde más se agradece
+   tener ancho— y las exportaciones quedan alineadas a la derecha. */
+body.conci-manifest-workspace #conci-quick-flight-group {
+   flex: 1 1 auto;
+   width: auto !important;
+   min-width: 14rem;
+}
+
+#manifiestos-summary-strip .ops-kpi-icon {
+   font-size: 1rem;
+}
+
+#manifiestos-summary-strip .ops-kpi-icon i {
+   font-size: .82rem;
+}
+
+#manifiestos-summary-strip .ops-kpi-value {
+   font-size: 1.05rem;
+   line-height: 1.15;
+}
+
+#manifiestos-summary-strip .ops-kpi-sub {
+   font-size: .68rem;
+   line-height: 1.1;
+   margin-top: 0;
+   white-space: nowrap;
 }
 
 /* ── Fila de filtros de columna (Conciliación Manifiestos) ── */
@@ -20354,21 +20715,16 @@ body.conci-manifest-workspace .conci-manifest-toolbar .input-group-text {
 }
 
 body.conci-manifest-workspace #manifiestos-summary-strip {
-   flex: 0 0 auto;
-}
+   /* La franja es UN elemento que contiene las fichas, así que para que cada
+      ficha termine del mismo ancho que una pastilla, la franja crece tanto
+      como fichas lleva (siete con el cierre activo).
 
-body.conci-manifest-workspace #manifiestos-summary-strip > .row {
-   padding-top: .3rem !important;
-   padding-bottom: .3rem !important;
-}
-
-body.conci-manifest-workspace .ops-kpi-card {
-   min-height: 52px;
-   padding: .35rem .55rem;
-}
-
-body.conci-manifest-workspace .ops-kpi-value {
-   font-size: 1rem;
+      min-width: 0 es imprescindible: por omisión una caja flexible no puede
+      angostarse por debajo de su contenido, así que la franja se quedaba con
+      el ancho natural de sus siete fichas y el sobrante se lo repartían las
+      pastillas, que acababan más anchas que las propias fichas. */
+   flex: 7 1 0;
+   min-width: 0;
 }
 
 body.conci-manifest-workspace #conci-manifiestos-loading,
@@ -20923,6 +21279,3249 @@ body.conci-manifest-workspace #navdeck-back {
   border-color: #f0ad4e !important;
 }
 
+
+/* ==========================================================================
+   Reportes (Carga / Pasajeros)
+   Pagina propia, hermana de Conciliacion, con el mismo espacio de trabajo a
+   pantalla completa que Manifiestos: sin encabezado, sin barra de agenda y
+   sin barra lateral, para que arriba quede solo su barra con el boton Menu.
+   Lo enciende y lo apaga js/conci-reportes.js.
+   ========================================================================== */
+.conci-reportes-shell {
+   border: 0;
+}
+
+#conci-reportes-tabs .nav-link {
+   color: #5a6a85;
+}
+
+#conci-reportes-tabs .nav-link.active {
+   color: #1565c0;
+   font-weight: 600;
+}
+
+.conci-reportes-tab-content {
+   min-height: 60vh;
+}
+
+body.conci-reportes-workspace {
+   height: 100vh;
+   overflow: hidden !important;
+}
+
+body.conci-reportes-workspace > #main-app,
+body.conci-reportes-workspace .app-body {
+   height: 100vh;
+   min-height: 0;
+   overflow: hidden;
+}
+
+/* Siguen en el DOM y reaparecen al salir de Reportes. */
+body.conci-reportes-workspace .header,
+body.conci-reportes-workspace #ag-today-bar,
+body.conci-reportes-workspace .sidebar,
+body.conci-reportes-workspace #sidebar-overlay,
+body.conci-reportes-workspace #navdeck-back {
+   display: none !important;
+}
+
+body.conci-reportes-workspace .main-content {
+   display: flex;
+   flex-direction: column;
+   width: 100% !important;
+   height: 100vh;
+   min-height: 0;
+   margin-left: 0 !important;
+   padding: .4rem !important;
+   overflow: hidden !important;
+}
+
+body.conci-reportes-workspace #conci-reportes-section.active,
+body.conci-reportes-workspace .conci-reportes-shell,
+body.conci-reportes-workspace .conci-reportes-shell > .card-body {
+   display: flex;
+   flex: 1 1 auto;
+   flex-direction: column;
+   min-height: 0;
+}
+
+body.conci-reportes-workspace #conci-reportes-section.active {
+   position: fixed;
+   inset: 0;
+   z-index: 1500;
+   width: 100%;
+   height: 100%;
+   overflow: hidden;
+   background: var(--body-bg, #f4f7fb);
+}
+
+body.conci-reportes-workspace .conci-reportes-shell {
+   width: 100%;
+   height: 100%;
+   overflow: hidden;
+}
+
+body.conci-reportes-workspace .conci-reportes-heading {
+   flex: 0 0 auto;
+   padding: .4rem .75rem !important;
+}
+
+body.conci-reportes-workspace .conci-reportes-heading .section-title {
+   font-size: 1.1rem;
+}
+
+body.conci-reportes-workspace #conci-reportes-tabs {
+   flex: 0 0 auto;
+   gap: .25rem;
+   padding: .25rem .75rem 0 !important;
+}
+
+body.conci-reportes-workspace #conci-reportes-tabs .nav-link {
+   padding: .35rem .75rem;
+   font-size: .8rem;
+}
+
+/* El contenido del apartado es lo unico que scrollea. */
+body.conci-reportes-workspace .conci-reportes-tab-content {
+   flex: 1 1 auto;
+   min-height: 0;
+   overflow: auto;
+}
+
+/* ==========================================================================
+   Conciliacion > Estadistica: pantalla completa con scroll
+   Arriba el encabezado del aeropuerto (logo, titulo, hoy, hora, Actualizar)
+   y debajo las pestanas de Conciliacion con su boton Menu. Se quitan la barra
+   lateral, la agenda del dia, la cabecera de Conciliacion y el boton Menu
+   flotante, que ahi repetia al de las pestanas. NO fija la pagina a 100vh:
+   el tablero es largo y se recorre con el scroll normal de la pagina.
+   ========================================================================== */
+body.conci-estadistica-workspace #ag-today-bar,
+body.conci-estadistica-workspace .sidebar,
+body.conci-estadistica-workspace #sidebar-overlay,
+body.conci-estadistica-workspace .conci-section-heading,
+body.conci-estadistica-workspace #navdeck-back {
+   display: none !important;
+}
+
+body.conci-estadistica-workspace .main-content {
+   width: 100% !important;
+   margin-left: 0 !important;
+   padding: 0 .4rem .4rem !important;
+}
+
+/* Encabezado compacto: un solo renglón, como el tablero de diseño. Las alas
+   de aifa-logo.png con el nombre al lado, el título, el escudo, las fichas de
+   Hoy y Hora local, Actualizar y el tema. Fuera de Estadística el encabezado
+   no cambia: estas piezas nacen ocultas. */
+.header-hoy-chip,
+.header-chip-icon,
+.header-brand-text {
+   display: none;
+}
+
+body.conci-estadistica-workspace .header {
+   margin-bottom: 0;
+   padding: .35rem .9rem !important;
+   border-radius: 0;
+}
+
+body.conci-estadistica-workspace #flying-plane,
+body.conci-estadistica-workspace #sidebar-toggler,
+body.conci-estadistica-workspace .header-subtext,
+body.conci-estadistica-workspace .utc-clock-container,
+body.conci-estadistica-workspace .header-title-row .header-logo:first-child {
+   display: none !important;
+}
+
+body.conci-estadistica-workspace .header-content {
+   min-height: 0;
+   gap: 1rem;
+}
+
+body.conci-estadistica-workspace .header-brand-block {
+   gap: .55rem;
+}
+
+/* Solo las alas: el texto de la imagen quedaría ilegible a este tamaño. */
+body.conci-estadistica-workspace .aifa-logo {
+   width: 84px;
+   height: 30px;
+   object-fit: cover;
+   object-position: center top;
+}
+
+body.conci-estadistica-workspace .header-brand-text {
+   display: flex;
+   flex-direction: column;
+   font-size: .6rem;
+   font-weight: 600;
+   line-height: 1.15;
+   letter-spacing: .02em;
+   color: #1a2f55;
+   white-space: nowrap;
+}
+
+body.conci-estadistica-workspace .header-brand-text b {
+   font-size: .8rem;
+   font-weight: 800;
+}
+
+body.conci-estadistica-workspace .header-center-content {
+   flex-direction: row;
+   gap: 0;
+   padding: 0;
+}
+
+body.conci-estadistica-workspace .header-center-content .header-title-row {
+   gap: 1rem;
+}
+
+body.conci-estadistica-workspace .main-title {
+   flex: 1 1 auto;
+   max-width: none;
+   font-size: clamp(1rem, .7rem + .75vw, 1.35rem);
+   white-space: nowrap;
+}
+
+body.conci-estadistica-workspace .header-logo {
+   height: 34px;
+}
+
+body.conci-estadistica-workspace .header-hoy-chip,
+body.conci-estadistica-workspace .formal-clock-container {
+   display: grid;
+   grid-template-columns: auto auto;
+   align-items: center;
+   column-gap: .5rem;
+   min-width: 0;
+   padding: .3rem .65rem;
+   border: 1px solid rgba(14, 55, 99, .14);
+   border-radius: 10px;
+   background: rgba(255, 255, 255, .85);
+   text-align: left;
+}
+
+body.conci-estadistica-workspace .header-chip-icon {
+   display: block;
+   grid-row: 1 / span 2;
+   font-size: 1rem;
+   color: #0e63c7;
+}
+
+body.conci-estadistica-workspace .header-hoy-chip .clock-label,
+body.conci-estadistica-workspace .formal-clock-container .clock-label {
+   font-size: .6rem;
+   font-weight: 600;
+   letter-spacing: 0;
+   text-transform: lowercase;
+   color: #1a2f55;
+}
+
+/* "HORA LOCAL" → "Hora local", como en el diseño. */
+body.conci-estadistica-workspace .header-hoy-chip .clock-label::first-letter,
+body.conci-estadistica-workspace .formal-clock-container .clock-label::first-letter {
+   text-transform: uppercase;
+}
+
+body.conci-estadistica-workspace .header-hoy-fecha,
+body.conci-estadistica-workspace .formal-clock {
+   font-family: inherit;
+   font-size: .74rem;
+   font-weight: 700;
+   letter-spacing: 0;
+   color: #0c2d57;
+   white-space: nowrap;
+}
+
+/* Las pestañas de Conciliación pegadas al encabezado, sin franja en medio. */
+body.conci-estadistica-workspace #conciliacion-tabs {
+   padding-top: .35rem !important;
+}
+
+body.dark-mode.conci-estadistica-workspace .header-brand-text,
+body.dark-mode.conci-estadistica-workspace .header-hoy-chip .clock-label,
+body.dark-mode.conci-estadistica-workspace .formal-clock-container .clock-label,
+body.dark-mode.conci-estadistica-workspace .header-hoy-fecha,
+body.dark-mode.conci-estadistica-workspace .formal-clock {
+   color: #e2e8f0;
+}
+
+body.dark-mode.conci-estadistica-workspace .header-hoy-chip,
+body.dark-mode.conci-estadistica-workspace .formal-clock-container {
+   border-color: rgba(255, 255, 255, .14);
+   background: rgba(255, 255, 255, .06);
+}
+
+/* En pantallas angostas no cabe todo en un renglón: se quedan el título, la
+   hora y los botones. */
+@media (max-width: 991.98px) {
+   body.conci-estadistica-workspace .header-brand-text,
+   body.conci-estadistica-workspace .header-hoy-chip {
+      display: none;
+   }
+
+   body.conci-estadistica-workspace .main-title {
+      white-space: normal;
+   }
+}
+
+/* Título del encabezado en Estadística: la frase del tablero de diseño. */
+.main-title-est {
+   display: none;
+}
+
+body.conci-estadistica-workspace .main-title-app {
+   display: none;
+}
+
+body.conci-estadistica-workspace .main-title-est {
+   display: inline;
+}
+
+body.conci-estadistica-workspace .main-title {
+   text-transform: none;
+}
+
+/* La frase es larga: el renglón cede antes de encimarse con las fichas. */
+body.conci-estadistica-workspace .header-center-content,
+body.conci-estadistica-workspace .header-center-content .header-title-row {
+   min-width: 0;
+}
+
+body.conci-estadistica-workspace .main-title {
+   overflow: hidden;
+   text-overflow: ellipsis;
+}
+
+/* Hasta 1500 px no caben el nombre junto a las alas y la frase completa:
+   se quedan las alas y la frase, un poco más chica. */
+@media (max-width: 1500px) {
+   body.conci-estadistica-workspace .header-brand-text {
+      display: none;
+   }
+
+   body.conci-estadistica-workspace .main-title {
+      font-size: 1.05rem;
+   }
+}
+
+/* ==========================================================================
+   Estadistica: cabecera con "Estadisticas" (boton del Resumen) y los filtros
+   arriba, y una ventana por area debajo. Todos los botones viven en
+   #est-subnav para que Bootstrap alterne las pestanas entre ellos.
+   ========================================================================== */
+#est-subnav.est-cabecera {
+   display: grid;
+   grid-template-columns: minmax(13rem, 17rem) minmax(0, 1fr);
+   grid-template-areas:
+      "resumen filtros"
+      "ventanas ventanas";
+   align-items: stretch;
+   gap: .75rem;
+   margin-bottom: 1rem;
+}
+
+.est-cabecera > .est-resumen {
+   grid-area: resumen;
+}
+
+.est-cabecera > #est-filtros {
+   grid-area: filtros;
+   margin: 0;
+}
+
+/* Ventanas en renglones parejos y centrados. En pantalla ancha (abajo),
+   Descargas cuadrada a la izquierda y las otras doce en dos renglones de seis. */
+.est-ventanas {
+   --est-por-renglon: 4;
+   --est-separacion: .6rem;
+   grid-area: ventanas;
+   display: flex;
+   flex-wrap: wrap;
+   justify-content: center;
+   gap: var(--est-separacion);
+}
+
+.est-ventanas > .est-ventana {
+   flex: 0 0 calc((100% - (var(--est-por-renglon) - 1) * var(--est-separacion)) / var(--est-por-renglon));
+   min-width: 0;
+   min-height: 4.3rem;
+}
+
+.est-cabecera .nav-link {
+   position: relative;
+   display: flex;
+   align-items: center;
+   gap: .7rem;
+   width: 100%;
+   padding: .75rem .9rem;
+   border: 1px solid rgba(14, 55, 99, .12);
+   border-radius: .8rem;
+   background: #fff;
+   color: #1a2f55;
+   text-align: left;
+   box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+   transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+.est-cabecera .nav-link:hover {
+   border-color: #93b8f5;
+   box-shadow: 0 6px 16px -10px rgba(13, 110, 253, .45);
+   color: #1a2f55;
+}
+
+.est-cabecera .nav-link:focus-visible {
+   outline: 2px solid #0d6efd;
+   outline-offset: 2px;
+}
+
+.est-ventana-icono {
+   flex: 0 0 auto;
+   display: grid;
+   place-items: center;
+   width: 2.4rem;
+   height: 2.4rem;
+   border-radius: .65rem;
+   background: #e8f0fe;
+   color: #0d6efd;
+   font-size: 1.05rem;
+}
+
+.est-ventana-texto {
+   display: flex;
+   flex-direction: column;
+   min-width: 0;
+   line-height: 1.2;
+}
+
+.est-ventana-texto b {
+   font-size: .86rem;
+   font-weight: 700;
+}
+
+.est-ventana-texto small {
+   font-size: .7rem;
+   color: #6b7280;
+}
+
+.est-ventana-nuevo {
+   position: absolute;
+   top: .35rem;
+   right: .45rem;
+   padding: .05rem .45rem;
+   border-radius: 999px;
+   background: #ede9fe;
+   color: #6d28d9;
+   font-size: .6rem;
+   font-weight: 700;
+}
+
+/* "Estadisticas": el recuadro grande de arriba, que abre el Resumen. */
+.est-cabecera .est-resumen {
+   padding: .5rem .9rem;
+}
+
+.est-resumen .est-ventana-icono {
+   width: 2.5rem;
+   height: 2.5rem;
+   border-radius: .7rem;
+   font-size: 1.2rem;
+}
+
+.est-resumen .est-ventana-texto b {
+   font-size: 1.2rem;
+   font-weight: 800;
+}
+
+.est-resumen .est-ventana-texto small {
+   font-size: .72rem;
+}
+
+/* El area abierta va en azul, como en el tablero de diseno. */
+.est-cabecera .nav-link.active {
+   border-color: transparent;
+   background: linear-gradient(135deg, #1a6ef0, #0b4fc4);
+   color: #fff;
+   box-shadow: 0 8px 18px -10px rgba(11, 79, 196, .7);
+}
+
+.est-cabecera .nav-link.active .est-ventana-icono {
+   background: rgba(255, 255, 255, .18);
+   color: #fff;
+}
+
+.est-cabecera .nav-link.active .est-ventana-texto small {
+   color: rgba(255, 255, 255, .85);
+}
+
+body.dark-mode .est-cabecera .nav-link:not(.active) {
+   border-color: rgba(255, 255, 255, .1);
+   background: #1e293b;
+   color: #e2e8f0;
+}
+
+body.dark-mode .est-cabecera .nav-link:not(.active) .est-ventana-icono {
+   background: rgba(59, 130, 246, .16);
+   color: #93c5fd;
+}
+
+body.dark-mode .est-cabecera .nav-link:not(.active) .est-ventana-texto small {
+   color: #94a3b8;
+}
+
+@media (max-width: 991.98px) {
+   #est-subnav.est-cabecera {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+         "resumen"
+         "filtros"
+         "ventanas";
+   }
+}
+
+@media (min-width: 1200px) {
+   .est-ventanas {
+      display: grid;
+      grid-template-columns: 9.2rem repeat(6, minmax(0, 1fr));
+      grid-auto-rows: minmax(4.3rem, auto);
+   }
+
+   .est-ventanas > .est-ventana {
+      flex: none;
+   }
+
+   /* Descargas: cuadrada, del alto de los dos renglones. */
+   .est-ventanas > #est-tab-descargas {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+      flex-direction: column;
+      justify-content: center;
+      gap: .5rem;
+      text-align: center;
+   }
+
+   .est-ventanas > #est-tab-descargas .est-ventana-icono {
+      width: 3rem;
+      height: 3rem;
+      border-radius: .8rem;
+      font-size: 1.35rem;
+   }
+
+   .est-ventanas > #est-tab-descargas .est-ventana-texto {
+      align-items: center;
+   }
+}
+
+@media (max-width: 767.98px) {
+   .est-ventanas {
+      --est-por-renglon: 2;
+   }
+}
+
+/* Filtros en un solo renglón: cada campo cede espacio antes de saltar de
+   línea; solo si la pantalla no alcanza pasan a un segundo renglón. */
+.est-cabecera #est-filtros .card-body {
+   padding: .45rem .75rem !important;
+}
+
+.est-cabecera #est-filtros .card-body > .d-flex {
+   gap: .45rem !important;
+}
+
+.est-cabecera #est-filtros .card-body > .d-flex > div {
+   flex: 1 1 0;
+   min-width: 5.4rem;
+}
+
+/* Las fechas necesitan más ancho que un desplegable. */
+.est-cabecera #est-filtros .card-body > .d-flex > div:nth-child(-n + 2) {
+   flex-grow: 1.4;
+   min-width: 7.9rem;
+}
+
+.est-cabecera #est-filtros .card-body > .d-flex > .est-filtros-acciones {
+   flex: 0 0 auto;
+   min-width: 0;
+}
+
+.est-cabecera #est-filtros .form-label {
+   display: block;
+   overflow: hidden;
+   font-size: .68rem !important;
+   white-space: nowrap;
+   text-overflow: ellipsis;
+}
+
+.est-cabecera #est-filtros .form-control,
+.est-cabecera #est-filtros .form-select {
+   width: 100% !important;
+   max-width: none !important;
+   font-size: .8rem;
+}
+
+.est-cabecera #est-filtros .form-select {
+   padding-right: 1.7rem;
+   background-position: right .45rem center;
+}
+
+.est-filtros-acciones {
+   display: flex;
+   flex-direction: column;
+   align-items: flex-end;
+}
+
+.est-filtros-acciones #est-frescura {
+   font-size: .62rem;
+   line-height: 1.65;
+   white-space: nowrap;
+}
+
+/* Un área que está cargando lleva un indicador que gira; no se atenúa,
+   porque un botón gris parece deshabilitado. */
+.est-cabecera .nav-link.est-cargando::after {
+   content: "";
+   position: absolute;
+   top: .45rem;
+   right: .45rem;
+   width: .75rem;
+   height: .75rem;
+   border: 2px solid rgba(13, 110, 253, .25);
+   border-top-color: #0d6efd;
+   border-radius: 50%;
+   animation: est-girar .8s linear infinite;
+}
+
+.est-cabecera .nav-link.active.est-cargando::after {
+   border-color: rgba(255, 255, 255, .35);
+   border-top-color: #fff;
+}
+
+@keyframes est-girar {
+   to {
+      transform: rotate(360deg);
+   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .est-cabecera .nav-link.est-cargando::after {
+      animation: none;
+   }
+}
+
+/* Mientras carga, el contenido queda difuminado sobre un fondo blanco.
+   El aviso y su avance flotan encima sin tarjeta, contorno ni sombra. */
+.est-pane-cargando {
+   position: relative;
+   min-height: 18rem;
+   background: #fff;
+}
+
+.est-pane-cargando > :not(.est-carga) {
+   filter: blur(6px);
+   opacity: .35;
+   pointer-events: none;
+   user-select: none;
+}
+
+.est-carga {
+   position: absolute;
+   top: 2.5rem;
+   left: 50%;
+   z-index: 5;
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   gap: .35rem;
+   width: min(30rem, calc(100% - 2rem));
+   padding: 1.75rem 1.5rem;
+   border: 0;
+   border-radius: 0;
+   background: transparent;
+   box-shadow: none;
+   transform: translateX(-50%);
+   text-align: center;
+}
+
+.est-carga-icono {
+   display: grid;
+   place-items: center;
+   width: 3.2rem;
+   height: 3.2rem;
+   margin-bottom: .35rem;
+   border-radius: .9rem;
+   background: #e8f0fe;
+   color: #0d6efd;
+   font-size: 1.4rem;
+   animation: est-latido 1.6s ease-in-out infinite;
+}
+
+.est-carga-titulo {
+   margin: 0;
+   font-size: 1.05rem;
+   font-weight: 700;
+   color: #1a2f55;
+}
+
+.est-carga-mensaje {
+   min-height: 1.2em;
+   margin: 0;
+   font-size: .82rem;
+   color: #6b7280;
+}
+
+.est-carga-barra {
+   width: 100%;
+   height: .5rem;
+   margin-top: .6rem;
+   overflow: hidden;
+   border-radius: 999px;
+   background: #e5edf8;
+}
+
+.est-carga-relleno {
+   width: 0;
+   height: 100%;
+   border-radius: inherit;
+   background: linear-gradient(90deg, #1a6ef0, #3b9bff);
+   transition: width .3s ease;
+}
+
+.est-carga-porcentaje {
+   margin: .15rem 0 0;
+   font-size: .78rem;
+   font-weight: 700;
+   color: #0d6efd;
+   font-variant-numeric: tabular-nums;
+}
+
+@keyframes est-latido {
+   0%,
+   100% {
+      transform: scale(1);
+   }
+
+   50% {
+      transform: scale(1.08);
+   }
+}
+
+@media (prefers-reduced-motion: reduce) {
+   .est-carga-icono {
+      animation: none;
+   }
+
+   .est-carga-relleno {
+      transition: none;
+   }
+}
+
+body.dark-mode .est-pane-cargando {
+   background: var(--card-bg);
+}
+
+body.dark-mode .est-carga-titulo {
+   color: #e2e8f0;
+}
+
+body.dark-mode .est-carga-mensaje {
+   color: #94a3b8;
+}
+
+body.dark-mode .est-carga-barra {
+   background: rgba(255, 255, 255, .1);
+}
+
+/* ==========================================================================
+   Estadistica: el lienzo completo en blanco, sin franja gris debajo, y los
+   avisos del periodo al pie de la pagina, en blanco como el fondo.
+   ========================================================================== */
+body.conci-estadistica-workspace {
+   background-color: #fff;
+}
+
+body.dark-mode.conci-estadistica-workspace {
+   background-color: var(--card-bg);
+}
+
+body.conci-estadistica-workspace .conci-workspace-shell {
+   border-color: transparent;
+   box-shadow: none !important;
+}
+
+/* El área llena el alto de la ventana: si el contenido es corto, los
+   avisos quedan abajo del todo y no asoma el fondo. */
+.tab-content > #pane-conci-estadistica.active {
+   display: flex;
+   flex-direction: column;
+   min-height: calc(100vh - 7.75rem);
+}
+
+#pane-conci-estadistica > * {
+   min-width: 0;
+}
+
+#pane-conci-estadistica > #est-subcontent {
+   order: 1;
+}
+
+#pane-conci-estadistica > .est-pie {
+   order: 2;
+   margin-top: auto;
+}
+
+/* Pie de avisos (todas las ventanas de Estadística y el Informe oficial):
+   advertencias y errores como texto sobre el fondo blanco. */
+.est-pie > :not(.d-none):not([hidden]) {
+   margin-top: 1rem;
+}
+
+.est-aviso {
+   display: flex;
+   align-items: flex-start;
+   gap: .5rem;
+   margin: 0;
+   padding: .3rem 0;
+   background: transparent;
+   color: #475569;
+   font-size: .78rem;
+   line-height: 1.45;
+}
+
+.est-aviso i {
+   margin-top: .15rem;
+}
+
+.est-aviso-aviso i {
+   color: #d97706;
+}
+
+.est-aviso-error {
+   color: #b42318;
+}
+
+.est-aviso-error i {
+   color: #dc2626;
+}
+
+.est-aviso-info i {
+   color: #94a3b8;
+}
+
+body.dark-mode .est-aviso {
+   color: #cbd5e1;
+}
+
+body.dark-mode .est-aviso-error {
+   color: #fca5a5;
+}
+
+/* Resumen: la calidad del dato va al pie del tablero, como notas sobre el
+   fondo blanco (sin recuadros). */
+.est-resumen-calidad-pie {
+   margin-top: 1rem;
+}
+
+.est-resumen-calidad-pie .fbo-destacados {
+   gap: .35rem 1.5rem;
+}
+
+.est-resumen-calidad-pie .fbo-destacado,
+body.dark-mode .est-resumen-calidad-pie .fbo-destacado {
+   padding: .2rem 0;
+   border: 0;
+   border-radius: 0;
+   background: transparent;
+}
+
+/* ==========================================================================
+   Estadistica > FBO · Aviacion General: el primer tablero con la
+   visualizacion nueva. Frase que cuenta el periodo, tarjetas con su
+   variacion, destacados que se pueden tocar, tendencia con selector, barras
+   de composicion y rankings que filtran todo el tablero.
+   ========================================================================== */
+.fbo-tablero {
+   display: flex;
+   flex-direction: column;
+   gap: 1rem;
+}
+
+.fbo-contenido {
+   display: flex;
+   flex-direction: column;
+   gap: 1rem;
+}
+
+.fbo-cabeza {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: .75rem 1.5rem;
+}
+
+.fbo-cabeza-texto {
+   flex: 1 1 32rem;
+   min-width: 0;
+}
+
+.fbo-titulo {
+   margin: 0 0 .3rem;
+   font-weight: 800;
+   color: #1a2f55;
+}
+
+.fbo-titulo i {
+   color: #0d6efd;
+}
+
+/* La frase ocupa todo el ancho disponible: menos renglones, menos alto. */
+.fbo-frase {
+   margin: 0;
+   font-size: .92rem;
+   line-height: 1.55;
+   color: #334155;
+}
+
+.fbo-frase b {
+   color: #0b4fc4;
+}
+
+.fbo-filtro-activo {
+   flex: 0 0 auto;
+   padding-top: .2rem;
+}
+
+.fbo-pista {
+   font-size: .78rem;
+   color: #64748b;
+}
+
+.fbo-pista i {
+   margin-right: .4rem;
+   color: #0d6efd;
+}
+
+.fbo-chip {
+   display: inline-flex;
+   align-items: center;
+   gap: .45rem;
+   padding: .35rem .45rem .35rem .8rem;
+   border-radius: 999px;
+   background: #e8f0fe;
+   color: #0b4fc4;
+   font-size: .82rem;
+}
+
+.fbo-chip-quitar {
+   display: grid;
+   place-items: center;
+   width: 1.45rem;
+   height: 1.45rem;
+   padding: 0;
+   border: 0;
+   border-radius: 50%;
+   background: #0d6efd;
+   color: #fff;
+   font-size: 1rem;
+   line-height: 1;
+   cursor: pointer;
+}
+
+.fbo-nota {
+   margin: 0;
+   padding: .45rem .75rem;
+   border-radius: .6rem;
+   background: #f1f5f9;
+   color: #475569;
+   font-size: .8rem;
+}
+
+.fbo-kpis {
+   display: grid;
+   grid-template-columns: repeat(auto-fit, minmax(11.5rem, 1fr));
+   gap: .75rem;
+}
+
+.fbo-kpi {
+   display: flex;
+   gap: .75rem;
+   padding: .9rem 1rem;
+   border: 1px solid rgba(14, 55, 99, .1);
+   border-left: 4px solid var(--fbo-color, #0d6efd);
+   border-radius: .9rem;
+   background: #fff;
+   box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
+
+.fbo-kpi-icono {
+   flex: 0 0 auto;
+   display: grid;
+   place-items: center;
+   width: 2.4rem;
+   height: 2.4rem;
+   border-radius: .7rem;
+   background: #eef2ff;
+   background: color-mix(in srgb, var(--fbo-color, #0d6efd) 14%, transparent);
+   color: var(--fbo-color, #0d6efd);
+   font-size: 1.05rem;
+}
+
+.fbo-kpi-texto {
+   display: flex;
+   flex-direction: column;
+   min-width: 0;
+   line-height: 1.25;
+}
+
+.fbo-kpi-titulo {
+   font-size: .72rem;
+   font-weight: 700;
+   letter-spacing: .03em;
+   text-transform: uppercase;
+   color: #64748b;
+}
+
+.fbo-kpi-valor {
+   font-size: 1.55rem;
+   font-weight: 800;
+   color: #0f172a;
+   font-variant-numeric: tabular-nums;
+}
+
+.fbo-kpi-detalle {
+   font-size: .74rem;
+   color: #64748b;
+}
+
+.fbo-destacados {
+   display: flex;
+   flex-wrap: wrap;
+   gap: .5rem;
+}
+
+.fbo-destacados:empty {
+   display: none;
+}
+
+.fbo-destacado {
+   display: inline-flex;
+   align-items: center;
+   gap: .6rem;
+   padding: .45rem .85rem;
+   border: 1px solid rgba(14, 55, 99, .12);
+   border-radius: .8rem;
+   background: #fff;
+   color: #1a2f55;
+   font-size: .8rem;
+   text-align: left;
+}
+
+.fbo-destacado i {
+   color: #0d6efd;
+}
+
+.fbo-destacado > span {
+   display: flex;
+   flex-direction: column;
+   line-height: 1.2;
+}
+
+.fbo-destacado small {
+   font-size: .68rem;
+   color: #64748b;
+}
+
+button.fbo-destacado {
+   cursor: pointer;
+   transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+button.fbo-destacado:hover,
+button.fbo-destacado:focus-visible {
+   border-color: #93b8f5;
+   box-shadow: 0 6px 16px -10px rgba(13, 110, 253, .45);
+}
+
+.fbo-destacado-aviso {
+   border-color: #fcd34d;
+   background: #fffbeb;
+}
+
+.fbo-destacado-aviso i {
+   color: #b45309;
+}
+
+.fbo-rejilla {
+   display: grid;
+   grid-template-columns: repeat(3, minmax(0, 1fr));
+   gap: .9rem;
+}
+
+.fbo-panel {
+   display: flex;
+   flex-direction: column;
+   gap: .6rem;
+   min-width: 0;
+   padding: .9rem 1rem 1rem;
+   border: 1px solid rgba(14, 55, 99, .1);
+   border-radius: .9rem;
+   background: #fff;
+   box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
+
+.fbo-panel-tendencia {
+   grid-column: span 2;
+}
+
+.fbo-panel-matriculas {
+   grid-column: 1 / -1;
+}
+
+.fbo-panel-cabeza {
+   display: flex;
+   align-items: flex-start;
+   justify-content: space-between;
+   gap: .75rem;
+}
+
+.fbo-panel-cabeza h6 {
+   margin: 0;
+   font-weight: 700;
+   color: #1a2f55;
+}
+
+.fbo-panel-cabeza p {
+   margin: .1rem 0 0;
+   font-size: .74rem;
+   color: #64748b;
+}
+
+.fbo-grafica {
+   position: relative;
+   height: 18rem;
+}
+
+.fbo-grafica-alta {
+   height: 20rem;
+}
+
+.fbo-comp {
+   margin-bottom: .9rem;
+}
+
+.fbo-comp:last-child {
+   margin-bottom: 0;
+}
+
+.fbo-comp-titulo {
+   margin-bottom: .3rem;
+   font-size: .72rem;
+   font-weight: 700;
+   letter-spacing: .03em;
+   text-transform: uppercase;
+   color: #475569;
+}
+
+.fbo-comp-barra {
+   display: flex;
+   height: .8rem;
+   overflow: hidden;
+   border-radius: 999px;
+   background: #e5edf8;
+}
+
+.fbo-comp-barra span {
+   height: 100%;
+}
+
+.fbo-comp-leyenda {
+   display: flex;
+   flex-wrap: wrap;
+   gap: .25rem .9rem;
+   margin-top: .35rem;
+   font-size: .76rem;
+   color: #334155;
+}
+
+.fbo-comp-leyenda i {
+   display: inline-block;
+   width: .6rem;
+   height: .6rem;
+   margin-right: .3rem;
+   border-radius: 2px;
+}
+
+.fbo-comp-leyenda small {
+   color: #94a3b8;
+}
+
+.fbo-lista {
+   display: grid;
+   grid-template-columns: repeat(2, minmax(0, 1fr));
+   gap: .5rem 2rem;
+   margin: 0;
+   padding: 0;
+   list-style: none;
+}
+
+.fbo-lista li {
+   display: grid;
+   grid-template-columns: 1.5rem auto minmax(0, 1fr) 5rem 2.8rem;
+   align-items: center;
+   gap: .55rem;
+   font-size: .8rem;
+}
+
+.fbo-lista-pos {
+   display: grid;
+   place-items: center;
+   width: 1.5rem;
+   height: 1.5rem;
+   border-radius: 50%;
+   background: #eef2ff;
+   color: #4338ca;
+   font-size: .7rem;
+   font-weight: 700;
+}
+
+.fbo-lista-clave {
+   padding: .1rem .5rem;
+   border: 1px solid rgba(14, 55, 99, .15);
+   border-radius: .4rem;
+   background: #fff;
+   color: #0b4fc4;
+   font-family: inherit;
+   font-size: .78rem;
+   font-weight: 700;
+   cursor: pointer;
+}
+
+.fbo-lista-clave:hover,
+.fbo-lista-clave:focus-visible {
+   border-color: #93b8f5;
+   background: #e8f0fe;
+}
+
+.fbo-lista-detalle {
+   overflow: hidden;
+   color: #64748b;
+   white-space: nowrap;
+   text-overflow: ellipsis;
+}
+
+.fbo-lista-barra {
+   height: .45rem;
+   overflow: hidden;
+   border-radius: 999px;
+   background: #eef2f7;
+}
+
+.fbo-lista-barra span {
+   display: block;
+   height: 100%;
+   border-radius: inherit;
+   background: #6f42c1;
+}
+
+.fbo-lista-valor {
+   text-align: right;
+   font-variant-numeric: tabular-nums;
+}
+
+.fbo-vacio {
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   gap: .45rem;
+   padding: 2.5rem 1rem;
+   border: 1px dashed rgba(14, 55, 99, .2);
+   border-radius: 1rem;
+   background: #fff;
+   color: #475569;
+   text-align: center;
+}
+
+.fbo-vacio > i {
+   font-size: 2rem;
+   color: #94a3b8;
+}
+
+.fbo-vacio p {
+   margin: 0;
+}
+
+.fbo-vacio-titulo {
+   font-weight: 700;
+   color: #1a2f55;
+}
+
+.fbo-sin-dato {
+   display: flex;
+   align-items: flex-start;
+   gap: .45rem;
+   margin: 0;
+   font-size: .74rem;
+   line-height: 1.4;
+   color: #64748b;
+}
+
+.fbo-sin-dato[hidden] {
+   display: none;
+}
+
+.fbo-sin-dato i {
+   margin-top: .15rem;
+   color: #b45309;
+}
+
+@media (max-width: 1199.98px) {
+   .fbo-rejilla {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+}
+
+@media (max-width: 767.98px) {
+   .fbo-rejilla,
+   .fbo-lista {
+      grid-template-columns: minmax(0, 1fr);
+   }
+
+   .fbo-panel-tendencia {
+      grid-column: auto;
+   }
+
+   /* El selector baja debajo del título, completo y en fila. */
+   .fbo-panel-cabeza {
+      flex-wrap: wrap;
+   }
+
+   .fbo-panel-cabeza .btn-group {
+      flex-direction: row;
+      flex-wrap: nowrap;
+   }
+}
+
+body.dark-mode .fbo-kpi,
+body.dark-mode .fbo-panel,
+body.dark-mode .fbo-destacado,
+body.dark-mode .fbo-vacio,
+body.dark-mode .fbo-lista-clave {
+   border-color: rgba(255, 255, 255, .1);
+   background: #1e293b;
+}
+
+body.dark-mode .fbo-titulo,
+body.dark-mode .fbo-kpi-valor,
+body.dark-mode .fbo-panel-cabeza h6,
+body.dark-mode .fbo-destacado,
+body.dark-mode .fbo-vacio-titulo {
+   color: #e2e8f0;
+}
+
+body.dark-mode .fbo-frase,
+body.dark-mode .fbo-comp-leyenda {
+   color: #cbd5e1;
+}
+
+body.dark-mode .fbo-nota {
+   background: rgba(255, 255, 255, .06);
+   color: #cbd5e1;
+}
+
+body.dark-mode .fbo-comp-barra,
+body.dark-mode .fbo-lista-barra {
+   background: rgba(255, 255, 255, .1);
+}
+
+body.dark-mode .fbo-destacado-aviso {
+   border-color: #b45309;
+   background: rgba(245, 158, 11, .12);
+}
+
+/* En oscuro, el azul marino de las cifras y las matrículas no se lee. */
+body.dark-mode .fbo-frase b,
+body.dark-mode .fbo-lista-clave {
+   color: #93c5fd;
+}
+
+body.dark-mode .fbo-lista-clave:hover,
+body.dark-mode .fbo-lista-clave:focus-visible {
+   background: rgba(13, 110, 253, .2);
+}
+
+body.dark-mode .fbo-chip {
+   background: rgba(13, 110, 253, .2);
+   color: #bfdbfe;
+}
+
+body.dark-mode .fbo-lista-pos {
+   background: rgba(99, 102, 241, .22);
+   color: #c7d2fe;
+}
+
+body.dark-mode .fbo-kpi-titulo,
+body.dark-mode .fbo-kpi-detalle,
+body.dark-mode .fbo-comp-titulo,
+body.dark-mode .fbo-panel-cabeza p,
+body.dark-mode .fbo-destacado small,
+body.dark-mode .fbo-lista-detalle,
+body.dark-mode .fbo-pista,
+body.dark-mode .fbo-sin-dato {
+   color: #94a3b8;
+}
+
+/* ==========================================================================
+   Estadistica: el diseno de FBO en todas las areas. Paneles a todo lo ancho,
+   tablas dentro de su panel con encabezado fijo, controles del Explorador y
+   el Comparador, fichas de Descargas y el Informe oficial con tarjetas y
+   paneles del mismo lenguaje.
+   ========================================================================== */
+.fbo-panel-ancho {
+   grid-column: 1 / -1;
+}
+
+/* Una cifra no se parte en dos renglones, ni en la frase ni en la tarjeta. */
+.fbo-frase b,
+.fbo-kpi-valor {
+   white-space: nowrap;
+}
+
+/* Áreas con muchas tarjetas: dos renglones parejos en pantalla ancha. */
+@media (min-width: 1200px) {
+   .tb-kpis-cinco {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+   }
+
+   .tb-kpis-cuatro {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+   }
+}
+
+.fbo-panel[hidden] {
+   display: none;
+}
+
+.tb-controles {
+   gap: .75rem;
+}
+
+.tb-controles .form-label {
+   font-weight: 600;
+   color: #475569;
+   white-space: nowrap;
+}
+
+/* Explorador: agrupación, filtro, consultar y exportar en un solo renglón.
+   Las listas ceden ancho para caber; en pantallas angostas la fila puede
+   bajar a un segundo renglón antes que desbordarse. */
+.tb-controles-fila {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: flex-end;
+   gap: .5rem;
+}
+
+.tb-controles-fila > div {
+   min-width: 0;
+}
+
+.tb-controles-fila .form-select {
+   width: auto;
+   max-width: 13rem;
+}
+
+.tb-controles-fila > .btn,
+.tb-controles-conteo {
+   flex: 0 0 auto;
+   white-space: nowrap;
+}
+
+/* Conteo, CSV y Excel viajan juntos y pegados a la derecha. */
+.tb-controles-exportar {
+   display: flex;
+   flex: 0 0 auto;
+   align-items: center;
+   gap: .5rem;
+   margin-left: auto;
+}
+
+.tb-controles-exportar .btn {
+   white-space: nowrap;
+}
+
+.tb-controles-conteo {
+   align-self: center;
+   font-size: .75rem;
+}
+
+@media (min-width: 1400px) {
+   .tb-controles-fila {
+      flex-wrap: nowrap;
+   }
+}
+
+.tb-tabla {
+   border-radius: .6rem;
+}
+
+.tb-tabla-alta {
+   max-height: 26rem;
+   overflow: auto;
+}
+
+.tb-tabla .table {
+   margin: 0;
+   font-size: .8rem;
+}
+
+.tb-tabla thead th {
+   position: sticky;
+   top: 0;
+   z-index: 1;
+   border-bottom: 1px solid rgba(14, 55, 99, .12);
+   background: #f1f5f9;
+   color: #475569;
+   font-size: .7rem;
+   font-weight: 700;
+   letter-spacing: .03em;
+   text-transform: uppercase;
+   white-space: nowrap;
+}
+
+.tb-tabla td {
+   border-color: rgba(14, 55, 99, .07);
+}
+
+.tb-tabla tbody tr:hover td {
+   background: #f8fafc;
+}
+
+.tb-tabla tbody tr.table-light td {
+   background: #eef4ff;
+   color: #0b4fc4;
+}
+
+.fbo-grafica + .tb-tabla {
+   margin-top: .5rem;
+}
+
+.tb-docs {
+   display: grid;
+   grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+   gap: .9rem;
+}
+
+.tb-doc {
+   display: grid;
+   grid-template-columns: auto minmax(0, 1fr);
+   gap: .3rem .85rem;
+   padding: 1rem;
+   border: 1px solid rgba(14, 55, 99, .1);
+   border-radius: .9rem;
+   background: #fff;
+   box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+   transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.tb-doc:hover {
+   border-color: #93b8f5;
+   box-shadow: 0 8px 20px -14px rgba(13, 110, 253, .45);
+}
+
+.tb-doc-icono {
+   grid-row: 1 / span 2;
+   display: grid;
+   place-items: center;
+   width: 2.6rem;
+   height: 2.6rem;
+   border-radius: .75rem;
+   background: #e8f0fe;
+   color: #0d6efd;
+   font-size: 1.1rem;
+}
+
+.tb-doc-texto h6 {
+   margin: 0;
+   font-size: .9rem;
+   font-weight: 700;
+   color: #1a2f55;
+}
+
+.tb-doc-texto p {
+   margin: .15rem 0 0;
+   font-size: .76rem;
+   color: #64748b;
+}
+
+.tb-doc-acciones {
+   grid-column: 2;
+   display: flex;
+   flex-wrap: wrap;
+   align-items: center;
+   gap: .4rem;
+   margin-top: .35rem;
+}
+
+/* Informe oficial: mismo lenguaje, sin mover su contenido. */
+#est-pane-informe #informe-est-toolbar {
+   padding: .75rem 1rem;
+   border: 1px solid rgba(14, 55, 99, .1);
+   border-radius: .9rem;
+   background: #fff;
+   box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
+
+#est-pane-informe .airline-stats-summary {
+   grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+
+#est-pane-informe .airline-stat-card {
+   padding: .85rem 1rem;
+   border: 1px solid rgba(14, 55, 99, .1);
+   border-left: 4px solid #0d6efd;
+   border-radius: .9rem;
+   background: #fff;
+   box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
+
+#est-pane-informe .airline-stat-card:nth-child(3n+2) {
+   border-left-color: #20c997;
+}
+
+#est-pane-informe .airline-stat-card:nth-child(3n) {
+   border-left-color: #fd7e14;
+}
+
+#est-pane-informe .airline-stat-card > span:first-child {
+   font-size: .72rem;
+   font-weight: 700;
+   letter-spacing: .03em;
+   text-transform: uppercase;
+   color: #64748b;
+}
+
+#est-pane-informe .airline-stat-card strong {
+   font-size: 1.4rem;
+   font-weight: 800;
+   color: #0f172a;
+}
+
+#est-pane-informe h6.text-primary {
+   color: #1a2f55 !important;
+   font-weight: 700;
+}
+
+#est-pane-informe .table-responsive {
+   padding: .35rem;
+   border: 1px solid rgba(14, 55, 99, .1);
+   border-radius: .9rem;
+   background: #fff;
+   box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
+
+#est-pane-informe .table-responsive thead th {
+   background: #f1f5f9;
+   color: #475569;
+   font-size: .72rem;
+   letter-spacing: .03em;
+   text-transform: uppercase;
+}
+
+#est-pane-informe .table-bordered > :not(caption) > * > * {
+   border-color: rgba(14, 55, 99, .08);
+}
+
+/* La gráfica mensual del informe, en un panel como las demás ventanas. */
+#est-pane-informe .informe-est-grafica .fbo-grafica {
+   height: 19rem;
+}
+
+body.dark-mode .tb-tabla thead th,
+body.dark-mode #est-pane-informe .table-responsive thead th {
+   background: rgba(255, 255, 255, .06);
+   color: #cbd5e1;
+}
+
+body.dark-mode .tb-tabla tbody tr:hover td {
+   background: rgba(255, 255, 255, .04);
+}
+
+body.dark-mode .tb-tabla tbody tr.table-light td {
+   background: rgba(13, 110, 253, .14);
+   color: #bfdbfe;
+}
+
+body.dark-mode .tb-doc,
+body.dark-mode #est-pane-informe #informe-est-toolbar,
+body.dark-mode #est-pane-informe .airline-stat-card,
+body.dark-mode #est-pane-informe .table-responsive {
+   border-color: rgba(255, 255, 255, .1);
+   background: #1e293b;
+}
+
+body.dark-mode .tb-doc-texto h6,
+body.dark-mode #est-pane-informe .airline-stat-card strong,
+body.dark-mode #est-pane-informe h6.text-primary {
+   color: #e2e8f0 !important;
+}
+
+body.dark-mode .tb-doc-texto p,
+body.dark-mode .tb-controles .form-label {
+   color: #94a3b8;
+}
+
+body.dark-mode .tb-doc-icono {
+   background: rgba(13, 110, 253, .2);
+   color: #93c5fd;
+}
+
+/* ==========================================================================
+   Reportes > Pasajeros
+   Los tres reportes se imprimen tal cual, asi que la hoja imita la plantilla
+   del libro que sustituye. Los colores salen de xl/styles.xml del propio
+   libro, no de una aproximacion a ojo:
+
+     #255C4F  verde institucional  encabezados de tabla y fila PROMEDIO
+     #D9D9D9  gris                 fila TOTAL, con texto #0A202D
+     #A42145  vino                 titulo y etiquetas de maximos
+     Noto Sans 13pt                cuerpo de las plantillas
+
+   La hoja es un bloque blanco de ancho fijo: en pantalla se ve como se va a
+   imprimir, sin sorpresas al mandar a la impresora.
+   ========================================================================== */
+.conci-rep-pax-toolbar {
+   position: sticky;
+   top: 0;
+   z-index: 5;
+   background: var(--card-bg, #fff);
+   padding: .35rem 0;
+}
+
+.conci-rep-hoja {
+   --rep-verde: #255C4F;
+   --rep-gris: #D9D9D9;
+   --rep-gris-texto: #0A202D;
+   --rep-vino: #A42145;
+   font-family: "Noto Sans", "Segoe UI", system-ui, sans-serif;
+   color: #000;
+   background: #fff;
+   width: 100%;
+   max-width: 820px;
+   margin: 0 auto;
+   padding: 2.2rem 2.4rem 1.6rem;
+   border: 1px solid #e3e8ef;
+   border-radius: 6px;
+   box-shadow: 0 2px 10px rgba(15, 23, 42, .06);
+}
+
+/* Subsecretaria y Plantilla 2 son apaisadas: no caben en el ancho carta. */
+.conci-rep-hoja.conci-rep-hoja-ancha {
+   max-width: 1180px;
+}
+
+.conci-rep-logo {
+   text-align: center;
+   margin-bottom: 1.1rem;
+}
+
+.conci-rep-logo img {
+   height: 52px;
+   width: auto;
+}
+
+.conci-rep-h1 {
+   text-align: center;
+   font-size: .82rem;
+   font-weight: 700;
+   letter-spacing: .02em;
+   color: var(--rep-vino);
+   margin: 0 0 1rem;
+}
+
+.conci-rep-actualizacion {
+   text-align: center;
+   font-size: .78rem;
+   margin: 0 0 1.1rem;
+   color: #000;
+}
+
+.conci-rep-nota {
+   font-size: .66rem;
+   font-style: italic;
+   line-height: 1.55;
+   color: #000;
+   margin: 1.4rem 0 0;
+   text-align: justify;
+}
+
+.conci-rep-nota strong {
+   font-style: italic;
+}
+
+/* ── tablas de plantilla ───────────────────────────────────────────────── */
+
+.conci-rep-plantilla {
+   width: 100%;
+   border-collapse: collapse;
+   font-size: .72rem;
+   margin: 0 auto;
+}
+
+.conci-rep-plantilla th,
+.conci-rep-plantilla td {
+   border: 1px solid #9fb3ab;
+   padding: .22rem .5rem;
+   line-height: 1.35;
+   white-space: nowrap;
+}
+
+.conci-rep-plantilla thead th {
+   background: var(--rep-verde);
+   color: #fff;
+   font-weight: 700;
+   text-align: center;
+   letter-spacing: .01em;
+}
+
+.conci-rep-plantilla .num {
+   text-align: center;
+   font-variant-numeric: tabular-nums;
+}
+
+.conci-rep-plantilla .conci-rep-vacia {
+   text-align: center;
+   padding: .9rem;
+   color: #6b7a90;
+   font-style: italic;
+   white-space: normal;
+}
+
+.conci-rep-fila-total td {
+   background: var(--rep-gris);
+   color: var(--rep-gris-texto);
+   font-weight: 700;
+   text-align: center;
+}
+
+.conci-rep-fila-promedio td {
+   background: var(--rep-verde);
+   color: #fff;
+   font-weight: 700;
+   text-align: center;
+}
+
+/* Plantilla 1: el nombre de la aerolinea se pinta con su color de catalogo,
+   igual que en la tabla de Manifiestos. */
+.conci-rep-p1 .conci-rep-aero {
+   font-weight: 600;
+   text-align: left;
+}
+
+.conci-rep-acumuladas {
+   text-align: center;
+   font-size: .76rem;
+   margin: 1.3rem 0 .55rem;
+}
+
+/* ── Plantilla 2: pasajeros y operaciones, lado a lado ─────────────────── */
+
+.conci-rep-p2-rejilla {
+   display: grid;
+   grid-template-columns: 1fr 1fr;
+   gap: 1.6rem;
+   align-items: start;
+}
+
+.conci-rep-banda {
+   font-size: .8rem;
+   letter-spacing: .06em;
+}
+
+.conci-rep-p2 .conci-rep-subcabecera th {
+   background: var(--rep-vino);
+   font-size: .7rem;
+}
+
+.conci-rep-p2 .conci-rep-dia {
+   text-align: center;
+   font-variant-numeric: tabular-nums;
+}
+
+.conci-rep-p2-pie {
+   display: flex;
+   gap: 2.4rem;
+   flex-wrap: wrap;
+   margin-top: 1.1rem;
+}
+
+.conci-rep-maximos {
+   border-collapse: collapse;
+   font-size: .72rem;
+}
+
+.conci-rep-maximos td,
+.conci-rep-maximos th {
+   border: 1px solid #9fb3ab;
+   padding: .22rem .6rem;
+   white-space: nowrap;
+}
+
+.conci-rep-maximos .num {
+   text-align: center;
+   min-width: 76px;
+   font-variant-numeric: tabular-nums;
+}
+
+.conci-rep-etiqueta-vino {
+   background: var(--rep-vino);
+   color: #fff;
+   font-weight: 700;
+}
+
+.conci-rep-th-simple {
+   text-align: center;
+   font-weight: 700;
+   background: #fff;
+}
+
+.conci-rep-hueco {
+   border: 0 !important;
+}
+
+/* ── Subsecretaria: dinamicas a la izquierda, oficio a la derecha ──────── */
+
+.conci-rep-sub-rejilla {
+   display: grid;
+   grid-template-columns: minmax(330px, 420px) 1fr;
+   gap: 2.4rem;
+   align-items: start;
+}
+
+.conci-rep-filtro {
+   font-size: .7rem;
+   border: 1px solid #9fb3ab;
+   background: #eef3f7;
+   padding: .18rem .5rem;
+   margin: 0 0 .7rem;
+   display: inline-block;
+}
+
+.conci-rep-pivote {
+   width: 100%;
+   border-collapse: collapse;
+   font-size: .7rem;
+   margin-bottom: 1.4rem;
+}
+
+.conci-rep-pivote th,
+.conci-rep-pivote td {
+   border: 1px solid #b8c6d6;
+   padding: .18rem .45rem;
+   white-space: nowrap;
+}
+
+.conci-rep-pivote thead th {
+   background: #dbe5f1;
+   color: #1f3864;
+   font-weight: 700;
+   text-align: center;
+}
+
+.conci-rep-pivote .conci-rep-pivote-titulo {
+   text-align: left;
+   background: #eef3f7;
+}
+
+.conci-rep-pivote .num {
+   text-align: right;
+   font-variant-numeric: tabular-nums;
+}
+
+.conci-rep-pivote-total td {
+   font-weight: 700;
+   border-top: 2px solid #1f3864;
+}
+
+/* Cuando el mes pedido aun no tiene cierre y se entrega el anterior. */
+.conci-rep-aviso {
+   font-size: .72rem;
+   font-weight: 600;
+   color: #7a4a00;
+   background: #fff4d6;
+   border: 1px solid #f0c36d;
+   border-radius: 4px;
+   padding: .4rem .7rem;
+   margin: 0 0 1rem;
+}
+
+.conci-rep-sub-intro {
+   font-size: .76rem;
+   margin: 0 0 1rem;
+}
+
+.conci-rep-sub-apartado {
+   font-size: .74rem;
+   font-weight: 700;
+   margin: 1.1rem 0 .35rem;
+}
+
+.conci-rep-oficio {
+   border-collapse: collapse;
+   font-size: .7rem;
+   width: 100%;
+}
+
+.conci-rep-oficio th,
+.conci-rep-oficio td {
+   border: 1px solid #7f8c9b;
+   padding: .2rem .55rem;
+   white-space: nowrap;
+}
+
+.conci-rep-oficio thead th {
+   font-weight: 700;
+   text-align: center;
+   background: #fff;
+}
+
+.conci-rep-oficio .conci-rep-oficio-fecha {
+   color: #c00000;
+   letter-spacing: .02em;
+}
+
+.conci-rep-oficio .rot {
+   text-align: left;
+   font-weight: 600;
+}
+
+.conci-rep-oficio .num {
+   text-align: center;
+   min-width: 92px;
+   font-variant-numeric: tabular-nums;
+}
+
+/* El bloque del dia va resaltado, como en la hoja que se envia. */
+.conci-rep-oficio-hoy tbody td {
+   background: #e2efda;
+   font-weight: 600;
+}
+
+/* ── impresion ─────────────────────────────────────────────────────────── */
+
+@media print {
+   body.conci-rep-imprimiendo * {
+      visibility: hidden;
+   }
+
+   body.conci-rep-imprimiendo .conci-rep-hoja,
+   body.conci-rep-imprimiendo .conci-rep-hoja * {
+      visibility: visible;
+   }
+
+   body.conci-rep-imprimiendo .conci-rep-hoja {
+      position: absolute;
+      inset: 0 auto auto 0;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      box-shadow: none;
+   }
+
+   /* Sin esto el navegador tira los fondos y la hoja sale en blanco y negro. */
+   body.conci-rep-imprimiendo .conci-rep-hoja * {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+   }
+
+   /* Que no parta una tabla a media pagina. */
+   body.conci-rep-imprimiendo .conci-rep-plantilla,
+   body.conci-rep-imprimiendo .conci-rep-pivote,
+   body.conci-rep-imprimiendo .conci-rep-oficio {
+      page-break-inside: avoid;
+   }
+}
+
+/* La hoja es un documento en papel: no se repinta en modo oscuro. */
+body.dark-mode .conci-rep-hoja {
+   background: #fff;
+   color: #000;
+}
+
+
+/* ==========================================================================
+   Reportes > Carga
+   La Hoja 2 y la presentacion usan el template de la baraja original: sus
+   fondos, su encabezado, el logotipo de Defensa, la ilustracion de portada y
+   los logotipos de las aerolineas, recortados de sus propias tarjetas. Las
+   piezas viven en images/presentacion-carga/.
+
+     #691B32  vino       titulos
+     #FFF2CC  crema      recuadro de cada tarjeta
+     #385723  verde      marco de los totales
+     #F5EDE0  arena      fondo de las cifras acumuladas
+   ========================================================================== */
+.conci-rep-aclaracion {
+   font-size: .72rem;
+   font-style: italic;
+   margin: .9rem 0 0;
+}
+
+/* ── Hoja 2: tarjetas con logotipo, agrupadas como en la baraja ─────────── */
+
+.cc-grupo {
+   margin: 1.4rem 0 0;
+}
+
+.cc-grupo:first-of-type {
+   margin-top: .4rem;
+}
+
+.cc-grupo-titulo {
+   font-family: Patria, "Noto Sans", "Segoe UI", system-ui, sans-serif;
+   color: #691B32;
+   font-weight: 700;
+   font-size: .95rem;
+   margin: 0 0 .7rem;
+}
+
+.cc-tarjetas {
+   display: grid;
+   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+   gap: 1rem .9rem;
+}
+
+.cc-tarjeta {
+   display: flex;
+   flex-direction: column;
+   break-inside: avoid;
+}
+
+.cc-logo {
+   height: 58px;
+   display: flex;
+   align-items: flex-end;
+   justify-content: center;
+   margin-bottom: .25rem;
+}
+
+.cc-logo img {
+   max-width: 100%;
+   max-height: 100%;
+   object-fit: contain;
+}
+
+.cc-logo span {
+   font-weight: 700;
+   font-size: .75rem;
+   color: #691B32;
+   text-align: center;
+}
+
+.cc-cifras {
+   display: grid;
+   grid-template-columns: 1fr auto;
+   align-items: center;
+   gap: .15rem .6rem;
+   margin: 0;
+   padding: .4rem .6rem;
+   background: #FFF2CC;
+   font-family: "Noto Sans", "Segoe UI", system-ui, sans-serif;
+   font-size: .74rem;
+   font-weight: 700;
+   color: #000;
+}
+
+.cc-cifras dt {
+   font-weight: 700;
+}
+
+.cc-cifras dd {
+   margin: 0;
+   min-width: 5.5em;
+   text-align: center;
+   font-variant-numeric: tabular-nums;
+}
+
+/* ── La presentacion: cada diapositiva es un lienzo de 10 x 7.5 in ──────── */
+
+.cp-baraja {
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   gap: 1.4rem;
+}
+
+.cp-slide {
+   position: relative;
+   width: 100%;
+   max-width: 980px;
+   aspect-ratio: 4 / 3;
+   overflow: hidden;
+   background: #fff;
+   border: 1px solid #e3e8ef;
+   border-radius: 4px;
+   box-shadow: 0 2px 10px rgba(15, 23, 42, .08);
+   container-type: inline-size;
+   font-family: Patria, "Noto Sans", "Segoe UI", system-ui, sans-serif;
+   color: #691B32;
+   line-height: 1.15;
+}
+
+.cp-img,
+.cp-txt,
+.cp-abs,
+.cp-logo,
+.cp-card,
+.cp-marco,
+.cp-cifra {
+   position: absolute;
+}
+
+.cp-img {
+   display: block;
+   object-fit: fill;
+}
+
+.cp-txt {
+   display: flex;
+   flex-direction: column;
+   justify-content: center;
+}
+
+.cp-txt-in {
+   display: block;
+}
+
+/* La tabla de las 58 aerolineas llena la diapositiva: sin interlineado de sobra. */
+.cp-t3 td,
+.cp-t3 th {
+   line-height: 1;
+}
+
+.cp-logo {
+   display: flex;
+   align-items: flex-end;
+   justify-content: center;
+}
+
+.cp-logo img {
+   max-width: 100%;
+   max-height: 100%;
+   object-fit: contain;
+}
+
+/* Recuadro crema: la etiqueta a la izquierda y la cifra centrada en el 38 % derecho. */
+.cp-card {
+   display: grid;
+   grid-template-columns: 62% 38%;
+   align-content: center;
+   row-gap: .35em;
+   padding-left: 1%;
+   background: #FFF2CC;
+   font-family: "Noto Sans", "Segoe UI", system-ui, sans-serif;
+   font-weight: 700;
+   color: #000;
+   white-space: nowrap;
+}
+
+.cp-card b {
+   text-align: center;
+   font-variant-numeric: tabular-nums;
+}
+
+.cp-marco {
+   border: .25cqw solid #385723;
+   border-radius: 2.2cqw;
+   background: rgba(255, 255, 255, .55);
+}
+
+.cp-cifra {
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   border-radius: 1.6cqw;
+   background: #F5EDE0;
+   color: #235B4E;
+   font-weight: 700;
+   font-variant-numeric: tabular-nums;
+}
+
+.cp-tabla {
+   width: 100%;
+   border-collapse: collapse;
+   table-layout: fixed;
+   font-family: "Noto Sans", "Segoe UI", system-ui, sans-serif;
+   color: #000;
+   line-height: 1.2;
+}
+
+.cp-tabla th,
+.cp-tabla td {
+   padding: 0 .3em;
+   text-align: center;
+   white-space: nowrap;
+   overflow: hidden;
+}
+
+.cp-t1 td,
+.cp-t9 td,
+.cp-t19 td,
+.cp-t3 td,
+.cp-t3 th {
+   border: 1px solid #7f7f7f;
+}
+
+.cp-t9 .cp-etq {
+   color: #fff;
+   font-weight: 700;
+   text-align: left;
+}
+
+.cp-t9 .cp-acum td,
+.cp-t3 .cp-acum td {
+   font-weight: 700;
+}
+
+.cp-t19 tr:nth-child(2) th {
+   background: #002060;
+   color: #fff;
+}
+
+.cp-t19 td {
+   background: #DDEBF7;
+}
+
+.cp-t19 .cp-titulo-tabla {
+   font-weight: 400;
+   white-space: normal;
+}
+
+.cp-t3 th {
+   background: #E7E6E6;
+}
+
+.cp-t3 td {
+   padding: 0 .2em;
+}
+
+.cp-catalogo th,
+.cp-catalogo td {
+   border: 1px dotted #595959;
+}
+
+.cp-catalogo th {
+   background: #F2F2F2;
+}
+
+.cp-catalogo td[rowspan] {
+   white-space: normal;
+   background: #fff;
+}
+
+/* En papel: una diapositiva por hoja, apaisada, con sus colores. */
+@page diapositiva {
+   size: 11in 8.5in;
+   margin: .3in;
+}
+
+@media print {
+   body.conci-rep-imprimiendo .cp-baraja,
+   body.conci-rep-imprimiendo .cp-baraja * {
+      visibility: visible;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+   }
+
+   body.conci-rep-imprimiendo .cp-baraja {
+      position: absolute;
+      inset: 0 auto auto 0;
+      width: 100%;
+      gap: 0;
+   }
+
+   body.conci-rep-imprimiendo .cp-slide {
+      page: diapositiva;
+      break-after: page;
+      max-width: none;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+   }
+
+   body.conci-rep-imprimiendo .cp-slide:last-child {
+      break-after: auto;
+   }
+}
+
+/* La baraja es un documento: no se repinta en modo oscuro. */
+body.dark-mode .cp-slide,
+body.dark-mode .cc-cifras {
+   background-color: #fff;
+}
+
+/* ── Reportes: edición y marcatextos ──────────────────────────────────── */
+
+.conci-rep-edicion {
+   position: sticky;
+   top: 0;
+   z-index: 5;
+   display: flex;
+   align-items: center;
+   flex-wrap: wrap;
+   gap: .45rem;
+   margin-bottom: .75rem;
+   padding: .5rem .75rem;
+   border: 1px solid #f3d27a;
+   border-radius: .6rem;
+   background: #fff8e1;
+   box-shadow: 0 2px 6px rgba(0, 0, 0, .06);
+   font-size: .8rem;
+}
+
+.conci-rep-edicion-titulo {
+   font-weight: 700;
+   color: #8a5a00;
+}
+
+.conci-rep-edicion-sep {
+   align-self: stretch;
+   width: 1px;
+   background: rgba(0, 0, 0, .12);
+}
+
+.conci-rep-edicion-etiqueta {
+   font-weight: 600;
+   color: #6b7280;
+}
+
+.conci-rep-edicion .btn.conci-rep-herramienta.active {
+   box-shadow: 0 0 0 2px #1f2937;
+}
+
+.conci-rep-color {
+   width: 1.65rem;
+   height: 1.65rem;
+   padding: 0;
+   border: 2px solid rgba(0, 0, 0, .18);
+   border-radius: 50%;
+   background: var(--marca);
+   cursor: pointer;
+}
+
+.conci-rep-color.active {
+   box-shadow: 0 0 0 2px #fff, 0 0 0 4px #1f2937;
+}
+
+.conci-rep-edicion-aviso {
+   display: flex;
+   align-items: center;
+   flex-wrap: wrap;
+   gap: .5rem;
+   margin-bottom: .75rem;
+   padding: .45rem .75rem;
+   border: 1px solid #bfdbfe;
+   border-radius: .6rem;
+   background: #eff6ff;
+   color: #1e3a8a;
+   font-size: .8rem;
+}
+
+.conci-rep-edicion-aviso .btn {
+   font-size: .75rem;
+}
+
+.conci-rep-edicion-local {
+   font-weight: 600;
+   color: #b45309;
+}
+
+/* El color del marcatextos gana a los fondos de la hoja (aerolíneas, grupos,
+   recuadros crema) y sale igual en papel. */
+#conci-reportes-section [data-marca="rojo"] { background-color: #FF8A80 !important; }
+#conci-reportes-section [data-marca="verde"] { background-color: #9CE6A5 !important; }
+#conci-reportes-section [data-marca="amarillo"] { background-color: #FFF176 !important; }
+#conci-reportes-section [data-marca="azul"] { background-color: #8FD3FE !important; }
+#conci-reportes-section [data-marca="morado"] { background-color: #D6A8F5 !important; }
+
+#conci-reportes-section [data-marca] {
+   -webkit-print-color-adjust: exact;
+   print-color-adjust: exact;
+}
+
+/* Solo en pantalla: al imprimir no salen los contornos de edición. */
+@media screen {
+   .conci-rep-editando [contenteditable="true"] {
+      cursor: text;
+   }
+
+   .conci-rep-editando [contenteditable="true"]:hover {
+      outline: 1px dashed #f59e0b;
+      outline-offset: -1px;
+   }
+
+   .conci-rep-editando [contenteditable="true"]:focus {
+      outline: 2px solid #f59e0b;
+      outline-offset: -2px;
+   }
+
+   .conci-rep-pintando #conci-rep-hoja,
+   .conci-rep-pintando #conci-rep-hoja * {
+      cursor: cell !important;
+   }
+}
+
+body.dark-mode .conci-rep-edicion {
+   border-color: #806a2e;
+   background: #3b3220;
+   color: #f5e6c8;
+}
+
+body.dark-mode .conci-rep-edicion-titulo {
+   color: #f5c451;
+}
+
+body.dark-mode .conci-rep-edicion-aviso {
+   border-color: #334155;
+   background: #1e293b;
+   color: #cbd5e1;
+}
+
+/* ==========================================================================
+   Campos de fecha dd/mm/aaaa (js/fecha-ddmm.js): texto con mascara, boton de
+   calendario y el <input type="date"> nativo oculto como fuente de verdad.
+   ========================================================================== */
+.fecha-ddmm {
+   position: relative;
+   display: inline-flex;
+   align-items: stretch;
+   max-width: 100%;
+   vertical-align: middle;
+}
+
+.fecha-ddmm > .fecha-ddmm-texto {
+   flex: 1 1 auto;
+   width: 7.6rem;
+   min-width: 0;
+   border-top-right-radius: 0;
+   border-bottom-right-radius: 0;
+   font-variant-numeric: tabular-nums;
+}
+
+.fecha-ddmm-bloque {
+   display: flex;
+}
+
+.fecha-ddmm-ancho > .fecha-ddmm-texto,
+.fecha-ddmm-bloque > .fecha-ddmm-texto {
+   width: auto;
+}
+
+.fecha-ddmm > .fecha-ddmm-calendario {
+   flex: 0 0 auto;
+   display: grid;
+   place-items: center;
+   min-height: 0;
+   padding: 0 .5rem;
+   font-size: .8rem;
+   line-height: 1;
+   border: 1px solid #dee2e6;
+   border-left: 0;
+   border-radius: 0 .375rem .375rem 0;
+   background: #fff;
+   color: #64748b;
+   cursor: pointer;
+}
+
+.fecha-ddmm > .fecha-ddmm-calendario:hover:not(:disabled) {
+   background: #f1f5f9;
+   color: #0d6efd;
+}
+
+.fecha-ddmm > .fecha-ddmm-calendario:disabled {
+   cursor: default;
+   opacity: .6;
+}
+
+.fecha-ddmm-nativo {
+   position: absolute !important;
+   left: 0;
+   bottom: 0;
+   width: 1px !important;
+   min-width: 0 !important;
+   height: 1px !important;
+   margin: 0 !important;
+   padding: 0 !important;
+   border: 0 !important;
+   opacity: 0;
+   pointer-events: none;
+}
+
+body.dark-mode .fecha-ddmm > .fecha-ddmm-calendario {
+   border-color: rgba(255, 255, 255, .15);
+   background: #1e293b;
+   color: #cbd5e1;
+}
+
+/* ==========================================================================
+   Inicio · interfaz nueva: encabezado de un renglon con boton de usuario,
+   banner con bienvenida y tarjeta del periodo, tarjetas de cifras claras con
+   la foto a la derecha, accesos rapidos y subdirecciones como la referencia.
+   Solo cambia la presentacion: ids, secciones y permisos siguen igual.
+   ========================================================================== */
+/* Boton y menu de usuario (solo en el tablero; Estadistica conserva el suyo). */
+.hdr-user {
+   display: none;
+   position: relative;
+   flex: 0 0 auto;
+}
+
+body.navdeck-mode:not(.conci-estadistica-workspace) .hdr-user {
+   display: block;
+   margin-left: auto;
+}
+
+body.conci-estadistica-workspace .hdr-user {
+   display: none !important;
+}
+
+.hdr-user-btn {
+   display: flex;
+   align-items: center;
+   gap: .6rem;
+   max-width: 23rem;
+   padding: .3rem .75rem .3rem .35rem;
+   border: 1px solid rgba(14, 55, 99, .12);
+   border-radius: 12px;
+   background: #fff;
+   color: #1a2f55;
+   text-align: left;
+   cursor: pointer;
+   box-shadow: 0 4px 12px -10px rgba(15, 23, 42, .35);
+   transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.hdr-user-btn:hover,
+.hdr-user-btn.is-open {
+   border-color: #93b8f5;
+   background: #f8fafc;
+   box-shadow: 0 8px 18px -12px rgba(13, 110, 253, .45);
+}
+
+.hdr-user-icono {
+   display: grid;
+   place-items: center;
+   flex: 0 0 auto;
+   width: 2.15rem;
+   height: 2.15rem;
+   border-radius: 50%;
+   background: #e8f0fe;
+   color: #0d6efd;
+   font-size: .95rem;
+}
+
+body.dark-mode .hdr-user-btn {
+   border-color: rgba(255, 255, 255, .12);
+   background: rgba(15, 23, 42, .55);
+   color: #e2e8f0;
+}
+
+body.dark-mode .hdr-user-btn:hover,
+body.dark-mode .hdr-user-btn.is-open {
+   background: rgba(30, 41, 59, .9);
+}
+
+body.dark-mode .hdr-user-icono {
+   background: rgba(13, 110, 253, .2);
+   color: #93c5fd;
+}
+
+body.dark-mode .hdr-user-rol {
+   background: rgba(99, 102, 241, .22);
+   color: #c7d2fe;
+}
+
+body.dark-mode .hdr-user-correo,
+body.dark-mode .hdr-user-chev {
+   color: #94a3b8;
+}
+
+.hdr-user-texto {
+   display: flex;
+   flex-direction: column;
+   gap: .2rem;
+   min-width: 0;
+   line-height: 1.15;
+}
+
+.hdr-user-linea {
+   display: flex;
+   align-items: center;
+   gap: .4rem;
+   min-width: 0;
+}
+
+.hdr-user-nombre {
+   overflow: hidden;
+   font-size: .84rem;
+   font-weight: 700;
+   white-space: nowrap;
+   text-overflow: ellipsis;
+}
+
+.hdr-user-rol {
+   flex: 0 0 auto;
+   padding: .08rem .5rem;
+   border-radius: 999px;
+   background: #eef2ff;
+   color: #3730a3;
+   font-size: .62rem;
+   font-weight: 700;
+   letter-spacing: .03em;
+}
+
+.hdr-user-area {
+   display: inline-flex;
+   flex: 0 0 auto;
+   align-items: center;
+   gap: .3rem;
+   padding: .08rem .5rem;
+   border-radius: 999px;
+   background: color-mix(in srgb, var(--hdr-area, #16a34a) 20%, #fff);
+   color: color-mix(in srgb, var(--hdr-area, #16a34a) 75%, #000);
+   font-size: .6rem;
+   font-weight: 700;
+   white-space: nowrap;
+}
+
+.hdr-user-area[hidden],
+.hdr-user-rol[hidden],
+.hdr-user-correo[hidden] {
+   display: none;
+}
+
+.hdr-user-area-punto {
+   width: .42rem;
+   height: .42rem;
+   border-radius: 50%;
+   background: var(--hdr-area, #16a34a);
+}
+
+.hdr-user-correo {
+   overflow: hidden;
+   color: #64748b;
+   font-size: .64rem;
+   white-space: nowrap;
+   text-overflow: ellipsis;
+}
+
+.hdr-user-chev {
+   flex: 0 0 auto;
+   margin-left: .2rem;
+   color: #64748b;
+   font-size: .6rem;
+   transition: transform .15s ease;
+}
+
+.hdr-user-btn.is-open .hdr-user-chev {
+   transform: rotate(180deg);
+}
+
+.hdr-user-menu {
+   position: absolute;
+   top: calc(100% + .45rem);
+   right: 0;
+   z-index: 1450;
+   width: 17.5rem;
+   padding: .35rem;
+   border: 1px solid rgba(14, 55, 99, .12);
+   border-radius: 14px;
+   background: #fff;
+   box-shadow: 0 22px 44px -18px rgba(15, 23, 42, .45);
+   text-align: left;
+}
+
+.hdr-user-menu[hidden] {
+   display: none;
+}
+
+/* La lista de opciones siempre se ve dentro del menu; cada opcion conserva
+   su propio d-none, que es el que manejan los permisos. */
+.hdr-user-menu #si-user-dropdown,
+.hdr-user-menu #si-user-dropdown.d-none {
+   display: block !important;
+}
+
+.hdr-user-menu a.menu-item {
+   display: flex !important;
+   align-items: center;
+   gap: .7rem;
+   margin: 0 !important;
+   padding: .56rem .75rem !important;
+   border: 0 !important;
+   border-radius: 9px !important;
+   background: transparent !important;
+   color: #1f2d45 !important;
+   font-size: .85rem;
+   font-weight: 500;
+   text-decoration: none;
+}
+
+.hdr-user-menu a.menu-item.d-none {
+   display: none !important;
+}
+
+.hdr-user-menu a.menu-item:hover,
+.hdr-user-menu a.menu-item:focus-visible {
+   background: #f1f5f9 !important;
+}
+
+.hdr-user-menu a.menu-item > i,
+.hdr-user-menu a.menu-item .si-ico {
+   width: 1.1rem;
+   margin: 0 !important;
+   color: #64748b !important;
+   text-align: center;
+}
+
+.hdr-user-menu a.hdr-user-salir {
+   margin-top: .3rem !important;
+   border-top: 1px solid rgba(14, 55, 99, .1) !important;
+   border-radius: 0 0 9px 9px !important;
+   color: #dc2626 !important;
+   font-weight: 600;
+}
+
+.hdr-user-menu a.hdr-user-salir > i {
+   color: #dc2626 !important;
+}
+
+body.dark-mode .hdr-user-menu {
+   border-color: rgba(255, 255, 255, .1);
+   background: #1e293b;
+}
+
+body.dark-mode .hdr-user-menu a.menu-item {
+   color: #e2e8f0 !important;
+}
+
+body.dark-mode .hdr-user-menu a.menu-item:hover,
+body.dark-mode .hdr-user-menu a.menu-item:focus-visible {
+   background: rgba(255, 255, 255, .06) !important;
+}
+
+/* La tarjeta de usuario y Cerrar Sesion de la barra pasan al boton del encabezado. */
+body.navdeck-mode .sidebar.nav-deck > .si-user-card,
+body.navdeck-mode .sidebar.nav-deck > .si-link--logout {
+   display: none !important;
+}
+
+/* Encabezado de un renglon: logos, titulo, usuario, emblema, horas y acciones. */
+@media (min-width: 992px) {
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header {
+      margin-bottom: .75rem;
+      padding: .5rem 1.1rem !important;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) #flying-plane {
+      display: none;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-content {
+      flex-wrap: nowrap;
+      gap: .9rem;
+      min-height: 0;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-brand-block {
+      padding-right: .9rem;
+      border-right: 1px solid rgba(14, 55, 99, .14);
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .aifa-logo {
+      width: 78px;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content {
+      flex-direction: row;
+      align-items: center;
+      min-width: 0;
+      padding: 0;
+      text-align: left;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content .header-title-row {
+      justify-content: flex-start;
+      gap: .8rem;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content .header-title-row .main-title {
+      max-width: none;
+      margin: 0;
+      font-size: clamp(1.05rem, .55rem + .8vw, 1.45rem);
+      text-align: left;
+      white-space: nowrap;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-logo {
+      height: 38px;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content .header-subtext {
+      display: none;
+   }
+}
+
+/* En pantallas angostas el boton se reduce al icono. */
+@media (max-width: 991.98px) {
+   .hdr-user-texto,
+   .hdr-user-chev {
+      display: none;
+   }
+
+   .hdr-user-btn {
+      padding: .3rem;
+      border-radius: 50%;
+   }
+}
+
+/* Banner: foto a lo ancho, bienvenida, tarjeta del periodo translucida, fecha
+   abajo y el selector de vista arriba a la derecha. */
+body.navdeck-mode .ndw-hero {
+   align-items: stretch;
+   min-height: 15rem;
+   padding: 1.25rem 1.5rem;
+}
+
+/* La torre completa (images/banner.png, 1701 x 925): la foto se escala por
+   alto para que la torre quepa entera y centrada, con cielo arriba y su base
+   abajo; los lados se rellenan con la misma foto desenfocada y los bordes de
+   la nitida se funden con ese fondo. Sin zoom lento: sacaria la torre. */
+body.navdeck-mode .ndw-hero-media {
+   overflow: hidden;
+   background-image: none;
+   transform: none;
+   animation: none;
+}
+
+body.navdeck-mode .ndw-hero-media::before {
+   position: absolute;
+   inset: -40px;
+   background: var(--ndw-hero-img) center 42% / cover no-repeat;
+   content: "";
+   filter: blur(22px) saturate(1.15) brightness(.9);
+}
+
+.ndw-hero-foto {
+   display: none;
+}
+
+body.navdeck-mode .ndw-hero-foto {
+   position: absolute;
+   top: -75%;
+   left: 50%;
+   display: block;
+   height: 220%;
+   aspect-ratio: 1701 / 925;
+   background: var(--ndw-hero-img) center / cover no-repeat;
+   transform: translateX(-50%);
+   -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
+   mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
+}
+
+.ndw-hero-main {
+   position: relative;
+   z-index: 1;
+   display: flex;
+   flex-direction: column;
+   justify-content: space-between;
+   gap: .75rem;
+   min-width: 0;
+}
+
+.ndw-hero-welcome,
+.ndw-hero-fecha {
+   color: #fff;
+   font-size: .84rem;
+   font-weight: 600;
+   text-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+}
+
+.ndw-hero-fecha {
+   display: inline-flex;
+   align-items: center;
+   gap: .45rem;
+}
+
+/* Sin recuadro: el icono y el texto del periodo van sobre la foto. */
+.ndw-hero-card {
+   display: flex;
+   align-items: center;
+   gap: 1rem;
+   max-width: 44rem;
+}
+
+body.navdeck-mode .ndw-hero-card .ndw-hero-icon {
+   width: 3.5rem;
+   height: 3.5rem;
+   border-radius: 14px;
+   background: rgba(255, 255, 255, .16);
+   color: #fff;
+   font-size: 1.45rem;
+   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .45), 0 6px 16px rgba(0, 0, 0, .25);
+}
+
+body.navdeck-mode .ndw-hero-card .ndw-hero-title {
+   color: #fff !important;
+   text-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+}
+
+body.navdeck-mode .ndw-hero-card .ndw-hero-kicker,
+body.navdeck-mode .ndw-hero-card .ndw-tap-hint {
+   color: rgba(255, 255, 255, .9) !important;
+   text-shadow: 0 1px 3px rgba(0, 0, 0, .45);
+}
+
+/* Sobre la foto, las pastillas del periodo y el selector de mes y año
+   necesitan fondo propio para leerse en tema claro. */
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-prelim-banner-note,
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-prelim-last-date,
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-month-stepper,
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-period-chip {
+   background: rgba(255, 255, 255, .92) !important;
+   text-shadow: none;
+   box-shadow: 0 4px 12px -8px rgba(15, 23, 42, .55);
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-period-chip.is-active {
+   background: #0d6efd !important;
+   color: #fff !important;
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-hero-media::after {
+   background: linear-gradient(95deg, rgba(8, 20, 45, .62) 0%, rgba(8, 20, 45, .3) 36%, rgba(8, 20, 45, 0) 56%);
+}
+
+/* En oscuro, el velo tambien se queda del lado del texto: la torre se ve,
+   apenas atenuada para no deslumbrar. */
+body.navdeck-mode.dark-mode .ndw-hero-media::after {
+   background: linear-gradient(95deg, rgba(8, 14, 28, .82) 0%, rgba(8, 14, 28, .5) 36%, rgba(8, 14, 28, .22) 58%, rgba(8, 14, 28, .32) 100%);
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-view-toggle {
+   border-color: rgba(255, 255, 255, .65);
+   background: rgba(255, 255, 255, .75);
+   box-shadow: 0 10px 26px -16px rgba(15, 23, 42, .55);
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-view-btn {
+   color: #475569;
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-view-btn:hover {
+   background: rgba(13, 110, 253, .08);
+   color: #0d6efd;
+}
+
+body.navdeck-mode .ndw-view-btn.is-active,
+body.navdeck-mode:not(.dark-mode) .ndw-view-btn.is-active {
+   background: #0d6efd;
+   color: #fff;
+}
+
+/* Tarjetas de cifras: claras, con icono, cifra y la foto desvanecida a la derecha. */
+body.navdeck-mode .ndw-card {
+   flex-direction: row;
+   align-items: center;
+   justify-content: flex-start;
+   gap: .75rem;
+   min-height: 5.6rem;
+   padding: .75rem .9rem;
+   border: 1px solid rgba(20, 33, 61, .1);
+   border-bottom: 3px solid var(--ndw-accent, #3b82f6);
+   background-color: #fff;
+   background-image: linear-gradient(90deg, #fff 0%, #fff 46%, rgba(255, 255, 255, .78) 66%, rgba(255, 255, 255, .15) 100%), var(--ndw-img) !important;
+   background-position: center, right center !important;
+   background-size: cover !important;
+   color: #0f172a;
+   box-shadow: 0 8px 20px -14px rgba(15, 23, 42, .4);
+}
+
+body.navdeck-mode .ndw-card:hover {
+   box-shadow: 0 14px 26px -14px rgba(15, 23, 42, .45);
+}
+
+body.navdeck-mode .ndw-card::after {
+   position: absolute;
+   top: .5rem;
+   right: .6rem;
+   color: #94a3b8;
+   content: "\f054";
+   font-family: "Font Awesome 6 Free";
+   font-size: .62rem;
+   font-weight: 900;
+}
+
+body.navdeck-mode .ndw-card-overlay,
+body.navdeck-mode .ndw-card-cta {
+   display: none;
+}
+
+body.navdeck-mode .ndw-card-icon {
+   position: static;
+   flex: 0 0 auto;
+   width: 2.5rem;
+   height: 2.5rem;
+   border-radius: .8rem;
+   font-size: 1.05rem;
+   box-shadow: 0 8px 16px -10px var(--ndw-accent, #3b82f6);
+}
+
+body.navdeck-mode .ndw-card-tag {
+   color: #64748b;
+}
+
+body.navdeck-mode .ndw-card-value {
+   color: #0f172a;
+   font-size: 1.4rem;
+   text-shadow: none;
+}
+
+body.navdeck-mode .ndw-card-sub {
+   color: #64748b;
+}
+
+body.navdeck-mode.dark-mode .ndw-card {
+   border-color: rgba(255, 255, 255, .08);
+   background-color: #1e293b;
+   background-image: linear-gradient(90deg, #1e293b 0%, #1e293b 40%, rgba(30, 41, 59, .65) 68%, rgba(30, 41, 59, .15) 100%), var(--ndw-img) !important;
+   color: #e2e8f0;
+}
+
+body.navdeck-mode.dark-mode .ndw-card-value {
+   color: #f8fafc;
+}
+
+body.navdeck-mode.dark-mode .ndw-card-tag,
+body.navdeck-mode.dark-mode .ndw-card-sub {
+   color: #94a3b8;
+}
+
+/* Accesos rapidos: tarjetas blancas con icono de color. */
+body.navdeck-mode:not(.dark-mode) .si-nav > a.si-link.si-quick {
+   border: 1px solid rgba(20, 33, 61, .1);
+   background: #fff !important;
+   color: #1f2d45 !important;
+   box-shadow: 0 6px 16px -12px rgba(15, 23, 42, .4);
+}
+
+body.navdeck-mode:not(.dark-mode) .si-nav > a.si-link.si-quick:hover {
+   border-color: var(--qc, #60a5fa);
+   background: color-mix(in srgb, var(--qc, #60a5fa) 10%, #fff) !important;
+   color: #1f2d45 !important;
+}
+
+/* Subdirecciones: encabezado de color en un renglon (icono y nombre) y
+   gerencias como renglones blancos con su flecha. */
+body.navdeck-mode:not(.dark-mode) .si-group--sub {
+   background: #fff;
+}
+
+body.navdeck-mode .sidebar.nav-deck .si-grp-btn--sub {
+   flex-direction: row !important;
+   align-items: center !important;
+   justify-content: flex-start;
+   gap: .75rem;
+   margin: 0 0 .6rem !important;
+   padding: .8rem 1rem !important;
+   text-align: left;
+}
+
+body.navdeck-mode .sidebar.nav-deck .si-grp-btn--sub .si-grp-lbl::before {
+   content: none !important;
+}
+
+body.navdeck-mode .sidebar.nav-deck .si-grp-btn--sub .si-sub-ico {
+   width: 2.6rem;
+   height: 2.6rem;
+   margin: 0;
+   border-radius: .8rem;
+   font-size: 1.2rem;
+}
+
+body.navdeck-mode .sidebar.nav-deck .si-grp-btn--sub .si-grp-lbl {
+   font-size: 1rem;
+}
+
+body.navdeck-mode:not(.dark-mode) .si-group--ger {
+   border-color: rgba(20, 33, 61, .1);
+   background: #fff;
+   box-shadow: 0 3px 10px -8px rgba(15, 23, 42, .35);
+}
+
+body.navdeck-mode:not(.dark-mode) .si-group--ger:hover {
+   background: color-mix(in srgb, var(--sub-c, #60a5fa) 8%, #fff);
+}
+
+/* La flecha apunta a la derecha cerrada y hacia abajo al desplegar. */
+body.navdeck-mode .sidebar.nav-deck .si-grp-btn--ger > .si-chev {
+   transition: transform .15s ease;
+}
+
+body.navdeck-mode .sidebar.nav-deck .si-grp-btn--ger.collapsed > .si-chev {
+   transform: rotate(-90deg);
+}
+
+/* El tema claro anterior pintaba el texto de las tarjetas de blanco con
+   !important (para leerse sobre la foto); ahora va sobre fondo claro. */
+body.navdeck-mode:not(.dark-mode) .ndw-card-tag,
+body.navdeck-mode:not(.dark-mode) .ndw-card-sub {
+   color: #64748b !important;
+   opacity: 1;
+   text-shadow: none;
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-card-value {
+   color: #0f172a !important;
+   text-shadow: none;
+}
+
+/* Con el menu de usuario abierto, el encabezado queda por encima de la franja
+   de agenda, que lleva z-index 1310 para que su globo gane al encabezado. */
+.header.hdr-menu-abierto {
+   z-index: 1320;
+}
+
+/* Si el renglon no alcanza, el titulo cede con puntos suspensivos en vez de
+   encimarse con el boton de usuario o las horas. */
+@media (min-width: 992px) {
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content .header-title-row {
+      min-width: 0;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content .header-title-row .main-title {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+   }
+}
+
+@media (min-width: 992px) and (max-width: 1499.98px) {
+   body.navdeck-mode:not(.conci-estadistica-workspace) .hdr-user-correo {
+      display: none;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) #btn-global-refresh > span {
+      display: none !important;
+   }
+
+   body.navdeck-mode:not(.conci-estadistica-workspace) .header-center-content .header-title-row .main-title {
+      font-size: 1.05rem;
+   }
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    PASADA MÓVIL — TELÉFONOS
    Las medidas de tableta (≥ 576 px) ya estaban resueltas y no se tocan: todo
@@ -21375,3 +24974,10 @@ body.conci-manifest-workspace #navdeck-back {
    border-top: 1px solid #e9eef6;
    padding: .75rem 1.1rem;
 }
+/* Selector del día exacto para las cifras de manifiestos. */
+.ndw-current-picker { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-top: 12px; }
+.ndw-current-picker label { display: flex; flex-direction: column; gap: 4px; color: #fff; font-weight: 600; }
+.ndw-current-picker input, .ndw-current-picker button { min-height: 44px; border-radius: 12px; padding: 8px 12px; border: 1px solid #cbd5e1; }
+.ndw-current-picker input { background: #fff; color: #172b4d; color-scheme: light; max-width: 100%; }
+.ndw-current-picker button { background: #0d6efd; color: #fff; font-weight: 600; }
+.ndw-current-picker button:focus-visible, .ndw-current-picker input:focus-visible { outline: 3px solid #fbbf24; outline-offset: 3px; }

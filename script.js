@@ -2218,6 +2218,15 @@ document.addEventListener('click', (event) => {
     handleDirectorioDocClick(trigger);
 });
 
+// Páginas que viven fuera de su módulo pero forman parte de él. Reportes se
+// abre desde Conciliación Manifiestos: quien tiene Conciliación la ve, aunque
+// no sea un módulo que el administrador asigne por separado.
+const SECCIONES_DE_MODULO = { 'conci-reportes': 'conciliacion' };
+
+function permisoDeSeccion(key) {
+    return SECCIONES_DE_MODULO[key] || key;
+}
+
 function normalizeSectionKey(key) {
     return (key || '').toString().trim();
 }
@@ -2257,7 +2266,7 @@ function hideEmptySidebarGroups() {
 function isSectionAllowed(sectionKey) {
     if (!sectionKey) return true;
     if (!Array.isArray(userSectionWhitelist) || !userSectionWhitelist.length) return true;
-    return userSectionWhitelist.includes(sectionKey);
+    return userSectionWhitelist.includes(permisoDeSeccion(sectionKey));
 }
 
 function getDefaultAllowedSection() {
@@ -2316,7 +2325,7 @@ function applySectionPermissions(userName) {
             }
         });
         document.querySelectorAll('.content-section').forEach(sectionEl => {
-            const key = (sectionEl.id || '').replace(/-section$/, '');
+            const key = permisoDeSeccion((sectionEl.id || '').replace(/-section$/, ''));
             if (key !== 'colaboradores' && !authenticatedCoreSections.includes(key)) {
                 sectionEl.classList.add('perm-hidden');
                 sectionEl.classList.remove('active');
@@ -2381,7 +2390,7 @@ function applySectionPermissions(userName) {
             }
         });
         document.querySelectorAll('.content-section').forEach((sectionEl) => {
-            const key = normalizeSectionKey((sectionEl.id || '').replace(/-section$/, ''));
+            const key = permisoDeSeccion(normalizeSectionKey((sectionEl.id || '').replace(/-section$/, '')));
             if (!userSectionWhitelist.includes(key)) {
                 sectionEl.classList.add('perm-hidden');
                 sectionEl.classList.remove('active');
@@ -2476,7 +2485,7 @@ function applySectionPermissions(userName) {
         // desajuste "contenido = Operaciones, pero la barra dice #colaboradores".
         const hashKey = (location.hash || '').replace(/^#/, '');
         const activeKey = activeSection
-            ? (activeSection.id || '').replace(/-section$/, '')
+            ? permisoDeSeccion((activeSection.id || '').replace(/-section$/, ''))
             : (getDefaultAllowedSection() || 'operaciones-totales');
         // En el lanzador no hay sección activa contra la que normalizar, y el
         // hash ya se limpió al salir del módulo (exitSectionToMenu). Escribir
@@ -7945,6 +7954,13 @@ function initializeGsoQuickLinks() {
     }
 }
 
+// Fecha corta de la ficha "Hoy" del encabezado compacto: "Vie 11 Sep 2026".
+function formatHeaderHoy(fecha) {
+    const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return `${DIAS[fecha.getDay()]} ${String(fecha.getDate()).padStart(2, '0')} ${MESES[fecha.getMonth()]} ${fecha.getFullYear()}`;
+}
+
 // Fecha en la barra superior
 function updateDate() {
     try {
@@ -7956,6 +7972,8 @@ function updateDate() {
         // Capitalizar primera letra
         txt = txt.charAt(0).toUpperCase() + txt.slice(1);
         el.textContent = txt;
+        const hoy = document.getElementById('header-hoy-fecha');
+        if (hoy) hoy.textContent = formatHeaderHoy(now);
     } catch (e) { /* ignore */ }
 }
 
@@ -11667,6 +11685,42 @@ function ndwGetAnnualVal(cat, metric, yearStr) {
     return total;
 }
 
+async function ndwLoadCurrentManifestDay(dateKey, force = false) {
+    const cache = window._ndwCurrentManifestDays ||= {};
+    if (cache[dateKey]?.status === 'loading' || (!force && cache[dateKey])) return;
+    cache[dateKey] = { status: 'loading' };
+    try {
+        const client = window.supabaseClient || (window.ensureSupabaseClient && await window.ensureSupabaseClient());
+        if (!client) throw new Error('No hay conexión con manifiestos');
+        const { error: refreshError } = await client.rpc('refrescar_informe_estadistico', { p_forzar: false });
+        // Antes de la migración 028 la vista es en vivo y no existe este RPC.
+        if (refreshError && !['PGRST202', '42883'].includes(refreshError.code)) throw refreshError;
+        const totals = { comercial: { operaciones: 0, pasajeros: 0 }, carga: { operaciones: 0, toneladas: 0 } };
+        let count = 0;
+        for (let offset = 0; ; offset += 1000) {
+            const { data, error } = await client.from('v_informe_manifiestos_normalizado')
+                .select('fecha_operacion,es_carga,pax_total,carga_kg')
+                .eq('fecha_operacion', dateKey).eq('capturado', true)
+                .order('manifiesto_id', { ascending: true }).range(offset, offset + 999);
+            if (error) throw error;
+            const rows = data || [];
+            rows.forEach(row => {
+                const category = row.es_carga ? 'carga' : 'comercial';
+                totals[category].operaciones += 1;
+                if (category === 'carga') totals.carga.toneladas += (Number(row.carga_kg) || 0) / 1000;
+                else totals.comercial.pasajeros += Number(row.pax_total) || 0;
+            });
+            count += rows.length;
+            if (rows.length < 1000) break;
+        }
+        cache[dateKey] = { status: 'ready', totals, count };
+    } catch (error) {
+        cache[dateKey] = { status: 'error' };
+        console.warn('[Inicio Actual] No se pudieron consultar los manifiestos:', error);
+    }
+    renderNavdeckWeeklyBanner();
+}
+
 function renderNavdeckWeeklyBanner() {
     const container = document.getElementById('navdeck-weekly-banner');
     if (!container) return;
@@ -11703,8 +11757,14 @@ function renderNavdeckWeeklyBanner() {
 
         /* ── compute preliminary / latest-data note (shared across all modes) ── */
         const _now = new Date();
+        const currentDateKey = NDW_VIEW_STATE.date || `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+        const currentDate = parseIsoDay(currentDateKey);
+        const currentManifest = window._ndwCurrentManifestDays?.[currentDateKey];
+        if (mode === 'current' && !currentManifest) ndwLoadCurrentManifestDay(currentDateKey);
         const _MONTH_NAMES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
         const _DOW_ES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+        const _capitalizar = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+        const _hoyTexto = `${_capitalizar(_DOW_ES[_now.getDay()])}, ${_now.getDate()} de ${_MONTH_NAMES_ES[_now.getMonth()]} de ${_now.getFullYear()}`;
         const _allCapDays = [];
         const _seenCapFechas = new Set();
         const _weekSrcsShared = [
@@ -11750,7 +11810,19 @@ function renderNavdeckWeeklyBanner() {
         /* ── hero content per mode ── */
         let heroIcon, heroKicker, heroTitle, periodPickerHtml = '';
 
-        if (mode === 'weekly') {
+        if (mode === 'current') {
+            /* Actual: manifiestos de la fecha seleccionada, hoy por defecto. */
+            heroIcon   = 'fas fa-bolt';
+            heroKicker = 'Cifras del día';
+            heroTitle = `${_capitalizar(_DOW_ES[currentDate.getDay()])} ${currentDate.getDate()} de ${_MONTH_NAMES_ES[currentDate.getMonth()]} de ${currentDate.getFullYear()}`;
+            periodPickerHtml = `
+                <div class="ndw-current-picker"><label>Fecha de manifiestos <input type="date" data-ndw-date value="${currentDateKey}"></label>
+                <button type="button" data-ndw-refresh>Actualizar cifras</button></div>
+                <p class="ndw-tap-hint" aria-live="polite">${currentManifest?.status === 'ready'
+                    ? (currentManifest.count ? 'Manifiestos capturados de la fecha seleccionada · Cifras preliminares' : 'Sin manifiestos capturados para esta fecha')
+                    : currentManifest?.status === 'error' ? 'No fue posible consultar los manifiestos. Intenta actualizar.' : 'Consultando manifiestos…'}</p>
+                <p class="ndw-tap-hint">Aviación General: captura diaria de la misma fecha; 0 si no hay captura.</p>`;
+        } else if (mode === 'weekly') {
             const rangeLabel = (typeof formatWeekLabel === 'function')
                 ? formatWeekLabel(weekly)
                 : (weekly?.rango?.descripcion || 'Semana reciente');
@@ -11819,9 +11891,15 @@ function renderNavdeckWeeklyBanner() {
                 ${_prelimHtml}`;
         }
 
+        /* ── foto del banner: va según la hora local (ver ndwHeroImgPorHora) ── */
+        const heroImg = ndwHeroImgPorHora();
+
         /* ── view toggle ── */
         const viewToggleHtml = `
             <div class="ndw-view-toggle" role="group" aria-label="Seleccionar vista">
+                <button type="button" class="ndw-view-btn${mode === 'current' ? ' is-active' : ''}" data-ndw-mode="current" aria-pressed="${mode === 'current'}">
+                    <i class="fas fa-bolt" aria-hidden="true"></i>Actual
+                </button>
                 <button type="button" class="ndw-view-btn${mode === 'weekly'  ? ' is-active' : ''}" data-ndw-mode="weekly"  aria-pressed="${mode === 'weekly'}">
                     <i class="fas fa-calendar-week" aria-hidden="true"></i>Semanal
                 </button>
@@ -11837,8 +11915,15 @@ function renderNavdeckWeeklyBanner() {
             </div>`;
 
         /* ── card values per mode ── */
-        const subSuffix = { weekly: 'semana', monthly: 'mes', annual: 'año', historic: 'histórico' }[mode] || 'histórico';
+        const subSuffix = { current: 'del día', weekly: 'semana', monthly: 'mes', annual: 'año', historic: 'histórico' }[mode] || 'histórico';
         const getCardVal = (def) => {
+            if (mode === 'current') {
+                if (def.cat !== 'general') return currentManifest?.status === 'ready' ? currentManifest.totals[def.cat]?.[def.metric] || 0 : null;
+                const dia = _weekSrcsShared
+                    .map((wk) => (Array.isArray(wk?.dias) ? wk.dias.find((d) => d?.fecha === currentDateKey) : null))
+                    .find(Boolean);
+                return dia ? getWeeklyValue(dia, def.cat, def.metric) : 0;
+            }
             if (mode === 'weekly')  return days.reduce((acc, d) => acc + getWeeklyValue(d, def.cat, def.metric), 0);
             if (mode === 'monthly') return ndwGetMonthlyVal(def.cat, def.metric, selYear, selMonthIdx);
             if (mode === 'annual')  return ndwGetAnnualVal(def.cat, def.metric, selYear);
@@ -11851,36 +11936,57 @@ function renderNavdeckWeeklyBanner() {
             const sub   = def.sub.replace('semana', subSuffix);
             return `
             <button type="button" class="ndw-card ndw-card--${def.cat}" data-ndw-idx="${idx}"
-                    style="--ndw-accent:${def.accent};background-image:url('${def.img}');background-position:${def.bgPos || 'center center'};"
+                    style="--ndw-accent:${def.accent};--ndw-img:url('${def.img}');background-image:url('${def.img}');background-position:${def.bgPos || 'center center'};"
                     aria-label="${escapeHTML(def.label)} — ${escapeHTML(sub)}">
                 <span class="ndw-card-overlay" aria-hidden="true"></span>
                 <span class="ndw-card-icon"><i class="${def.icon}" aria-hidden="true"></i></span>
                 <span class="ndw-card-body">
                     <span class="ndw-card-tag">${escapeHTML(def.label)}</span>
-                    <span class="ndw-card-value">${ndwFormatValue(total, def.metric)}</span>
+                    <span class="ndw-card-value">${total === null ? '—' : ndwFormatValue(total, def.metric)}</span>
                     <span class="ndw-card-sub">${escapeHTML(sub)}</span>
                 </span>
-                <span class="ndw-card-cta" aria-hidden="true"><i class="fas fa-${mode === 'weekly' ? 'chart-column' : 'chart-line'}"></i> ${mode === 'weekly' ? 'Ver detalle' : 'Ver análisis'}</span>
+                <span class="ndw-card-cta" aria-hidden="true"><i class="fas fa-${(mode === 'weekly' || mode === 'current') ? 'chart-column' : 'chart-line'}"></i> ${(mode === 'weekly' || mode === 'current') ? 'Ver detalle' : 'Ver análisis'}</span>
             </button>`;
         }).join('');
 
         container.innerHTML = `
-            <div class="ndw-hero ndw-hero--${mode}" style="--ndw-hero-img:url('images/torre.jpg')">
-                <div class="ndw-hero-media" aria-hidden="true"></div>
-                <span class="ndw-hero-icon" aria-hidden="true"><i class="${heroIcon}"></i></span>
-                <div class="ndw-hero-text">
-                    <span class="ndw-hero-kicker">${escapeHTML(heroKicker)}</span>
-                    <span class="ndw-hero-title">${escapeHTML(heroTitle)}</span>
-                    ${periodPickerHtml}
+            <div class="ndw-hero ndw-hero--${mode}" style="--ndw-hero-img:url('${heroImg}')" data-ndw-hero-img="${heroImg}">
+                <div class="ndw-hero-media" aria-hidden="true"><span class="ndw-hero-foto"></span></div>
+                <div class="ndw-hero-main">
+                    <span class="ndw-hero-welcome">Bienvenido al sistema</span>
+                    <div class="ndw-hero-card">
+                        <span class="ndw-hero-icon" aria-hidden="true"><i class="${heroIcon}"></i></span>
+                        <div class="ndw-hero-text">
+                            <span class="ndw-hero-kicker">${escapeHTML(heroKicker)}</span>
+                            <span class="ndw-hero-title">${escapeHTML(heroTitle)}</span>
+                            ${periodPickerHtml}
+                        </div>
+                    </div>
+                    <span class="ndw-hero-fecha"><i class="far fa-calendar" aria-hidden="true"></i>${escapeHTML(_hoyTexto)}</span>
                 </div>
                 ${viewToggleHtml}
             </div>
             <div class="ndw-cards">${cardsHtml}</div>
         `;
 
+        // La foto sigue al reloj: cada segundo revisa si la hora cruzó un horario.
+        if (!container._ndwFotoReloj) {
+            container._ndwFotoReloj = setInterval(ndwActualizarFotoPorHora, 1000);
+        }
+
         if (!container._ndwWired) {
             container._ndwWired = true;
+            container.addEventListener('change', (ev) => {
+                if (!ev.target.matches('[data-ndw-date]') || !ev.target.value) return;
+                NDW_VIEW_STATE.date = ev.target.value;
+                renderNavdeckWeeklyBanner();
+            });
             container.addEventListener('click', (ev) => {
+                if (ev.target.closest('[data-ndw-refresh]')) {
+                    ndwLoadCurrentManifestDay(container.querySelector('[data-ndw-date]').value, true);
+                    renderNavdeckWeeklyBanner();
+                    return;
+                }
                 const modeBtn = ev.target.closest('[data-ndw-mode]');
                 if (modeBtn) {
                     NDW_VIEW_STATE.mode = modeBtn.getAttribute('data-ndw-mode');
@@ -11921,7 +12027,7 @@ function renderNavdeckWeeklyBanner() {
                 if (!card) return;
                 const idx = Number(card.getAttribute('data-ndw-idx'));
                 if (!Number.isFinite(idx)) return;
-                if (NDW_VIEW_STATE.mode === 'weekly')       openNavdeckWeeklyDetail(idx);
+                if (NDW_VIEW_STATE.mode === 'weekly' || NDW_VIEW_STATE.mode === 'current') openNavdeckWeeklyDetail(idx);
                 else if (NDW_VIEW_STATE.mode === 'monthly') openNavdeckMonthlyDetail(idx);
                 else                                        openNavdeckAnnualDetail(idx);
             });
@@ -11929,14 +12035,50 @@ function renderNavdeckWeeklyBanner() {
     } catch (e) { /* ignore */ }
 }
 
+/* Foto del banner de inicio según la hora local que muestra el reloj del
+   encabezado (la del navegador):
+     06:00:01 a 15:00:00  images/banner4.png  (día)
+     15:00:01 a 17:00:00  images/banner.png   (tarde)
+     17:00:01 a 20:00:00  images/banner2.png  (anochecer)
+     20:00:01 a 06:00:00  images/banner3.png  (noche) */
+function ndwHeroImgPorHora(fecha) {
+    const d = fecha || new Date();
+    const s = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+    if (s > 6 * 3600 && s <= 15 * 3600) return 'images/banner4.png';
+    if (s > 15 * 3600 && s <= 17 * 3600) return 'images/banner.png';
+    if (s > 17 * 3600 && s <= 20 * 3600) return 'images/banner2.png';
+    return 'images/banner3.png';
+}
+
+/* Cuando la hora cruza uno de esos horarios, cambia la foto del banner ya
+   pintado (sin volver a pintarlo). */
+function ndwActualizarFotoPorHora() {
+    const hero = document.querySelector('#navdeck-weekly-banner .ndw-hero');
+    if (!hero) return;
+    const img = ndwHeroImgPorHora();
+    if (hero.getAttribute('data-ndw-hero-img') === img) return;
+    hero.setAttribute('data-ndw-hero-img', img);
+    hero.setAttribute('style', `--ndw-hero-img:url('${img}')`);
+}
+
 function openNavdeckWeeklyDetail(idx) {
     const def = NDW_CARD_DEFS[idx];
     if (!def) return;
     const weekly = (typeof getActiveWeeklyDataset === 'function') ? getActiveWeeklyDataset() : null;
-    const days = Array.isArray(weekly?.dias) ? weekly.dias : [];
+    let days = Array.isArray(weekly?.dias) ? weekly.dias : [];
+    const isCurrent = NDW_VIEW_STATE.mode === 'current';
+    if (isCurrent) {
+        const dateKey = document.querySelector('[data-ndw-date]')?.value;
+        const manifest = window._ndwCurrentManifestDays?.[dateKey];
+        if (def.cat !== 'general' && manifest?.status !== 'ready') return;
+        const sources = [...(typeof WEEKLY_OPERATIONS_DATASETS !== 'undefined' ? WEEKLY_OPERATIONS_DATASETS : []), staticData.operacionesSemanaActual];
+        const generalDay = sources.flatMap(w => w?.dias || []).find(d => d.fecha === dateKey);
+        days = [{ fecha: dateKey, label: dateKey, comercial: manifest?.totals?.comercial,
+            carga: manifest?.totals?.carga, general: generalDay?.general || {} }];
+    }
     if (!days.length) return;
 
-    const rangeLabel = (typeof formatWeekLabel === 'function') ? formatWeekLabel(weekly) : 'Semana reciente';
+    const rangeLabel = isCurrent ? days[0].fecha : (typeof formatWeekLabel === 'function') ? formatWeekLabel(weekly) : 'Semana reciente';
     const rows = days.map(d => ({
         label: d.labelFull || d.label || d.fecha || '',
         value: getWeeklyValue(d, def.cat, def.metric)
@@ -12007,7 +12149,7 @@ function openNavdeckWeeklyDetail(idx) {
                 </div>
             </div>
             <div class="ndw-modal-kpis">
-                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(total, def.metric)}</span><span class="ndw-kpi-lbl">Total semana</span></div>
+                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(total, def.metric)}</span><span class="ndw-kpi-lbl">${isCurrent ? 'Total del día' : 'Total semana'}</span></div>
                 <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(avg, def.metric)}</span><span class="ndw-kpi-lbl">Promedio diario</span></div>
                 <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(peak?.value || 0, def.metric)}</span><span class="ndw-kpi-lbl">Día pico</span></div>
             </div>
@@ -17591,6 +17733,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnConciSaveAll = document.getElementById('btn-conci-save-all');
     const btnConciRewriteAll = document.getElementById('btn-conci-rewrite-all');
     const btnConciClearFilters = document.getElementById('btn-conci-clear-filters');
+    const btnConciPendientesAerolinea = document.getElementById('btn-conci-pendientes-aerolinea');
     if (btnConciRefresh) btnConciRefresh.addEventListener('click', () => loadConciliacionManifiestos({ forceRefresh: true }));
     if (btnConciAdd) btnConciAdd.addEventListener('click', _conciAddBlankRow);
     // El autoguardado por celda dispara un insert/update a Supabase sin esperar
@@ -17643,6 +17786,10 @@ document.addEventListener('DOMContentLoaded', () => {
         _conciReescribirTodasLasFilas();
     });
     if (btnConciClearFilters) btnConciClearFilters.addEventListener('click', _conciClearAllTableFilters);
+    if (btnConciPendientesAerolinea) btnConciPendientesAerolinea.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        _conciShowPendientesPorAerolinea(btnConciPendientesAerolinea);
+    });
     // Formato dd/mm/aaaa fijo en los filtros de fecha, tanto de Manifiestos
     // como de Itinerario de Vuelos, sin depender del idioma del navegador.
     _conciInitCamposFecha(document);
@@ -19444,7 +19591,7 @@ async function _conciFetchLatestManifestDate(client, year) {
 // date. When the table has no numeric "Día" column the day is filtered in JS by
 // parsing the Fecha column. Falls back to a full fetch only when no date columns
 // can be detected at all.
-async function _conciFetchManifestsForDate(client, year, month, day, dayEnd) {
+async function _conciFetchManifestsForDate(client, year, month, day, dayEnd, ventana) {
     const info = await _conciGetManifestColInfo(client);
     if (!info || (!info.portalDateKey && !info.mKey && !info.dKey && !info.fKey)) {
         return _concifetchAllRows(client, 'Conciliación Manifiestos', {
@@ -19468,7 +19615,13 @@ async function _conciFetchManifestsForDate(client, year, month, day, dayEnd) {
         // acota luego por día programado U operado, igual que filteredVuelos.
         let startIso;
         let endIso;
-        if (day) {
+        if (ventana) {
+            // La ventana manda tal cual (±1 día por los cruces de medianoche):
+            // así un rango que cambia de mes —del 28 de septiembre al 3 de
+            // octubre— se pide completo y no sólo alrededor de su arranque.
+            startIso = _conciIsoDesplazado(ventana.desde, -1);
+            endIso = _conciIsoDesplazado(ventana.hasta, 1);
+        } else if (day) {
             const lastDay = (dayEnd && dayEnd > day) ? dayEnd : day;
             const startDate = new Date(year, (month || 1) - 1, day);
             startDate.setDate(startDate.getDate() - 1);
@@ -19684,6 +19837,24 @@ function _conciDemoraMinutos(slotAsignadoRaw, slotCoordinadoRaw, opRaw, fallback
     const minutes = Math.round((opDate.getTime() - slotDate.getTime()) / 60000);
     return Number.isFinite(minutes) ? minutes : null;
 }
+
+// Alerta de 30 horas (js/conci-alerta-30h.js): horas transcurridas desde el
+// SLOT de referencia hasta "ahora", para un vuelo SIN manifiesto real
+// capturado. Reutiliza el mismo parseo (_conciParseDateTimeParts/
+// _conciPartsToDate) y la MISMA prioridad SLOT COORDINADO > SLOT ASIGNADO que
+// ya usa _conciDemoraMinutos — no se inventa una segunda regla de cuál slot
+// vale más. Si faltan ambos, o no son una fecha/hora válida, devuelve null:
+// nunca se inventa un vencimiento.
+function _conciHorasDesdeSlot(slotAsignadoRaw, slotCoordinadoRaw, fallbackYear, ahora) {
+    const referenceRaw = String(slotCoordinadoRaw || '').trim() || String(slotAsignadoRaw || '').trim();
+    if (!referenceRaw) return null;
+    const slotDate = _conciPartsToDate(_conciParseDateTimeParts(referenceRaw, fallbackYear));
+    if (!slotDate) return null;
+    const ahoraDate = (ahora instanceof Date && !Number.isNaN(ahora.getTime())) ? ahora : new Date();
+    const horas = (ahoraDate.getTime() - slotDate.getTime()) / 3600000;
+    return Number.isFinite(horas) ? horas : null;
+}
+window._conciHorasDesdeSlot = _conciHorasDesdeSlot;
 
 function _conciDemoraHorasMinutos(value) {
     if (!Number.isFinite(value)) return '';
@@ -20053,6 +20224,77 @@ function _conciBuildSortDate(row, columns, fallbackYear) {
 // OPERACIÓN. Si esa columna no tiene un valor con fecha, cae a SLOT ASIGNADO y luego
 // a FECHA. Cuando ninguna columna aporta una fecha parseable, la fila se conserva
 // (para no ocultar manifiestos sin hora de operación capturada).
+// Ventana de fechas pedida en el filtro, como fechas completas (AAAA-MM-DD).
+// Con un rango —del 16 al 20— los filtros de esta pantalla comparaban contra
+// UN solo día y se quedaban con el primero: la consulta traía los cinco días
+// y la tabla mostraba uno. Devuelve null cuando no hay fecha en el filtro.
+function _conciVentanaDelFiltro() {
+    const desdeEl = document.getElementById('filter-conci-fecha-desde');
+    const hastaEl = document.getElementById('filter-conci-fecha-hasta');
+    const desde = desdeEl && desdeEl.value ? desdeEl.value : '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(desde)) return null;
+    const hastaCrudo = hastaEl && hastaEl.value ? hastaEl.value : '';
+    const hasta = /^\d{4}-\d{2}-\d{2}$/.test(hastaCrudo) && hastaCrudo >= desde ? hastaCrudo : desde;
+    return { desde, hasta };
+}
+
+// Una fecha ISO movida N días, para ampliar la ventana de la consulta.
+function _conciIsoDesplazado(iso, dias) {
+    const partes = String(iso || '').split('-').map(Number);
+    if (partes.length !== 3 || partes.some(n => !Number.isFinite(n))) return iso;
+    const f = new Date(partes[0], partes[1] - 1, partes[2]);
+    f.setDate(f.getDate() + dias);
+    return _conciIsoDateKey(f.getFullYear(), f.getMonth() + 1, f.getDate());
+}
+
+// Los vuelos guardan la fecha sin año ("16SEP 09:16"): se prueba con los años
+// que toca la ventana (casi siempre uno solo).
+function _conciIsoDentroDeVentana(mes, dia, ventana) {
+    if (!ventana || !Number.isFinite(mes) || !Number.isFinite(dia)) return false;
+    const anios = new Set([Number(ventana.desde.slice(0, 4)), Number(ventana.hasta.slice(0, 4))]);
+    for (const anio of anios) {
+        const iso = _conciIsoDateKey(anio, mes, dia);
+        if (iso >= ventana.desde && iso <= ventana.hasta) return true;
+    }
+    return false;
+}
+
+// ¿El vuelo del itinerario cae dentro de la ventana? Se mira su día
+// PROGRAMADO y su día de OPERACIÓN, igual que con un solo día.
+function _conciVueloEnVentana(vuelo, year, ventana) {
+    for (const isArr of [true, false]) {
+        const dp = _conciExtractVueloDateParts(vuelo, isArr);
+        if (dp && _conciIsoDentroDeVentana(parseInt(dp.month, 10), parseInt(dp.day, 10), ventana)) return true;
+        const op = _conciParseDateTimeParts(_conciGetOperationHour(vuelo, isArr), year);
+        if (op && _conciIsoDentroDeVentana(op.month, op.day, ventana)) return true;
+    }
+    return false;
+}
+
+// Igual que _conciRowMatchesOperationDay, pero contra la ventana completa:
+// se conserva la fila si su día PROGRAMADO o su día de OPERACIÓN cae dentro.
+function _conciRowMatchesWindow(row, columns, year, ventana) {
+    if (!ventana) return true;
+    const keys = Array.isArray(columns) && columns.length ? columns : Object.keys(row || {});
+    const opCol    = keys.find(c => /hr\.?\s*de\s*oper/i.test(c));
+    const slotCol  = keys.find(c => /slot\s*asignad/i.test(c));
+    const fechaCol = keys.find(c => /(^|\b)fecha(\b|$)/i.test(c));
+    let sawParseable = false;
+    for (const col of [opCol, slotCol, fechaCol]) {
+        if (!col) continue;
+        const val = row[col];
+        if (val === null || val === undefined || String(val).trim() === '') continue;
+        const parts = _conciParseDateTimeParts(val, year);
+        if (parts && Number.isFinite(parts.day) && Number.isFinite(parts.month)) {
+            sawParseable = true;
+            const anio = Number.isFinite(parts.year) ? parts.year : year;
+            const iso = _conciIsoDateKey(anio, parts.month, parts.day);
+            if (iso >= ventana.desde && iso <= ventana.hasta) return true;
+        }
+    }
+    return !sawParseable;
+}
+
 function _conciRowMatchesOperationDay(row, columns, year, month, day) {
     if (!day) return true;
     const keys = Array.isArray(columns) && columns.length ? columns : Object.keys(row || {});
@@ -20085,6 +20327,10 @@ function _conciRowMatchesOperationDay(row, columns, year, month, day) {
 // (F/H = carga; el resto pasajeros) y, como respaldo, el catálogo de aerolíneas de
 // carga conocidas.
 function _conciRowIsCargo(row, optypeCol, airlineCol) {
+    if (row && Object.prototype.hasOwnProperty.call(row, 'cierre_es_carga_reportado')
+        && row.cierre_es_carga_reportado !== null && row.cierre_es_carga_reportado !== undefined) {
+        return row.cierre_es_carga_reportado === true || row.cierre_es_carga_reportado === 'true';
+    }
     if (airlineCol) {
         try {
             const meta = (typeof _conciResolveAirlineMeta === 'function') ? _conciResolveAirlineMeta(row[airlineCol]) : null;
@@ -20555,6 +20801,11 @@ async function loadConciliacionManifiestos(options = {}) {
         _conciPendingRemoteRefresh = true;
         return;
     }
+    // El panel "Manifiestos por capturar" muestra una foto del día cargado;
+    // si el usuario cambia de fecha mientras está abierto, se cierra para no
+    // dejar en pantalla un desglose de un día que ya no es el seleccionado.
+    document.querySelectorAll('.conci-pendientes-dropdown').forEach(el => el.remove());
+
     const requestSeq = ++_conciLoadRequestSeq;
 
     let year, month, day, dayEnd = null;
@@ -20593,7 +20844,11 @@ async function loadConciliacionManifiestos(options = {}) {
         day = dayEl && dayEl.value ? parseInt(dayEl.value, 10) : null;
     }
 
-    let cacheKey = `${year}|${month || 0}|${day || 0}|${dayEnd || 0}`;
+    // Ventana pedida, en fechas completas. Entra también en la clave de la
+    // caché: sin ella, "16 de septiembre" y "del 16 de septiembre al 3 de
+    // octubre" compartían clave y se pintaba lo del otro filtro.
+    const ventana = _conciVentanaDelFiltro();
+    let cacheKey = `${year}|${month || 0}|${day || 0}|${dayEnd || 0}|${ventana ? ventana.hasta : ''}`;
 
     // When auto-detecting the latest date we skip the render-cache short-circuit
     // because we don’t know the effective key until we scan the raw data.
@@ -20717,7 +20972,7 @@ async function loadConciliacionManifiestos(options = {}) {
             return;
         }
 
-        const mResult = await _conciFetchManifestsForDate(client, year, month, day, dayEnd);
+        const mResult = await _conciFetchManifestsForDate(client, year, month, day, dayEnd, ventana);
         if (requestSeq !== _conciLoadRequestSeq) return;
         if (mResult.error) throw mResult.error;
         manifestRows = mResult.data || [];
@@ -20730,6 +20985,7 @@ async function loadConciliacionManifiestos(options = {}) {
         // tras el cruce de medianoche (p. ej. programado 27 pero operado 28). El filtro fino
         // por HR. DE OPERACIÓN se aplica más abajo sobre las filas ya enriquecidas.
         const filteredVuelos = vuelosRows.filter(r => {
+            if (ventana) return _conciVueloEnVentana(r, year, ventana);
             if (!month && !day) return true;
             for (const isArr of [true, false]) {
                 const dp = _conciExtractVueloDateParts(r, isArr);
@@ -20783,9 +21039,11 @@ async function loadConciliacionManifiestos(options = {}) {
         // día seleccionado (con respaldo a SLOT ASIGNADO / FECHA cuando no hay hora de
         // operación). Esto corrige el caso en que un vuelo programado un día opera en otro
         // tras el cruce de medianoche y aparecía en el día equivocado.
-        const dayFilteredRows = day
-            ? rows.filter(r => _conciRowMatchesOperationDay(r, columns, year, month, day))
-            : rows;
+        const dayFilteredRows = ventana
+            ? rows.filter(r => _conciRowMatchesWindow(r, columns, year, ventana))
+            : (day
+                ? rows.filter(r => _conciRowMatchesOperationDay(r, columns, year, month, day))
+                : rows);
 
         // Decorate-sort-undecorate: compute sort key once per row instead of n·log(n) times.
         // Mismo criterio que Itinerario de Vuelos: agrupa por Status (orden
@@ -20933,6 +21191,107 @@ function _conciUpdateResumen(data, columns) {
     }
     _conciCountBreakdown = { paxArr, paxDep, cargaArr, cargaDep };
 }
+
+// ── Panel "Manifiestos por capturar" agrupado por aerolínea ──────────────────
+// Mismo criterio de "sin capturar" que ya usa el badge de la barra superior
+// (ver _conciUpdateResumen): HR. DE RECEPCIÓN vacía. Al agrupar por el valor
+// crudo de AEROLÍNEA (incluida la cadena vacía cuando falta) cada fila sin
+// capturar cae en un único grupo, así que la suma de todos los grupos siempre
+// coincide con el badge "Sin capturar", sin excepciones.
+function _conciComputeSinCapturarPorAerolinea() {
+    const cols = (Array.isArray(_conciManifestosSummaryColumns) && _conciManifestosSummaryColumns.length)
+        ? _conciManifestosSummaryColumns
+        : Object.keys((_conciManifestosAllData && _conciManifestosAllData[0]) || {});
+    const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
+    const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
+
+    const counts = new Map();
+    (_conciManifestosAllData || []).forEach(r => {
+        if (recepcionCol && String(r?.[recepcionCol] ?? '').trim()) return; // ya capturado
+        const code = airlineCol ? String(r[airlineCol] ?? '').trim() : '';
+        counts.set(code, (counts.get(code) || 0) + 1);
+    });
+
+    const entries = [...counts.entries()]
+        .map(([code, count]) => ({ code, count }))
+        .sort((a, b) => b.count - a.count);
+    return { airlineCol, entries };
+}
+
+function _conciShowPendientesPorAerolinea(triggerEl) {
+    document.querySelectorAll('.conci-pendientes-dropdown').forEach(el => el.remove());
+
+    const { airlineCol, entries } = _conciComputeSinCapturarPorAerolinea();
+    const total = entries.reduce((sum, e) => sum + e.count, 0);
+
+    const rect = triggerEl.getBoundingClientRect();
+    const menu = document.createElement('div');
+    menu.className = 'conci-pendientes-dropdown';
+    document.body.appendChild(menu);
+
+    // Mismo look que los popovers de filtro por columna (_showConciExcelFilter),
+    // para que se sienta parte del mismo sistema.
+    let left = rect.left;
+    if (left + 300 > window.innerWidth) left = window.innerWidth - 310;
+    menu.style.cssText = `position:fixed;top:${rect.bottom + 4}px;left:${Math.max(4, left)}px;z-index:99999;` +
+        `background:#fff;border:1px solid #ddd;box-shadow:0 4px 14px rgba(0,0,0,.18);` +
+        `width:300px;border-radius:6px;padding:10px;font-size:.84rem;`;
+
+    const esc2 = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+    const rowsHtml = entries.map(({ code, count }) => {
+        let label;
+        if (code) {
+            const meta = _conciResolveAirlineMeta(code);
+            label = meta && meta.name ? `${esc2(code)} — ${esc2(meta.name)}` : esc2(code);
+        } else {
+            label = '(Sin aerolínea)';
+        }
+        return `<button type="button" class="conci-pendientes-item" data-code="${esc2(code)}"
+                    style="display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;border:0;background:none;padding:6px 8px;border-radius:4px;text-align:left;cursor:pointer;font-size:.84rem;">
+                    <span>${label}</span>
+                    <span class="badge bg-danger">${count}</span>
+                </button>`;
+    }).join('');
+
+    menu.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+            <strong style="font-size:.82rem;">Sin capturar por aerolínea</strong>
+            <button type="button" class="btn-close" id="conci-pend-close" aria-label="Cerrar" style="font-size:.65rem;"></button>
+        </div>
+        <div style="max-height:280px;overflow-y:auto;border:1px solid #eee;border-radius:4px;padding:4px;margin-bottom:8px;background:#f8f9fa;">
+            ${entries.length ? rowsHtml : '<div class="text-muted text-center py-3" style="font-size:.8rem;">No hay manifiestos pendientes de capturar.</div>'}
+        </div>
+        <div class="text-muted px-1" style="font-size:.72rem;">Total: ${total} sin capturar${airlineCol ? '' : ' — no se detectó la columna AEROLÍNEA'}</div>
+    `;
+
+    menu.addEventListener('click', e => e.stopPropagation());
+    menu.querySelector('#conci-pend-close').addEventListener('click', () => menu.remove());
+
+    menu.querySelectorAll('.conci-pendientes-item').forEach(btn => {
+        btn.addEventListener('mouseenter', () => { btn.style.background = '#f1f3f5'; });
+        btn.addEventListener('mouseleave', () => { btn.style.background = 'none'; });
+        btn.addEventListener('click', () => {
+            const code = btn.dataset.code;
+            // Mismo mecanismo que ya usa el filtro desplegable de columna
+            // ("solo este valor") combinado con el pill "Sin capturar" — no
+            // se duplica lógica de filtrado, solo se fija el mismo estado que
+            // esos controles ya leen.
+            if (airlineCol) _conciExcelFilters[airlineCol] = new Set([code]);
+            _conciCaptureFilter = 'sin-capturar';
+            menu.remove();
+            _updateConciExcelFilterIcons();
+            _conciApplyPillFilter();
+        });
+    });
+
+    setTimeout(() => {
+        document.addEventListener('click', function closeFn(e) {
+            if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', closeFn); }
+        });
+    }, 0);
+}
+window.conciShowPendientesPorAerolinea = _conciShowPendientesPorAerolinea;
 
 // Muestra una alerta emergente (toast) cuando una carga fresca de datos detecta
 // vuelos con más pasajeros capturados que la capacidad máxima de la aeronave.
@@ -21174,10 +21533,15 @@ function _conciApplyQuickFlightSearch(term, options) {
     _conciApplyPillFilter();
 
     if (!value) return;
-    const visible = _conciVisibleBodyRows().length;
-    // Enter/↓ siempre saltan a la captura; al escribir, solo cuando el filtro
-    // ya dejó un único vuelo (no tiene caso robar el foco con varios resultados).
-    if (opts.focusFirst || visible === 1) {
+    // Solo Enter/↓ saltan a la captura (igual que dice el título del buscador).
+    // Antes también saltaba solo por escribir, en cuanto el filtro dejaba un
+    // único vuelo visible — con vuelos como "AC 7249", ya el primer dígito
+    // podía ser ese único match, y el foco brincaba a media palabra a la
+    // primera celda capturable (CIERRE SUBSECRETARIA) sin que el usuario
+    // tecleara Enter ni ↓. Lo que seguía escribiendo para terminar de buscar
+    // cala entonces en esa celda real, no en el buscador: eso es lo que se
+    // reportaba como "se filtran letras a CIERRE SUBSECRETARIA".
+    if (opts.focusFirst) {
         requestAnimationFrame(() => _conciFocusFirstCaptureCell());
     }
 }
@@ -21228,6 +21592,11 @@ function _conciInitQuickFlightSearch() {
 function _conciAttachDateMask(input) {
     if (!input || input.dataset.conciDateMask === '1') return;
     const isoValue = input.value;
+    // Autocompletar con cero a la izquierda (ver más abajo) solo aplica cuando
+    // la celda arranca realmente vacía. Una fecha que ya trae un valor
+    // precargado (por ejemplo FECHA) mantiene su comportamiento de captura
+    // exactamente igual que antes, sin importar qué se toque después.
+    const empezoVacio = !isoValue;
     input.type = 'text';
     input.dataset.conciDateMask = '1';
     input.inputMode = 'numeric';
@@ -21237,6 +21606,41 @@ function _conciAttachDateMask(input) {
 
     const onlyDigits = value => String(value || '').replace(/\D/g, '');
 
+    // Dado lo ya tecleado (dígitos crudos) y la tecla numérica recién
+    // presionada, regresa el string completo de dígitos que debe quedar en
+    // el campo. Solo se usa en celdas que arrancaron vacías (empezoVacio).
+    //
+    //  - 1er dígito de DÍA o MES: si por sí solo no podría ser el inicio de
+    //    un valor de dos dígitos válido (día 01-31, mes 01-12), se completa
+    //    con "0" y avanza a la siguiente sección con ese mismo dígito.
+    //  - 2do dígito de DÍA o MES: si el primer dígito SÍ era ambiguo (0-3 en
+    //    día, 0-1 en mes) se espera este segundo dígito y se valida el
+    //    número completo. Si la combinación es inválida (ej. mes "1"+"5" =
+    //    15), el primer dígito se completa solo con "0" y este dígito se
+    //    reinterpreta como el primero de la SIGUIENTE sección (aplicando la
+    //    misma regla ahí, por si también hace falta completarlo).
+    //  - Año y demás posiciones: sin reglas especiales, se anexa tal cual.
+    const appendMaskDigit = (base, key) => {
+        if (base.length === 0) {
+            return /^[0-3]$/.test(key) ? base + key : `0${key}`;
+        }
+        if (base.length === 1) {
+            const dia = parseInt(base + key, 10);
+            if (dia >= 1 && dia <= 31) return base + key;
+            return appendMaskDigit(`0${base}`, key);
+        }
+        if (base.length === 2) {
+            return /^[0-1]$/.test(key) ? base + key : `${base}0${key}`;
+        }
+        if (base.length === 3) {
+            const mesDigitoPendiente = base.slice(2);
+            const mes = parseInt(mesDigitoPendiente + key, 10);
+            if (mes >= 1 && mes <= 12) return base + key;
+            return appendMaskDigit(`${base.slice(0, 2)}0${mesDigitoPendiente}`, key);
+        }
+        return base + key;
+    };
+
     // Se guardan aparte los dígitos que realmente tecleó el usuario: en pantalla
     // "10/10/2026" puede venir de 6 teclas ("101026", con el siglo completado)
     // o de 8, y hay que distinguirlo para que al seguir escribiendo se pueda
@@ -21244,15 +21648,28 @@ function _conciAttachDateMask(input) {
     // `notify` reemite el evento "input" que el teclado ya no dispara (se
     // intercepta con preventDefault). Sin él, el editor de la celda nunca se
     // entera de que hubo captura y no guardaría lo tecleado.
+    let ultimoTexto = '';
     const render = (digits, notify) => {
         const raw = onlyDigits(digits).slice(0, 8);
         input.dataset.conciDateDigits = raw;
-        input.value = _conciFormatDateMask(raw);
+        input.value = ultimoTexto = _conciFormatDateMask(raw);
         if (document.activeElement === input) {
             const end = input.value.length;
             input.setSelectionRange(end, end);
         }
         if (notify) input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    // Corrección en medio de la fecha: cada lugar de DD/MM/AAAA se queda donde
+    // está y el cursor no se mueve de donde lo dejó el usuario. Mientras haya
+    // huecos el campo no es una fecha todavía, así que no se guardan dígitos
+    // sueltos en el dataset: la captura de abajo sólo corre sin huecos.
+    const renderEnCursor = ({ slots, slot }) => {
+        const hayHuecos = slots.includes(_CONCI_FECHA_HUECO);
+        input.dataset.conciDateDigits = hayHuecos ? '' : slots;
+        input.value = ultimoTexto = _conciFechaSlotsATexto(slots);
+        const pos = _conciFechaPosDeSlot(slot);
+        input.setSelectionRange(pos, pos);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
     };
 
     // El valor con el que se abre la celda viene en ISO.
@@ -21263,12 +21680,27 @@ function _conciAttachDateMask(input) {
     // el siglo se completa solo.
     input.addEventListener('keydown', (ev) => {
         if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+        // Corrección puntual: el cursor está en medio de la fecha o hay una
+        // parte seleccionada. Devuelve null en los casos de siempre (cursor al
+        // final o todo seleccionado), que resuelve la captura de abajo tal cual.
+        if (/^\d$/.test(ev.key) || ev.key === 'Backspace' || ev.key === 'Delete') {
+            const edicion = _conciEditarFechaEnCursor(input, ev.key, input.dataset.conciDateDigits);
+            if (edicion) {
+                ev.preventDefault();
+                renderEnCursor(edicion);
+                return;
+            }
+        }
         const raw = input.dataset.conciDateDigits || '';
         const hasSelection = input.selectionStart !== input.selectionEnd;
         if (/^\d$/.test(ev.key)) {
             ev.preventDefault();
             // Teclear sobre el texto seleccionado reemplaza la fecha completa.
-            render((hasSelection ? '' : raw) + ev.key, true);
+            const base = hasSelection ? '' : raw;
+            // Solo en celdas que arrancaron vacías: una fecha ya precargada
+            // no cambia su comportamiento de captura.
+            const nuevo = empezoVacio ? appendMaskDigit(base, ev.key) : base + ev.key;
+            render(nuevo, true);
         } else if (ev.key === 'Backspace') {
             ev.preventDefault();
             render(hasSelection ? '' : raw.slice(0, -1), true);
@@ -21279,7 +21711,7 @@ function _conciAttachDateMask(input) {
 
     // Red para lo que no viene del teclado: pegar, autocompletar, etc.
     input.addEventListener('input', () => {
-        if (input.value === _conciFormatDateMask(input.dataset.conciDateDigits || '')) return;
+        if (input.value === ultimoTexto) return;
         // Ya se está propagando un "input" real; no hace falta reemitirlo.
         render(input.value, false);
     });
@@ -21288,6 +21720,21 @@ function _conciAttachDateMask(input) {
     // editor de la celda ya tiene su propio ciclo de confirmación y este blur
     // corre antes que él.
     input.addEventListener('blur', () => {
+        // Una fecha a medio corregir se deja tal cual: reacomodarla aquí es
+        // justo lo que movía los dígitos de un segmento a otro. Quien valida
+        // es el editor de la celda al confirmar, no cada tecla ni cada salida.
+        if (input.value.includes(_CONCI_FECHA_HUECO)) return;
+        // Si se deja el DÍA o el MES a medias con un solo dígito ambiguo
+        // (ej. "3" sin segundo dígito) al salir del campo, se completa con
+        // cero a la izquierda igual que si el dígito no hubiera sido
+        // ambiguo. Solo en celdas que arrancaron vacías.
+        if (empezoVacio) {
+            const digitos = input.dataset.conciDateDigits || '';
+            let completos = digitos;
+            if (digitos.length === 1) completos = `0${digitos}`;
+            else if (digitos.length === 3) completos = `${digitos.slice(0, 2)}0${digitos.slice(2)}`;
+            if (completos !== digitos) render(completos, true);
+        }
         const expanded = _conciExpandDateMaskYear(input.value);
         if (expanded !== input.value) input.value = expanded;
     });
@@ -21327,6 +21774,27 @@ function _conciClearAllTableFilters() {
     _conciApplyPillFilter();
 }
 
+// Ordena valores de un filtro por relevancia respecto al texto buscado:
+// 1) coincidencia exacta (case-insensitive) primero
+// 2) luego los que EMPIEZAN con el texto (startsWith), alfabético entre ellos
+// 3) luego el resto (coincide en cualquier posición), alfabético entre ellos
+// Con texto vacío devuelve el orden original sin reordenar.
+function sortBySearchRelevance(values, query) {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return values.slice();
+    const rank = (v) => {
+        const s = String(v).trim().toLowerCase();
+        if (s === q) return 0;
+        if (s.startsWith(q)) return 1;
+        return 2;
+    };
+    return values.slice().sort((a, b) => {
+        const diff = rank(a) - rank(b);
+        if (diff !== 0) return diff;
+        return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+    });
+}
+
 function _showConciExcelFilter(col, triggerEl) {
     document.querySelectorAll('.conci-excel-dropdown').forEach(el => el.remove());
 
@@ -21349,6 +21817,17 @@ function _showConciExcelFilter(col, triggerEl) {
 
     const esc2 = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
+    // La columna AEROL\u00cdNEA guarda el c\u00f3digo IATA; se le antepone el nombre
+    // comercial tomado del mismo cat\u00e1logo (tabla `airlines`) que ya usa la
+    // celda de la tabla, para que el capturista no tenga que memorizar c\u00f3digos.
+    const _isAirlineFilterCol = /aerol[i\u00ed]nea|airline/i.test(col);
+    const airlineLabelFor = (v) => {
+        const meta = _conciResolveAirlineMeta(v);
+        if (meta && meta.name) return `${esc2(v)} \u2014 ${esc2(meta.name)}`;
+        console.warn(`[Conciliaci\u00f3n] C\u00f3digo de aerol\u00ednea sin match en el cat\u00e1logo: "${v}"`);
+        return esc2(v);
+    };
+
     menu.innerHTML = `
         <input type="text" class="form-control form-control-sm mb-2" placeholder="Buscar valor..." id="conci-ef-search">
         <div class="d-flex justify-content-between mb-2 small px-1">
@@ -21358,9 +21837,17 @@ function _showConciExcelFilter(col, triggerEl) {
         <div style="max-height:200px;overflow-y:auto;border:1px solid #eee;border-radius:4px;padding:4px;margin-bottom:10px;background:#f8f9fa;" id="conci-ef-list">
             ${values.map((v, i) => {
         const checked = !activeSet || activeSet.has(v);
-        const label = v === '' ? '(Vac\u00edo)' : esc2(v);
+        const label = v === '' ? '(Vac\u00edo)' : (_isAirlineFilterCol ? airlineLabelFor(v) : esc2(v));
         const safeVal = esc2(v);
-        return `<div class="conci-ef-item d-flex align-items-center gap-2" style="padding:2px 4px;cursor:pointer;" data-value="${safeVal}">
+        // El buscador de este panel debe encontrar tanto el codigo IATA crudo
+        // (p.ej. "E7") como el nombre comercial que la etiqueta realmente
+        // muestra (p.ej. "Estafeta"); antes solo comparaba contra el valor
+        // crudo, asi que escribir "estafeta" no encontraba las filas guardadas
+        // con el codigo y esas quedaban invisibles al usar "Seleccionar todo"
+        // despues de buscar.
+        const airlineSearchMeta = _isAirlineFilterCol ? _conciResolveAirlineMeta(v) : null;
+        const searchKey = ((airlineSearchMeta && airlineSearchMeta.name) ? `${v} ${airlineSearchMeta.name}` : v).toLowerCase();
+        return `<div class="conci-ef-item d-flex align-items-center gap-2" style="padding:2px 4px;cursor:pointer;" data-value="${safeVal}" data-search="${esc2(searchKey)}">
                     <input class="form-check-input conci-ef-chk" type="checkbox" id="conci-ef-${i}" value="${safeVal}" ${checked ? 'checked' : ''}>
                     <label class="conci-ef-label flex-grow-1" data-value="${safeVal}" title="click: solo este valor" style="cursor:pointer;margin:0;">${label}</label>
                 </div>`;
@@ -21377,9 +21864,20 @@ function _showConciExcelFilter(col, triggerEl) {
     const listEl = menu.querySelector('#conci-ef-list');
 
     searchBox.addEventListener('input', () => {
-        const txt = searchBox.value.toLowerCase();
-        listEl.querySelectorAll('.conci-ef-item').forEach(item => {
-            item.style.display = item.dataset.value.toLowerCase().includes(txt) ? '' : 'none';
+        const txt = searchBox.value.trim().toLowerCase();
+        const items = [...listEl.querySelectorAll('.conci-ef-item')];
+        items.forEach(item => {
+            const haystack = item.dataset.search || item.dataset.value.toLowerCase();
+            item.style.display = haystack.includes(txt) ? '' : 'none';
+        });
+        // Reordena los elementos existentes (sin recrearlos) para que las
+        // coincidencias más relevantes queden arriba; esto preserva el estado
+        // "checked" de cada checkbox porque appendChild mueve el nodo, no lo recrea.
+        const itemByValue = new Map(items.map(item => [item.dataset.value, item]));
+        const order = txt ? sortBySearchRelevance(values, txt) : values;
+        order.forEach(v => {
+            const item = itemByValue.get(v);
+            if (item) listEl.appendChild(item);
         });
     });
 
@@ -21403,10 +21901,7 @@ function _showConciExcelFilter(col, triggerEl) {
     });
     menu.querySelector('#conci-ef-none').addEventListener('click', e => {
         e.preventDefault();
-        delete _conciExcelFilters[col];
-        menu.remove();
-        _updateConciExcelFilterIcons();
-        _conciApplyPillFilter();
+        listEl.querySelectorAll('.conci-ef-chk').forEach(c2 => { c2.checked = false; });
     });
     menu.querySelector('#conci-ef-cancel').addEventListener('click', () => menu.remove());
     menu.querySelector('#conci-ef-apply').addEventListener('click', () => {
@@ -21600,6 +22095,13 @@ const _CONCI_EXPORT_COLS_CARGA = [
     { h: 'CAPTURÓ', t: 'text', a: ['CAPTURÓ', 'CAPTURO'] },
 ];
 
+// Para la exportación "Total": encabezado (normalizado) -> definición de
+// columna, tomando Pasajeros como preferida cuando un mismo encabezado
+// existe en ambos catálogos (la grilla combinada usa esos nombres).
+const _CONCI_EXPORT_COLS_TOTAL_BY_HEADER = new Map(
+    [..._CONCI_EXPORT_COLS_CARGA, ..._CONCI_EXPORT_COLS_PAX].map(d => [d.h.trim().toUpperCase(), d])
+);
+
 // Localiza el valor de una fila probando alias exactos y luego una comparación
 // normalizada (sin acentos/espacios/signos) contra las llaves reales.
 function _conciExportGetField(row, aliases) {
@@ -21692,6 +22194,66 @@ function _conciGetExportRows() {
     return rows;
 }
 
+// Proyección exclusiva del Excel de Carga; no modifica las filas capturadas.
+function _conciExportCargoRow(row, year) {
+    const get = aliases => _conciExportGetField(row, aliases);
+    const has = value => value !== undefined && value !== null && String(value).trim() !== '';
+    const number = value => Number(String(value).replace(/,/g, '').trim());
+    const isArr = /lleg|arr/i.test(get(['TIPO DE MANIFIESTO']));
+    const isDep = /sal|dep/i.test(get(['TIPO DE MANIFIESTO']));
+    const route = String(get(['RUTA', 'ROUTING']) || get(['DESTINO / ORIGEN'])).trim();
+    const parts = route.split(/[-/]+/).map(p => p.trim()).filter(Boolean);
+    const origen = has(row.ORIGEN) ? row.ORIGEN : (parts.length > 1 || isArr ? parts[0] || '' : (parts.length && isDep ? 'NLU' : ''));
+    const destino = has(row.DESTINO) ? row.DESTINO : (parts.length > 1 || isDep ? parts[parts.length - 1] || '' : (parts.length && isArr ? 'NLU' : ''));
+    const escala = has(row.ESCALA) ? row.ESCALA : parts.slice(1, -1).join('-');
+    const country = raw => String(raw || '').split(/[-/]+/).map(code => {
+        const iata = code.trim().toUpperCase();
+        return _conciAirportCountryByIata.get(iata) || (window._iataToCountry ? window._iataToCountry(iata) : '');
+    }).filter(Boolean).join(' / ');
+    const operacion = get(['TIPO DE OPERACIÓN']) || _conciOperacionNacInt(isArr ? origen : destino);
+    let nacional = get(['KGS. DE CARGA NACIONAL']);
+    let internacional = get(['KGS. DE CARGA INTERNACIONAL']);
+    const total = get(['KG DE CARGA TOTAL', 'KGS. DE CARGA']);
+    if (!has(nacional) && !has(internacional) && has(total)) {
+        if (/internacional/i.test(operacion)) internacional = total;
+        else if (/^nacional$/i.test(String(operacion).trim())) nacional = total;
+    }
+    // Cada desglose conserva su naturaleza, incluso en operaciones mixtas.
+    const importacion = get(['IMPORTACIÓN']);
+    const llegada = get(['KGS CARGA LLEGADA NLU', 'KGS. CARGA LLEGADA', 'KGS LLEGADA']);
+    const exportacion = get(['EXPORTACIÓN']);
+    const salida = get(['KG. DE CARGA SALIDA NLU', 'KGS CARGA SALIDA NLU', 'KGS SALIDA']);
+    const carga = [
+        has(importacion) ? importacion : (isArr ? internacional : ''),
+        has(llegada) ? llegada : (isArr ? nacional : ''),
+        has(exportacion) ? exportacion : (isDep ? internacional : ''),
+        has(salida) ? salida : (isDep ? nacional : ''),
+    ];
+    const date = value => _conciPartsToDate(_conciParseDateTimeParts(value, year));
+    const op = date(_conciFormatDisplayValue('HR. DE OPERACIÓN', get(['HR. DE OPERACIÓN']), row, 'FECHA', year));
+    const slot = date(_conciFormatDisplayValue('SLOT ASIGNADO', get(['SLOT ASIGNADO']), row, 'FECHA', year));
+    const recepcion = date(_conciFormatDisplayValue('HR. DE RECEPCIÓN', get(['HR. DE RECEPCIÓN']), row, 'FECHA', year));
+    const maxima = date(_conciHrMaximaEntrega(get(['HR. DE OPERACIÓN']), row, 'FECHA', year));
+    const totalDia = get(['Total dia']);
+    const demora = get(['TIEMPO DE DEMORA / ANTICIPACIÓN']);
+    return {
+        ...row,
+        'CIERRE DE PRESENTACIÓN': get(['CIERRE DE PRESENTACIÓN', 'DATOS SUBSECRETARIA', 'CIERRE SUBSECRETARIA']),
+        'TIPO DE OPERACIÓN': operacion,
+        ORIGEN: origen, ESCALA: escala, DESTINO: destino,
+        'IMPORTACIÓN': carga[0], 'KGS CARGA LLEGADA NLU': carga[1],
+        'EXPORTACIÓN': carga[2], 'KG. DE CARGA SALIDA NLU': carga[3],
+        'Total dia': has(totalDia) ? totalDia : (carga.some(has) ? carga.reduce((sum, v) => sum + (has(v) && Number.isFinite(number(v)) ? number(v) : 0), 0) : total),
+        'DEMORA +-15': String(get(['DEMORA +-15', 'DEMORA +-15 MIN', 'DEMORA +- 15 MIN.'])),
+        'EXTEMPORANEO': get(['EXTEMPORANEO']) || (recepcion && maxima ? (recepcion > maxima ? 'EXTEMPORANEO' : 'EN TIEMPO') : ''),
+        'TIEMPO DE DEMORA / ANTICIPACIÓN': has(demora) ? demora : (op && slot ? Math.abs(op - slot) / 86400000 : ''),
+        // En BASE DE CARGA estos tres encabezados son PAÍSES, no códigos IATA.
+        Origen: has(row.Origen) ? row.Origen : country(origen),
+        Destino: has(row.Destino) ? row.Destino : country(destino),
+        escala: has(row.escala) ? row.escala : country(escala),
+    };
+}
+
 async function _conciExportToExcel(kind) {
     if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
         alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
@@ -21709,12 +22271,45 @@ async function _conciExportToExcel(kind) {
     const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
 
     const isCarga = kind === 'carga';
-    const defs = isCarga ? _CONCI_EXPORT_COLS_CARGA : _CONCI_EXPORT_COLS_PAX;
-    const dataRows = rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga);
+    const isTotal = kind === 'total';
+    // 'total' no separa por tipo: junta pasajeros y carga en una sola hoja con
+    // las mismas columnas que se ven en la grilla (mismo criterio que usa
+    // _conciExportPorCapturista para su tabla por capturista), reutilizando el
+    // formato de Pasajeros/Carga columna por columna cuando aplica.
+    const defs = isTotal
+        ? cols.map(c => _CONCI_EXPORT_COLS_TOTAL_BY_HEADER.get(String(c).trim().toUpperCase()) || { h: c, t: 'text', a: [c] })
+        : (isCarga ? _CONCI_EXPORT_COLS_CARGA.flatMap(d => {
+            // El catálogo original sigue intacto para Total y por capturista.
+            const def = d.h === 'DATOS SUBSECRETARIA'
+                ? { ...d, h: 'CIERRE DE PRESENTACIÓN', a: ['CIERRE DE PRESENTACIÓN'] }
+                : d.h === 'DEMORA +-15 MIN'
+                    ? { ...d, h: 'DEMORA +-15', a: ['DEMORA +-15'] }
+                    : d.h === 'TIPO DE OPERACIÓN'
+                        ? { ...d, t: 'text', a: ['TIPO DE OPERACIÓN'] } : d;
+            return d.h === 'TRANSITO' ? [def, { h: 'Total dia', t: 'num', a: ['Total dia'] }] : [def];
+        }).concat([
+            { h: 'EXTEMPORANEO', t: 'text', a: ['EXTEMPORANEO'] },
+            { h: 'TIEMPO DE DEMORA / ANTICIPACIÓN', t: 'num', a: ['TIEMPO DE DEMORA / ANTICIPACIÓN'] },
+            { h: 'Origen', t: 'text', a: ['Origen'] },
+            { h: 'Destino', t: 'text', a: ['Destino'] },
+            { h: 'escala', t: 'text', a: ['escala'] },
+        ]) : _CONCI_EXPORT_COLS_PAX
+            // Solo Pasajeros: estructura DATA; conservar los alias de origen y
+            // el catálogo compartido con Total y la exportación por capturista.
+            .filter(d => !['RUTA', 'KGS. DE CARGA NACIONAL', 'KGS. DE CARGA INTERNACIONAL'].includes(d.h))
+            .map(d => ({
+                ...d,
+                h: ({
+                    'PAX QUE PAGAN TUA': 'PAX. QUE PAGAN TUA',
+                    'KG DE CARGA TOTAL': 'KGS. DE CARGA',
+                    'DEMORA +- 15 MIN.': 'DEMORA 15 MIN.',
+                })[d.h] || d.h,
+            })));
+    const dataRows = isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga);
     if (!dataRows.length) {
         // Decía "en la vista actual", lo que daba a entender que respeta los
         // filtros de la tabla. No los respeta: exporta el día completo.
-        alert(`No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
+        alert(isTotal ? 'No hay datos cargados para exportar.' : `No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
         return;
     }
 
@@ -21820,8 +22415,9 @@ async function _conciExportToExcel(kind) {
         }
     };
 
+    const sheetLabel = isTotal ? 'Total' : (isCarga ? 'Carga' : 'Pasajeros');
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet(isCarga ? 'Carga' : 'Pasajeros', {
+    const ws = wb.addWorksheet(sheetLabel, {
         views: [{ state: 'frozen', ySplit: 1 }],
     });
     const headers = defs.map(d => d.h.trim());
@@ -21843,9 +22439,14 @@ async function _conciExportToExcel(kind) {
 
     // Data
     dataRows.forEach((row) => {
+        if (isCarga) row = _conciExportCargoRow(row, year);
         const tipoRaw = String(get(row, ['TIPO DE MANIFIESTO']) || '').toLowerCase();
         const isArr = /lleg|arr/.test(tipoRaw);
-        const cells = defs.map(d => computeCell(d, row, isArr));
+        const cells = defs.map(d =>
+            // Distinguir los códigos (ORIGEN/DESTINO/ESCALA) de sus países.
+            isCarga && ['ORIGEN', 'DESTINO', 'ESCALA', 'Origen', 'Destino', 'escala', 'TIEMPO DE DEMORA / ANTICIPACIÓN'].includes(d.h)
+                ? { value: row[d.h] ?? '' } : computeCell(d, row, isArr)
+        );
         const xr = ws.addRow(cells.map(c => (c.value === undefined || c.value === null) ? '' : c.value));
         xr.eachCell((cell, colNumber) => {
             const meta = cells[colNumber - 1] || {};
@@ -21860,15 +22461,396 @@ async function _conciExportToExcel(kind) {
         });
     });
 
+    if (isCarga) ws.getColumn('TIEMPO DE DEMORA / ANTICIPACIÓN').numFmt = 'hh:mm:ss';
     ws.columns.forEach((col, i) => { col.width = Math.min(46, Math.max(11, maxLen[i] + 2)); });
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
 
     const buf = await wb.xlsx.writeBuffer();
     const stamp = new Date().toISOString().slice(0, 10);
-    const fname = `Conciliacion_${isCarga ? 'Carga' : 'Pasajeros'}_${stamp}.xlsx`;
+    const fname = `Conciliacion_${sheetLabel}_${stamp}.xlsx`;
     saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fname);
 }
 window.conciExportExcel = _conciExportToExcel;
+
+// ─── Exportación a Excel (por capturista) ──────────────────────────────────
+// Un libro con una hoja por capturista, cada una con el nombre completo como
+// encabezado y debajo una tabla con las mismas columnas que se ven en pantalla
+// (mismo criterio que _renderConciManifiestosTable para armar el <thead>: se
+// excluyen las columnas internas). Solo entran manifiestos ya capturados —
+// HR. DE RECEPCIÓN es la misma autoridad de estado que usan los contadores y
+// el filtro "Capturados/Sin capturar" (ver _conciIsReceptionColumn).
+const _CONCI_EXPORT_CAPTURISTA_HIDDEN_COLS = new Set(['_fuente', '_isPax', '_validado_itinerario', '_validado_por_itinerario', 'id', 'Año', 'Mes', 'Día']);
+
+// Convierte a número cuando el texto es puramente numérico (para que sume/ordene
+// bien en Excel); cualquier otra cosa (fechas, horas, matrículas, # de vuelo,
+// códigos) se deja como texto tal cual se capturó.
+function _conciExportCapturistaCellValue(raw) {
+    const s = String(raw ?? '').trim();
+    if (s === '') return '';
+    if (/^-?\d+([.,]\d+)?$/.test(s)) {
+        const n = parseFloat(s.replace(',', '.'));
+        if (Number.isFinite(n)) return n;
+    }
+    return s;
+}
+
+async function _conciExportPorCapturista() {
+    if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
+        alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
+        return;
+    }
+    const rows = _conciGetExportRows();
+    if (!rows.length) {
+        alert('No hay datos cargados para exportar.');
+        return;
+    }
+
+    const allCols = (Array.isArray(_conciManifestosSummaryColumns) && _conciManifestosSummaryColumns.length)
+        ? _conciManifestosSummaryColumns
+        : Object.keys(rows[0] || {});
+    const cols = allCols.filter(c => !_CONCI_EXPORT_CAPTURISTA_HIDDEN_COLS.has(c));
+
+    const get = _conciExportGetField;
+    const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
+    const capturoCol = cols.find(c => /^captur[oó]$/i.test(c.trim())) || null;
+
+    const capturados = rows.filter(r => recepcionCol && String(get(r, [recepcionCol])).trim() !== '');
+    if (!capturados.length) {
+        alert('No hay manifiestos capturados en el día cargado.');
+        return;
+    }
+
+    const grupos = new Map();
+    capturados.forEach(r => {
+        const nombre = String((capturoCol ? get(r, [capturoCol]) : '') || '').trim() || 'SIN CAPTURISTA IDENTIFICADO';
+        if (!grupos.has(nombre)) grupos.set(nombre, []);
+        grupos.get(nombre).push(r);
+    });
+
+    const wb = new ExcelJS.Workbook();
+    const thin = { style: 'thin', color: { argb: 'FFBFBFBF' } };
+    const border = { top: thin, left: thin, bottom: thin, right: thin };
+    const baseFont = { name: 'Noto Sans', size: 10 };
+    const usedSheetNames = new Set();
+    const sheetNameFor = (nombre) => {
+        const base = nombre.replace(/[*?:\/\\\[\]]/g, ' ').trim().slice(0, 31) || 'Capturista';
+        let candidate = base;
+        let n = 2;
+        while (usedSheetNames.has(candidate.toUpperCase())) {
+            const suffix = ` (${n++})`;
+            candidate = base.slice(0, 31 - suffix.length) + suffix;
+        }
+        usedSheetNames.add(candidate.toUpperCase());
+        return candidate;
+    };
+
+    const nombresOrdenados = [...grupos.keys()].sort((a, b) => a.localeCompare(b, 'es'));
+    for (const nombre of nombresOrdenados) {
+        const filas = grupos.get(nombre);
+        const ws = wb.addWorksheet(sheetNameFor(nombre), { views: [{ state: 'frozen', ySplit: 3 }] });
+
+        ws.mergeCells(1, 1, 1, cols.length);
+        const titleCell = ws.getCell(1, 1);
+        titleCell.value = nombre;
+        titleCell.font = { name: 'Noto Sans', size: 13, bold: true, color: { argb: 'FFFFFFFF' } };
+        titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF15683F' } };
+        titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+        ws.getRow(1).height = 26;
+
+        ws.mergeCells(2, 1, 2, cols.length);
+        const subtitleCell = ws.getCell(2, 1);
+        subtitleCell.value = `${filas.length} manifiesto${filas.length === 1 ? '' : 's'} capturado${filas.length === 1 ? '' : 's'}`;
+        subtitleCell.font = { name: 'Noto Sans', size: 9, italic: true, color: { argb: 'FF555555' } };
+        subtitleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        const headerRow = ws.getRow(3);
+        cols.forEach((c, i) => { headerRow.getCell(i + 1).value = c; });
+        headerRow.height = 30;
+        headerRow.eachCell((cell) => {
+            cell.font = { name: 'Noto Sans', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2E7D32' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            cell.border = border;
+        });
+
+        const maxLen = cols.map(c => c.length);
+        filas.forEach(row => {
+            const values = cols.map(c => _conciExportCapturistaCellValue(get(row, [c])));
+            const xr = ws.addRow(values);
+            xr.eachCell((cell, colNumber) => {
+                const isObservaciones = /observacion/i.test(cols[colNumber - 1] || '');
+                cell.font = { ...baseFont };
+                cell.alignment = isObservaciones
+                    ? { vertical: 'middle', horizontal: 'left', wrapText: true }
+                    : { vertical: 'middle', horizontal: typeof cell.value === 'number' ? 'right' : 'center' };
+                cell.border = border;
+                const len = String(cell.value ?? '').length;
+                if (len > maxLen[colNumber - 1]) maxLen[colNumber - 1] = len;
+            });
+        });
+
+        cols.forEach((_, i) => { ws.getColumn(i + 1).width = Math.min(46, Math.max(11, maxLen[i] + 2)); });
+        ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: cols.length } };
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    const stamp = new Date().toISOString().slice(0, 10);
+    const fname = `Conciliacion_Por_Capturista_${stamp}.xlsx`;
+    saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fname);
+}
+window.conciExportPorCapturista = _conciExportPorCapturista;
+
+// ─── "Manifiestos capturados" por fecha, agrupados por capturista ──────────
+// Misma fuente de datos, mismas columnas (_CONCI_EXPORT_CAPTURISTA_HIDDEN_COLS)
+// y mismo criterio de "capturado" (HR. DE RECEPCIÓN con valor) que ya usa
+// "Exportar por capturista" — aquí solo se agrega un selector de fecha: elegir
+// un día carga ese día en el propio dashboard (mismo mecanismo que el filtro
+// de fecha de la barra superior) y este panel lee lo que quedó cargado.
+function _conciRenderManifiestosCapturadosPanel() {
+    const cont = document.getElementById('conci-mc-resultado');
+    if (!cont) return;
+
+    const capturistaSel = document.getElementById('conci-mc-capturista');
+    const aerolineaSel = document.getElementById('conci-mc-aerolinea');
+    const tipoSel = document.getElementById('conci-mc-tipo');
+    const buscarInput = document.getElementById('conci-mc-buscar');
+    const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+    const rows = _conciGetExportRows();
+    const allCols = (Array.isArray(_conciManifestosSummaryColumns) && _conciManifestosSummaryColumns.length)
+        ? _conciManifestosSummaryColumns
+        : Object.keys(rows[0] || {});
+    const cols = allCols.filter(c => !_CONCI_EXPORT_CAPTURISTA_HIDDEN_COLS.has(c));
+
+    const get = _conciExportGetField;
+    const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
+    const capturoCol = cols.find(c => /^captur[oó]$/i.test(c.trim())) || null;
+    const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
+    const optypeCol = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
+
+    const capturados = rows.filter(r => recepcionCol && String(get(r, [recepcionCol])).trim() !== '');
+
+    if (!capturados.length) {
+        if (capturistaSel) capturistaSel.innerHTML = '<option value="">Todos los capturistas</option>';
+        if (aerolineaSel) aerolineaSel.innerHTML = '<option value="">Todas las aerolíneas</option>';
+        cont.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-inbox fa-2x mb-2 d-block"></i>No hay manifiestos capturados en esta fecha.</div>';
+        return;
+    }
+
+    const grupos = new Map();
+    capturados.forEach(r => {
+        const nombre = String((capturoCol ? get(r, [capturoCol]) : '') || '').trim() || 'SIN CAPTURISTA IDENTIFICADO';
+        if (!grupos.has(nombre)) grupos.set(nombre, []);
+        grupos.get(nombre).push(r);
+    });
+    const nombresOrdenados = [...grupos.keys()].sort((a, b) => a.localeCompare(b, 'es'));
+
+    // Repuebla el combo de capturistas solo cuando cambia el conjunto de
+    // nombres (p.ej. al cargar otra fecha) — así no se pierde la selección
+    // del usuario cada vez que teclea en el buscador.
+    if (capturistaSel) {
+        const firma = nombresOrdenados.join('');
+        if (capturistaSel.dataset.firma !== firma) {
+            const previo = capturistaSel.value;
+            capturistaSel.innerHTML = '<option value="">Todos los capturistas</option>' +
+                nombresOrdenados.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+            capturistaSel.value = nombresOrdenados.includes(previo) ? previo : '';
+            capturistaSel.dataset.firma = firma;
+        }
+    }
+
+    // El combo de aerolínea solo ofrece las aerolíneas del tipo elegido en
+    // "Carga o pasajeros" — si ya se filtró a Pasajeros, no tiene sentido
+    // ofrecer una aerolínea de carga que de todos modos no aparecería.
+    const tipoFiltroPrevio = tipoSel ? tipoSel.value : '';
+    const capturadosParaAerolinea = tipoFiltroPrevio
+        ? capturados.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === (tipoFiltroPrevio === 'carga'))
+        : capturados;
+
+    // Todos los códigos del catálogo de aerolíneas (tabla `airlines`) que
+    // clasifican como el tipo pedido, aunque ninguno haya capturado nada
+    // todavía ese día — así se puede filtrar de una vez por una aerolínea de
+    // carga que sigue pendiente, sin esperar a que aparezca en los datos.
+    // Se reutiliza _conciRowIsCargo (no un filtro propio sobre "types") para
+    // que la división sea exclusiva: unas pocas aerolíneas están marcadas en
+    // el catálogo con AMBOS tipos (Air China, Cathay Pacific, China Southern,
+    // Emirates, Lufthansa, Turkish — transportan pasajeros y carga real), y
+    // _conciRowIsCargo ya sabe resolver ese empate igual que lo hace para
+    // cada fila real: sin un TIPO DE OPERACIÓN que lo desempate, cae siempre
+    // del mismo lado (pasajeros) en vez de aparecer en las dos listas.
+    const codigosDeCatalogoPorTipo = (tipo) => {
+        if (typeof _conciAirlineCodeMap === 'undefined' || !(_conciAirlineCodeMap instanceof Map)) return [];
+        return [..._conciAirlineCodeMap.keys()]
+            .filter(code => _conciRowIsCargo({ [airlineCol]: code }, null, airlineCol) === (tipo === 'carga'));
+    };
+    const codigosDeDatos = airlineCol
+        ? [...new Set(capturadosParaAerolinea.map(r => String(get(r, [airlineCol]) || '').trim()).filter(Boolean))]
+        : [];
+    // Combo de aerolinea: mismo formato "CODIGO - Nombre" que ya usa el
+    // filtro de columna AEROLINEA de la tabla principal (_conciResolveAirlineMeta,
+    // alimentado por el catalogo de aerolineas).
+    const codigosAerolinea = tipoFiltroPrevio
+        ? [...new Set([...codigosDeCatalogoPorTipo(tipoFiltroPrevio === 'carga' ? 'carga' : 'pasajeros'), ...codigosDeDatos])].sort((a, b) => a.localeCompare(b, 'es'))
+        : codigosDeDatos.sort((a, b) => a.localeCompare(b, 'es'));
+    if (aerolineaSel) {
+        const firmaAerolinea = tipoFiltroPrevio + '|' + codigosAerolinea.join('');
+        if (aerolineaSel.dataset.firma !== firmaAerolinea) {
+            const previo = aerolineaSel.value;
+            aerolineaSel.innerHTML = '<option value="">Todas las aerolíneas</option>' +
+                codigosAerolinea.map(cod => {
+                    const meta = _conciResolveAirlineMeta(cod);
+                    const label = meta && meta.name ? (cod + '—' + meta.name) : cod;
+                    return `<option value="${esc(cod)}">${esc(label)}</option>`;
+                }).join('');
+            aerolineaSel.value = codigosAerolinea.includes(previo) ? previo : '';
+            aerolineaSel.dataset.firma = firmaAerolinea;
+        }
+    }
+
+    // "Qué capturó": busca por aerolínea, # de vuelo o tipo de manifiesto —
+    // las mismas columnas con las que ya se identifica un manifiesto en
+    // "Exportar por capturista" — usando el mismo criterio de comparación
+    // (sin espacios/guiones/puntos) que el buscador rápido de vuelo.
+    const idCols = cols.filter(c => /aerol[ií]nea|^#\s*de\s*vuelo$|tipo de manifiesto/i.test(c));
+    const buscarTexto = buscarInput ? _conciCompactText(buscarInput.value.trim().toLowerCase()) : '';
+    const capturistaFiltro = capturistaSel ? capturistaSel.value : '';
+    const aerolineaFiltro = aerolineaSel ? aerolineaSel.value : '';
+    // "Carga o pasajeros": mismo criterio (_conciRowIsCargo) que ya usan los
+    // pills Pasajeros/Carga y el resumen KPI de la barra superior.
+    const tipoFiltro = tipoSel ? tipoSel.value : '';
+    const nombresVisibles = capturistaFiltro ? nombresOrdenados.filter(n => n === capturistaFiltro) : nombresOrdenados;
+
+    const headHtml = cols.map(c => `<th>${esc(c)}</th>`).join('');
+    // Dentro de cada capturista, los manifiestos se dividen en Pasajeros y
+    // Carga (mismo criterio _conciRowIsCargo, mismos colores que ya usan las
+    // píldoras "Pasajeros" #5e35b1 y "Carga" #e65100 de la barra superior).
+    const renderSubtabla = (subFilas, etiqueta, icono, color) => {
+        if (!subFilas.length) return '';
+        const bodyHtml = subFilas.map(row => {
+            const tds = cols.map(c => {
+                const val = _conciExportCapturistaCellValue(get(row, [c]));
+                const alignClass = typeof val === 'number' ? 'text-end' : (/observacion/i.test(c) ? 'text-start' : 'text-center');
+                return `<td class="${alignClass}">${esc(val)}</td>`;
+            }).join('');
+            return `<tr>${tds}</tr>`;
+        }).join('');
+        return `
+            <div class="mb-3">
+                <div class="d-flex align-items-center gap-2 mb-1 px-2 py-1 rounded" style="background:${color};color:#fff;font-size:.76rem;">
+                    <i class="fas ${icono}"></i>
+                    <span class="fw-bold text-uppercase">${etiqueta}</span>
+                    <span class="badge bg-light text-dark ms-auto">${subFilas.length}</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-striped mb-0" style="font-size:.78rem;">
+                        <thead><tr>${headHtml}</tr></thead>
+                        <tbody>${bodyHtml}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    };
+
+    const bloques = nombresVisibles.map(nombre => {
+        let filas = grupos.get(nombre) || [];
+        if (aerolineaFiltro) {
+            filas = filas.filter(row => String(get(row, [airlineCol]) || '').trim() === aerolineaFiltro);
+        }
+        if (buscarTexto) {
+            filas = filas.filter(row => idCols.some(c => _conciCompactText(String(get(row, [c]) || '').toLowerCase()).includes(buscarTexto)));
+        }
+        if (!filas.length) return '';
+
+        const filasPax = filas.filter(row => !_conciRowIsCargo(row, optypeCol, airlineCol));
+        const filasCarga = filas.filter(row => _conciRowIsCargo(row, optypeCol, airlineCol));
+        const mostrarPax = tipoFiltro !== 'carga' ? filasPax : [];
+        const mostrarCarga = tipoFiltro !== 'pax' ? filasCarga : [];
+        const total = mostrarPax.length + mostrarCarga.length;
+        if (!total) return '';
+
+        return `
+            <div class="mb-4">
+                <div class="d-flex align-items-center gap-2 mb-2 px-2 py-2 rounded" style="background:#15683f;color:#fff;">
+                    <i class="fas fa-user-tag"></i>
+                    <strong>${esc(nombre)}</strong>
+                    <span class="badge bg-light text-dark ms-auto">${total} manifiesto${total === 1 ? '' : 's'}</span>
+                </div>
+                ${renderSubtabla(mostrarPax, 'Pasajeros', 'fa-users', '#5e35b1')}
+                ${renderSubtabla(mostrarCarga, 'Carga', 'fa-box-open', '#e65100')}
+            </div>`;
+    }).filter(Boolean).join('');
+
+    cont.innerHTML = bloques || '<div class="text-center text-muted py-4">No hay manifiestos que coincidan con el filtro.</div>';
+}
+
+// Cambia la fecha del dashboard a la elegida en el modal (mismo mecanismo que
+// el filtro de fecha de la barra superior) y refresca el panel con lo que
+// quede cargado para ese día.
+async function _conciCargarFechaManifiestosCapturados() {
+    const fechaInput = document.getElementById('conci-mc-fecha');
+    const cont = document.getElementById('conci-mc-resultado');
+    const fecha = fechaInput && fechaInput.value;
+    if (!fecha) return;
+
+    const desdeEl = document.getElementById('filter-conci-fecha-desde');
+    const hastaEl = document.getElementById('filter-conci-fecha-hasta');
+    if (desdeEl) desdeEl.value = fecha;
+    if (hastaEl) hastaEl.value = '';
+
+    if (cont) {
+        cont.innerHTML = '<div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm text-success mb-2"></div><div>Cargando…</div></div>';
+    }
+
+    await loadConciliacionManifiestos({ forceRefresh: true });
+    _conciRenderManifiestosCapturadosPanel();
+}
+
+function _conciAbrirManifiestosCapturados() {
+    const modalEl = document.getElementById('modalConciManifiestosCapturados');
+    if (!modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) return;
+
+    const fechaInput = document.getElementById('conci-mc-fecha');
+    const desdeEl = document.getElementById('filter-conci-fecha-desde');
+    if (fechaInput && !fechaInput.dataset.bound) {
+        fechaInput.dataset.bound = '1';
+        fechaInput.addEventListener('change', _conciCargarFechaManifiestosCapturados);
+    }
+    const exportBtn = document.getElementById('conci-mc-exportar');
+    if (exportBtn && !exportBtn.dataset.bound) {
+        exportBtn.dataset.bound = '1';
+        exportBtn.addEventListener('click', () => {
+            if (typeof window.conciExportPorCapturista === 'function') window.conciExportPorCapturista();
+        });
+    }
+    const capturistaSel = document.getElementById('conci-mc-capturista');
+    if (capturistaSel && !capturistaSel.dataset.bound) {
+        capturistaSel.dataset.bound = '1';
+        capturistaSel.addEventListener('change', _conciRenderManifiestosCapturadosPanel);
+    }
+    const aerolineaSel = document.getElementById('conci-mc-aerolinea');
+    if (aerolineaSel && !aerolineaSel.dataset.bound) {
+        aerolineaSel.dataset.bound = '1';
+        aerolineaSel.addEventListener('change', _conciRenderManifiestosCapturadosPanel);
+    }
+    const tipoSel = document.getElementById('conci-mc-tipo');
+    if (tipoSel && !tipoSel.dataset.bound) {
+        tipoSel.dataset.bound = '1';
+        tipoSel.addEventListener('change', _conciRenderManifiestosCapturadosPanel);
+    }
+    const buscarInput = document.getElementById('conci-mc-buscar');
+    if (buscarInput && !buscarInput.dataset.bound) {
+        buscarInput.dataset.bound = '1';
+        buscarInput.addEventListener('input', _conciRenderManifiestosCapturadosPanel);
+    }
+    // Se propone la fecha que ya está cargada en el dashboard, y se muestra
+    // de una vez lo que ya está en pantalla, sin esperar a que el usuario
+    // toque el calendario.
+    if (fechaInput) fechaInput.value = (desdeEl && desdeEl.value) || '';
+    _conciRenderManifiestosCapturadosPanel();
+
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+}
+window.conciAbrirManifiestosCapturados = _conciAbrirManifiestosCapturados;
+
 // ─── Importación de archivos para Conciliación Manifiestos ───────────────────
 // Cada manifiesto se identifica por Fecha + Tipo de manifiesto + Número de vuelo.
 // Esa llave permite sustituir una carga previa sin añadir filas duplicadas.
@@ -21887,7 +22869,12 @@ const _CONCI_IMPORT_FALLBACK_COLUMNS = [
 ];
 const _CONCI_IMPORT_IGNORED_COLUMNS = new Set([
     'id', 'created_at', 'updated_at', '_fuente', '_ispax', '_validadoitinerario',
-    '_validadoporitinerario', '_concivueloid', '_concivuelodireccion', 'movement_key'
+    '_validadoporitinerario', '_concivueloid', '_concivuelodireccion', 'movement_key',
+    // Columnas del Cierre de Subsecretaría (migración 053): las escribe el
+    // servidor —cierre_capturado_en lo sella el trigger en cada INSERT— y una
+    // importación nunca debe mandarlas. Si llegaran, el trigger las ignoraría
+    // igual, pero mejor no ensuciar el payload.
+    'cierre_id', 'cierre_capturado_en', 'cierre_subsecretaria'
 ]);
 const _CONCI_IMPORT_HEADER_ALIASES = {
     datos_subsecretaria: 'cierre_subsecretaria',
@@ -22345,6 +23332,21 @@ function _conciGetLiveSummaryRows() {
     return rows;
 }
 
+// Cuando una fila "Solo Vuelos" se materializa, el DOM recibe el id nuevo,
+// pero el arreglo enriquecido todavía conserva _fuente='Solo Vuelos'. Mantén
+// un override por índice para que FIJO/PREVIO se actualicen sin recargar toda
+// la tabla.
+function _conciMarcarVueloMaterializado(tr, persistedId) {
+    if (!tr) return;
+    const index = String(tr.dataset.rowIndex || '');
+    if (!/^\d+$/.test(index)) return;
+    const actual = _conciSummaryLiveOverrides.get(index) || {};
+    actual.id = persistedId;
+    actual._fuente = 'Manifiestos + Vuelos';
+    _conciSummaryLiveOverrides.set(index, actual);
+    _conciRefreshSummaryCardsLive();
+}
+
 function _conciRefreshSummaryCardsLive() {
     const rows = _conciGetLiveSummaryRows();
     _conciUpdateResumen(rows, _conciManifestosSummaryColumns);
@@ -22407,6 +23409,19 @@ function _updateManifiestosSummaryStrip(data, columns) {
     // cero, se muestra 0: es un dato, no una ausencia de dato.
     setEl('mf-sum-kgs-carga', kgsCapturados ? fmt(Math.round(kgsCarga)) : 'N/D');
     strip.classList.remove('d-none');
+
+    // Hook opcional para js/conci-cierre-subsecretaria.js: le pasa el mismo
+    // conjunto de filas ya enriquecido (con _fuente) que usan estas tarjetas,
+    // para que calcule PREVIO sin duplicar la lógica de cruce con vuelos.
+    if (typeof window._conciCierreOnSummaryData === 'function') {
+        try { window._conciCierreOnSummaryData(rows, cols); } catch (_) {}
+    }
+    // Mismo patrón para js/conci-alerta-30h.js: le llegan las MISMAS filas
+    // enriquecidas (manifiestos reales + "Solo Vuelos"), así que la alerta de
+    // 30 horas tampoco duplica el cruce con Itinerario.
+    if (typeof window._conciAlerta30hOnSummaryData === 'function') {
+        try { window._conciAlerta30hOnSummaryData(rows, cols); } catch (_) {}
+    }
 }
 
 // Ajusta el alto del contenedor con scroll (#conci-manifiestos-scroll) al
@@ -22482,23 +23497,37 @@ function _conciUpdateWorkspaceMode() {
     const section = document.getElementById('conciliacion-section');
     const manifestPane = document.getElementById('pane-conci-comercial');
     const itineraryPane = document.getElementById('pane-conci-itinerario');
+    const statsPane = document.getElementById('pane-conci-estadistica');
     const enabled = !!(section?.classList.contains('active') &&
         (manifestPane?.classList.contains('active') || itineraryPane?.classList.contains('active')));
     document.body.classList.toggle('conci-manifest-workspace', enabled);
     document.body.classList.toggle('conci-itinerary-workspace',
         !!(enabled && itineraryPane?.classList.contains('active')));
+    // Estadistica tambien va a pantalla completa (con el encabezado del
+    // aeropuerto, sin barra lateral ni boton Menu flotante), pero SIN el alto
+    // fijo de la hoja de calculo: el tablero es largo y baja con el scroll.
+    document.body.classList.toggle('conci-estadistica-workspace',
+        !!(section?.classList.contains('active') && statsPane?.classList.contains('active')));
     requestAnimationFrame(_conciSyncScrollHeight);
 }
 
 window.conciReturnToMainMenu = function () {
-    document.body.classList.remove('conci-manifest-workspace', 'conci-itinerary-workspace');
+    document.body.classList.remove('conci-manifest-workspace', 'conci-itinerary-workspace', 'conci-estadistica-workspace');
     if (typeof window._navdeckShowMenu === 'function') {
         window._navdeckShowMenu();
     }
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    ['tab-conci-comercial', 'tab-conci-itinerario'].forEach(id => {
+    // Estadistica va en la lista aunque NO use el modo hoja de calculo: es
+    // justamente la pestana que tiene que APAGARLO (y encender el suyo, que
+    // conserva el scroll). Sin este listener, entrar a
+    // Estadistica desde Itinerario o Manifiestos dejaba el body en
+    // conci-manifest-workspace, que fija la pagina a 100vh con overflow:hidden;
+    // el contenido se veia cortado a media pantalla y no bajaba con el scroll.
+    // _conciUpdateWorkspaceMode ya decide sola segun el panel activo, asi que
+    // basta con que se vuelva a ejecutar al cambiar a cualquiera de las tres.
+    ['tab-conci-comercial', 'tab-conci-itinerario', 'tab-conci-estadistica'].forEach(id => {
         document.getElementById(id)?.addEventListener('shown.bs.tab', _conciUpdateWorkspaceMode);
     });
     document.querySelectorAll('.menu-item[data-section]').forEach(link => {
@@ -22551,6 +23580,129 @@ document.addEventListener('keydown', event => {
     event.stopPropagation();
     _conciGuardarTodoAhora();
 }, true);
+
+// Ctrl+J rellena hacia abajo: copia el valor de la celda que se está
+// capturando SOLO en la fila visible justo debajo, en esa misma columna —
+// el "rellenar hacia abajo" de una hoja de cálculo, un renglón a la vez
+// (repetible). Reutiliza el mismo camino de guardado que una edición
+// manual (_conciCommitCellRaw), así que la celda rellenada queda marcada
+// como dirty, entra al historial de deshacer y se autoguarda igual que si
+// el usuario la hubiera tecleado. No toca columnas de solo lectura.
+document.addEventListener('keydown', event => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+    if (String(event.key || '').toLowerCase() !== 'j') return;
+    const section = document.getElementById('conciliacion-section');
+    if (!section?.classList.contains('active')) return;
+    if (!document.getElementById('pane-conci-comercial')?.classList.contains('active')) return;
+    if (!document.getElementById('table-conci-manifiestos')) return;
+    if (!_conciEditMode || !_conciCanCurrentUserEdit()) return;
+
+    const activeTd = document.querySelector('#table-conci-manifiestos td.conci-cell-active');
+    if (!activeTd || activeTd.dataset.conciReadonly === '1') return;
+    const startRow = activeTd.closest('tr');
+    const filas = _conciVisibleBodyRows();
+    const idx = startRow ? filas.indexOf(startRow) : -1;
+    if (idx === -1 || idx >= filas.length - 1) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const col = activeTd.dataset.col;
+    const liveInput = activeTd.querySelector('input, textarea, select');
+    const fallbackRaw = _conciIsRoutingColumn(col)
+        ? (activeTd.dataset.routeRaw ?? activeTd.dataset.raw ?? activeTd.textContent)
+        : (activeTd.dataset.raw ?? activeTd.textContent);
+    const value = _conciNormalizeEditableCellText(
+        liveInput ? liveInput.value : (activeTd.dataset.pendingRaw ?? fallbackRaw)
+    );
+
+    const celda = _conciGetCellInRow(filas[idx + 1], col);
+    if (!celda || celda === activeTd || celda.dataset.conciReadonly === '1') return;
+    _conciCommitCellRaw(celda, value, false, value);
+}, true);
+
+// Ctrl+; inserta la fecha de hoy, fija (no fórmula), en la celda que se está
+// capturando — el atajo estándar de Excel para "Insertar fecha actual".
+// Reutiliza el mismo camino de guardado que las demás celdas
+// (_conciCommitCellRaw): la celda queda marcada como dirty, entra al
+// historial de deshacer y se autoguarda igual que si el usuario la hubiera
+// tecleado a mano.
+//
+// No se descarta por Shift, y se acepta por dos vías porque en teclado en
+// español (Latinoamérica) hay dos formas físicas de llegar a esto:
+//   1) Shift+, (coma) — así se escribe el carácter ";" en este layout;
+//      event.key ya trae ese carácter resultante.
+//   2) La tecla Ñ sola, sin Shift — es la misma POSICIÓN física que el
+//      punto y coma en teclado en inglés (event.code === 'Semicolon',
+//      que identifica la tecla por posición, no por lo que imprime), y es
+//      justo la tecla que Excel de verdad intercepta para este atajo
+//      (Excel usa el código de tecla física, no el carácter), así que en
+//      Excel real en este teclado el atajo ya es "Ctrl + Ñ" sin Shift.
+document.addEventListener('keydown', event => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+    if (event.key !== ';' && event.code !== 'Semicolon') return;
+    const section = document.getElementById('conciliacion-section');
+    if (!section?.classList.contains('active')) return;
+    if (!document.getElementById('pane-conci-comercial')?.classList.contains('active')) return;
+    if (!document.getElementById('table-conci-manifiestos')) return;
+    if (!_conciEditMode || !_conciCanCurrentUserEdit()) return;
+
+    const activeTd = document.querySelector('#table-conci-manifiestos td.conci-cell-active');
+    if (!activeTd || activeTd.dataset.conciReadonly === '1') return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const hoy = new Date();
+    const fechaHoy = `${_conciPad2(hoy.getDate())}/${_conciPad2(hoy.getMonth() + 1)}/${hoy.getFullYear()}`;
+    _conciCommitCellRaw(activeTd, fechaHoy, false, fechaHoy);
+}, true);
+
+// Ctrl+Home regresa el foco a la primera celda editable de la MISMA fila en
+// la que se está capturando — con tantas columnas, evita tener que hacer
+// scroll horizontal a mano o ir saltando celda por celda para volver al
+// inicio de la fila. No cambia de fila.
+//
+// Si había un editor abierto en la celda actual, se confirma con el mismo
+// camino que Tab/flechas (closeEditor(true, 'row-start') → _conciCommitCellRaw),
+// así lo tecleado se guarda igual que al moverse con cualquier otra tecla de
+// navegación, en vez de perderse de forma distinta a las demás.
+//
+// Se usa captura (como Ctrl+;) para adelantarse a los editores nativos de
+// fecha/hora, y preventDefault siempre que hay una celda activa, para que el
+// navegador no haga scroll al inicio de toda la página (su Ctrl+Home nativo).
+document.addEventListener('keydown', event => {
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
+    if (event.key !== 'Home') return;
+    const section = document.getElementById('conciliacion-section');
+    if (!section?.classList.contains('active')) return;
+    if (!document.getElementById('pane-conci-comercial')?.classList.contains('active')) return;
+    if (!document.getElementById('table-conci-manifiestos')) return;
+    if (!_conciEditMode) return;
+
+    const activeTd = document.querySelector('#table-conci-manifiestos td.conci-cell-active');
+    if (!activeTd) return;
+    // Solo si el foco realmente sigue dentro de esa celda (o de su editor):
+    // evita que el atajo dispare si el usuario ya se movió a otra parte de
+    // la página (buscador, filtros, botones) y quedó una clase "activa"
+    // rezagada de una celda anterior.
+    const focoActual = document.activeElement;
+    if (focoActual !== activeTd && !activeTd.contains(focoActual)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (typeof activeTd._conciCloseEditor === 'function') {
+        activeTd._conciCloseEditor(true, 'row-start');
+    } else {
+        const firstCell = _conciFirstEditableCellInRow(activeTd);
+        if (firstCell) {
+            _conciAsegurarCeldaVisible(firstCell, 'ambos');
+            _conciActivateCellEditor(firstCell);
+        }
+    }
+}, true);
+
 window.addEventListener('resize', () => {
     clearTimeout(_conciScrollResizeTimer);
     _conciScrollResizeTimer = setTimeout(() => {
@@ -23695,11 +24847,102 @@ function _conciFormatDateMask(value) {
     return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${year.length === 2 ? `20${year}` : year}`;
 }
 
+// ── Corrección de la fecha sin mover nada de sitio ───────────────────────────
+// Mientras se corrige, la fecha NO es una lista de dígitos que se recorre: es
+// una plantilla de 8 lugares fijos, DDMMAAAA. Borrar el día deja su lugar
+// vacío ("__/09/2026") en vez de jalar el mes y el año hacia la izquierda,
+// que es lo que convertía 21/09/2026 en 09/20/26. El día siempre ocupa DD, el
+// mes MM, el año AAAA y las diagonales nunca se mueven.
+const _CONCI_FECHA_HUECO = '_';
+
+// Texto con máscara → los 8 lugares de DDMMAAAA (cada uno dígito o hueco).
+function _conciFechaSlots(texto) {
+    const crudo = String(texto || '').replace(/[^\d_]/g, '');
+    return (crudo + _CONCI_FECHA_HUECO.repeat(8)).slice(0, 8);
+}
+
+// Los 8 lugares → lo que se ve, con las diagonales en su posición de siempre.
+function _conciFechaSlotsATexto(slots) {
+    return `${slots.slice(0, 2)}/${slots.slice(2, 4)}/${slots.slice(4)}`;
+}
+
+// Lugar (0-8) → índice del cursor en el texto, saltando las diagonales.
+function _conciFechaPosDeSlot(i) {
+    return i + (i >= 2 ? 1 : 0) + (i >= 4 ? 1 : 0);
+}
+
+// Índice del cursor en el texto → lugar (0-8). Sobre una diagonal cuenta como
+// el primer lugar del segmento que sigue.
+function _conciFechaSlotEnPos(p) {
+    if (p <= 2) return Math.min(p, 2);
+    if (p <= 5) return Math.min(p - 1, 4);
+    return Math.min(Math.max(p - 2, 0), 8);
+}
+
+// Aplica un dígito, Backspace o Delete sobre el lugar donde está el cursor (o
+// sobre los lugares seleccionados), sin recorrer nada. Devuelve los 8 lugares
+// resultantes y en cuál queda el cursor, o null cuando el caso es el de
+// siempre —seguir capturando al final de una celda nueva, o reescribir la
+// celda entera con todo seleccionado— que resuelve tal cual la lógica de
+// captura de abajo.
+//
+// `capturados` son los dígitos que el usuario tecleó de verdad. Con menos de
+// 8 la fecha se está capturando y el siglo "20" que aparece solo al 6º dígito
+// es de adorno, no un lugar tecleado: al final del campo se sigue capturando
+// como siempre. Con los 8 puestos ya no hay captura que respetar, sólo
+// corrección, así que los lugares mandan y el año nunca se encoge.
+function _conciEditarFechaEnCursor(input, tecla, capturados) {
+    const texto = String(input.value || '');
+    const ini = input.selectionStart;
+    const fin = input.selectionEnd;
+    if (ini == null || fin == null) return null;
+    const conSeleccion = ini !== fin;
+    if (conSeleccion && ini === 0 && fin >= texto.length) return null;
+    const conHuecos = texto.includes(_CONCI_FECHA_HUECO);
+    const capturando = !conHuecos && String(capturados || '').length < 8;
+    if (!conSeleccion && capturando && ini >= texto.length) return null;
+
+    const slots = _conciFechaSlots(texto).split('');
+    const listo = (slot) => ({ slots: slots.join(''), slot });
+    let a = _conciFechaSlotEnPos(ini);
+
+    if (conSeleccion) {
+        // Lo seleccionado se vacía en su sitio; un dígito entra en el primero.
+        for (let i = a; i < _conciFechaSlotEnPos(fin); i++) slots[i] = _CONCI_FECHA_HUECO;
+        if (/^\d$/.test(tecla) && a < 8) slots[a++] = tecla;
+        return listo(a);
+    }
+    if (tecla === 'Backspace') {
+        if (a === 0) return listo(0);
+        slots[a - 1] = _CONCI_FECHA_HUECO;
+        return listo(a - 1);
+    }
+    if (tecla === 'Delete') {
+        if (a < 8) slots[a] = _CONCI_FECHA_HUECO;
+        return listo(a);
+    }
+    // Un dígito sobrescribe el lugar que está delante del cursor. Tecleado al
+    // final cae en el primer lugar vacío, o sobre el último del año si ya no
+    // queda ninguno ("21/09/2026" + "5" al final → "21/09/2025").
+    let destino = a;
+    if (destino >= 8) {
+        const hueco = slots.indexOf(_CONCI_FECHA_HUECO);
+        destino = hueco >= 0 ? hueco : 7;
+    }
+    slots[destino] = tecla;
+    return listo(destino + 1);
+}
+
 // Convierte lo capturado en la máscara a ISO (yyyy-mm-dd), o '' si aún no es
 // una fecha real. El año se toma con 2 dígitos como 20XX ("26" → 2026), que es
 // el caso normal de captura; con 4 dígitos se respeta tal cual, para poder
 // registrar cualquier otro año sin salirse del mismo campo.
 function _conciMaskedDateToIso(value) {
+    // Un lugar vacío (_CONCI_FECHA_HUECO, aquí literal porque esta función se
+    // lee suelta desde las pruebas) significa fecha a medio corregir: no se
+    // interpreta lo que quedó ("__/09/2026" no es el 9 del mes 20), se rechaza
+    // y el editor de la celda la pide completa, como cualquier otra incompleta.
+    if (/_/.test(String(value || ''))) return '';
     const digits = String(value || '').replace(/\D/g, '');
     if (digits.length !== 6 && digits.length !== 8) return '';
     const day = parseInt(digits.slice(0, 2), 10);
@@ -23787,6 +25030,13 @@ function _conciGetPrevEditableCell(td) {
         row = row.previousElementSibling;
     }
     return null;
+}
+
+// Primera celda editable de la MISMA fila que td (Ctrl+Home: "ir al inicio
+// de esta fila", sin cambiar de fila).
+function _conciFirstEditableCellInRow(td) {
+    const tr = td && td.closest('tr');
+    return tr ? tr.querySelector(_CONCI_SEL_CELDA_EDITABLE) : null;
 }
 
 // ── Navegación vertical (↑/↓) y desde la fila de filtros ──────────────────
@@ -24065,10 +25315,20 @@ function _conciNormalizedColumnName(column) {
 }
 
 // Antes MES/FECHA quedaban bloqueados en toda la tabla (no solo en filas
-// nuevas). El usuario pidió que todos los campos sean editables, así que
-// esta protección queda desactivada.
-function _conciIsProtectedEditColumn(_column) {
-    return false;
+// nuevas). El usuario pidió que todos los campos sean editables, así que esa
+// protección quedó desactivada y sigue desactivada: la única columna que vuelve
+// a estar bloqueada es "CIERRE SUBSECRETARIA", y por una razón distinta (ya no
+// es un dato de captura, sino la fecha del corte que escribe el servidor).
+function _conciIsProtectedEditColumn(column) {
+    // "CIERRE SUBSECRETARIA" dejó de ser captura libre: la escribe el Cierre de
+    // Subsecretaría con la FECHA DEL CORTE (migración 053). El trigger la deja
+    // vacía en cada INSERT y la conserva intacta en cada UPDATE de una fila del
+    // nuevo mecanismo, así que teclearla aquí no serviría de nada — y peor:
+    // mientras la fila siguiera ABIERTA aparecería en el oficio de esa fecha
+    // sin haberse cerrado nunca, que es justo el descuadre que el mecanismo
+    // existe para impedir. Se bloquea en la interfaz para que el capturista vea
+    // por qué, en vez de escribir algo que el servidor va a ignorar.
+    return _conciNormalizedColumnName(column) === 'cierre subsecretaria';
 }
 
 // Columnas que el propio cliente calcula (fórmula) a partir de otras
@@ -24407,6 +25667,23 @@ function _conciIsRoutingColumn(column) {
     const key = _conciNormalizedColumnName(column);
     return key === 'destino / origen' || key === 'destino/origen' || key === 'routing'
         || /destino.*origen|origen.*destino/.test(key);
+}
+
+// Valor crudo de una celda: lo que se guardaría en la base, no lo que se ve.
+// En DESTINO / ORIGEN la celda muestra la ciudad del extremo que toca
+// ("BOGOTÁ") mientras el valor real vive en routeRaw ("BOG-NLU-LAX").
+// Comparar contra lo que se ve daba por cambiada una celda que sólo se
+// atravesó: el editor devuelve la ruta al cerrarse, la ruta no es igual a la
+// ciudad, y la fila quedaba sucia —y firmada en CAPTURÓ— sin que nadie la
+// tocara. Las demás columnas muestran lo mismo que guardan, así que para
+// ellas no cambia nada.
+function _conciCeldaValorCrudo(td) {
+    if (!td || !td.dataset) return '';
+    if (td.dataset.pendingRaw !== undefined) return td.dataset.pendingRaw;
+    if (_conciIsRoutingColumn(td.dataset.col)) {
+        return td.dataset.routeRaw ?? td.dataset.raw ?? td.textContent ?? '';
+    }
+    return td.dataset.raw || td.textContent || '';
 }
 
 function _conciIsAeronaveColumn(column) {
@@ -24782,7 +26059,7 @@ function _conciActivateRoutingEditor(td, currentRaw) {
     select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
-        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
+        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, 'stay'); }
         else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
             closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
@@ -24983,7 +26260,7 @@ function _conciActivateAeronaveEditor(td, currentRaw) {
             closeEditor(true, 'next');
         } else if (event.key === 'Escape') {
             event.preventDefault();
-            closeEditor(false, false);
+            closeEditor(false, 'stay');
         } else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             // →/← se comportan igual que Tab/Shift+Tab: pasan de campo sin
             // confirmar ninguna sugerencia.
@@ -25506,7 +26783,7 @@ function _conciActivateDemoraCodeEditor(td, currentRaw) {
                 closeSuggest();
                 return;
             }
-            closeEditor(false, false);
+            closeEditor(false, 'stay');
         } else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             // →/← se comportan igual que Tab/Shift+Tab, como en el editor de
             // AERONAVE: pasan de campo sin confirmar ninguna sugerencia.
@@ -25698,7 +26975,7 @@ function _conciActivateManifestTypeEditor(td, currentRaw) {
     select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
-        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
+        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, 'stay'); }
         else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
             closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
@@ -25767,7 +27044,7 @@ function _conciActivateMatriculaStatusEditor(td, currentRaw) {
     select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
     select.addEventListener('keydown', event => {
         if (event.key === 'Enter') { event.preventDefault(); closeEditor(true, 'next'); }
-        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, false); }
+        else if (event.key === 'Escape') { event.preventDefault(); closeEditor(false, 'stay'); }
         // Mismo criterio que los combos de TIPO DE MANIFIESTO y TIPO DE
         // OPERACIÓN. Este editor se había quedado solo con Enter y Escape, y
         // _conciHandleGridArrowNavigation ignora a propósito lo que ocurre
@@ -25851,7 +27128,7 @@ function _conciActivateOperationTypeEditor(td, currentRaw) {
             closeEditor(true, 'next');
         } else if (event.key === 'Escape') {
             event.preventDefault();
-            closeEditor(false, false);
+            closeEditor(false, 'stay');
         } else if (event.key === 'Tab' || event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
             closeEditor(true, (event.key === 'ArrowLeft' || (event.key === 'Tab' && event.shiftKey)) ? 'prev' : 'next');
@@ -26803,6 +28080,11 @@ function _conciHandleRemoteCellSaved(payload) {
             todoAplicado = false;
         }
     });
+    // Una escritura confirmada desde otra pestaña también invalida los
+    // reportes oficiales. El evento local por sí solo no alcanza esta ruta.
+    if (todoAplicado && typeof _conciNotificarManifiestosCambiaron === 'function') {
+        _conciNotificarManifiestosCambiaron();
+    }
     // Si todo se pudo aplicar aqui, la recarga completa que Postgres anuncia
     // en un momento ya no aporta nada y solo haria parpadear la pantalla.
     if (todoAplicado) _conciUltimoParcheTs = Date.now();
@@ -26947,7 +28229,16 @@ function _conciHandleRemoteCellInput(payload) {
 // compañero. Si hay un editor de celda abierto ahora mismo, difiere el
 // refresco para no interrumpir la captura en curso; se reintenta al cerrar
 // esa celda (ver _conciCommitCellRaw / _conciAutoSaveRow).
+//
+// Esto llega aunque la tabla de Conciliación Manifiestos no esté en pantalla
+// (por ejemplo, con un reporte de pasajeros o de carga abierto), así que la
+// invalidación de esos reportes va ANTES del early-return de abajo. Si no,
+// un capturista modificando en otra pestaña nunca tira la caché de quien está
+// viendo reportes, y el reporte se queda mostrando datos de antes del cambio.
 function _conciHandleRemoteTableChange() {
+    if (typeof _conciNotificarManifiestosCambiaron === 'function') {
+        _conciNotificarManifiestosCambiaron();
+    }
     if (!document.getElementById('table-conci-manifiestos')) return;
     _conciPendingRemoteRefresh = true;
     _conciMaybeApplyDeferredRemoteRefresh();
@@ -28933,7 +30224,17 @@ function _conciActivateCellEditor(td) {
     const isDateCol = _conciColIsDate(col);
     const isDateTimeCol = !isDateCol && _conciColIsDateTime(col);
     if (isDateCol || isDateTimeCol) {
-        const parts = currentRaw ? _conciParseDateTimeParts(currentRaw, _conciEditFallbackYear) : null;
+        let parts = currentRaw ? _conciParseDateTimeParts(currentRaw, _conciEditFallbackYear) : null;
+        // HR. DE RECEPCIÓN vacía: se propone la fecha de hoy real (hora local),
+        // en vez de dejarla en blanco. No depende del filtro de fecha activo en
+        // la tabla (que puede estar mostrando otro día) ni de _conciEditFallbackYear;
+        // solo aplica a esta columna — el resto de las columnas de fecha siguen
+        // abriendo vacías como antes. Como no se marca "touched" solo por
+        // proponerla, si el usuario no toca nada la celda sigue sin guardarse.
+        if (!parts && _conciIsReceptionColumn(col)) {
+            const hoy = new Date();
+            parts = { year: hoy.getFullYear(), month: hoy.getMonth() + 1, day: hoy.getDate() };
+        }
         _conciActivateDateTimeEditor(td, { withTime: isDateTimeCol, parts, currentRaw });
         return;
     }
@@ -29012,7 +30313,7 @@ function _conciActivateCellEditor(td) {
             closeEditor(true, 'next');
         } else if (e.key === 'Escape') {
             e.preventDefault();
-            closeEditor(false, false);
+            closeEditor(false, 'stay');
         } else if (e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
             // →/← se comportan igual que Tab/Shift+Tab: pasan de campo siempre,
             // sin importar en qué posición esté el cursor dentro del texto.
@@ -29051,7 +30352,7 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
     const previousRaw = _conciNormalizeEditableCellText(
         td._conciEditorStartRaw !== undefined
             ? td._conciEditorStartRaw
-            : (td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || td.textContent))
+            : _conciCeldaValorCrudo(td)
     );
     delete td._conciEditorStartRaw;
     const hasOriginalValue = td.dataset.origRaw !== undefined;
@@ -29139,6 +30440,22 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
         _conciFocusFilterOrAbove(td);
     } else if (move === 'down') {
         _conciFocusBelow(td);
+    } else if (move === 'stay') {
+        // Esc: el editor se cierra y el valor vuelve al que tenía (nextRaw ya
+        // llegó como fallbackRaw desde cada closeEditor), pero a diferencia de
+        // 'next'/'prev'/'up'/'down' aquí no se activa ninguna otra celda — así
+        // que sin esto la celda se queda sin la marca de "aquí estabas" y el
+        // usuario pierde de vista dónde se quedó capturando.
+        td.classList.add('conci-cell-active');
+        try { td.focus({ preventScroll: true }); } catch (_) { td.focus(); }
+    } else if (move === 'row-start') {
+        // Ctrl+Home: misma fila, primera columna editable — igual que
+        // 'next'/'prev', solo cambia a qué celda se salta.
+        const firstCell = _conciFirstEditableCellInRow(td);
+        if (firstCell) {
+            _conciAsegurarCeldaVisible(firstCell, 'ambos');
+            _conciActivateCellEditor(firstCell);
+        }
     }
     // Aplica un refresco remoto en espera SOLO después de intentar abrir la
     // siguiente celda: si la navegación deja una celda activa, este chequeo
@@ -29287,13 +30604,27 @@ function _conciActivateDateTimeEditor(td, { withTime, parts, currentRaw = '' }) 
     // encima de usar esas flechas para moverse entre los segmentos día/mes/año
     // del selector de fecha nativo (para eso ya sirve escribir los números,
     // que avanzan de segmento solos).
+    // Excepción en el campo de fecha: ←/→ mueven el cursor dentro de la fecha
+    // (y con Shift seleccionan) mientras no esté en el borde; en el borde
+    // siguen pasando de campo como siempre.
+    const flechaDentroDeFecha = (e) => {
+        if (e.target !== dateInput || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return false;
+        if (e.shiftKey) return true;
+        const ini = dateInput.selectionStart;
+        const fin = dateInput.selectionEnd;
+        if (ini == null || fin == null) return false;
+        if (ini !== fin) return true;
+        return e.key === 'ArrowLeft' ? ini > 0 : fin < dateInput.value.length;
+    };
     const onKeydown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
             closeEditor(true, 'next');
         } else if (e.key === 'Escape') {
             e.preventDefault();
-            closeEditor(false, false);
+            closeEditor(false, 'stay');
+        } else if (flechaDentroDeFecha(e)) {
+            // Movimiento nativo del cursor dentro de la fecha.
         } else if (e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
             const goingBack = e.key === 'ArrowLeft' || (e.key === 'Tab' && e.shiftKey);
             if (goingBack) {
@@ -29952,6 +31283,22 @@ function _conciDatabaseValueEquals(expected, actual) {
     return String(actual ?? '').trim() === String(expected).trim();
 }
 
+// Avisa de que los datos de "Conciliación Manifiestos" cambiaron de verdad
+// (escritura o borrado ya CONFIRMADOS por la base, no simplemente intentados).
+//
+// Lo escuchan js/conci-reportes-pasajeros.js y js/conci-reportes-carga.js para
+// tirar su caché: esa caché sólo compara la fecha pedida, así que sin este
+// aviso un reporte regenerado después de un cierre o de una corrección seguiría
+// mostrando las filas que descargó antes. No se emite en refrescos de sólo
+// lectura: la idea es que la caché no sobreviva a una MODIFICACIÓN, no dejar de
+// cachear.
+function _conciNotificarManifiestosCambiaron() {
+    try {
+        window.dispatchEvent(new CustomEvent('conciliacion:manifiestos-cambiaron'));
+    } catch (_) { /* nunca debe tumbar el guardado que acaba de funcionar */ }
+}
+window._conciNotificarManifiestosCambiaron = _conciNotificarManifiestosCambiaron;
+
 function _conciPersistenceMismatch(persistedRow, expectedPayload) {
     if (!persistedRow || typeof persistedRow !== 'object') return ['id'];
     return Object.keys(expectedPayload || {}).filter(column =>
@@ -30269,6 +31616,15 @@ async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
         }
 
         if (!result.error) {
+            // Escritura confirmada por la base (ya se comprobaron los valores
+            // devueltos): los reportes deben tirar su caché. El typeof es la
+            // misma guarda que usan los demás hooks opcionales del archivo —
+            // varios arneses de prueba extraen esta función sola, sin el resto
+            // de script.js, y un aviso de caché no puede hacer fallar un
+            // guardado que ya funcionó.
+            if (typeof _conciNotificarManifiestosCambiaron === 'function') {
+                _conciNotificarManifiestosCambiaron();
+            }
             return {
                 ok: true,
                 adjusted: attempt > 0 || recoveredRowId !== null,
@@ -30440,13 +31796,18 @@ function _conciFillRowActionCell(actionTd, persistedId) {
         del.dataset.rowId = persistedId;
         group.appendChild(del);
     }
+    // Hook opcional para js/conci-cierre-subsecretaria.js: agrega un icono de
+    // candado cuando este manifiesto pertenece a un Cierre de Subsecretaría.
+    if (typeof window._conciCierreExtraRowAction === 'function') {
+        try { window._conciCierreExtraRowAction(group, persistedId); } catch (_) {}
+    }
     actionTd.appendChild(group);
 }
 
 // Limpia el estado "dirty"/warning de una fila tras un guardado exitoso.
 function _conciMarkRowSaved(tr, cells) {
     cells.forEach(td => {
-        const raw = _conciNormalizeEditableCellText(td.dataset.pendingRaw ?? td.dataset.raw ?? td.textContent);
+        const raw = _conciNormalizeEditableCellText(_conciCeldaValorCrudo(td));
         td.dataset.origRaw = raw;
         td.removeAttribute('data-dirty');
     });
@@ -30623,6 +31984,7 @@ function _conciAdoptarFilaPersistida(tr, result) {
     if (tr.dataset.rowFuente === 'Solo Vuelos') {
         tr.dataset.rowFuente = 'Manifiestos + Vuelos';
         tr.classList.remove('conci-missing-manifiesto');
+        if (typeof _conciMarcarVueloMaterializado === 'function') _conciMarcarVueloMaterializado(tr, id);
     }
     const actionTd = tr.querySelector('td.conci-row-action-col');
     if (actionTd && typeof _conciFillRowActionCell === 'function') _conciFillRowActionCell(actionTd, String(id));
@@ -30787,7 +32149,15 @@ async function _conciAutoSaveRow(tr, options = {}) {
     // datos sin depender de que alguien lo escriba a mano. No aplica al
     // ajuste trivial de aerolínea sobre una fila "Solo Vuelos" (no crea
     // manifiesto), y nunca sobreescribe un capturista ya asignado.
-    if (Object.keys(payload).length) {
+    //
+    // "Captura real" es una celda que el usuario tocó (dirty), no un payload
+    // con contenido: el payload lleva TODAS las columnas con valor, las haya
+    // cambiado o no, porque la fila se reenvía entera en cada autoguardado.
+    // Y el autoguardado corre al cerrarse cualquier editor, aunque nadie
+    // escribiera nada. Con la condición vieja bastaba con atravesar la fila
+    // —Tab, flechas o un clic de celda en celda— para que quedara firmada por
+    // quien sólo pasó por ahí. Vaciar una celda sí cuenta: es una captura.
+    if (dirtyCols.size) {
         const airlineEntryForCapturo = _conciAirlinePayloadEntry(payload);
         const onlyAirlineDirtyForCapturo = tr.dataset.rowFuente === 'Solo Vuelos' && airlineEntryForCapturo
             && dirtyCols.size > 0 && [...dirtyCols].every(col => col === airlineEntryForCapturo.key);
@@ -30893,6 +32263,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
                     _conciBorradorTrasladarFilaNueva(tr, inserted.id);
                     tr.dataset.rowId = String(inserted.id);
                     tr.dataset.rowFuente = 'Manifiestos + Vuelos';
+                    if (typeof _conciMarcarVueloMaterializado === 'function') _conciMarcarVueloMaterializado(tr, inserted.id);
                     tr.classList.remove('conci-missing-manifiesto');
                     const actionTd = tr.querySelector('td.conci-row-action-col');
                     if (actionTd) _conciFillRowActionCell(actionTd, String(inserted.id));
@@ -30983,6 +32354,7 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 tr.dataset.rowId = String(inserted.id);
                 tr.dataset.conciSummaryPersisted = '1';
                 tr.removeAttribute('data-conci-new');
+                if (typeof _conciMarcarVueloMaterializado === 'function') _conciMarcarVueloMaterializado(tr, inserted.id);
                 // La fila ya es un registro real: su celda de acciones pasa a ser
                 // la misma que la del resto de filas guardadas (historial +
                 // eliminar según permisos). Antes sólo se le cambiaba la clase al
@@ -31183,6 +32555,10 @@ async function _conciEliminarRegistro(rowId) {
     // re-filtrar la misma fecha reviviría la fila borrada.
     _conciRenderCache.clear();
     _conciRenderedKey = '';
+    // Y por la misma razón, la caché de Reportes tampoco puede sobrevivir.
+    if (typeof _conciNotificarManifiestosCambiaron === 'function') {
+        _conciNotificarManifiestosCambiaron();
+    }
     return true;
 }
 
@@ -32138,6 +33514,7 @@ async function _conciSaveBulkEdits() {
         { key: 'parte-operaciones',    label: 'Parte de Operaciones',    icon: 'file-invoice',      group: 'Operaciones' },
         { key: 'analisis-operaciones', label: 'Análisis de Operaciones', icon: 'chart-pie',         group: 'Operaciones' },
         { key: 'conciliacion',         label: 'Conciliación',            icon: 'tasks',             group: 'Operaciones' },
+        { key: 'aviacion-general',     label: 'Aviación General · FBO',  icon: 'paper-plane',       group: 'Operaciones' },
         { key: 'puntualidad-agosto',   label: 'Puntualidad',             icon: 'clock',             group: 'Operaciones' },
         { key: 'demoras',              label: 'Demoras',                 icon: 'clock',             group: 'Operaciones' },
         { key: 'aerolineas',           label: 'Aerolíneas',              icon: 'plane',             group: 'Módulos' },
@@ -32230,7 +33607,7 @@ async function _conciSaveBulkEdits() {
             desc: 'GAG · GC · GCOMB',
             icon: 'truck-loading',
             color: '#fd7e14',
-            sections: ['aviacion-general-fbo', 'combustibles', 'capacidad-carga']
+            sections: ['aviacion-general-fbo', 'aviacion-general', 'combustibles', 'capacidad-carga']
         },
         {
             key: 'SI',

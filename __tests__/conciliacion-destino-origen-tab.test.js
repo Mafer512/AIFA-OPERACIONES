@@ -89,3 +89,66 @@ describe('DESTINO / ORIGEN al navegar con Tab', () => {
     expect(routingCell.dataset.routeRaw).toBe('TRC-NLU-TRC');
   });
 });
+
+describe('atravesar DESTINO / ORIGEN no marca la celda como capturada', () => {
+  // La celda muestra la ciudad ("Torreon") y guarda la ruta ("TRC-NLU-TRC").
+  // Al cerrarse, el editor devuelve la ruta; compararla contra lo que se veía
+  // daba por capturada una celda que nadie tocó, y eso firmaba la fila en
+  // CAPTURÓ con el nombre de quien sólo pasó por ahí.
+  const trozo = (nombre) => {
+    const inicio = source.indexOf('function ' + nombre);
+    if (inicio === -1) throw new Error('No se encontró ' + nombre);
+    return source.slice(inicio, source.indexOf('\nfunction ', inicio + 10));
+  };
+
+  const construirCommit = () => {
+    const nada = () => {};
+    return new Function(
+      '_conciNormalizeEditableCellText', '_conciIsRoutingColumn', '_conciBorradorGuardarCelda',
+      '_conciBorradorQuitarCelda', '_conciNormalizedColumnName', '_conciIsOperationTypeColumn',
+      '_conciRenderOperationTypeCell', '_conciResolveAirlineMeta', '_conciApplyAirlineCellPreview',
+      '_conciRecordUndo', '_conciMarkCellChanged', '_conciChangeCleanup',
+      '_conciRefreshMatriculaValidationForRow', '_conciRefreshCalculatedCellsForRow',
+      '_conciAutoSaveRow', '_conciBroadcastFoco', '_conciGetNextEditableCell',
+      '_conciAsegurarCeldaVisible', '_conciActivateCellEditor', '_conciGetPrevEditableCell',
+      '_conciFocusFilterOrAbove', '_conciFocusBelow', '_conciFirstEditableCellInRow',
+      '_conciMaybeApplyDeferredRemoteRefresh', '_conciEditMode',
+      trozo('_conciCeldaValorCrudo') + '\n' + trozo('_conciCommitCellRaw') + '\nreturn _conciCommitCellRaw;'
+    )(
+      normalize,
+      col => String(col || '').toUpperCase().includes('DESTINO'),
+      nada, nada,
+      col => String(col || '').toUpperCase().trim(),
+      () => false, nada, () => null, nada, nada, nada, nada, nada, nada, nada, nada,
+      () => null, nada, nada, () => null, nada, nada, () => null, nada, true
+    );
+  };
+
+  const celdaRouting = () => {
+    document.body.innerHTML = '<table><tbody><tr><td data-col="DESTINO / ORIGEN"></td></tr></tbody></table>';
+    const td = document.querySelector('td');
+    td.dataset.raw = 'Torreon';           // lo que se ve
+    td.dataset.routeRaw = 'TRC-NLU-TRC';  // lo que se guarda
+    td.textContent = 'Torreon';
+    return td;
+  };
+
+  test('cerrar el editor con el mismo valor deja la celda limpia', () => {
+    const commit = construirCommit();
+    const td = celdaRouting();
+
+    commit(td, 'TRC-NLU-TRC', false, 'Torreon');
+
+    expect(td.dataset.dirty).toBeUndefined();
+    expect(td.closest('tr').dataset.dirty).toBeUndefined();
+  });
+
+  test('elegir otro aeropuerto sí la marca como capturada', () => {
+    const commit = construirCommit();
+    const td = celdaRouting();
+
+    commit(td, 'Zaragoza', false, 'Zaragoza');
+
+    expect(td.dataset.dirty).toBe('1');
+  });
+});
