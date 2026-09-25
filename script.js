@@ -22264,6 +22264,20 @@ async function _conciExportToExcel(kind) {
         alert('No hay datos cargados para exportar.');
         return;
     }
+    // Total tiene su propio formato DATA. La ruta Pasajeros/Carga continúa
+    // utilizando exactamente sus catálogos, cálculos y presentación previos.
+    if (kind === 'total') {
+        const workbook = window.ConciExportTotal.createWorkbook(ExcelJS, rows, {
+            parseDateParts: _conciParseDateTimeParts,
+            year: _conciEditFallbackYear,
+            resolveAirlineMeta: _conciResolveAirlineMeta,
+        });
+        const buffer = await workbook.xlsx.writeBuffer();
+        const stamp = new Date().toISOString().slice(0, 10);
+        saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+            `Conciliacion_Total_${stamp}.xlsx`);
+        return;
+    }
     const columns = _conciManifestosSummaryColumns;
     const year = _conciEditFallbackYear;
     const cols = (Array.isArray(columns) && columns.length) ? columns : Object.keys(rows[0] || {});
