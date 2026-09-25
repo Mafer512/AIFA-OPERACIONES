@@ -18,6 +18,7 @@
         TERMINATED: 'baja',
         COMMISSIONED_OUT: 'comisionado_fuera',
         DUPLICATE: 'duplicado',
+        OUTSIDE_DIRECTION: 'fuera_direccion',
         OTHER: 'otro',
     });
 
@@ -34,6 +35,7 @@
         commissionedSubdirection: 'subdireccion_comisionado',
         commissionedManagement: 'gerencia_comisionado',
         commissionedCoordination: 'coordinacion_comisionado',
+        belongsToDirection: 'pertenece_direccion',
     });
 
     function normalize(value) {
@@ -176,6 +178,28 @@
        en otras Mujer, y darla por hombre metía mujeres en el conteo de hombres.
        Aquí solo se resuelve lo que no admite dos lecturas; la "M" se deja
        pendiente para que la decida el CURP (ver resolveGender). */
+    /* La palomita de "pertenece a la Dirección de Operación".
+
+       La columna Dirección dice dónde está adscrita la plaza, no quién integra
+       el área de verdad: hay gente que aparece con Dirección de Operación y
+       orgánicamente no forma parte de ella, y contarla inflaba el total y con
+       él todos los indicadores del Resumen. Por eso la pertenencia se marca a
+       mano, una palomita por persona, y es ese dato el que manda.
+
+       Quien no tiene la casilla capturada cuenta como que pertenece: la columna
+       nació en true para que el día que se agregó ningún número se moviera, y
+       desde ahí se va despalomeando a quien no va. Sólo un "no" explícito
+       excluye, así que mientras la columna no exista todo sigue como estaba. */
+    function belongsToDirection(record, get) {
+        const raw = get(record, SEMANTIC_FIELDS.belongsToDirection);
+        if (raw === false) return false;
+        if (raw === true || raw == null) return true;
+
+        const value = normalize(raw);
+        if (!value) return true;
+        return !/^(?:false|f|0|no|n)$/.test(value);
+    }
+
     function normalizeGender(value) {
         const gender = normalize(value);
         if (['masculino', 'hombre', 'varon', 'h'].includes(gender)) return 'H';
@@ -281,6 +305,16 @@
             return { included: false, reason: REASONS.COMMISSIONED_OUT, detail: 'comisión explícita fuera del área' };
         }
 
+        // Al final a propósito: quien causó baja sale por baja, no por falta de
+        // palomita, para que el desglose de exclusiones siga diciendo la verdad.
+        if (!belongsToDirection(record, get)) {
+            return {
+                included: false,
+                reason: REASONS.OUTSIDE_DIRECTION,
+                detail: 'sin palomita de pertenencia a la Dirección de Operación',
+            };
+        }
+
         return { included: true, reason: null, detail: 'persona activa' };
     }
 
@@ -346,6 +380,7 @@
                     terminated: reasonCounts[REASONS.TERMINATED] || 0,
                     commissionedOut: reasonCounts[REASONS.COMMISSIONED_OUT] || 0,
                     duplicate: reasonCounts[REASONS.DUPLICATE] || 0,
+                    outsideDirection: reasonCounts[REASONS.OUTSIDE_DIRECTION] || 0,
                     other: reasonCounts[REASONS.OTHER] || 0,
                 },
             },
@@ -366,6 +401,7 @@
         isVacancyName,
         isOperationalAreaDestination,
         isCommissionedOut,
+        belongsToDirection,
         classifyRecord,
         buildUniverse,
     });
