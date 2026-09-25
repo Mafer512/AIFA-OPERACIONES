@@ -7833,6 +7833,8 @@ FF
                             flex-shrink: 0;
                         }
                         .cd-kpi-total .cd-kpi-icon { background: #e8f0fe; color: #1558d6; }
+                        .cd-kpi-vac   .cd-kpi-icon { background: #fdeee0; color: #b3541e; }
+                        .cd-kpi-vac   .cd-kpi-pct  { color: #b3541e; }
                         .cd-kpi-masc  .cd-kpi-icon { background: #e3f2fd; color: #1565c0; }
                         .cd-kpi-fem   .cd-kpi-icon { background: #fce4ec; color: #c2185b; }
                         .cd-kpi-dir   .cd-kpi-icon { background: #e8f5e9; color: #2e7d32; }
@@ -9439,10 +9441,82 @@ FF
                         }
                         .ctbl-status-activo { color: #047857; background: #d1fae5; border-color: #6ee7b7; }
                         .ctbl-status-baja { color: #fff; background: #6b7280; border-color: #4b5563; }
+                        /* La palomita de pertenencia: grande y con area de clic propia,
+                           porque se va a usar cientos de veces seguidas al depurar el padron. */
+                        .ctbl-pert {
+                            display: flex; align-items: center; justify-content: center;
+                            margin: 0; cursor: pointer; padding: .15rem;
+                        }
+                        .ctbl-pert input { width: 17px; height: 17px; cursor: pointer; accent-color: #1558d6; margin: 0; }
+                        .ctbl-pert input:disabled { cursor: not-allowed; opacity: .45; }
+                        .ctbl-table td.ctbl-td-pert { text-align: center; padding: .2rem .35rem; width: 1%; }
+                        /* Quien queda fuera del conteo se ve apagado: al depurar cientos de
+                           renglones hace falta distinguirlos de un vistazo, sin leer la casilla. */
+                        .ctbl-table tr.ctbl-fuera td { opacity: .48; }
+                        .ctbl-table tr.ctbl-fuera td.ctbl-td-pert { opacity: 1; }
+                        .ctbl-pert-badge {
+                            background: #eaf7ee; color: #16794c;
+                            border-radius: 999px; padding: .12rem .65rem;
+                            font-size: .75rem; font-weight: 700; white-space: nowrap;
+                        }
+                        .ctbl-pert-badge.tiene-fuera { background: #fdeceb; color: #b3261e; }
                         .ctbl-count-badge {
                             background: #e8eef8; color: #1558d6;
                             border-radius: 999px; padding: .12rem .65rem;
                             font-size: .75rem; font-weight: 700;
+                        }
+
+                        /* ---- PLAZAS VACANTES ---- */
+                        .vacp-toolbar {
+                            display: flex; gap: .5rem; align-items: center; flex-wrap: wrap;
+                            padding: .6rem .9rem; border-bottom: 1px solid #e8eef8; background: #f8fafc;
+                        }
+                        .vacp-toolbar .vacp-inp {
+                            flex: 1 1 240px; min-width: 180px;
+                            border: 1px solid #cfd8e3; border-radius: 8px;
+                            padding: .35rem .7rem; font-size: .82rem;
+                        }
+                        .vacp-toolbar select {
+                            border: 1px solid #cfd8e3; border-radius: 8px;
+                            padding: .35rem .6rem; font-size: .82rem; background: #fff;
+                        }
+                        .vacp-resumen {
+                            display: flex; gap: 1.5rem; flex-wrap: wrap;
+                            padding: .7rem .9rem; background: #fff8f0; border-bottom: 1px solid #f4e2cd;
+                        }
+                        .vacp-resumen b { display: block; font-size: 1.25rem; color: #b3541e; line-height: 1.1; }
+                        .vacp-resumen span { font-size: .72rem; color: #8a6d51; font-weight: 700; text-transform: uppercase; }
+                        .vacp-body { overflow-y: auto; padding: .4rem 0 1rem; }
+                        .vacp-grupo-head {
+                            position: sticky; top: 0; z-index: 2;
+                            display: flex; align-items: center; gap: .5rem;
+                            padding: .45rem .9rem; background: #eef3fb;
+                            border-top: 1px solid #dde6f3; border-bottom: 1px solid #dde6f3;
+                            font-size: .8rem; font-weight: 800; color: #1a3d6d;
+                        }
+                        .vacp-grupo-head .vacp-n {
+                            background: #1558d6; color: #fff; border-radius: 999px;
+                            padding: .05rem .5rem; font-size: .72rem; margin-left: auto;
+                        }
+                        .vacp-grupo-head .vacp-mx { font-size: .72rem; font-weight: 700; color: #5a7599; }
+                        .vacp-item {
+                            display: grid; grid-template-columns: 6.5rem 3.5rem 1fr auto;
+                            gap: .6rem; align-items: center;
+                            padding: .4rem .9rem; border-bottom: 1px solid #f1f5f9; font-size: .82rem;
+                        }
+                        .vacp-item:hover { background: #f8fbff; }
+                        .vacp-plaza { font-weight: 800; color: #b3541e; white-space: nowrap; }
+                        .vacp-nivel {
+                            background: #eef2f7; color: #47597a; border-radius: 6px;
+                            padding: .05rem .4rem; font-size: .72rem; font-weight: 700; text-align: center;
+                        }
+                        .vacp-puesto { color: #33475b; }
+                        .vacp-puesto em { color: #9aa8b8; font-style: normal; }
+                        .vacp-sueldo { color: #47597a; font-variant-numeric: tabular-nums; white-space: nowrap; }
+                        .vacp-vacio { padding: 2rem; text-align: center; color: #94a3b8; font-size: .85rem; }
+                        @media (max-width: 640px) {
+                            .vacp-item { grid-template-columns: 5rem 3rem 1fr; }
+                            .vacp-sueldo { grid-column: 3; text-align: right; }
                         }
 
                         /* --- PUNTUALIDAD: MODAL CRITERIO --- */
@@ -10141,6 +10215,15 @@ FF
                                                 <div class="cd-kpi-val" id="cd-kpi-total">—</div>
                                                 <div class="cd-kpi-pct" id="cd-kpi-total-note">Sólo personal activo</div>
                                                 <div class="cd-kpi-label">Total Colaboradores</div>
+                                            </div>
+                                            <i class="fas fa-arrow-right cd-kpi-go" aria-hidden="true"></i>
+                                        </div>
+                                        <div class="cd-kpi cd-kpi-vac" data-kpi="vacantes" role="button" tabindex="0" title="Ver qué plazas están vacías y en qué área">
+                                            <div class="cd-kpi-icon"><i class="fas fa-chair"></i></div>
+                                            <div>
+                                                <div class="cd-kpi-val" id="cd-kpi-vacantes">—</div>
+                                                <div class="cd-kpi-pct" id="cd-kpi-vacantes-note">No cuentan en el total</div>
+                                                <div class="cd-kpi-label">Plazas vacantes</div>
                                             </div>
                                             <i class="fas fa-arrow-right cd-kpi-go" aria-hidden="true"></i>
                                         </div>
@@ -11605,6 +11688,49 @@ FF
                     </div><!-- /colabOnboardingFaltantesModal -->
 
                     <!-- ----------------------------------------------
+                         MODAL: PLAZAS VACANTES
+                         Lo que el Resumen resta del total, pero visible: qué plaza
+                         está vacía, de qué nivel y en qué área.
+                    ---------------------------------------------- -->
+                    <div class="modal fade" id="colabVacantesModal" tabindex="-1" aria-labelledby="colabVacantesModalLabel" aria-hidden="true">
+                        <div class="modal-dialog modal-lg modal-dialog-centered">
+                            <div class="modal-content">
+                                <div class="modal-header py-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <h5 class="modal-title text-white mb-0" id="colabVacantesModalLabel">
+                                            <i class="fas fa-chair me-2"></i>Plazas vacantes
+                                        </h5>
+                                        <span class="ctbl-count-badge" id="vacp-badge">—</span>
+                                    </div>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                                </div>
+
+                                <div class="vacp-resumen">
+                                    <div><b id="vacp-total">—</b><span>Plazas sin cubrir</span></div>
+                                    <div><b id="vacp-areas">—</b><span id="vacp-areas-lbl">Áreas con vacantes</span></div>
+                                    <div><b id="vacp-sueldo">—</b><span>Sueldo bruto sin ejercer</span></div>
+                                </div>
+
+                                <div class="vacp-toolbar">
+                                    <input type="text" class="vacp-inp" id="vacp-search"
+                                           placeholder="&#x1F50D; Buscar por plaza, nivel, puesto o área…"
+                                           autocomplete="off" oninput="colabVacantesBuscar(this.value)">
+                                    <label class="d-flex align-items-center gap-1 mb-0" style="font-size:.78rem;color:#5a7599;font-weight:700">
+                                        Agrupar por
+                                        <select id="vacp-agrupar" onchange="colabVacantesAgrupar(this.value)"
+                                                aria-label="Nivel del organigrama por el que se agrupan las vacantes"></select>
+                                    </label>
+                                    <button class="ctbl-btn-export green" onclick="colabVacantesExcel()" title="Descargar las vacantes que se ven">
+                                        <i class="fas fa-file-excel"></i> Excel
+                                    </button>
+                                </div>
+
+                                <div class="vacp-body" id="vacp-body" style="max-height:58vh"></div>
+                            </div>
+                        </div>
+                    </div><!-- /colabVacantesModal -->
+
+                    <!-- ----------------------------------------------
                          MODAL: TABLA COMPLETA DE COLABORADORES
                     ---------------------------------------------- -->
                     <div class="modal fade" id="colabTablaModal" tabindex="-1" aria-labelledby="colabTablaModalLabel" aria-hidden="true">
@@ -11614,6 +11740,8 @@ FF
                                     <div class="d-flex align-items-center gap-2">
                                         <h5 class="modal-title text-white mb-0" id="colabTablaModalLabel"><i class="fas fa-table me-2"></i>Tabla Completa de Colaboradores</h5>
                                         <span class="ctbl-count-badge" id="ctbl-badge">—</span>
+                                        <span class="ctbl-pert-badge d-none" id="ctbl-pert-badge"
+                                              title="Cuántos colaboradores integran la Dirección de Operación según la palomita"></span>
                                         <span class="modal-aifa-mark" title="AIFA"><img src="images/aifa-logo.png" alt="AIFA"></span>
                                     </div>
                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
@@ -11925,7 +12053,7 @@ FF
                     </div>
 
                     <!-- -- JAVASCRIPT DE LA SECCIÓN -- -->
-                    <script src="js/colaboradores-directory-policy.js?v=20260831b"></script>
+                    <script src="js/colaboradores-directory-policy.js?v=20260924a"></script>
                     <script src="js/employee-photo-upload.js?v=20260804"></script>
                     <script src="js/employee-document-upload.js?v=20260804"></script>
                     <!-- Visor de fotos e identificaciones: previa al pasar el mouse,
@@ -12021,6 +12149,11 @@ FF
                                 foto_cred:       find('foto.*cred', 'cred.*foto'),
                                 cv_url:          find('^cv$', 'cv_url', 'curriculum', 'curr[ií]culum', 'cv.*url', 'url.*cv'),
                                 sexo:            find('^sexo$', 'g[eé]nero', '^sex$'),
+                                sueldo:          find('sueldo.*bruto', '^sueldo$', 'sueldo', 'percepci'),
+                                // La palomita que decide quién cuenta en el Resumen. Si la
+                                // columna todavía no existe en la tabla, gc() devuelve null y
+                                // la política trata a todos como que sí pertenecen.
+                                pertenece_direccion: find('^pertenece_direccion_operacion$', 'pertenece.*direcci', 'pertenece.*operaci'),
                             };
                             console.log('[Colaboradores] Mapeo detectado:', cols);
                             return cols;
@@ -12044,6 +12177,27 @@ FF
                                 today: new Date(),
                             });
                             return colabDirectoryUniverse;
+                        }
+
+                        /* Los No. de Empleado que quedaron FUERA de la Dirección de Operación.
+
+                           Vencimientos, Agenda de Cursos y Vacaciones consultan agenda_2026
+                           por su cuenta, cada uno con sus propias columnas. En vez de repetir
+                           la regla tres veces, todos filtran contra este conjunto: así la
+                           palomita manda igual en los cuatro lugares y hay un solo sitio que
+                           corregir el día que cambie.
+
+                           Si la columna aún no existe en la tabla, devuelve un conjunto vacío
+                           y ninguno de los tres módulos filtra nada. */
+                        async function colabNumerosFueraDelArea() {
+                            await colabCargarTodos();
+                            const numCol = colabCols?.num;
+                            const policy = window.ColaboradoresDirectoryPolicy;
+                            if (!numCol || !colabCols?.pertenece_direccion || !policy) return new Set();
+                            return new Set((colabCache || [])
+                                .filter(r => !policy.belongsToDirection(r, gc))
+                                .map(r => String(r[numCol] ?? '').trim())
+                                .filter(Boolean));
                         }
 
                         /* Auditoría del sexo, bajo demanda desde la consola.
@@ -12976,6 +13130,18 @@ FF
                             setKpi('cd-kpi-subdirs', bySubDir.filter(([k]) => k !== '(Sin dato)').length);
                             setKpi('cd-kpi-profs',   byProf.filter(([k]) => k !== '(Sin dato)').length);
                             setKpi('cd-kpi-gers',    byGer.filter(([k]) => k !== '(Sin dato)').length);
+
+                            /* Las plazas vacantes salen del mismo universo: son justo una de
+                               las razones por las que la tabla tiene más renglones que
+                               personas cuenta el total. Aquí se vuelven visibles. */
+                            const vacantes = universe.summary.excluded.vacancy || 0;
+                            setKpi('cd-kpi-vacantes', vacantes);
+                            const notaVac = document.getElementById('cd-kpi-vacantes-note');
+                            if (notaVac) {
+                                notaVac.textContent = vacantes > 0
+                                    ? 'No cuentan en el total'
+                                    : 'Sin plazas por cubrir';
+                            }
                             
                             /* ---------- LAS TARJETAS DEL RESUMEN, COMO FILTROS ----------
                                Cada una abre lo que cuenta: las de personas listan a esas personas,
@@ -13010,6 +13176,9 @@ FF
                                     case 'sin-sexo':
                                         _abrirGrupoModalPersonas('Sin sexo capturado', 'fas fa-circle-question',
                                             gente.filter(r => _sexoDe(r) === '?'));
+                                        break;
+                                    case 'vacantes':
+                                        window.colabAbrirVacantes();
                                         break;
                                     case 'direccion':
                                         window.colabAbrirCategoriasModal('direccion', 'Direcciones', 'fas fa-building', 'dirección');
@@ -15876,6 +16045,211 @@ FF
                             }
                         };
 
+                        /* ===========================================================
+                           PLAZAS VACANTES
+
+                           Una vacante no es una persona: es una plaza con presupuesto y
+                           sin nadie. En el directorio viven como un renglón más, con el
+                           nombre en "VACANTE" y el número de empleado en blanco, pero con
+                           su plaza, su nivel, su sueldo y su lugar en el organigrama bien
+                           capturados. El Resumen ya las descartaba del conteo —por eso 546
+                           renglón no es lo mismo que 420 personas— pero no había dónde
+                           verlas, y saber qué está vacío es justo lo que hace falta para
+                           pedir personal.
+
+                           No se inventa una regla nueva: son las mismas que la política ya
+                           marca como vacante, así que lo que aparece aquí es exactamente lo
+                           que se resta del total.
+                        =========================================================== */
+
+                        // De lo más fino a lo más amplio; es el orden en que se agrupa.
+                        const PLZ_NIVELES_AREA = [
+                            { clave: 'coordinacion', etiqueta: 'Coordinación', plural: 'Coordinaciones' },
+                            { clave: 'gerencia',     etiqueta: 'Gerencia',     plural: 'Gerencias' },
+                            { clave: 'subdireccion', etiqueta: 'Subdirección', plural: 'Subdirecciones' },
+                            { clave: 'direccion',    etiqueta: 'Dirección',    plural: 'Direcciones' },
+                        ];
+                        // Subdirección por omisión: es el corte que ya se mira en las
+                        // gráficas del Resumen y el que está mejor capturado.
+                        let _plzAgruparPor = 'subdireccion';
+                        let _plzBusqueda = '';
+
+                        /** Las plazas vacantes, tal como la política del Resumen las clasifica. */
+                        function colabPlazasVacantes() {
+                            const policy = window.ColaboradoresDirectoryPolicy;
+                            if (!policy) return [];
+                            const universe = colabObtenerUniversoDirectorio();
+                            return universe.excluded
+                                .filter(item => item.reason === policy.REASONS.VACANCY)
+                                .map(item => item.record);
+                        }
+
+                        /** El sueldo como número; viene con signos de peso y comas. */
+                        function _plzSueldo(r) {
+                            const crudo = String(gc(r, 'sueldo') ?? '').replace(/[^0-9.\-]/g, '');
+                            const n = parseFloat(crudo);
+                            return Number.isFinite(n) ? n : 0;
+                        }
+
+                        const _plzMoneda = n => n.toLocaleString('es-MX', {
+                            style: 'currency', currency: 'MXN', maximumFractionDigits: 2
+                        });
+
+                        /** El área de una vacante en el nivel elegido. Sin fallback a propósito:
+                            si el dato no está capturado hay que verlo, no taparlo con el de arriba. */
+                        function _plzArea(r, clave) {
+                            const v = String(gc(r, clave) ?? '').trim();
+                            if (v) return v;
+                            const nivel = PLZ_NIVELES_AREA.find(n => n.clave === clave);
+                            return 'Sin ' + (nivel ? nivel.etiqueta.toLowerCase() : 'área') + ' capturada';
+                        }
+
+                        /** Los datos de una vacante, ya listos para pintar o exportar. */
+                        function _plzFila(r) {
+                            const texto = v => String(v ?? '').trim();
+                            return {
+                                plaza:  texto(gc(r, 'plaza')) || '—',
+                                nivel:  texto(gc(r, 'nivel')) || '—',
+                                puesto: texto(gc(r, 'puesto')),
+                                sueldo: _plzSueldo(r),
+                                direccion:    texto(gc(r, 'direccion')),
+                                subdireccion: texto(gc(r, 'subdireccion')),
+                                gerencia:     texto(gc(r, 'gerencia')),
+                                coordinacion: texto(gc(r, 'coordinacion')),
+                            };
+                        }
+
+                        /** Agrupa por el nivel elegido y ordena: primero donde más falta gente. */
+                        function _plzAgrupar(registros, clave) {
+                            const grupos = new Map();
+                            registros.forEach(r => {
+                                const area = _plzArea(r, clave);
+                                if (!grupos.has(area)) grupos.set(area, []);
+                                grupos.get(area).push(r);
+                            });
+                            return [...grupos.entries()]
+                                .map(([area, filas]) => ({
+                                    area,
+                                    filas: filas.slice().sort((a, b) =>
+                                        String(gc(a, 'plaza') ?? '').localeCompare(String(gc(b, 'plaza') ?? ''), 'es', { numeric: true })),
+                                    sueldo: filas.reduce((t, r) => t + _plzSueldo(r), 0),
+                                }))
+                                .sort((a, b) => (b.filas.length - a.filas.length) || a.area.localeCompare(b.area, 'es'));
+                        }
+
+                        /** Escapa para meter texto en HTML sin romperlo. */
+                        const _plzEsc = v => String(v == null ? '' : v)
+                            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+                        /** Las vacantes que pasan la busqueda. Busca en todo lo que se ve. */
+                        function _plzFiltradas() {
+                            const q = norm(_plzBusqueda);
+                            const todas = colabPlazasVacantes();
+                            if (!q) return todas;
+                            return todas.filter(r => {
+                                const d = _plzFila(r);
+                                return norm([d.plaza, d.nivel, d.puesto, d.direccion,
+                                             d.subdireccion, d.gerencia, d.coordinacion].join(' ')).includes(q);
+                            });
+                        }
+
+                        function colabVacantesRender() {
+                            const body = document.getElementById('vacp-body');
+                            if (!body) return;
+
+                            const filtradas = _plzFiltradas();
+                            const grupos = _plzAgrupar(filtradas, _plzAgruparPor);
+                            const sueldoTotal = filtradas.reduce((t, r) => t + _plzSueldo(r), 0);
+                            const nivel = PLZ_NIVELES_AREA.find(n => n.clave === _plzAgruparPor);
+
+                            const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+                            set('vacp-total', filtradas.length);
+                            set('vacp-areas', grupos.length);
+                            set('vacp-areas-lbl', (nivel ? nivel.plural : 'Áreas') + ' con vacantes');
+                            set('vacp-sueldo', sueldoTotal > 0 ? _plzMoneda(sueldoTotal) : '—');
+                            const badge = document.getElementById('vacp-badge');
+                            if (badge) badge.textContent = colabPlazasVacantes().length;
+
+                            if (!grupos.length) {
+                                body.innerHTML = '<div class="vacp-vacio">'
+                                    + (_plzBusqueda
+                                        ? 'Ninguna plaza vacante coincide con “' + _plzEsc(_plzBusqueda) + '”.'
+                                        : 'No hay plazas vacantes en el directorio.')
+                                    + '</div>';
+                                return;
+                            }
+
+                            body.innerHTML = grupos.map(g => {
+                                const cabeza = '<div class="vacp-grupo-head">'
+                                    + '<i class="fas fa-sitemap" style="opacity:.55"></i>'
+                                    + '<span>' + _plzEsc(g.area) + '</span>'
+                                    + (g.sueldo > 0 ? '<span class="vacp-mx">' + _plzEsc(_plzMoneda(g.sueldo)) + '</span>' : '')
+                                    + '<span class="vacp-n">' + g.filas.length + '</span>'
+                                    + '</div>';
+                                const items = g.filas.map(r => {
+                                    const d = _plzFila(r);
+                                    return '<div class="vacp-item">'
+                                        + '<span class="vacp-plaza">Plaza ' + _plzEsc(d.plaza) + '</span>'
+                                        + '<span class="vacp-nivel">' + _plzEsc(d.nivel) + '</span>'
+                                        + '<span class="vacp-puesto">'
+                                        + (d.puesto ? _plzEsc(d.puesto) : '<em>Sin puesto capturado</em>') + '</span>'
+                                        + '<span class="vacp-sueldo">'
+                                        + (d.sueldo > 0 ? _plzEsc(_plzMoneda(d.sueldo)) : '—') + '</span>'
+                                        + '</div>';
+                                }).join('');
+                                return cabeza + items;
+                            }).join('');
+                        }
+
+                        window.colabVacantesBuscar = function(q) {
+                            _plzBusqueda = q || '';
+                            colabVacantesRender();
+                        };
+
+                        window.colabVacantesAgrupar = function(clave) {
+                            _plzAgruparPor = clave;
+                            colabVacantesRender();
+                        };
+
+                        window.colabAbrirVacantes = async function() {
+                            await colabCargarTodos();
+                            const sel = document.getElementById('vacp-agrupar');
+                            if (sel && !sel.options.length) {
+                                PLZ_NIVELES_AREA.forEach(n => {
+                                    const o = document.createElement('option');
+                                    o.value = n.clave; o.textContent = n.etiqueta;
+                                    sel.appendChild(o);
+                                });
+                            }
+                            if (sel) sel.value = _plzAgruparPor;
+                            const inp = document.getElementById('vacp-search');
+                            if (inp) inp.value = '';
+                            _plzBusqueda = '';
+                            colabVacantesRender();
+                            new bootstrap.Modal(document.getElementById('colabVacantesModal')).show();
+                        };
+
+                        /** Descarga lo que se esta viendo, para pedir personal con el papel en mano. */
+                        window.colabVacantesExcel = function() {
+                            if (typeof XLSX === 'undefined') {
+                                alert('La librería Excel aún no ha cargado. Espera un momento e inténtalo de nuevo.');
+                                return;
+                            }
+                            const filas = _plzFiltradas().map(_plzFila);
+                            if (!filas.length) { alert('No hay plazas vacantes que descargar.'); return; }
+                            const encabezado = ['Plaza', 'Nivel', 'Puesto', 'Sueldo bruto',
+                                                'Dirección', 'Subdirección', 'Gerencia', 'Coordinación'];
+                            const datos = filas.map(d => [d.plaza, d.nivel, d.puesto, d.sueldo || '',
+                                                          d.direccion, d.subdireccion, d.gerencia, d.coordinacion]);
+                            const ws = XLSX.utils.aoa_to_sheet([encabezado, ...datos]);
+                            ws['!cols'] = [{ wch: 10 }, { wch: 8 }, { wch: 34 }, { wch: 14 },
+                                           { wch: 28 }, { wch: 30 }, { wch: 30 }, { wch: 30 }];
+                            const wb = XLSX.utils.book_new();
+                            XLSX.utils.book_append_sheet(wb, ws, 'Plazas vacantes');
+                            XLSX.writeFile(wb, 'plazas_vacantes_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+                        };
+
                         /* -------------------------------------------
                            TABLA COMPLETA DE COLABORADORES
                         ------------------------------------------- */
@@ -15897,7 +16271,7 @@ FF
                         // Orden preferido de columnas
                         const CTBL_COL_ORDER = [
                             'estatus','Estatus','sangre','Tipo de sangre',
-                            'num_empleado','nombre','sexo','Sexo','puesto','plaza','nivel','turno',
+                            'num_empleado','nombre','pertenece_direccion_operacion','sexo','Sexo','puesto','plaza','nivel','turno',
                             'direccion','subdireccion','gerencia','coordinacion',
                             'fecha_ingreso','correo','celular','extension','profesion',
                             'grado','matricula','grado_academico','Grado Académico','cedula',
@@ -15913,7 +16287,9 @@ FF
 
                         // Etiquetas legibles
                         const CTBL_COL_LABELS = {
-                            'num_empleado':'No. Empleado','nombre':'Nombre','sexo':'Sexo','Sexo':'Sexo','puesto':'Puesto',
+                            'num_empleado':'No. Empleado','nombre':'Nombre',
+                            'pertenece_direccion_operacion':'Dir. Operación',
+                            'sexo':'Sexo','Sexo':'Sexo','puesto':'Puesto',
                             'plaza':'Plaza','nivel':'Nivel','turno':'Turno',
                             'direccion':'Dirección','subdireccion':'Subdireccion',
                             'gerencia':'Gerencia','coordinacion':'Coordinacion',
@@ -15984,6 +16360,102 @@ FF
                                     }))
                                     .sort((a, b) => (b.score - a.score) || (a.idx - b.idx))[0].key;
                             });
+                        }
+
+                        /* -- LA PALOMITA DE PERTENENCIA A LA DIRECCIÓN DE OPERACIÓN --
+
+                           El organigrama dice dónde está adscrita la plaza, no quién integra
+                           el área de verdad. Esta casilla es el dato que manda, y de ella
+                           dependen el Resumen del Directorio, los vencimientos de cursos, la
+                           agenda de cursos y el calendario de vacaciones. */
+
+                        /** La columna real, o null si todavía no se ha corrido el SQL. */
+                        function ctblPerteneceCol() {
+                            return colabCols?.pertenece_direccion || null;
+                        }
+
+                        function ctblEsPerteneceCol(col) {
+                            const real = ctblPerteneceCol();
+                            return Boolean(real) && col === real;
+                        }
+
+                        /** ¿Este colaborador cuenta? Lo resuelve la misma política que los KPIs. */
+                        function ctblPertenece(r) {
+                            const policy = window.ColaboradoresDirectoryPolicy;
+                            if (!policy || typeof policy.belongsToDirection !== 'function') return true;
+                            return policy.belongsToDirection(r, gc);
+                        }
+
+                        function ctblPerteneceCeldaHtml(r, dataIndex) {
+                            const marcado = ctblPertenece(r);
+                            const puede = colabCanEdit() && Boolean(ctblPerteneceCol());
+                            const motivo = !ctblPerteneceCol()
+                                ? 'Falta la columna en la base: corre db/add_pertenece_direccion_operacion.sql'
+                                : !colabCanEdit()
+                                    ? 'Solo un editor de colaboradores puede cambiar esto'
+                                    : marcado
+                                        ? 'Cuenta en el Resumen del Directorio. Quita la palomita para sacarlo de los conteos.'
+                                        : 'No cuenta en los conteos. Paloméalo para volver a incluirlo.';
+                            return '<label class="ctbl-pert" title="' + motivo.replace(/"/g, '&quot;') + '"'
+                                + ' onclick="event.stopPropagation()">'
+                                + '<input type="checkbox" ' + (marcado ? 'checked' : '')
+                                + (puede ? '' : ' disabled')
+                                + ' aria-label="Pertenece a la Dirección de Operación"'
+                                + ' onchange="ctblTogglePertenece(this,' + dataIndex + ')"></label>';
+                        }
+
+                        /* El texto por el que se filtra una celda.
+
+                           Tiene que ser EXACTAMENTE el mismo que ofrece el menú de la columna
+                           y el que compara el filtro: si divergen, se marca una opción y la
+                           tabla se queda vacía. Por eso las dos salen de aquí.
+
+                           La palomita se lee como Sí/No: "true" no le dice nada a nadie. */
+                        function ctblValorFiltro(r, col) {
+                            if (ctblEsPerteneceCol(col)) return ctblPertenece(r) ? 'Sí' : 'No';
+                            return String(r[col] ?? '').trim() || '—';
+                        }
+
+                        /* Depurar el padrón son ráfagas de clics, y el Resumen ni siquiera
+                           se ve mientras la tabla está encima: repintar sus veinte gráficas
+                           en cada palomita es trabajo tirado. Se agrupa en uno solo. */
+                        let _tPertenencia = null;
+                        function colabRepintarResumenPronto() {
+                            clearTimeout(_tPertenencia);
+                            _tPertenencia = setTimeout(() => { try { colabRenderDashboard(); } catch (_) {} }, 400);
+                        }
+
+                        /* Cuánta gente cuenta hoy, para ver el avance mientras se depura.
+
+                           Se cuenta sobre el MISMO universo que la tarjeta "Total Colaboradores",
+                           no sobre los renglones de la tabla. La tabla los muestra todos —bajas,
+                           vacantes, duplicados y comisionados fuera incluidos— y esos nunca
+                           contaron: si el contador los sumara, diría un número que no coincide
+                           con ninguna tarjeta y no serviría para saber cómo va la depuración. */
+                        function ctblActualizarResumenPertenencia() {
+                            const el = document.getElementById('ctbl-pert-badge');
+                            if (!el) return;
+                            if (!ctblPerteneceCol() || !ctblAllData.length) { el.classList.add('d-none'); return; }
+
+                            let universe;
+                            try { universe = colabObtenerUniversoDirectorio(); }
+                            catch (_) { el.classList.add('d-none'); return; }
+
+                            const dentro = universe.summary.total;
+                            const despalomeados = universe.summary.excluded.outsideDirection || 0;
+                            const otrosFuera = universe.summary.excluded.total - despalomeados;
+
+                            el.classList.remove('d-none');
+                            el.classList.toggle('tiene-fuera', despalomeados > 0);
+                            el.textContent = dentro + ' en la Dirección de Operación'
+                                + (despalomeados > 0
+                                    ? ' · ' + despalomeados + (despalomeados === 1 ? ' despalomeado' : ' despalomeados')
+                                    : '');
+                            el.title = 'De los ' + ctblAllData.length + ' renglones de esta tabla, '
+                                + dentro + ' cuentan en el Resumen del Directorio.'
+                                + (despalomeados > 0 ? ' ' + despalomeados + ' quedaron fuera por la palomita.' : '')
+                                + (otrosFuera > 0 ? ' Otros ' + otrosFuera + ' ya no contaban: bajas, vacantes, '
+                                    + 'duplicados o comisionados fuera del área.' : '');
                         }
 
                         function ctblFindColByCanon(canonName) {
@@ -16189,6 +16661,7 @@ FF
                             if (searchEl) searchEl.value = '';
 
                             if (loadingEl) loadingEl.classList.add('d-none');
+                            ctblActualizarResumenPertenencia();
                             colabTablaFiltrar();
                         };
 
@@ -16226,7 +16699,7 @@ FF
                                 let accepted = true;
                                 for (const [col, vals] of Object.entries(_ctblColFilters)) {
                                     if (!vals || !vals.size) continue;
-                                    const cell = String(r[col] ?? '').trim() || '—';
+                                    const cell = ctblValorFiltro(r, col);
                                     if (!vals.has(cell)) { accepted = false; break; }
                                 }
                                 if (accepted) matches.push(r);
@@ -16326,7 +16799,7 @@ FF
                             if (!popup) return;
 
                             // Valores Únicos de toda la data (sin filtros de columna excepto los demás)
-                            const allVals = [...new Set(ctblAllData.map(r => String(r[col] ?? '').trim() || '—'))]
+                            const allVals = [...new Set(ctblAllData.map(r => ctblValorFiltro(r, col)))]
                                 .sort((a,b) => {
                                     // orden numérico si posible
                                     const na = parseFloat(a), nb = parseFloat(b);
@@ -16362,8 +16835,8 @@ FF
                         function ctblFiltroColRenderList(filter) {
                             const listEl = document.getElementById('ctbl-cfp-list');
                             if (!listEl) return;
-                            const q = filter.toLowerCase().trim();
-                            const shown = q ? _ctblCFP.allVals.filter(v => v.toLowerCase().includes(q)) : _ctblCFP.allVals;
+                            const q = norm(filter);
+                            const shown = q ? _ctblCFP.allVals.filter(v => norm(v).includes(q)) : _ctblCFP.allVals;
                             const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
                             listEl.innerHTML = shown.map((v, i) => {
                                 const chk = _ctblCFP.tempSel.has(v) ? 'checked' : '';
@@ -16431,7 +16904,11 @@ FF
                             const raw = String(gc(r,'amonestaciones') ?? r['amonestaciones'] ?? '').trim();
                             const n = raw ? raw.split(/\n/).map(l => l.trim()).filter(Boolean).length : 0;
                             const { cls } = semClassify(n);
-                            const rowCls = cls === 'sem-rojo' ? ' class="ctbl-rojo"' : cls === 'sem-amarillo' ? ' class="ctbl-amarillo"' : '';
+                            const clases = [];
+                            if (cls === 'sem-rojo') clases.push('ctbl-rojo');
+                            else if (cls === 'sem-amarillo') clases.push('ctbl-amarillo');
+                            if (!ctblPertenece(r)) clases.push('ctbl-fuera');
+                            const rowCls = clases.length ? ' class="' + clases.join(' ') + '"' : '';
                             const statusHtml = value => {
                                 const limpio = String(value || '').trim();
                                 const esBaja = /^baja$/i.test(limpio);
@@ -16440,6 +16917,9 @@ FF
                                 return clsStatus ? `<span class="ctbl-status-badge ${clsStatus}">${esc(limpio)}</span>` : esc(limpio || '—');
                             };
                             const allTds = ctblCols.map(col => {
+                                if (ctblEsPerteneceCol(col)) {
+                                    return '<td class="ctbl-td-pert">' + ctblPerteneceCeldaHtml(r, dataIndex) + '</td>';
+                                }
                                 const v = String(r[col] ?? '').trim() || '—';
                                 const style = CTBL_WRAP_COLS.has(col) ? ' style="max-width:200px;white-space:normal"' : '';
                                 const content = /^estatus$/i.test(col)
@@ -16500,6 +16980,79 @@ FF
                             return ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - renderStarted;
                         }
 
+                        /* Palomear o despalomear a una persona.
+                           Se guarda al instante, sin botón de por medio: depurar el padrón
+                           son cientos de clics seguidos y detenerse a guardar cada uno lo
+                           volvería impracticable. Si la base rechaza el cambio, la casilla
+                           se regresa a como estaba en vez de quedarse mintiendo. */
+                        window.ctblTogglePertenece = async function(input, dataIndex) {
+                            const rec = ctblAllData[dataIndex];
+                            const quiere = input.checked;
+                            const revertir = () => { input.checked = !quiere; };
+
+                            if (!rec) { revertir(); return; }
+                            if (!colabRequireEdit()) { revertir(); return; }
+
+                            const col = ctblPerteneceCol();
+                            if (!col) {
+                                revertir();
+                                alert('La tabla agenda_2026 todavía no tiene la columna de pertenencia.\n\n'
+                                    + 'Corre db/add_pertenece_direccion_operacion.sql en Supabase y recarga la página.');
+                                return;
+                            }
+
+                            const numCol = colabCols?.num;
+                            const numEmpl = String((numCol ? rec[numCol] : '') ?? '').trim();
+                            if (!numCol || !numEmpl) {
+                                revertir();
+                                alert('Ese registro no tiene No. de Empleado, así que no hay cómo identificarlo para guardar el cambio.');
+                                return;
+                            }
+
+                            const antes = rec[col];
+                            input.disabled = true;
+                            try {
+                                let sb = window.supabaseClient;
+                                if (!sb && typeof window.ensureSupabaseClient === 'function') sb = await window.ensureSupabaseClient();
+                                if (!sb) throw new Error('Supabase no disponible');
+
+                                // Misma precaución que el resto del módulo: la columna del
+                                // número se llama "No. Empleado" y sin comillas no resuelve.
+                                const safeNumCol = /[\s.]/.test(numCol) ? '"' + numCol + '"' : numCol;
+                                const { error } = await sb.from('agenda_2026')
+                                    .update({ [col]: quiere })
+                                    .eq(safeNumCol, numEmpl);
+                                if (error) throw error;
+
+                                rec[col] = quiere;
+
+                                const nombre = String((colabCols?.nombre ? rec[colabCols.nombre] : '') ?? '').trim();
+                                window.logHistory?.('EDITAR', 'Colaboradores', numEmpl, {
+                                    summary: (quiere ? 'Se incluyó en' : 'Se sacó de') + ' la Dirección de Operación: '
+                                        + 'No. ' + numEmpl + (nombre ? ' — ' + nombre : ''),
+                                    old: { [col]: antes },
+                                    new: { [col]: quiere }
+                                });
+
+                                // El universo del Resumen se rehace desde cero en el próximo
+                                // cálculo; el HTML del renglón se refresca por si su nodo se
+                                // recicla (el nodo vivo ya trae la casilla como quedó).
+                                colabDirectoryUniverse = null;
+                                ctblRowHtmlCache.set(rec, ctblConstruirFilaHtml(rec, dataIndex));
+                                ctblRowNodeCache.delete(rec);
+                                const fila = input.closest('tr');
+                                if (fila) fila.classList.toggle('ctbl-fuera', !quiere);
+                                ctblActualizarResumenPertenencia();
+                                colabRepintarResumenPronto();
+                            } catch (err) {
+                                console.error('[Colaboradores] No se pudo guardar la pertenencia:', err);
+                                revertir();
+                                alert('No se pudo guardar el cambio: ' + (err?.message || String(err)));
+                            } finally {
+                                input.disabled = false;
+                            }
+                        };
+
                         /** Click en fila: cerrar modal y mostrar ficha */
                         window.colabTablaVerFicha = function(idx) {
                             const rec = ctblData[idx];
@@ -16521,6 +17074,12 @@ FF
                             renderFicha(rec);
                         }
 
+                        /* En un Excel, "true" no dice nada: la palomita se exporta como Sí/No. */
+                        function ctblValorExport(r, k) {
+                            if (ctblEsPerteneceCol(k)) return ctblPertenece(r) ? 'Sí' : 'No';
+                            return String(r[k] ?? '');
+                        }
+
                         /** Descargar CSV con todos los campos visibles */
                         window.colabDescargarCSV = function() {
                             if (!ctblData.length) return;
@@ -16529,7 +17088,7 @@ FF
                             const esc = s => `"${String(s ?? '').replace(/"/g,'""')}"`;
                             const rows = [headers.join(',')];
                             ctblData.forEach(r => {
-                                rows.push(cols.map(k => esc(String(r[k] ?? ''))).join(','));
+                                rows.push(cols.map(k => esc(ctblValorExport(r, k))).join(','));
                             });
                             const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
                             const url  = URL.createObjectURL(blob);
@@ -16737,7 +17296,7 @@ FF
                             }
                             const cols    = ctblCols.length ? ctblCols : ['num_empleado','nombre','puesto','plaza','nivel','turno','direccion','subdireccion','gerencia','fecha_ingreso','correo','celular'];
                             const headers = cols.map(k => CTBL_COL_LABELS[k] || k);
-                            const wsData  = [headers, ...ctblData.map(r => cols.map(k => String(r[k] ?? '')))];
+                            const wsData  = [headers, ...ctblData.map(r => cols.map(k => ctblValorExport(r, k)))];
                             const ws = XLSX.utils.aoa_to_sheet(wsData);
                             ws['!cols'] = cols.map(k => ({ wch: CTBL_WRAP_COLS.has(k) ? 28 : 14 }));
                             const wb = XLSX.utils.book_new();
@@ -17341,8 +17900,13 @@ FF
                                 const puestoCol = colabCols?.puesto;
                                 const areaCol   = colabCols?.coordinacion || colabCols?.gerencia || colabCols?.subdireccion || colabCols?.direccion;
                                 // Aplanar todos los períodos del año
+                                // Quien no tiene la palomita no aparece en el calendario:
+                                // no integra la Dirección de Operación, así que sus períodos
+                                // no son de este cuadro de vacaciones.
+                                const _policyVac = window.ColaboradoresDirectoryPolicy;
                                 _vacAllCache = [];
                                 for (const emp of empleados) {
+                                    if (_policyVac && !_policyVac.belongsToDirection(emp, gc)) continue;
                                     const vacs = Array.isArray(emp.vacaciones) ? emp.vacaciones : [];
                                     const num  = numCol ? String(emp[numCol] || '') : '';
                                     const nom  = nomCol ? String(emp[nomCol] || '') : num;
@@ -18705,13 +19269,19 @@ FF
                                     (dirRows || []).forEach(r => { nombreMap[String(r.num_empleado)] = r.nombre || r.num_empleado; });
                                 }
 
-                                // 3. Calcular pr\u00f3xima fecha y estado
-                                _ccalData = (cursos || []).map(c => ({
-                                    curso:   c,
-                                    nombre:  nombreMap[String(c.num_empleado)] || c.num_empleado,
-                                    nextDue: ccNextDue(c),
-                                    status:  ccStatus(c)
-                                })).filter(d => d.nextDue);
+                                // 3. Calcular próxima fecha y estado.
+                                //    Los vencimientos de quien no integra la Dirección de
+                                //    Operación no son de este tablero: se quedan fuera con la
+                                //    misma palomita que manda en el Resumen.
+                                const _fueraCC = await colabNumerosFueraDelArea();
+                                _ccalData = (cursos || [])
+                                    .filter(c => !_fueraCC.has(String(c.num_empleado ?? '').trim()))
+                                    .map(c => ({
+                                        curso:   c,
+                                        nombre:  nombreMap[String(c.num_empleado)] || c.num_empleado,
+                                        nextDue: ccNextDue(c),
+                                        status:  ccStatus(c)
+                                    })).filter(d => d.nextDue);
                             } catch (err) {
                                 console.warn('[CursoCal] Error:', err);
                                 _ccalData = [];
@@ -18966,11 +19536,14 @@ FF
                                 throw error;
                             }
 
+                            // Fuera de la Dirección de Operación no hay a quién agendarle
+                            // cursos: esa gente ya no se administra desde aquí.
+                            const _fueraCA = await colabNumerosFueraDelArea();
                             _caRows = (data || []).map(r => ({
                                 num: String(r[_caNumCol] ?? '').trim(),
                                 nombre: String(r[_caNombreCol] ?? r[_caNumCol] ?? '').trim(),
                                 cursos_programados: caNormEvents(r.cursos_programados)
-                            })).filter(r => r.num);
+                            })).filter(r => r.num && !_fueraCA.has(r.num));
                         }
 
                         function caBuildSessions() {

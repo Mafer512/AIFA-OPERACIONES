@@ -209,12 +209,70 @@ describe('política del Resumen del Directorio', () => {
 
     test('la integración del dashboard utiliza la política central y conserva el histórico completo', () => {
         const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-        expect(html).toContain('js/colaboradores-directory-policy.js?v=20260831b');
+        expect(html).toContain('js/colaboradores-directory-policy.js?v=20260924a');
         expect(html).toContain('const universe = colabObtenerUniversoDirectorio();');
         expect(html).toContain('const data = universe.included;');
         expect(html).toContain('var masc = universe.summary.men;');
         expect(html).toContain('var fem  = universe.summary.women;');
         expect(html).toContain('allRecords: true');
         expect(html).toContain('window.colabAuditarResumenDirectorio');
+    });
+
+    /* ---- La palomita de pertenencia a la Dirección de Operación ----
+
+       La columna Dirección dice dónde está adscrita la plaza, no quién integra
+       el área: había gente contada en el Resumen que orgánicamente no forma
+       parte de la Dirección de Operación. Ahora se marca a mano y ese dato
+       manda sobre el organigrama. */
+    describe('pertenencia a la Dirección de Operación', () => {
+        test('sin la columna capturada la persona sigue contando', () => {
+            // Así la app funciona igual mientras el SQL no se haya corrido.
+            const result = policy.buildUniverse([active()], { today: TODAY });
+            expect(result.summary.total).toBe(1);
+            expect(result.summary.excluded.outsideDirection).toBe(0);
+        });
+
+        test('despalomear saca a la persona del total sin borrar su registro', () => {
+            const record = active({ pertenece_direccion: false });
+            const result = policy.buildUniverse([record], { today: TODAY });
+            expect(result.summary.total).toBe(0);
+            expect(result.summary.excluded.outsideDirection).toBe(1);
+            expect(result.excluded[0].record).toBe(record);
+        });
+
+        test('la palomita también descuenta del conteo por sexo', () => {
+            const result = policy.buildUniverse([
+                active({ num: '1', sexo: 'Masculino' }),
+                active({ num: '2', sexo: 'Femenino' }),
+                active({ num: '3', sexo: 'Femenino', pertenece_direccion: false }),
+            ], { today: TODAY });
+            expect(result.summary).toMatchObject({ total: 2, men: 1, women: 1 });
+        });
+
+        test('una baja despalomeada se reporta como baja, no como fuera del área', () => {
+            // El desglose de exclusiones tiene que seguir diciendo la verdad:
+            // esa persona no se fue del conteo por falta de palomita.
+            const result = policy.buildUniverse([
+                active({ estatus: 'Baja', pertenece_direccion: false }),
+            ], { today: TODAY });
+            expect(result.summary.excluded.terminated).toBe(1);
+            expect(result.summary.excluded.outsideDirection).toBe(0);
+        });
+
+        test('reconoce el "no" venga como booleano, texto o cero', () => {
+            // Supabase devuelve booleanos, pero un CSV o un import traen "0",
+            // "no" o "false" y todos significan lo mismo.
+            [false, 'false', 'FALSE', 'No', 'no', '0', 0, 'n'].forEach(valor => {
+                expect(policy.belongsToDirection({ pertenece_direccion: valor }, (r, f) => r[f]))
+                    .toBe(false);
+            });
+        });
+
+        test('todo lo demás cuenta como que sí pertenece', () => {
+            [true, 'true', 'Si', 'sí', '1', 1, '', null, undefined].forEach(valor => {
+                expect(policy.belongsToDirection({ pertenece_direccion: valor }, (r, f) => r[f]))
+                    .toBe(true);
+            });
+        });
     });
 });

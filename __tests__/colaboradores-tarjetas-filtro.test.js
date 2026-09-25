@@ -71,11 +71,13 @@ const filas = () => [...document.querySelectorAll('#colab-grupo-modal-list .cola
 const abierto = () => document.getElementById('colab-grupo-modal-backdrop').classList.contains('open');
 
 describe('las tarjetas del resumen abren lo que cuentan', () => {
-    test('las siete son botones de verdad, no números quietos', () => {
+    test('las ocho son botones de verdad, no números quietos', () => {
         montar();
         const tarjetas = [...document.querySelectorAll('.cd-kpi-row .cd-kpi[data-kpi]')];
+        // "vacantes" va pegada al total a propósito: cuánta gente hay y cuántas
+        // plazas están vacías se leen de un golpe.
         expect(tarjetas.map(t => t.dataset.kpi)).toEqual([
-            'total', 'hombres', 'mujeres', 'direccion', 'subdireccion', 'profesion', 'gerencia',
+            'total', 'vacantes', 'hombres', 'mujeres', 'direccion', 'subdireccion', 'profesion', 'gerencia',
         ]);
         tarjetas.forEach(t => {
             expect(t.getAttribute('role')).toBe('button');
