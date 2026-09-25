@@ -20428,7 +20428,7 @@ const _CONCI_OUTPUT_COLUMNS = [
     "HR. DE EMBARQUE O DESEMBARQUE", "HR. DE OPERACIÓN", "HR. MÁXIMA DE ENTREGA", "HR. DE RECEPCIÓN",
     "HRS. CUMPLIDAS", "TOTAL PAX", "DIPLOMATICOS", "EN COMISION",
     "INFANTES", "TRANSITOS", "CONEXIONES", "OTROS EXENTOS", "TOTAL EXENTOS", "PAX QUE PAGAN TUA",
-    "KGS. DE EQUIPAJE", "KGS. DE CARGA NACIONAL", "KGS. DE CARGA INTERNACIONAL", "KG DE CARGA TOTAL", "CORREO",
+    "KGS. DE EQUIPAJE", "KGS. DE CARGA NACIONAL", "KGS. DE CARGA INTERNACIONAL", "KG DE CARGA TOTAL", "KGS. DE CARGA EN TRANSITO", "CORREO",
     "PUNTUALIDAD / CANCELACIÓN", "DEMORA +- 15 MIN.", "CÓDIGO DEMORA",
     "OBSERVACIONES", "CAPTURÓ", "CAPACIDAD MÁXIMA", "FACTOR DE OCUPACIÓN", "id", "EVIDENCIA",
     "Hora y Fecha Generación", "_fuente"
@@ -22055,6 +22055,7 @@ const _CONCI_EXPORT_COLS_PAX = [
     { h: 'KGS. DE CARGA NACIONAL', t: 'num', a: ['KGS. DE CARGA NACIONAL'] },
     { h: 'KGS. DE CARGA INTERNACIONAL', t: 'num', a: ['KGS. DE CARGA INTERNACIONAL'] },
     { h: 'KG DE CARGA TOTAL', t: 'num', a: ['KG DE CARGA TOTAL', 'KGS. DE CARGA'] },
+    { h: 'KGS. DE CARGA EN TRANSITO', t: 'num', a: ['KGS. DE CARGA EN TRANSITO'] },
     { h: 'CORREO', t: 'num', a: ['CORREO'] },
     { h: 'DEMORA +- 15 MIN.', t: 'text', a: ['DEMORA +- 15 MIN.', 'DEMORA +-15 MIN', 'DEMORA +- 15 MIN'] },
     { h: 'CÓDIGO DEMORA', t: 'text', a: ['CÓDIGO DEMORA', 'CODIGO DEMORA'] },
@@ -22087,7 +22088,7 @@ const _CONCI_EXPORT_COLS_CARGA = [
     { h: 'KGS CARGA LLEGADA NLU', t: 'num', a: ['KGS CARGA LLEGADA NLU', 'KGS. CARGA LLEGADA', 'KGS LLEGADA'] },
     { h: 'EXPORTACIÓN', t: 'num', a: ['EXPORTACIÓN', 'EXPORTACION'] },
     { h: 'KG. DE CARGA SALIDA NLU', t: 'num', a: ['KG. DE CARGA SALIDA NLU', 'KGS CARGA SALIDA NLU', 'KGS SALIDA'] },
-    { h: 'TRANSITO', t: 'num', a: ['TRANSITO', 'TRANSITOS'] },
+    { h: 'TRANSITO', t: 'num', a: ['KGS. DE CARGA EN TRANSITO', 'TRANSITO', 'TRANSITOS'] },
     { h: 'CORREO', t: 'num', a: ['CORREO'] },
     { h: 'DEMORA +-15 MIN', t: 'text', a: ['DEMORA +-15 MIN', 'DEMORA +- 15 MIN.', 'DEMORA +- 15 MIN'] },
     { h: 'MOTIVO', t: 'textwrap', a: ['MOTIVO', 'OBSERVACIONES'] },
@@ -22254,7 +22255,10 @@ function _conciExportCargoRow(row, year) {
     };
 }
 
-async function _conciExportToExcel(kind) {
+// targetWb (interno): cuando 'total' arma un solo libro, agrega aquí la hoja de
+// Pasajeros o de Carga —idéntica a la de su descarga individual— en vez de
+// guardar su propio archivo. Devuelve true si agregó la hoja.
+async function _conciExportToExcel(kind, targetWb) {
     if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
         alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
         return;
@@ -22264,18 +22268,20 @@ async function _conciExportToExcel(kind) {
         alert('No hay datos cargados para exportar.');
         return;
     }
-    // Total tiene su propio formato DATA. La ruta Pasajeros/Carga continúa
-    // utilizando exactamente sus catálogos, cálculos y presentación previos.
+    // Total = un solo libro con las hojas Pasajeros y Carga, cada una generada
+    // exactamente por la misma ruta que su descarga individual.
     if (kind === 'total') {
-        const workbook = window.ConciExportTotal.createWorkbook(ExcelJS, rows, {
-            parseDateParts: _conciParseDateTimeParts,
-            year: _conciEditFallbackYear,
-            resolveAirlineMeta: _conciResolveAirlineMeta,
-        });
-        const buffer = await workbook.xlsx.writeBuffer();
-        const stamp = new Date().toISOString().slice(0, 10);
-        saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
-            `Conciliacion_Total_${stamp}.xlsx`);
+        const wbTotal = new ExcelJS.Workbook();
+        const conPax = await _conciExportToExcel('pax', wbTotal);
+        const conCarga = await _conciExportToExcel('carga', wbTotal);
+        if (!conPax && !conCarga) {
+            alert('No hay datos cargados para exportar.');
+            return;
+        }
+        const bufTotal = await wbTotal.xlsx.writeBuffer();
+        const stampTotal = new Date().toISOString().slice(0, 10);
+        saveAs(new Blob([bufTotal], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+            `Conciliacion_Total_${stampTotal}.xlsx`);
         return;
     }
     const columns = _conciManifestosSummaryColumns;
@@ -22310,7 +22316,7 @@ async function _conciExportToExcel(kind) {
         ]) : _CONCI_EXPORT_COLS_PAX
             // Solo Pasajeros: estructura DATA; conservar los alias de origen y
             // el catálogo compartido con Total y la exportación por capturista.
-            .filter(d => !['RUTA', 'KGS. DE CARGA NACIONAL', 'KGS. DE CARGA INTERNACIONAL'].includes(d.h))
+            .filter(d => !['RUTA', 'KGS. DE CARGA NACIONAL', 'KGS. DE CARGA INTERNACIONAL', 'KGS. DE CARGA EN TRANSITO'].includes(d.h))
             .map(d => ({
                 ...d,
                 h: ({
@@ -22319,8 +22325,16 @@ async function _conciExportToExcel(kind) {
                     'DEMORA +- 15 MIN.': 'DEMORA 15 MIN.',
                 })[d.h] || d.h,
             })));
-    const dataRows = isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga);
+    // En el libro Total (targetWb) solo van los vuelos ya recibidos: sin
+    // HR. DE RECEPCIÓN (vacía, null o sin registro) la fila aún no se recibe.
+    const _conciRecibido = (r) => {
+        const v = String(_conciExportGetField(r, ['HR. DE RECEPCIÓN']) ?? '').trim();
+        return v !== '' && !/^(null|undefined|sin registro|-|—|–)$/i.test(v);
+    };
+    const dataRows = (isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga))
+        .filter(r => !targetWb || _conciRecibido(r));
     if (!dataRows.length) {
+        if (targetWb) return false;
         // Decía "en la vista actual", lo que daba a entender que respeta los
         // filtros de la tabla. No los respeta: exporta el día completo.
         alert(isTotal ? 'No hay datos cargados para exportar.' : `No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
@@ -22430,7 +22444,7 @@ async function _conciExportToExcel(kind) {
     };
 
     const sheetLabel = isTotal ? 'Total' : (isCarga ? 'Carga' : 'Pasajeros');
-    const wb = new ExcelJS.Workbook();
+    const wb = targetWb || new ExcelJS.Workbook();
     const ws = wb.addWorksheet(sheetLabel, {
         views: [{ state: 'frozen', ySplit: 1 }],
     });
@@ -22479,6 +22493,7 @@ async function _conciExportToExcel(kind) {
     ws.columns.forEach((col, i) => { col.width = Math.min(46, Math.max(11, maxLen[i] + 2)); });
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
 
+    if (targetWb) return true;
     const buf = await wb.xlsx.writeBuffer();
     const stamp = new Date().toISOString().slice(0, 10);
     const fname = `Conciliacion_${sheetLabel}_${stamp}.xlsx`;
@@ -22879,7 +22894,7 @@ const _CONCI_IMPORT_FALLBACK_COLUMNS = [
     'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS',
     'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE EQUIPAJE',
     'KGS. DE CARGA NACIONAL', 'KGS. DE CARGA INTERNACIONAL', 'KG DE CARGA TOTAL',
-    'CORREO', 'DEMORA +- 15 MIN.', 'CÓDIGO DEMORA', 'OBSERVACIONES', 'CAPTURÓ'
+    'KGS. DE CARGA EN TRANSITO', 'CORREO', 'DEMORA +- 15 MIN.', 'CÓDIGO DEMORA', 'OBSERVACIONES', 'CAPTURÓ'
 ];
 const _CONCI_IMPORT_IGNORED_COLUMNS = new Set([
     'id', 'created_at', 'updated_at', '_fuente', '_ispax', '_validadoitinerario',
@@ -25440,7 +25455,8 @@ function _conciIsNumericCaptureColumn(column) {
         || /^correo$/.test(key)
         || /^kgs?.? de equipaje$/.test(key)
         || /^kgs?.? de carga (nacional|internacional)$/.test(key)
-        || /^kgs?.? de carga total$/.test(key);
+        || /^kgs?.? de carga total$/.test(key)
+        || /^kgs?.? de carga en transito$/.test(key);
 }
 
 // Deja solo digitos y un punto decimal. No usa <input type="number"> porque
@@ -31655,7 +31671,7 @@ async function _conciWriteRowSafe(client, payload, rowId, options = {}) {
 const typeValueMatch = message.match(/invalid input syntax for (?:type\s+)?(?:bigint|integer|numeric|double precision|real|smallint|decimal):\s*"([^"]+)"/i);
         if (typeValueMatch) {
             const badValue = _conciNormalizeEditableCellText(typeValueMatch[1]).toLowerCase();
-            const knownNumCols = ['TOTAL PAX', 'KGS. DE EQUIPAJE', 'HRS. CUMPLIDAS', '# DE VUELO', 'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE CARGA NACIONAL', 'KGS. DE CARGA INTERNACIONAL', 'KG DE CARGA TOTAL', 'CORREO', 'DIPLOMATICOS', 'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS'];
+            const knownNumCols = ['TOTAL PAX', 'KGS. DE EQUIPAJE', 'HRS. CUMPLIDAS', '# DE VUELO', 'TOTAL EXENTOS', 'PAX QUE PAGAN TUA', 'KGS. DE CARGA NACIONAL', 'KGS. DE CARGA INTERNACIONAL', 'KG DE CARGA TOTAL', 'KGS. DE CARGA EN TRANSITO', 'CORREO', 'DIPLOMATICOS', 'EN COMISION', 'INFANTES', 'TRANSITOS', 'CONEXIONES', 'OTROS EXENTOS'];
             // Un error de tipo numérico SOLO puede venir de una columna que
             // realmente sea numérica en la base de datos — nunca de una
             // columna de texto (AEROLINEA, DESTINO/ORIGEN, OBSERVACIONES...).
