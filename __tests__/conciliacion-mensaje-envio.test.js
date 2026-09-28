@@ -130,6 +130,19 @@ describe('el marcado', () => {
     expect(modal).toMatch(/id="btn-conci-msg-copiar"[^>]*>\s*<i class="fas fa-copy[^>]*><\/i>Copiar mensaje/);
   });
 
+  test('el Cierre de Subsecretaría y la alerta de 30 h se ocultan, no se eliminan', () => {
+    const css = fs.readFileSync(path.join(raiz, 'style.css'), 'utf8').replace(/\r\n/g, '\n');
+    const ids = ['btn-conci-cierre-subsecretaria', 'btn-conci-corregir-cerrado', 'btn-conci-solicitudes-pendientes',
+      'btn-conci-alerta30h-pendientes', 'conci-alerta30h-toggle-wrap', 'mf-cierre-card-fijo', 'mf-cierre-card-previo',
+      'mf-cierre-card-total'];
+    ids.forEach(id => expect(html).toContain(`id="${id}"`));
+    expect(html).toMatch(/<script src="js\/conci-cierre-subsecretaria\.js\?v=[^"]+" defer><\/script>/);
+    expect(html).toMatch(/<script src="js\/conci-alerta-30h\.js\?v=[^"]+" defer><\/script>/);
+    const regla = css.match(/#btn-conci-cierre-subsecretaria,[^{]*\{[^}]*\}/)[0];
+    [...ids.map(id => `#${id}`), '.conci-cierre-corregir-row'].forEach(sel => expect(regla).toContain(sel));
+    expect(regla).toMatch(/display: none !important;/);
+  });
+
   test('el módulo carga después de los dos reportes de los que toma las cifras', () => {
     const pax = html.indexOf('js/conci-reportes-pasajeros.js');
     const carga = html.indexOf('<script src="js/conci-reportes-carga.js');

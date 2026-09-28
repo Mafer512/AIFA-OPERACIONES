@@ -18160,6 +18160,24 @@ body.dark-mode .conci-manifest-toolbar #badge-conci-manifiestos-count {
    display: none !important;
 }
 
+/* Por ahora el Cierre de Subsecretaría y la alerta de 30 h no se usan desde
+   la pantalla: sus botones, fichas y el candado por fila siguen en la página
+   y sus scripts cargados, solo OCULTOS. El !important gana a los scripts, que
+   los muestran quitando d-none. Para volver a usarlos basta quitar esta regla.
+   Mientras tanto, el mensaje para WhatsApp cuenta lo capturado como cerrado
+   (js/conci-mensaje-envio.js). */
+#btn-conci-cierre-subsecretaria,
+#btn-conci-corregir-cerrado,
+#btn-conci-solicitudes-pendientes,
+#btn-conci-alerta30h-pendientes,
+#conci-alerta30h-toggle-wrap,
+#mf-cierre-card-fijo,
+#mf-cierre-card-previo,
+#mf-cierre-card-total,
+.conci-cierre-corregir-row {
+   display: none !important;
+}
+
 /* Importar Excel: la zona donde se suelta el archivo. */
 .conci-import-zona {
    display: flex;
