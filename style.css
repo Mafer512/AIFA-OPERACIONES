@@ -18147,6 +18147,35 @@ body.dark-mode .conci-manifest-toolbar #badge-conci-manifiestos-count {
    display: none !important;
 }
 
+/* Importar Excel: la zona donde se suelta el archivo. */
+.conci-import-zona {
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   justify-content: center;
+   padding: 1.75rem 1rem;
+   border: 2px dashed #86b7a1;
+   border-radius: .9rem;
+   background: #f6fbf8;
+   color: #1a2f55;
+   cursor: pointer;
+   text-align: center;
+   transition: border-color .15s ease, background .15s ease;
+}
+
+.conci-import-zona:hover,
+.conci-import-zona:focus-visible,
+.conci-import-zona-activa {
+   border-color: #198754;
+   background: #e8f5ee;
+}
+
+body.dark-mode .conci-import-zona {
+   border-color: rgba(25, 135, 84, .55);
+   background: rgba(25, 135, 84, .08);
+   color: #cbd5e1;
+}
+
 /* ==========================================================================
    Conciliación · Manifiestos: densidad alta.
 

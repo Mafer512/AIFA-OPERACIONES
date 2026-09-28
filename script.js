@@ -19011,6 +19011,13 @@ function _conciRefreshEditToolbar() {
         btnMatriculaCatalog.classList.toggle('d-none', !canManage);
         btnMatriculaCatalog.disabled = !canManage;
     }
+    // Importar Excel: la misma regla que los catalogos, editor o admin. El
+    // boton vive en index.html y su logica en js/conci-importar-excel.js.
+    const btnImportarExcel = document.getElementById('btn-conci-importar-excel');
+    if (btnImportarExcel) {
+        btnImportarExcel.classList.toggle('d-none', !canManage);
+        btnImportarExcel.disabled = !canManage;
+    }
 
     const controlsLocked = _conciEditMode;
     if (btnRefresh) btnRefresh.disabled = controlsLocked;
