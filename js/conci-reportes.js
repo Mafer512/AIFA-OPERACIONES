@@ -24,7 +24,7 @@
 
     /* Reportes usa su propio espacio de trabajo a pantalla completa, con las
        mismas reglas: sin encabezado, sin barra de agenda y sin barra lateral,
-       de modo que arriba quede solo su barra con el botón Menú. */
+       de modo que arriba quede solo su barra con el botón Inicio. */
     const CLASE_WORKSPACE = 'conci-reportes-workspace';
 
     function seccion(id) { return document.getElementById(id); }
@@ -72,7 +72,7 @@
         else abrirReportes();
     }
 
-    /** El botón Menú sale del módulo por completo, no regresa a Manifiestos. */
+    /** El botón Inicio sale del módulo por completo, no regresa a Manifiestos. */
     function irAlMenu() {
         seccion(ID_REPORTES)?.classList.remove('active');
         document.body.classList.remove('conci-reportes-abierto', CLASE_WORKSPACE, ...CLASES_ORIGEN);

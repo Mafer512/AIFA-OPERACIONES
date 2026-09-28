@@ -994,6 +994,9 @@
 
     window.conciReportesPasajeros = {
         generar, agregar, mostrar, aIso, imprimir, nombreAerolinea,
+        // Los manifiestos hasta una fecha, con su caché. (`descargar` es el
+        // Excel.) Lo usa el mensaje para WhatsApp, js/conci-mensaje-envio.js.
+        leer: descargar,
         descargar: descargar_,
         filasPlantilla1, filasPlantilla2,
         _cache: () => cache,

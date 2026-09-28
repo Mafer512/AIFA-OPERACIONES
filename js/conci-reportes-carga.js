@@ -1203,6 +1203,10 @@
         descargar: descargarPptx,
         filasHoja1, totales, toneladas, repartirEnteros, modeloPresentacion,
         aIso, nombreAerolinea, aplicarEdicionesPresentacion,
+        // Las columnas de carga de unas filas ya descargadas: el mensaje para
+        // WhatsApp (js/conci-mensaje-envio.js) reutiliza las del reporte de
+        // pasajeros en vez de volver a pedirlas.
+        columnas: detectarColumnas,
         _edicion: () => edicion
     };
 })();

@@ -16250,7 +16250,7 @@ body:not(.dark-mode) .ndw-card-icon {
 }
 
 /* ══════════════════════════════════════════════════════
-   NAV DECK — Vista de sección: ocultar deck + botón "Menú"
+   NAV DECK — Vista de sección: ocultar deck + botón "Inicio"
    ══════════════════════════════════════════════════════ */
 .navdeck-back-btn { display: none; }
 
@@ -16268,34 +16268,75 @@ body:not(.dark-mode) .ndw-card-icon {
 
     /* Al entrar a un módulo, el deck se oculta y el contenido ocupa todo */
     body.navdeck-mode.navdeck-active .sidebar.nav-deck { display: none !important; }
+}
 
-    body.navdeck-mode.navdeck-active .navdeck-back-btn {
-        position: fixed;
-        right: 18px;
-        bottom: 18px;
-        left: auto;
-        z-index: 1060;
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: .6rem 1.15rem;
-        border: none;
-        border-radius: 30px;
-        background: linear-gradient(135deg, #2563eb, #1e3a8a);
-        color: #fff;
-        font-size: .82rem;
-        font-weight: 700;
-        letter-spacing: .02em;
-        cursor: pointer;
-        box-shadow: 0 8px 22px rgba(0, 0, 0, .35);
-        transition: transform .15s ease, box-shadow .15s ease, background .2s;
-    }
-    body.navdeck-mode.navdeck-active .navdeck-back-btn:hover {
-        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-        transform: translateY(-2px);
-        box-shadow: 0 12px 28px rgba(0, 0, 0, .45);
-    }
-    body.navdeck-mode.navdeck-active .navdeck-back-btn i { font-size: .9rem; }
+/* Botón "Inicio": dentro de un módulo, en el encabezado, centrado entre el
+   título y el botón de usuario. Sus márgenes automáticos se reparten el hueco
+   a los dos lados, así que el botón de usuario deja de empujarse solo a la
+   derecha (si no, se llevaría un tercio del hueco y el botón quedaría cargado
+   hacia el título). Píldora clara con la casa en un círculo azul. */
+body.navdeck-mode.navdeck-active .navdeck-back-btn {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 9px;
+    margin-inline: auto;
+    padding: 4px 18px 4px 4px;
+    border: 1px solid rgba(37, 99, 235, .22);
+    border-radius: 999px;
+    background: #fff;
+    color: #14213d;
+    font-size: .9rem;
+    font-weight: 800;
+    letter-spacing: .01em;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow: 0 6px 16px -10px rgba(15, 23, 42, .45);
+    transition: transform .15s ease, box-shadow .15s ease, color .15s ease, border-color .15s ease;
+}
+body.navdeck-mode.navdeck-active .navdeck-back-btn + .hdr-user {
+    margin-left: 0;
+}
+/* En pantallas angostas el título se centra con márgenes automáticos; el
+   derecho se quita para que el hueco a los lados del botón siga parejo. */
+body.navdeck-mode.navdeck-active .header-title-row .main-title {
+    margin-right: 0;
+}
+body.navdeck-mode.navdeck-active .navdeck-back-btn:hover {
+    border-color: #93b8f5;
+    color: #1d4ed8;
+    transform: translateY(-1px);
+    box-shadow: 0 10px 20px -12px rgba(29, 78, 216, .55);
+}
+body.navdeck-mode.navdeck-active .navdeck-back-btn:focus-visible {
+    outline: 3px solid rgba(59, 130, 246, .55);
+    outline-offset: 2px;
+}
+body.navdeck-mode.navdeck-active .navdeck-back-ico {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    color: #fff;
+    font-size: .85rem;
+    box-shadow: 0 4px 10px -3px rgba(37, 99, 235, .55);
+    transition: transform .15s ease;
+}
+body.navdeck-mode.navdeck-active .navdeck-back-btn:hover .navdeck-back-ico { transform: scale(1.08); }
+body.navdeck-mode.dark-mode.navdeck-active .navdeck-back-btn {
+    border-color: rgba(148, 163, 184, .25);
+    background: rgba(15, 23, 42, .6);
+    color: #e2e8f0;
+}
+body.navdeck-mode.dark-mode.navdeck-active .navdeck-back-btn:hover { color: #93c5fd; }
+
+/* Donde el renglón del título se aprieta, queda solo la casa. */
+@media (max-width: 1279.98px) {
+    body.navdeck-mode.navdeck-active .navdeck-back-btn { padding: 4px; }
+    body.navdeck-mode.navdeck-active .navdeck-back-texto { display: none; }
 }
 
 /* Ocultar botón de Sugerencias cuando el usuario está dentro de una sección */
@@ -16624,101 +16665,6 @@ body.navdeck-mode #navdeck-weekly-banner {
     animation: ndwHandBounce 1.4s ease-in-out infinite;
 }
 
-/* Preliminary note in the banner hero (weekly mode) */
-.ndw-prelim-banner-note {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    margin: 7px 0 0;
-    padding: 5px 13px 5px 9px;
-    font-size: .7rem;
-    font-weight: 700;
-    letter-spacing: .03em;
-    color: #fef3c7;
-    background: rgba(251, 191, 36, .12);
-    border: 1px solid rgba(251, 191, 36, .32);
-    border-radius: 999px;
-    backdrop-filter: blur(4px);
-    box-shadow: 0 2px 10px rgba(251, 191, 36, .15);
-    pointer-events: none;
-    animation: ndwPrelimBannerPulse 2.8s ease-in-out infinite;
-}
-.ndw-prelim-banner-note i {
-    font-size: .72rem;
-    color: #fbbf24;
-    opacity: .9;
-}
-.ndw-prelim-banner-note strong { color: #fde68a; font-weight: 900; }
-.ndw-prelim-banner-dot {
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #f59e0b;
-    box-shadow: 0 0 0 0 rgba(245, 158, 11, .7);
-    animation: ndwDotPing 1.6s ease-out infinite;
-    flex-shrink: 0;
-}
-@keyframes ndwPrelimBannerPulse {
-    0%, 100% { opacity: .8; }
-    50%       { opacity: 1; }
-}
-@keyframes ndwDotPing {
-    0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, .75); }
-    70%  { box-shadow: 0 0 0 7px rgba(245, 158, 11, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
-}
-/* Light-mode */
-body:not(.dark-mode) .ndw-prelim-banner-note {
-    color: #92400e;
-    background: rgba(217, 119, 6, .09);
-    border-color: rgba(217, 119, 6, .3);
-}
-body:not(.dark-mode) .ndw-prelim-banner-note strong { color: #b45309; }
-
-/* Container that groups the two prelim pills side by side */
-.ndw-prelim-banner-group {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    margin: 7px 0 0;
-}
-.ndw-prelim-banner-group .ndw-prelim-banner-note { margin: 0; }
-
-/* "Datos al [fecha]" secondary pill */
-.ndw-prelim-last-date {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 13px 5px 9px;
-    font-size: .7rem;
-    font-weight: 600;
-    letter-spacing: .03em;
-    color: rgba(255, 255, 255, .75);
-    background: rgba(255, 255, 255, .07);
-    border: 1px solid rgba(255, 255, 255, .18);
-    border-radius: 999px;
-    backdrop-filter: blur(4px);
-    pointer-events: none;
-    margin: 0;
-}
-.ndw-prelim-last-date i {
-    font-size: .7rem;
-    color: #86efac;
-    opacity: .9;
-}
-.ndw-prelim-last-date strong {
-    color: #fff;
-    font-weight: 800;
-}
-body:not(.dark-mode) .ndw-prelim-last-date {
-    color: rgba(20, 33, 61, .65);
-    background: rgba(20, 33, 61, .06);
-    border-color: rgba(20, 33, 61, .18);
-}
-body:not(.dark-mode) .ndw-prelim-last-date strong { color: #14213d; }
-body:not(.dark-mode) .ndw-prelim-last-date i { color: #16a34a; }
 @keyframes ndwTapHintPulse {
     0%, 100% { opacity: .55; }
     50%       { opacity: .9; }
@@ -16843,14 +16789,6 @@ body:not(.dark-mode) .ndw-tap-hint i { color: rgba(20, 33, 61, .4); }
 .ndw-card:focus-visible .ndw-card-cta { transform: translateY(0); }
 
 /* ── Modal de detalle — Enhanced ── */
-@keyframes ndwPulse {
-    0%, 100% { opacity: .85; }
-    50%       { opacity: 1; }
-}
-@keyframes ndwBarIn {
-    from { width: 0 !important; }
-}
-
 .ndw-modal {
     position: fixed;
     inset: 0;
@@ -17056,17 +16994,14 @@ body:not(.dark-mode) .ndw-tap-hint i { color: rgba(20, 33, 61, .4); }
 .ndw-kpi:hover        { background: rgba(255, 255, 255, .03); }
 
 .ndw-kpi-val {
-    font-size: 1.4rem;
+    font-size: 1.75rem;
     font-weight: 900;
+    line-height: 1.1;
     color: #fff;
     letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
 }
 .ndw-kpi:first-child .ndw-kpi-val { color: var(--ndw-accent, #3b82f6); }
-.ndw-kpi-val--incourse {
-    font-size: 1.05rem;
-    color: #fbbf24;
-    letter-spacing: .01em;
-}
 
 .ndw-kpi-lbl {
     font-size: .58rem;
@@ -17075,6 +17010,13 @@ body:not(.dark-mode) .ndw-tap-hint i { color: rgba(20, 33, 61, .4); }
     letter-spacing: .07em;
     color: rgba(180, 205, 240, .7);
     margin-top: 3px;
+}
+/* Para qué periodo es la cifra ("Agosto", "2025"). */
+.ndw-kpi-sub {
+    margin-top: 2px;
+    font-size: .7rem;
+    font-weight: 600;
+    color: rgba(214, 232, 251, .85);
 }
 
 /* ── Body ── */
@@ -17097,60 +17039,7 @@ body:not(.dark-mode) .ndw-tap-hint i { color: rgba(20, 33, 61, .4); }
     background: rgba(148, 186, 255, .12);
 }
 
-.ndw-detail-row { margin-bottom: 10px; }
-.ndw-detail-row-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 5px;
-}
-.ndw-detail-day { font-size: .82rem; font-weight: 600; color: #d6e8fb; }
-.ndw-peak-tag {
-    font-size: .54rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: .06em;
-    color: #0b1220;
-    background: linear-gradient(135deg, #fbbf24, #f59e0b);
-    padding: 2px 7px;
-    border-radius: 999px;
-    margin-left: 5px;
-    vertical-align: middle;
-    box-shadow: 0 2px 6px rgba(245, 158, 11, .45);
-}
-.ndw-sel-tag {
-    font-size: .54rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: .06em;
-    color: #fff;
-    background: rgba(96, 165, 250, .55);
-    border: 1px solid rgba(96, 165, 250, .6);
-    padding: 2px 7px;
-    border-radius: 999px;
-    margin-left: 5px;
-    vertical-align: middle;
-}
-/* Preliminary / in-progress month badge */
-.ndw-prelim-tag {
-    font-size: .54rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: .06em;
-    color: #fff;
-    background: rgba(251, 146, 60, .5);
-    border: 1px solid rgba(251, 146, 60, .65);
-    padding: 2px 7px;
-    border-radius: 999px;
-    margin-left: 5px;
-    vertical-align: middle;
-}
-.ndw-detail-row.is-prelim .ndw-detail-bar > span {
-    background: linear-gradient(90deg, #fb923c, #f97316);
-    opacity: .85;
-}
-.ndw-detail-row.is-prelim .ndw-detail-val { color: #fdba74; }
-/* Preliminary note banner above chart */
+/* Preliminary note banner */
 .ndw-prelim-note {
     display: flex;
     align-items: center;
@@ -17162,60 +17051,184 @@ body:not(.dark-mode) .ndw-tap-hint i { color: rgba(20, 33, 61, .4); }
     border: 1px solid rgba(251, 191, 36, .25);
     border-radius: 8px;
     padding: 7px 12px;
-    margin-bottom: 10px;
-}
-.ndw-detail-row.is-selected .ndw-detail-bar > span {
-    background: linear-gradient(90deg, #60a5fa, #3b82f6);
-}
-.ndw-detail-row.is-selected .ndw-detail-val { color: #93c5fd; }
-
-/* Chart wrapper inside modal */
-.ndw-chart-wrap {
-    width: 100%;
-    height: 260px;
-    margin-bottom: 6px;
-    border-radius: 10px;
-    overflow: hidden;
-    background: rgba(255, 255, 255, .03);
-    padding: 4px 4px 4px;
+    margin-bottom: 12px;
 }
 
-.ndw-detail-val { font-size: .92rem; font-weight: 800; color: #fff; }
-.ndw-detail-pct {
+/* ── Cifra en foco: el periodo elegido, en grande ── */
+.ndw-focus {
+    margin-bottom: 18px;
+    padding: 16px 18px 14px;
+    border: 1px solid rgba(148, 186, 255, .14);
+    border-left: 4px solid var(--ndw-accent, #3b82f6);
+    border-radius: 14px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--ndw-accent, #3b82f6) 16%, transparent), rgba(255, 255, 255, .02) 70%);
+}
+.ndw-focus-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+}
+.ndw-focus-lbl { font-size: .84rem; font-weight: 700; color: #d6e8fb; }
+.ndw-focus-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: .58rem;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+.ndw-focus-tag.is-prelim { color: #fed7aa; background: rgba(251, 146, 60, .18); border: 1px solid rgba(251, 146, 60, .45); }
+.ndw-focus-tag.is-peak   { color: #0b1220; background: linear-gradient(135deg, #fbbf24, #f59e0b); }
+.ndw-focus-tag.is-active { color: #dbeafe; background: rgba(96, 165, 250, .2); border: 1px solid rgba(96, 165, 250, .5); }
+.ndw-focus-val {
+    margin: 4px 0 12px;
+    font-size: clamp(2.2rem, 7vw, 3.1rem);
+    font-weight: 900;
+    line-height: 1;
+    letter-spacing: -.03em;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+}
+.ndw-focus-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.ndw-delta,
+.ndw-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 10px;
+    border: 1px solid rgba(148, 186, 255, .14);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .06);
+    color: #d6e8fb;
+    font-size: .76rem;
+    white-space: nowrap;
+}
+.ndw-delta b,
+.ndw-stat b { font-weight: 800; font-variant-numeric: tabular-nums; }
+.ndw-delta small,
+.ndw-stat small { font-size: .68rem; color: rgba(180, 205, 240, .75); }
+.ndw-delta.is-up   { color: #86efac; background: rgba(34, 197, 94, .12); border-color: rgba(34, 197, 94, .35); }
+.ndw-delta.is-down { color: #fca5a5; background: rgba(239, 68, 68, .12); border-color: rgba(239, 68, 68, .35); }
+.ndw-delta.is-flat { color: rgba(214, 232, 251, .8); }
+.ndw-focus-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 10px 0 0;
+    font-size: .72rem;
+    color: #fdba74;
+}
+
+/* ── Fichas: una por día, mes o año; tocar una la pone en foco ── */
+.ndw-tiles-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.ndw-tiles-head .ndw-detail-title { flex: 1; margin-bottom: 0; }
+.ndw-orden {
+    display: inline-flex;
+    flex-shrink: 0;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid rgba(148, 186, 255, .14);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .06);
+}
+.ndw-orden button {
+    padding: 5px 11px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: rgba(214, 232, 251, .7);
     font-size: .66rem;
-    font-weight: 600;
-    color: rgba(180, 205, 240, .6);
-    margin-left: 6px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s ease, color .15s ease;
 }
+.ndw-orden button:hover { color: #fff; }
+.ndw-orden button.is-active { color: #fff; background: var(--ndw-accent, #3b82f6); }
 
-/* Progress bar */
-.ndw-detail-bar {
-    height: 8px;
-    border-radius: 6px;
-    background: rgba(148, 186, 255, .1);
+.ndw-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    gap: 10px;
+}
+.ndw-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 11px 12px 10px;
+    border: 1px solid rgba(148, 186, 255, .14);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .035);
+    color: #fff;
+    text-align: left;
+    cursor: pointer;
+    transition: transform .15s ease, border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.ndw-tile:hover {
+    transform: translateY(-2px);
+    border-color: rgba(148, 186, 255, .35);
+    background: rgba(255, 255, 255, .06);
+}
+.ndw-tile:focus-visible { outline: 2px solid var(--ndw-accent, #3b82f6); outline-offset: 2px; }
+.ndw-tile.is-focus {
+    border-color: var(--ndw-accent, #3b82f6);
+    background: color-mix(in srgb, var(--ndw-accent, #3b82f6) 18%, transparent);
+    box-shadow: 0 0 0 1px var(--ndw-accent, #3b82f6) inset, 0 8px 20px -10px var(--ndw-accent, #3b82f6);
+}
+.ndw-tile-lbl {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: rgba(180, 205, 240, .85);
+}
+.ndw-tile-lbl .fa-crown { color: #fbbf24; }
+.ndw-tile-lbl .fa-clock-rotate-left { color: #fdba74; }
+.ndw-tile-val {
+    font-size: 1.35rem;
+    font-weight: 900;
+    line-height: 1.05;
+    letter-spacing: -.02em;
+    font-variant-numeric: tabular-nums;
+}
+.ndw-tile .ndw-delta { padding: 2px 7px; font-size: .64rem; }
+.ndw-tile-bar {
+    align-self: stretch;
+    height: 4px;
+    border-radius: 4px;
+    background: rgba(148, 186, 255, .12);
     overflow: hidden;
 }
-.ndw-detail-bar > span {
+.ndw-tile-bar > span {
     display: block;
     height: 100%;
-    border-radius: 6px;
-    background: linear-gradient(90deg, var(--ndw-accent, #3b82f6) 0%, rgba(255, 255, 255, .6) 100%);
-    transition: width .55s cubic-bezier(.4,0,.2,1);
-    animation: ndwPulse 3s ease-in-out infinite;
+    border-radius: inherit;
+    background: var(--ndw-accent, #3b82f6);
 }
+.ndw-tile.is-peak .ndw-tile-bar > span { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.ndw-tile.is-prelim .ndw-tile-bar > span { background: repeating-linear-gradient(45deg, #fb923c 0 6px, rgba(251, 146, 60, .45) 6px 12px); }
+.ndw-tile.is-prelim .ndw-tile-val { color: #fdba74; }
 
-/* Peak row highlight */
-.ndw-detail-row.is-peak {
-    background: linear-gradient(90deg, rgba(251,191,36,.10), rgba(251,191,36,.04) 80%, transparent);
-    border: 1px solid rgba(251, 191, 36, .22);
-    border-radius: 9px;
-    padding: 7px 9px;
-    margin: 0 -9px 10px;
-}
-.ndw-detail-row.is-peak .ndw-detail-day { color: #fde68a; font-weight: 700; }
-.ndw-detail-row.is-peak .ndw-detail-bar { background: rgba(251, 191, 36, .12); }
-.ndw-detail-row.is-peak .ndw-detail-bar > span {
-    background: linear-gradient(90deg, #fbbf24 0%, #fef3c7 100%);
+@media (max-width: 575.98px) {
+    .ndw-kpi-val { font-size: 1.15rem; }
+    .ndw-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ndw-tiles-head { flex-wrap: wrap; }
 }
 
 /* ── Footer ── */
@@ -18174,6 +18187,75 @@ body.dark-mode .conci-import-zona {
    border-color: rgba(25, 135, 84, .55);
    background: rgba(25, 135, 84, .08);
    color: #cbd5e1;
+}
+
+/* Mensaje para WhatsApp o Webex (js/conci-mensaje-envio.js): el texto va en un
+   recuadro tipo globo de chat, con los tabuladores del mensaje original. */
+#modalConciMensaje .conci-msg-cabeza {
+   background: linear-gradient(135deg, #0f766e, #16a34a);
+   color: #fff;
+}
+
+#modalConciMensaje .conci-msg-barra {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: center;
+   gap: .5rem;
+   margin-bottom: .75rem;
+}
+
+#modalConciMensaje .conci-msg-barra label {
+   margin: 0;
+   color: #475569;
+   font-size: .8rem;
+   font-weight: 600;
+}
+
+#modalConciMensaje .conci-msg-estado {
+   margin-left: auto;
+   color: #64748b;
+   font-size: .76rem;
+}
+
+#modalConciMensaje .conci-msg-texto {
+   min-height: 24rem;
+   padding: .9rem 1rem;
+   border: 1px solid #c9e7c1;
+   border-radius: .9rem;
+   background: #effae9;
+   color: #0f172a;
+   font-size: .9rem;
+   line-height: 1.45;
+   tab-size: 4;
+   resize: vertical;
+}
+
+#modalConciMensaje .conci-msg-texto:focus {
+   border-color: #16a34a;
+   box-shadow: 0 0 0 .2rem rgba(22, 163, 74, .18);
+}
+
+#modalConciMensaje .conci-msg-nota {
+   margin-top: .5rem;
+   color: #64748b;
+   font-size: .74rem;
+}
+
+#modalConciMensaje .conci-msg-copiado {
+   border-color: #15803d;
+   background: #15803d;
+}
+
+body.dark-mode #modalConciMensaje .conci-msg-barra label,
+body.dark-mode #modalConciMensaje .conci-msg-estado,
+body.dark-mode #modalConciMensaje .conci-msg-nota {
+   color: #94a3b8;
+}
+
+body.dark-mode #modalConciMensaje .conci-msg-texto {
+   border-color: #1f5135;
+   background: #0f2a1d;
+   color: #e2e8f0;
 }
 
 /* ==========================================================================
@@ -20954,16 +21036,165 @@ body.conci-manifest-workspace #navdeck-back {
    }
 }
 
-@media (max-width: 991.98px) {
-   body.conci-manifest-workspace .conci-manifest-toolbar,
-   body.conci-manifest-workspace .conci-manifest-filters {
-      flex-wrap: nowrap !important;
-      overflow-x: auto;
-      overflow-y: hidden;
+/* ==========================================================================
+   Conciliación › Manifiestos a cualquier ancho.
+
+   Arriba de la tabla van tres franjas: herramientas; conteos y resumen;
+   filtros de captura con exportar y capturar. Al angostar la ventana cada
+   franja conserva su orden y lo que no cabe baja COMPLETO al renglón de
+   abajo, como en pantalla completa pero en más renglones.
+
+   Antes, por debajo de 992 px, cada franja se forzaba a una sola línea con
+   desplazamiento lateral, pero los botones de la barra (que se dibujan con
+   display:contents) sí podían encogerse: el texto de un botón se partía en
+   tres líneas, el selector de fechas se apilaba y las pastillas caían en
+   columna encima de las fichas. Y entre 992 y ~1300 px la franja de filtros
+   no bajaba de renglón: apretaba sus botones hasta partirles el texto.
+   ========================================================================== */
+
+/* Nada se encoge por dentro: si un control no cabe, baja de renglón. */
+body.conci-manifest-workspace .conci-manifest-toolbar,
+body.conci-manifest-workspace .conci-manifest-filters > div,
+body.conci-manifest-workspace .conci-manifest-acciones {
+   flex-wrap: wrap !important;
+}
+
+/* Los botones de la barra van juntos desde la izquierda. La clase
+   justify-content-between del marcado trae !important y, en un renglón que
+   no se llena, abría huecos enormes entre ellos. */
+body.conci-manifest-workspace .conci-manifest-toolbar {
+   justify-content: flex-start !important;
+}
+
+/* La regla general de teléfono agranda toda cifra "kpi-value"; en esta franja
+   las cifras conservan su tamaño. */
+body.conci-manifest-workspace #manifiestos-summary-strip .ops-kpi-value {
+   font-size: 1.05rem !important;
+}
+
+body.conci-manifest-workspace .conci-manifest-toolbar > div:first-child,
+body.conci-manifest-workspace .conci-manifest-toolbar .btn,
+body.conci-manifest-workspace .conci-manifest-toolbar .btn-group,
+body.conci-manifest-workspace .conci-manifest-toolbar .input-group,
+body.conci-manifest-workspace .conci-manifest-toolbar .badge,
+body.conci-manifest-workspace .conci-manifest-filters .btn,
+body.conci-manifest-workspace .conci-manifest-filters .btn-group,
+body.conci-manifest-workspace .conci-manifest-filters .dropdown {
+   flex-shrink: 0;
+   white-space: nowrap;
+}
+
+body.conci-manifest-workspace .conci-manifest-toolbar .input-group,
+body.conci-manifest-workspace .conci-manifest-filters .input-group {
+   flex-wrap: nowrap;
+}
+
+/* Filtros de captura: el buscador se queda con el espacio libre; exportar y
+   capturar van juntos y, si bajan de renglón, se alinean a la derecha. */
+body.conci-manifest-workspace .conci-manifest-filters > div:last-child {
+   row-gap: .3rem !important;
+}
+
+body.conci-manifest-workspace .conci-manifest-acciones {
+   display: flex;
+   flex: 0 1 auto;
+   align-items: center;
+   justify-content: flex-end;
+   gap: .5rem;
+   row-gap: .3rem;
+   margin-left: auto;
+}
+
+/* Conteos y resumen: cuando ya no caben en un solo renglón, las fichas del
+   resumen bajan a uno propio y se reparten el ancho en partes iguales. */
+@media (max-width: 1279.98px) {
+   body.conci-manifest-workspace #manifiestos-summary-strip {
+      display: grid;
+      flex: 1 1 100%;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
    }
-   body.conci-manifest-workspace .conci-manifest-toolbar > *,
-   body.conci-manifest-workspace .conci-manifest-filters > * {
+
+   body.conci-manifest-workspace #manifiestos-summary-strip .ops-kpi-card {
+      min-width: 0;
+      max-width: none;
+   }
+}
+
+/* Ventana angosta: las fichas de dos en dos y, más angosta aún, las
+   pastillas en rejilla de tres. */
+@media (max-width: 699.98px) {
+   body.conci-manifest-workspace #manifiestos-summary-strip {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+   }
+}
+
+@media (max-width: 639.98px) {
+   body.conci-manifest-workspace .conci-manifest-filters > div:first-child {
+      display: grid !important;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: .4rem !important;
+   }
+
+   body.conci-manifest-workspace .conci-manifest-filters .conci-count-pill {
+      min-width: 0;
+      max-width: none;
+   }
+
+   body.conci-manifest-workspace #manifiestos-summary-strip {
+      grid-column: 1 / -1;
+   }
+}
+
+/* Teléfono: las pestañas sin iconos y el botón Inicio solo con la casa, siempre
+   a la vista en la orilla derecha aunque las pestañas se deslicen de lado. */
+@media (max-width: 575.98px) {
+   #conciliacion-tabs .nav-link > i {
+      display: none;
+   }
+
+   #conciliacion-tabs .conci-tabs-menu-item {
+      position: sticky;
+      right: 0;
+      z-index: 2;
+      padding-left: .4rem;
+      background: inherit;
+   }
+
+   #btn-conci-main-menu {
+      padding: .3rem .6rem;
+      font-size: 0;
+   }
+
+   #btn-conci-main-menu > i {
+      margin: 0 !important;
+      font-size: .9rem;
+   }
+}
+
+/* En una ventana chica no alcanza el alto para las franjas y la tabla a la
+   vez: la página baja con el scroll y la tabla conserva casi toda la altura
+   de la pantalla (con su propio desplazamiento y su encabezado fijo). Solo
+   Manifiestos: Itinerario comparte el modo pero no estas franjas. */
+@media (max-width: 767.98px) {
+   body.conci-manifest-workspace:not(.conci-itinerary-workspace) #conciliacion-section.active {
+      overflow-y: auto;
+   }
+
+   body.conci-manifest-workspace:not(.conci-itinerary-workspace) .conci-workspace-shell {
+      height: auto;
+      min-height: 100%;
+      overflow: visible;
+   }
+
+   body.conci-manifest-workspace:not(.conci-itinerary-workspace) .conci-manifest-pane-body {
+      overflow: visible;
+   }
+
+   body.conci-manifest-workspace:not(.conci-itinerary-workspace) #conci-manifiestos-scroll {
       flex: 0 0 auto;
+      height: calc(100dvh - 1.5rem) !important;
+      min-height: 20rem;
+      overscroll-behavior: auto;
    }
 }
 
@@ -24231,8 +24462,8 @@ body.navdeck-mode .sidebar.nav-deck > .si-link--logout {
    }
 }
 
-/* Banner: foto a lo ancho, bienvenida, tarjeta del periodo translucida, fecha
-   abajo y el selector de vista arriba a la derecha. */
+/* Banner: foto a lo ancho, selector de vista arriba a la izquierda, tarjeta
+   del periodo translucida y fecha abajo. */
 body.navdeck-mode .ndw-hero {
    align-items: stretch;
    min-height: 15rem;
@@ -24240,14 +24471,16 @@ body.navdeck-mode .ndw-hero {
 }
 
 /* La torre completa (images/banner.png, 1701 x 925): la foto se escala por
-   alto para que la torre quepa entera y centrada, con cielo arriba y su base
-   abajo; los lados se rellenan con la misma foto desenfocada y los bordes de
-   la nitida se funden con ese fondo. Sin zoom lento: sacaria la torre. */
+   alto para que la torre quepa entera, con cielo arriba y su base abajo; a su
+   izquierda se rellena con la misma foto desenfocada y el borde izquierdo de
+   la nitida se funde con ese fondo. Sin zoom lento: sacaria la torre. El
+   contenedor se mide (cqw / cqh) para ubicar la foto. */
 body.navdeck-mode .ndw-hero-media {
    overflow: hidden;
    background-image: none;
    transform: none;
    animation: none;
+   container-type: size;
 }
 
 body.navdeck-mode .ndw-hero-media::before {
@@ -24262,15 +24495,21 @@ body.navdeck-mode .ndw-hero-media::before {
    display: none;
 }
 
+/* La foto nitida se pega al borde derecho del banner sin empezar antes de
+   donde terminan las letras del periodo (~40rem), y de ahi se recorre un 10 %
+   del ancho del banner a la izquierda. Si el banner es angosto, se recorre lo
+   necesario para que la torre (al centro de la foto) no se salga. El ancho de
+   la foto es su alto (220cqh) por la proporcion 1701 / 925. Sus dos bordes se
+   funden con el fondo desenfocado. */
 body.navdeck-mode .ndw-hero-foto {
    position: absolute;
    top: -75%;
-   left: 50%;
+   left: 30rem;
+   left: calc(min(max(40rem, 100cqw - 220cqh * 1701 / 925), 100cqw - 110cqh * 1701 / 925 - 4rem) - 10cqw);
    display: block;
    height: 220%;
    aspect-ratio: 1701 / 925;
    background: var(--ndw-hero-img) center / cover no-repeat;
-   transform: translateX(-50%);
    -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
    mask-image: linear-gradient(90deg, transparent 0%, #000 14%, #000 86%, transparent 100%);
 }
@@ -24283,20 +24522,6 @@ body.navdeck-mode .ndw-hero-foto {
    justify-content: space-between;
    gap: .75rem;
    min-width: 0;
-}
-
-.ndw-hero-welcome,
-.ndw-hero-fecha {
-   color: #fff;
-   font-size: .84rem;
-   font-weight: 600;
-   text-shadow: 0 1px 4px rgba(0, 0, 0, .45);
-}
-
-.ndw-hero-fecha {
-   display: inline-flex;
-   align-items: center;
-   gap: .45rem;
 }
 
 /* Sin recuadro: el icono y el texto del periodo van sobre la foto. */
@@ -24328,10 +24553,8 @@ body.navdeck-mode .ndw-hero-card .ndw-tap-hint {
    text-shadow: 0 1px 3px rgba(0, 0, 0, .45);
 }
 
-/* Sobre la foto, las pastillas del periodo y el selector de mes y año
-   necesitan fondo propio para leerse en tema claro. */
-body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-prelim-banner-note,
-body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-prelim-last-date,
+/* Sobre la foto, el selector de mes y año necesita fondo propio para leerse
+   en tema claro. */
 body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-month-stepper,
 body.navdeck-mode:not(.dark-mode) .ndw-hero-card .ndw-period-chip {
    background: rgba(255, 255, 255, .92) !important;
@@ -24567,6 +24790,268 @@ body.navdeck-mode:not(.dark-mode) .ndw-card-value {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   INICIO — BARRA DE AGENDA, SELECTOR DE VISTA Y TARJETAS GRANDES
+   La barra HOY / MAÑANA lleva letra más grande y, antes del Mapa Interactivo,
+   la fecha completa. El selector de vista (Día, Semana, Mes, Año, Histórico
+   total) sube a la esquina izquierda del banner, y las tarjetas de cifras
+   crecen: icono redondo, nombre completo, la cifra y el periodo.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Barra HOY / MAÑANA ── */
+#ag-today-bar {
+   min-height: 3.5rem;
+}
+
+.ag-tb-icon {
+   width: 34px;
+   height: 34px;
+   border-radius: 9px;
+   font-size: 1rem;
+}
+
+.ag-tb-day-block {
+   gap: 10px;
+}
+
+.ag-tb-day-label {
+   padding: 5px 18px;
+   font-size: .8rem;
+}
+
+.ag-tb-date {
+   font-size: .95rem;
+}
+
+.ag-tb-empty {
+   font-size: .85rem;
+}
+
+.ag-tb-sep {
+   height: 30px;
+}
+
+.ag-tb-chip {
+   gap: 6px;
+   padding: 6px 16px;
+   font-size: .85rem;
+}
+
+.ag-tb-chip-time {
+   font-size: .8rem;
+}
+
+.ag-tb-chip-area {
+   padding: 0 6px;
+   font-size: .7rem;
+}
+
+.ag-tb-hint {
+   gap: 6px;
+   font-size: .88rem;
+}
+
+.ag-tb-actions {
+   gap: 1.25rem;
+}
+
+/* La fecha va como texto sobre la barra, sin recuadro. En tema claro toma el
+   color de la barra (regla "body:not(.dark-mode) .ag-today-bar *"). */
+.ag-tb-fecha {
+   display: inline-flex;
+   align-items: center;
+   gap: .5rem;
+   color: rgba(255, 255, 255, .88);
+   font-size: .95rem;
+   font-weight: 700;
+   white-space: nowrap;
+}
+
+body:not(.dark-mode) .ag-tb-fecha i {
+   color: #4f46e5;
+}
+
+body.dark-mode .ag-tb-fecha i {
+   color: #a5b4fc;
+}
+
+/* Con varias sesiones en el día, lo que no cabe baja de renglón en vez de
+   salirse de la barra; el Mapa Interactivo se queda a la derecha. */
+@media (min-width: 992px) {
+   #ag-today-bar {
+      flex-wrap: wrap;
+      row-gap: .35rem;
+   }
+
+   .ag-tb-inner {
+      flex-wrap: wrap;
+      row-gap: .35rem;
+      min-width: 0;
+   }
+}
+
+/* Donde no alcanza el ancho, la fecha completa se queda solo en el banner. */
+@media (max-width: 1199.98px) {
+   .ag-tb-fecha {
+      display: none;
+   }
+}
+
+/* ── Selector de vista: arriba a la izquierda del banner ── */
+body.navdeck-mode .ndw-hero-main > .ndw-view-toggle {
+   align-self: flex-start;
+   margin-left: 0;
+}
+
+/* Junto a Histórico total, separado por una línea, el botón que regresa la
+   vista a su periodo actual. */
+.ndw-view-sep {
+   flex-shrink: 0;
+   align-self: center;
+   width: 1px;
+   height: 18px;
+   margin: 0 3px;
+   background: currentColor;
+   opacity: .2;
+}
+
+body.navdeck-mode:not(.dark-mode) .ndw-view-sep {
+   color: #475569;
+}
+
+body.navdeck-mode .ndw-view-btn.ndw-view-reset {
+   padding: 7px 11px;
+}
+
+.ndw-view-reset i {
+   font-size: 1.35em;
+}
+
+/* En Semana, las semanas del mes que aún no empiezan se ven pero no se eligen. */
+.ndw-period-chip:disabled {
+   opacity: .45;
+   cursor: default;
+   pointer-events: none;
+}
+
+/* ── Tarjetas de cifras grandes ──
+   El icono, el relleno y la letra crecen con el ancho de la pantalla. La cifra
+   se mide contra el ancho de su columna de texto (cqi) para llenar la tarjeta
+   sin salirse cuando la pantalla es más angosta; sin soporte de cqi se queda
+   en 1.6rem. Como el texto ocupa más de la tarjeta, el fondo liso llega más
+   lejos y la foto se desvanece solo en el último tercio. */
+body.navdeck-mode .ndw-card {
+   gap: clamp(.75rem, .9vw, 1.1rem);
+   min-height: clamp(6.75rem, 7.6vw, 9.5rem);
+   padding: clamp(.85rem, 1.05vw, 1.3rem);
+   background-image: linear-gradient(90deg, #fff 0%, #fff 56%, rgba(255, 255, 255, .85) 74%, rgba(255, 255, 255, .2) 100%), var(--ndw-img) !important;
+}
+
+body.navdeck-mode.dark-mode .ndw-card {
+   background-image: linear-gradient(90deg, #1e293b 0%, #1e293b 52%, rgba(30, 41, 59, .78) 74%, rgba(30, 41, 59, .2) 100%), var(--ndw-img) !important;
+}
+
+body.navdeck-mode .ndw-card-icon {
+   width: clamp(2.75rem, 3.4vw, 4.25rem);
+   height: clamp(2.75rem, 3.4vw, 4.25rem);
+   border-radius: 50%;
+   font-size: clamp(1.1rem, 1.35vw, 1.7rem);
+}
+
+body.navdeck-mode .ndw-card-body {
+   flex: 1 1 0;
+   gap: .3rem;
+   min-width: 0;
+   container-type: inline-size;
+}
+
+body.navdeck-mode .ndw-card-tag {
+   font-size: clamp(.66rem, .5vw + .2rem, .86rem);
+   font-weight: 800;
+   letter-spacing: .03em;
+   line-height: 1.2;
+}
+
+body.navdeck-mode .ndw-card-value {
+   margin: 0;
+   font-size: 1.6rem;
+   font-size: min(2.5rem, 19cqi);
+   line-height: 1.05;
+   white-space: nowrap;
+}
+
+body.navdeck-mode .ndw-card-value--largo {
+   font-size: min(2.5rem, 15cqi);
+}
+
+body.navdeck-mode .ndw-card-sub {
+   font-size: clamp(.66rem, .3vw + .3rem, .8rem);
+   letter-spacing: .02em;
+   text-transform: none;
+}
+
+/* El nombre de la tarjeta va en oscuro; la regla de arriba lo dejaba gris. */
+body.navdeck-mode:not(.dark-mode) .ndw-card-tag {
+   color: #1e293b !important;
+}
+
+body.navdeck-mode.dark-mode .ndw-card-tag {
+   color: #e2e8f0;
+}
+
+/* ── Teléfono: la barra vuelve a sus medidas compactas (la pasada móvil de
+   abajo ajusta el resto), el selector encabeza el banner a todo lo ancho y
+   las tarjetas se aprietan para caber en dos columnas. ── */
+@media (max-width: 575.98px) {
+   #ag-today-bar {
+      min-height: 0;
+   }
+
+   .ag-tb-day-label {
+      padding: 2px 8px;
+      font-size: .6rem;
+   }
+
+   .ag-tb-empty {
+      font-size: .66rem;
+   }
+
+   .ag-tb-chip-time {
+      font-size: .61rem;
+   }
+
+   .ag-tb-chip-area {
+      padding: 0 4px;
+      font-size: .56rem;
+   }
+
+   body.navdeck-mode .ndw-hero-main {
+      flex: 1 1 100%;
+   }
+
+   body.navdeck-mode .ndw-hero-main > .ndw-view-toggle {
+      order: 0;
+      flex: 0 0 auto;
+      align-self: stretch;
+   }
+
+   body.navdeck-mode .ndw-card {
+      gap: .55rem;
+      min-height: 6.5rem;
+      padding: .7rem;
+   }
+
+   body.navdeck-mode .ndw-card-icon {
+      width: 2.25rem;
+      height: 2.25rem;
+      font-size: .95rem;
+   }
+
+   body.navdeck-mode .ndw-card-tag {
+      font-size: .6rem;
+   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    PASADA MÓVIL — TELÉFONOS
    Las medidas de tableta (≥ 576 px) ya estaban resueltas y no se tocan: todo
    lo de aquí abajo entra solo en pantallas de teléfono, salvo el bloque de
@@ -24731,8 +25216,6 @@ body.navdeck-mode:not(.dark-mode) .ndw-card-value {
       transform: scale(1.04);
    }
 
-   .ndw-prelim-banner-note,
-   .ndw-prelim-last-date { font-size: .66rem; line-height: 1.3; }
    .ndw-tap-hint { font-size: .62rem; }
    .ndw-period-picker { padding: 8px 0 2px; }
 

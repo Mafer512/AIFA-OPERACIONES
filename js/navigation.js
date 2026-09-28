@@ -34,7 +34,7 @@
 // ──────────────────────────────────────────────────────────────────────────
 // NAV DECK — Lanzador de tarjetas
 // Al hacer clic en un módulo: oculta el deck, muestra la sección y sube arriba.
-// Botón flotante "Menú" para regresar al lanzador de tarjetas.
+// Botón "Inicio" del encabezado para regresar al lanzador de tarjetas.
 // ──────────────────────────────────────────────────────────────────────────
 ;(function(){
   document.addEventListener('DOMContentLoaded', function(){
@@ -77,15 +77,9 @@
     window._navdeckShowMenu = showMenu;
     window._navdeckEnterSection = enterSection;
 
-    // Botón flotante para volver al menú de tarjetas
-    var backBtn = document.createElement('button');
-    backBtn.id = 'navdeck-back';
-    backBtn.type = 'button';
-    backBtn.className = 'navdeck-back-btn';
-    backBtn.setAttribute('aria-label', 'Volver al menú principal');
-    backBtn.innerHTML = '<i class="fas fa-grip"></i><span>Menú</span>';
-    backBtn.addEventListener('click', showMenu);
-    document.body.appendChild(backBtn);
+    // Botón "Inicio" del encabezado (index.html): regresa a la pantalla de tarjetas.
+    var backBtn = document.getElementById('navdeck-back');
+    if (backBtn) backBtn.addEventListener('click', showMenu);
 
     // Al hacer clic en cualquier enlace de navegación del deck → entrar a la sección
     deck.addEventListener('click', function(e){
