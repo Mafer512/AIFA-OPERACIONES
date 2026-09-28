@@ -13,6 +13,9 @@
    dinámicas, ver docs/reportes-pasajeros-origen-de-datos.md— y la carga va en
    toneladas enteras, repartidas entre nacional e internacional como en el
    oficio. Así el mensaje nunca dice algo distinto de los oficios.
+
+   Mientras el cierre no se registre a diario, los manifiestos capturados
+   (con HR. DE RECEPCIÓN) cuentan como cerrados en su FECHA: ver comoCerrados.
    ========================================================================== */
 (function () {
     'use strict';
@@ -49,6 +52,32 @@
         const [a, m, d] = iso.split('-').map(Number);
         const ultimo = new Date(a - 1, m, 0).getDate();
         return `${a - 1}-${dos(m)}-${dos(Math.min(d, ultimo))}`;
+    }
+
+    const normaliza = t => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();
+
+    /**
+     * Por ahora el Cierre de Subsecretaría no se está registrando: un
+     * manifiesto CAPTURADO —con HR. DE RECEPCIÓN, el mismo criterio de
+     * "Capturados" en la tabla— cuenta como cerrado en su FECHA. Los que ya
+     * traen CIERRE SUBSECRETARIA lo conservan (así el histórico y el año
+     * anterior no cambian) y los que no están capturados ni cerrados no
+     * cuentan. Las filas originales no se tocan: las comparte la caché de
+     * Reportes.
+     */
+    function comoCerrados(leidos) {
+        const P = window.conciReportesPasajeros;
+        const columnas = leidos.columnas || {};
+        const cierre = columnas.cierre || 'CIERRE SUBSECRETARIA';
+        const recepcion = Object.keys(leidos.filas[0] || {})
+            .find(c => /^HR\.?\s*DE\s+RECEPCION/.test(normaliza(c)));
+        const filas = !recepcion ? leidos.filas : leidos.filas.map((fila) => {
+            if (String(fila[cierre] ?? '').trim() || !String(fila[recepcion] ?? '').trim()) return fila;
+            const fecha = P.aIso(columnas.fecha ? fila[columnas.fecha] : '')
+                || P.aIso(columnas.portal ? fila[columnas.portal] : '');
+            return fecha ? { ...fila, [cierre]: fecha } : fila;
+        });
+        return { ...leidos, filas, columnas: { ...columnas, cierre } };
     }
 
     /* ── cifras ─────────────────────────────────────────────────────────── */
@@ -168,7 +197,7 @@
     const aviso = texto => alerta('conci-msg-aviso', texto);
     const error = texto => alerta('conci-msg-error', texto);
 
-    /** El CIERRE SUBSECRETARIA más reciente que ya está capturado. */
+    /** El día más reciente con manifiestos cerrados o capturados. */
     function ultimoCierre(leidos, hasta) {
         const P = window.conciReportesPasajeros;
         const columna = leidos && leidos.columnas && leidos.columnas.cierre;
@@ -192,7 +221,7 @@
         const dia = resumen.cifras.dia;
         const sinCierre = [dia.pax, dia.opsPax, dia.carga, dia.opsCarga].every(c => !c.total);
         aviso(sinCierre
-            ? `No hay manifiestos con CIERRE SUBSECRETARIA del ${fechaCorta(fecha)}. Revisa que la captura de ese día esté cerrada.`
+            ? `No hay manifiestos capturados (con HR. DE RECEPCIÓN) ni cerrados del ${fechaCorta(fecha)}.`
             : '');
         const copiar = el('btn-conci-msg-copiar');
         if (copiar) copiar.disabled = false;
@@ -239,15 +268,18 @@
                 if (typeof window._ensureConciAirlineCatalog === 'function') {
                     try { await window._ensureConciAirlineCatalog(); } catch (_) { /* se usa lo capturado */ }
                 }
-                datos = await P.leer(hoy, n => estado(`Leyendo manifiestos… ${numero(n)}`));
-                columnasCarga = C.columnas(datos.filas[0] || {});
+                datos = comoCerrados(await P.leer(hoy, n => estado(`Leyendo manifiestos… ${numero(n)}`)));
+                columnasCarga = { ...C.columnas(datos.filas[0] || {}), cierre: datos.columnas.cierre };
                 leidoEn = Date.now();
             }
+            // El mensaje es de un día completo: por omisión, el último con
+            // datos hasta ayer (el del 27 se envía el 28).
+            const ayer = hoyIso(new Date(Date.now() - 24 * 60 * 60 * 1000));
             const campo = el('conci-msg-fecha');
-            const ultimo = ultimoCierre(datos, hoy);
-            if (campo && (!conservarFecha || !campo.value)) campo.value = ultimo || hoy;
+            const ultimo = ultimoCierre(datos, ayer);
+            if (campo && (!conservarFecha || !campo.value)) campo.value = ultimo || ayer;
             recalcular();
-            estado(`${numero(datos.filas.length)} manifiestos leídos${ultimo ? ` · último cierre: ${fechaCorta(ultimo)}` : ''}`);
+            estado(`${numero(datos.filas.length)} manifiestos leídos${ultimo ? ` · último día con datos: ${fechaCorta(ultimo)}` : ''}`);
         } catch (e) {
             console.error('[Mensaje WhatsApp]', e);
             error(`No se pudo armar el mensaje: ${e.message || e}`);
@@ -315,6 +347,6 @@
     });
 
     window.conciMensajeEnvio = {
-        abrir, preparar, copiar, calcular, componer, mismoDiaAnioAnterior, ultimoCierre
+        abrir, preparar, copiar, calcular, componer, mismoDiaAnioAnterior, ultimoCierre, comoCerrados
     };
 })();

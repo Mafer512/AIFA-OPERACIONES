@@ -217,6 +217,48 @@ describe('las cifras salen de los oficios a la Subsecretaría', () => {
   });
 });
 
+describe('mientras no se registre el cierre, lo capturado cuenta como cerrado', () => {
+  let api;
+  beforeEach(() => {
+    window._conciRowIsCargo = fila => fila['AEROLINEA'] === 'ESTAFETA';
+    api = cargar();
+  });
+  afterEach(() => { delete window._conciRowIsCargo; });
+
+  const fila = (c) => ({
+    ...manifiesto({ cierre: c.cierre ?? '', pax: c.pax, aerolinea: c.aerolinea, int: c.int, operacion: c.operacion }),
+    'FECHA': c.fecha,
+    'HR. DE RECEPCIÓN': c.recepcion ?? ''
+  });
+  const COLUMNAS_PAX = {
+    cierre: 'CIERRE SUBSECRETARIA', fecha: 'FECHA', tipo: 'TIPO DE MANIFIESTO',
+    operacion: 'TIPO DE OPERACIÓN', aerolinea: 'AEROLINEA', pax: 'TOTAL PAX'
+  };
+
+  test('un manifiesto con HR. DE RECEPCIÓN cuenta en su FECHA; sin ella, no; uno ya cerrado conserva su cierre', () => {
+    const filas = [
+      fila({ fecha: '2026-09-27', recepcion: '27/09/2026 10:15', pax: 70 }),
+      fila({ fecha: '2026-09-27', pax: 500 }),
+      fila({ fecha: '2026-09-27', recepcion: '28/09/2026 01:00', aerolinea: 'ESTAFETA', operacion: 'INTERNACIONAL', int: 3000 }),
+      fila({ fecha: '2026-09-25', cierre: '2026-09-26', recepcion: '25/09/2026 09:00', pax: 40 })
+    ];
+    const datos = api.comoCerrados({ filas, columnas: COLUMNAS_PAX });
+    const C = window.conciReportesCarga;
+    const colCarga = { ...C.columnas(datos.filas[0]), cierre: datos.columnas.cierre };
+
+    const dia27 = api.calcular(datos, colCarga, '2026-09-27').cifras.dia;
+    expect(dia27.pax).toEqual(t(70, 70, 0));
+    expect(dia27.opsPax.total).toBe(1);
+    expect(dia27.carga).toEqual(t(3, 0, 3));
+    // El ya cerrado va en su fecha de cierre (26), no en su FECHA (25).
+    expect(api.calcular(datos, colCarga, '2026-09-26').cifras.dia.pax.total).toBe(40);
+    expect(api.calcular(datos, colCarga, '2026-09-25').cifras.dia.pax.total).toBe(0);
+    // No se modifican las filas originales: las comparte la caché de Reportes.
+    expect(filas[0]['CIERRE SUBSECRETARIA']).toBe('');
+    expect(api.ultimoCierre(datos, '2026-09-27')).toBe('2026-09-27');
+  });
+});
+
 describe('la ventana', () => {
   let api;
   let rpc;
@@ -256,7 +298,7 @@ describe('la ventana', () => {
     expect(texto()).toContain('c. Carga: 6 (1 Nacionales, 5 Internacionales).');
     expect(aviso().classList.contains('d-none')).toBe(true);
     expect(document.getElementById('btn-conci-msg-copiar').disabled).toBe(false);
-    expect(document.getElementById('conci-msg-estado').textContent).toContain('último cierre: 27/09/2026');
+    expect(document.getElementById('conci-msg-estado').textContent).toContain('último día con datos: 27/09/2026');
   });
 
   test('otra fecha se calcula sin volver a leer, y avisa si ese día no tiene cierre', async () => {
@@ -269,7 +311,7 @@ describe('la ventana', () => {
     fecha.value = '2026-09-21';
     fecha.dispatchEvent(new Event('change', { bubbles: true }));
     expect(aviso().classList.contains('d-none')).toBe(false);
-    expect(aviso().textContent).toContain('No hay manifiestos con CIERRE SUBSECRETARIA del 21/09/2026');
+    expect(aviso().textContent).toContain('No hay manifiestos capturados (con HR. DE RECEPCIÓN) ni cerrados del 21/09/2026');
     expect(rpc).toHaveBeenCalledTimes(1);
   });
 
