@@ -20269,6 +20269,38 @@ function _conciRowMatchesWindow(row, columns, year, ventana) {
     return !sawParseable;
 }
 
+// Con una sola fecha en el filtro, la tabla anexa lo del día previo que sigue
+// SIN CAPTURAR: la fila cae en ese día (mismo criterio que la ventana) y su
+// HR. DE RECEPCIÓN está vacía —la misma autoridad que el pill "Sin capturar".
+// Una fila sin ninguna fecha legible no se arrastra: ya entra por la ventana.
+// Los cancelados tampoco: ni por Status (misma regla que excluye los vuelos
+// cancelados o no operativos en _conciBuildEnriched), ni por PUNTUALIDAD /
+// CANCELACIÓN, ni cuando OBSERVACIONES lo dice ("CANCELADO", "CANCELLED").
+function _conciEsPendienteDelDiaPrevio(row, columns, year, diaPrevioIso) {
+    if (!row || !diaPrevioIso) return false;
+    const keys = Array.isArray(columns) && columns.length ? columns : Object.keys(row);
+    const recepcionCol = keys.find(_conciIsReceptionColumn);
+    if (recepcionCol && String(row[recepcionCol] ?? '').trim()) return false;
+    const valorDe = (re) => keys.filter(c => re.test(c)).map(c => String(row[c] ?? '')).join(' ');
+    if (/cancel|not.?oper|no.?opera|cnx|nop\b/i.test(valorDe(/^status$/i))) return false;
+    if (/cancel/i.test(valorDe(/cancelaci[oó]n/i))) return false;
+    if (/\bcancelad[oa]s?\b|\bcancelled\b/i.test(valorDe(/observaci/i))) return false;
+    const opCol    = keys.find(c => /hr\.?\s*de\s*oper/i.test(c));
+    const slotCol  = keys.find(c => /slot\s*asignad/i.test(c));
+    const fechaCol = keys.find(c => /(^|\b)fecha(\b|$)/i.test(c));
+    for (const col of [opCol, slotCol, fechaCol]) {
+        if (!col) continue;
+        const val = row[col];
+        if (val === null || val === undefined || String(val).trim() === '') continue;
+        const parts = _conciParseDateTimeParts(val, year);
+        if (parts && Number.isFinite(parts.day) && Number.isFinite(parts.month)) {
+            const anio = Number.isFinite(parts.year) ? parts.year : year;
+            if (_conciIsoDateKey(anio, parts.month, parts.day) === diaPrevioIso) return true;
+        }
+    }
+    return false;
+}
+
 function _conciRowMatchesOperationDay(row, columns, year, month, day) {
     if (!day) return true;
     const keys = Array.isArray(columns) && columns.length ? columns : Object.keys(row || {});
@@ -20822,7 +20854,12 @@ async function loadConciliacionManifiestos(options = {}) {
     // caché: sin ella, "16 de septiembre" y "del 16 de septiembre al 3 de
     // octubre" compartían clave y se pintaba lo del otro filtro.
     const ventana = _conciVentanaDelFiltro();
-    let cacheKey = `${year}|${month || 0}|${day || 0}|${dayEnd || 0}|${ventana ? ventana.hasta : ''}`;
+    // Con una sola fecha en el filtro se anexan los manifiestos SIN CAPTURAR
+    // del día previo (ver _conciEsPendienteDelDiaPrevio): la consulta abarca
+    // ambos días y el filtro fino decide qué entra de cada uno.
+    const diaPrevio = (ventana && ventana.desde === ventana.hasta) ? _conciIsoDesplazado(ventana.desde, -1) : '';
+    const ventanaConsulta = diaPrevio ? { desde: diaPrevio, hasta: ventana.hasta } : ventana;
+    let cacheKey = `${year}|${month || 0}|${day || 0}|${dayEnd || 0}|${ventana ? ventana.hasta : ''}${diaPrevio ? '|previo' : ''}`;
 
     // When auto-detecting the latest date we skip the render-cache short-circuit
     // because we don’t know the effective key until we scan the raw data.
@@ -20946,7 +20983,7 @@ async function loadConciliacionManifiestos(options = {}) {
             return;
         }
 
-        const mResult = await _conciFetchManifestsForDate(client, year, month, day, dayEnd, ventana);
+        const mResult = await _conciFetchManifestsForDate(client, year, month, day, dayEnd, ventanaConsulta);
         if (requestSeq !== _conciLoadRequestSeq) return;
         if (mResult.error) throw mResult.error;
         manifestRows = mResult.data || [];
@@ -20959,7 +20996,7 @@ async function loadConciliacionManifiestos(options = {}) {
         // tras el cruce de medianoche (p. ej. programado 27 pero operado 28). El filtro fino
         // por HR. DE OPERACIÓN se aplica más abajo sobre las filas ya enriquecidas.
         const filteredVuelos = vuelosRows.filter(r => {
-            if (ventana) return _conciVueloEnVentana(r, year, ventana);
+            if (ventanaConsulta) return _conciVueloEnVentana(r, year, ventanaConsulta);
             if (!month && !day) return true;
             for (const isArr of [true, false]) {
                 const dp = _conciExtractVueloDateParts(r, isArr);
@@ -21014,7 +21051,12 @@ async function loadConciliacionManifiestos(options = {}) {
         // operación). Esto corrige el caso en que un vuelo programado un día opera en otro
         // tras el cruce de medianoche y aparecía en el día equivocado.
         const dayFilteredRows = ventana
-            ? rows.filter(r => _conciRowMatchesWindow(r, columns, year, ventana))
+            ? rows.filter(r => {
+                if (_conciRowMatchesWindow(r, columns, year, ventana)) return true;
+                if (!diaPrevio || !_conciEsPendienteDelDiaPrevio(r, columns, year, diaPrevio)) return false;
+                r._conci_dia_previo = diaPrevio;
+                return true;
+            })
             : (day
                 ? rows.filter(r => _conciRowMatchesOperationDay(r, columns, year, month, day))
                 : rows);
@@ -21515,9 +21557,23 @@ function _conciApplyQuickFlightSearch(term, options) {
     // tecleara Enter ni ↓. Lo que seguía escribiendo para terminar de buscar
     // cala entonces en esa celda real, no en el buscador: eso es lo que se
     // reportaba como "se filtran letras a CIERRE SUBSECRETARIA".
+    // Enter/↓ regresan además la barra horizontal al principio de la tabla
+    // (CIERRE SUBSECRETARIA), aunque antes se hubiera desplazado a la derecha.
     if (opts.focusFirst) {
-        requestAnimationFrame(() => _conciFocusFirstCaptureCell());
+        requestAnimationFrame(() => {
+            _conciFocusFirstCaptureCell();
+            _conciScrollManifiestosAlInicio();
+        });
     }
+}
+
+// El editor que abre _conciFocusFirstCaptureCell puede enfocar su campo un
+// cuadro después y el navegador lo desplaza a la vista; por eso se repite.
+function _conciScrollManifiestosAlInicio() {
+    const wrap = document.getElementById('conci-manifiestos-scroll');
+    if (!wrap) return;
+    wrap.scrollLeft = 0;
+    requestAnimationFrame(() => { wrap.scrollLeft = 0; });
 }
 
 function _conciClearQuickFlightSearch(focusInput) {
@@ -22166,7 +22222,10 @@ function _conciGetExportRows() {
         rows.push(row);
     });
 
-    return rows;
+    // Los pendientes del día previo que la tabla anexa (ver
+    // _conciEsPendienteDelDiaPrevio) son de otro día: no entran en lo que se
+    // exporta del día elegido. Se filtra al final para no mover los índices.
+    return rows.filter(r => !(r && r._conci_dia_previo));
 }
 
 // Proyección exclusiva del Excel de Carga; no modifica las filas capturadas.
@@ -22232,12 +22291,14 @@ function _conciExportCargoRow(row, year) {
 // targetWb (interno): cuando 'total' arma un solo libro, agrega aquí la hoja de
 // Pasajeros o de Carga —idéntica a la de su descarga individual— en vez de
 // guardar su propio archivo. Devuelve true si agregó la hoja.
-async function _conciExportToExcel(kind, targetWb) {
+// opts (interno, solo con targetWb): { rows, sheetName } para que "Exportar por
+// capturista" arme una hoja por persona con este mismo formato.
+async function _conciExportToExcel(kind, targetWb, opts = {}) {
     if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
         alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
         return;
     }
-    const rows = _conciGetExportRows();
+    const rows = (targetWb && Array.isArray(opts.rows)) ? opts.rows : _conciGetExportRows();
     if (!rows.length) {
         alert('No hay datos cargados para exportar.');
         return;
@@ -22280,13 +22341,16 @@ async function _conciExportToExcel(kind, targetWb) {
                     ? { ...d, h: 'DEMORA +-15', a: ['DEMORA +-15'] }
                     : d.h === 'TIPO DE OPERACIÓN'
                         ? { ...d, t: 'text', a: ['TIPO DE OPERACIÓN'] } : d;
-            return d.h === 'TRANSITO' ? [def, { h: 'Total dia', t: 'num', a: ['Total dia'] }] : [def];
+            return [def];
         }).concat([
             { h: 'EXTEMPORANEO', t: 'text', a: ['EXTEMPORANEO'] },
             { h: 'TIEMPO DE DEMORA / ANTICIPACIÓN', t: 'num', a: ['TIEMPO DE DEMORA / ANTICIPACIÓN'] },
             { h: 'Origen', t: 'text', a: ['Origen'] },
             { h: 'Destino', t: 'text', a: ['Destino'] },
             { h: 'escala', t: 'text', a: ['escala'] },
+            // Última columna, a un lado de "escala" (antes iba tras TRANSITO).
+            // El libro Total arma su hoja Carga por esta misma ruta.
+            { h: 'Total dia', t: 'num', a: ['Total dia'] },
         ]) : _CONCI_EXPORT_COLS_PAX
             // Solo Pasajeros: estructura DATA; conservar los alias de origen y
             // el catálogo compartido con Total y la exportación por capturista.
@@ -22419,7 +22483,7 @@ async function _conciExportToExcel(kind, targetWb) {
 
     const sheetLabel = isTotal ? 'Total' : (isCarga ? 'Carga' : 'Pasajeros');
     const wb = targetWb || new ExcelJS.Workbook();
-    const ws = wb.addWorksheet(sheetLabel, {
+    const ws = wb.addWorksheet((targetWb && opts.sheetName) || sheetLabel, {
         views: [{ state: 'frozen', ySplit: 1 }],
     });
     const headers = defs.map(d => d.h.trim());
@@ -22497,11 +22561,69 @@ function _conciExportCapturistaCellValue(raw) {
     return s;
 }
 
-async function _conciExportPorCapturista() {
+// kind 'pax' | 'carga' (menú "Exportar por capturista"): cada hoja es la de
+// Exportar Excel › Pasajeros/Carga, solo con lo capturado por esa persona.
+// Sin kind (botón de la ventana "Manifiestos capturados"): tabla con las
+// columnas de pantalla y el nombre como encabezado.
+async function _conciExportPorCapturistaFormato(kind) {
+    const isCarga = kind === 'carga';
+    const rows = _conciGetExportRows();
+    if (!rows.length) {
+        alert('No hay datos cargados para exportar.');
+        return;
+    }
+    const cols = (Array.isArray(_conciManifestosSummaryColumns) && _conciManifestosSummaryColumns.length)
+        ? _conciManifestosSummaryColumns
+        : Object.keys(rows[0] || {});
+    const capturoCol = cols.find(c => /^captur[oó]$/i.test(String(c).trim())) || null;
+
+    const grupos = new Map();
+    rows.forEach(r => {
+        const nombre = String((capturoCol ? _conciExportGetField(r, [capturoCol]) : '') || '').trim() || 'SIN CAPTURISTA IDENTIFICADO';
+        if (!grupos.has(nombre)) grupos.set(nombre, []);
+        grupos.get(nombre).push(r);
+    });
+
+    const wb = new ExcelJS.Workbook();
+    const usedSheetNames = new Set();
+    const sheetNameFor = (nombre) => {
+        const base = nombre.replace(/[*?:\/\\\[\]]/g, ' ').trim().slice(0, 31) || 'Capturista';
+        let candidate = base;
+        let n = 2;
+        while (usedSheetNames.has(candidate.toUpperCase())) {
+            const suffix = ` (${n++})`;
+            candidate = base.slice(0, 31 - suffix.length) + suffix;
+        }
+        return candidate;
+    };
+    let hojas = 0;
+    for (const nombre of [...grupos.keys()].sort((a, b) => a.localeCompare(b, 'es'))) {
+        const sheetName = sheetNameFor(nombre);
+        // Con targetWb, _conciExportToExcel deja solo lo recibido (HR. DE
+        // RECEPCIÓN con valor) del tipo pedido; sin nada, no agrega la hoja.
+        const agregada = await _conciExportToExcel(kind, wb, { rows: grupos.get(nombre), sheetName });
+        if (agregada) {
+            usedSheetNames.add(sheetName.toUpperCase());
+            hojas++;
+        }
+    }
+    if (!hojas) {
+        alert(`No hay manifiestos de ${isCarga ? 'carga' : 'pasajeros'} capturados en el día cargado.`);
+        return;
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    const stamp = new Date().toISOString().slice(0, 10);
+    const fname = `Conciliacion_Por_Capturista_${isCarga ? 'Carga' : 'Pasajeros'}_${stamp}.xlsx`;
+    saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fname);
+}
+
+async function _conciExportPorCapturista(kind) {
     if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
         alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
         return;
     }
+    if (kind === 'pax' || kind === 'carga') return _conciExportPorCapturistaFormato(kind);
     const rows = _conciGetExportRows();
     if (!rows.length) {
         alert('No hay datos cargados para exportar.');
@@ -22516,6 +22638,7 @@ async function _conciExportPorCapturista() {
     const get = _conciExportGetField;
     const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
     const capturoCol = cols.find(c => /^captur[oó]$/i.test(c.trim())) || null;
+    const airlineColIdx = cols.findIndex(c => /aerol[ií]nea|airline/i.test(c));
 
     const capturados = rows.filter(r => recepcionCol && String(get(r, [recepcionCol])).trim() !== '');
     if (!capturados.length) {
@@ -22579,6 +22702,10 @@ async function _conciExportPorCapturista() {
         const maxLen = cols.map(c => c.length);
         filas.forEach(row => {
             const values = cols.map(c => _conciExportCapturistaCellValue(get(row, [c])));
+            // AEROLINEA: nombre comercial con los colores del catálogo, igual
+            // que la exportación de Pasajeros/Carga (caso 'airline').
+            const airlineMeta = airlineColIdx >= 0 ? _conciResolveAirlineMeta(values[airlineColIdx]) : null;
+            if (airlineMeta) values[airlineColIdx] = String(airlineMeta.name || values[airlineColIdx] || '').toUpperCase();
             const xr = ws.addRow(values);
             xr.eachCell((cell, colNumber) => {
                 const isObservaciones = /observacion/i.test(cols[colNumber - 1] || '');
@@ -22587,6 +22714,10 @@ async function _conciExportPorCapturista() {
                     ? { vertical: 'middle', horizontal: 'left', wrapText: true }
                     : { vertical: 'middle', horizontal: typeof cell.value === 'number' ? 'right' : 'center' };
                 cell.border = border;
+                if (airlineMeta && colNumber - 1 === airlineColIdx) {
+                    cell.font = { ...baseFont, bold: true, color: { argb: _conciHexToArgb(airlineMeta.textColor || '#ffffff') } };
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: _conciHexToArgb(airlineMeta.color || '#6c757d') } };
+                }
                 const len = String(cell.value ?? '').length;
                 if (len > maxLen[colNumber - 1]) maxLen[colNumber - 1] = len;
             });
@@ -24074,6 +24205,12 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
             if (row._conci_overcapacity) {
                 tr.classList.add('conci-row-overcapacity');
                 tr.title = `Sobrecupo: ${row._conci_overcapacity_diff} pasajero(s) por encima de la capacidad máxima de la aeronave.`;
+            }
+            // Pendiente del día previo anexado a la vista de un solo día.
+            if (row._conci_dia_previo) {
+                tr.classList.add('conci-row-dia-previo');
+                tr.dataset.conciDiaPrevio = row._conci_dia_previo;
+                if (!tr.title) tr.title = `Sin capturar del día anterior (${row._conci_dia_previo.split('-').reverse().join('/')}).`;
             }
 
             displayCols.forEach((c, ci) => {

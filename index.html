@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20260928-ocultar-cierre">
+    <link rel="stylesheet" href="style.css?v=20260930-pendientes-dia-previo">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -23579,6 +23579,10 @@ FF
                                                         <button class="btn btn-sm btn-outline-primary" id="btn-conci-matricula-catalog" title="Administrar catálogo de matrículas">
                                                             <i class="fas fa-id-card me-1"></i>Catálogo de matrículas
                                                         </button>
+                                                        <!-- Importar Excel (js/conci-importar-excel.js): solo editor o admin; la barra lo muestra. -->
+                                                        <button class="btn btn-sm btn-outline-success d-none" type="button" id="btn-conci-importar-excel" title="Importar Excel: manifiestos desde un .xlsx, .xls o .csv sin pisar lo ya capturado" aria-label="Importar Excel">
+                                                            <i class="fas fa-file-import" aria-hidden="true"></i>
+                                                        </button>
                                                         <button class="btn btn-sm btn-outline-secondary d-none" id="btn-conci-historial" title="Ver historial de cambios">
                                                             <i class="fas fa-history me-1"></i>Historial
                                                         </button>
@@ -23718,7 +23722,7 @@ FF
                                                         <!-- Mensaje para WhatsApp o Webex (js/conci-mensaje-envio.js). -->
                                                         <button class="btn btn-sm btn-outline-success shadow-sm" type="button" id="btn-conci-enviar-mensaje"
                                                             title="Mensaje para WhatsApp o Webex" aria-label="Mensaje para WhatsApp o Webex">
-                                                            <i class="fas fa-paper-plane" aria-hidden="true"></i>
+                                                            <i class="fas fa-paper-plane me-1" aria-hidden="true"></i>SWEAR
                                                         </button>
                                                         <!-- Exportar y capturar: van juntos; si no caben en el renglón, bajan en bloque a la derecha. -->
                                                         <div class="conci-manifest-acciones">
@@ -23734,9 +23738,18 @@ FF
                                                                 <li><a class="dropdown-item" href="#" onclick="window.conciExportExcel &amp;&amp; window.conciExportExcel('carga'); return false;"><i class="fas fa-box-open text-warning me-2"></i>Carga</a></li>
                                                             </ul>
                                                         </div>
-                                                        <button class="btn btn-sm btn-outline-success shadow-sm" type="button" id="btn-conci-export-por-capturista" title="Descarga un Excel con los manifiestos ya capturados, organizados por capturista (una hoja por persona)" onclick="window.conciExportPorCapturista && window.conciExportPorCapturista(); return false;">
-                                                            <i class="fas fa-user-tag me-1"></i>Exportar por capturista
-                                                        </button>
+                                                        <!-- Mismo formato de Exportar Excel › Pasajeros/Carga, con una hoja por capturista. -->
+                                                        <div class="dropdown">
+                                                            <button class="btn btn-sm btn-outline-success shadow-sm dropdown-toggle" type="button" id="btn-conci-export-por-capturista" data-bs-toggle="dropdown" aria-expanded="false" title="Descarga un Excel con los manifiestos ya capturados, organizados por capturista (una hoja por persona)">
+                                                                <i class="fas fa-user-tag me-1"></i>Exportar por capturista
+                                                            </button>
+                                                            <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="btn-conci-export-por-capturista" style="font-size:0.85rem;">
+                                                                <li><h6 class="dropdown-header py-1" style="font-size:0.72rem;line-height:1.25;font-weight:600;">Solo lo capturado, una hoja por capturista<br><span class="fw-normal text-muted">Los filtros de la tabla no se aplican</span></h6></li>
+                                                                <li><hr class="dropdown-divider my-1"></li>
+                                                                <li><a class="dropdown-item" href="#" onclick="window.conciExportPorCapturista &amp;&amp; window.conciExportPorCapturista('pax'); return false;"><i class="fas fa-users text-primary me-2"></i>Pasajeros</a></li>
+                                                                <li><a class="dropdown-item" href="#" onclick="window.conciExportPorCapturista &amp;&amp; window.conciExportPorCapturista('carga'); return false;"><i class="fas fa-box-open text-warning me-2"></i>Carga</a></li>
+                                                            </ul>
+                                                        </div>
                                                         <button class="btn btn-sm btn-outline-success shadow-sm" type="button" id="btn-conci-manifiestos-capturados" title="Consulta los manifiestos capturados en una fecha, agrupados por capturista" onclick="window.conciAbrirManifiestosCapturados && window.conciAbrirManifiestosCapturados(); return false;">
                                                             <i class="fas fa-calendar-check me-1"></i>Manifiestos capturados
                                                         </button>
@@ -39351,7 +39364,7 @@ FF
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
     <script src="js/conci-export-total.js?v=20260925-recepcion" defer></script>
-    <script src="script.js?v=20260928-mensaje" defer></script>
+    <script src="script.js?v=20260930-pendientes-sin-cancelados" defer></script>
     <!-- Campos de fecha en dd/mm/aaaa sin importar el idioma del navegador. -->
     <script src="js/fecha-ddmm.js?v=20260912-fecha-1" defer></script>
     <!-- Botón y menú de usuario del encabezado de inicio. -->
@@ -40743,6 +40756,8 @@ FF
 <script src="js/conci-reportes-carga.js?v=20260928-mensaje" defer></script>
 <!-- Mensaje para WhatsApp o Webex: usa las cifras de los dos reportes de arriba. -->
 <script src="js/conci-mensaje-envio.js?v=20260928-capturados" defer></script>
+<!-- Importar Excel: botón btn-conci-importar-excel de la barra de Conciliación. -->
+<script src="js/conci-importar-excel.js?v=20260930-boton" defer></script>
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
 <script src="js/estadistico-informe-core.js?v=20260912-ag-directorio" defer></script>
 <script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>

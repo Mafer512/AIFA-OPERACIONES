@@ -17818,6 +17818,12 @@ body.dark-mode #table-conci-manifiestos tr.conci-row-overcapacity>td {
    background: rgba(211, 47, 47, .22) !important;
 }
 
+/* Sin capturar del día previo, anexado a la vista de un solo día. El sobrecupo
+   conserva su barra roja: va después y pesa más. */
+#table-conci-manifiestos tr.conci-row-dia-previo:not(.conci-row-overcapacity)>td:first-child {
+   border-left: 4px solid #f59f00 !important;
+}
+
 /* Fila con autoguardado en curso: feedback visual mientras Supabase confirma
    el insert/update, para que el usuario sepa que aún no debe recargar/salir. */
 #table-conci-manifiestos tr.conci-row-saving>td:first-child {
