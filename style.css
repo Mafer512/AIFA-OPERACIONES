@@ -17824,6 +17824,50 @@ body.dark-mode #table-conci-manifiestos tr.conci-row-overcapacity>td {
    border-left: 4px solid #f59f00 !important;
 }
 
+/* HR. DE RECEPCIÓN pendiente en un renglón que ya tiene CAPTURÓ: la celda se
+   ilumina en ámbar con "Falta capturar" (script.js, _conciMarcarFaltaRecepcion).
+   Pesa más que el fondo de sobrecupo para que no se pierda. */
+#table-conci-manifiestos tbody tr>td.conci-falta-recepcion {
+   background: #fff3cd !important;
+   box-shadow: inset 0 0 0 2px #f59f00;
+}
+#table-conci-manifiestos tbody tr>td.conci-falta-recepcion:not(.conci-cell-active)::after {
+   content: "Falta capturar";
+   color: #6c757d;
+   font-size: .74rem;
+   font-style: italic;
+}
+body.dark-mode #table-conci-manifiestos tbody tr>td.conci-falta-recepcion {
+   background: rgba(245, 159, 0, .22) !important;
+}
+body.dark-mode #table-conci-manifiestos tbody tr>td.conci-falta-recepcion:not(.conci-cell-active)::after {
+   color: #ced4da;
+}
+
+/* Aviso al salir de un renglón editado sin HR. DE RECEPCIÓN. */
+.conci-aviso-recepcion {
+   position: fixed;
+   right: 20px;
+   bottom: 20px;
+   z-index: 10850;
+   display: none;
+   align-items: center;
+   gap: .6rem;
+   max-width: min(440px, calc(100vw - 32px));
+   padding: .65rem .8rem;
+   border-radius: 10px;
+   border: 1px solid #f59f00;
+   border-left-width: 5px;
+   background: #fffaf0;
+   color: #5c4400;
+   font-size: .85rem;
+   box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+}
+.conci-aviso-recepcion.visible { display: flex; }
+.conci-aviso-recepcion > .fa-triangle-exclamation { color: #f59f00; font-size: 1.1rem; }
+.conci-aviso-recepcion-texto { flex: 1 1 auto; }
+.conci-aviso-recepcion .btn-warning { white-space: nowrap; font-weight: 600; }
+
 /* Fila con autoguardado en curso: feedback visual mientras Supabase confirma
    el insert/update, para que el usuario sepa que aún no debe recargar/salir. */
 #table-conci-manifiestos tr.conci-row-saving>td:first-child {

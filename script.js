@@ -21148,6 +21148,126 @@ function _conciIsReceptionColumn(column) {
     return /^hr\.?\s+de\s+recepcion$/.test(_conciNormalizedColumnName(column));
 }
 
+// ─── HR. DE RECEPCIÓN pendiente en un renglón ya capturado ─────────────────
+// HR. DE RECEPCIÓN es la llave de "capturado". Si un renglón ya tiene CAPTURÓ
+// (se firma solo con la primera captura, ver el autoguardado) y esa hora sigue
+// vacía, la celda se ilumina en ámbar con "Falta capturar" (style.css,
+// .conci-falta-recepcion). Depende sólo de lo que trae el renglón, así que se
+// ve igual tras recargar y para todos los capturistas. Al salir de un renglón
+// editado sin ella, un aviso lleva directo a la celda.
+function _conciCeldaValor(td) {
+    if (!td) return '';
+    const v = _conciNormalizeEditableCellText(td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || ''));
+    return /^[-–—]$/.test(v) ? '' : v;
+}
+
+function _conciCeldasClaveRecepcion(tr) {
+    const celdas = { capturo: null, recepcion: null, vuelo: null };
+    if (!tr) return celdas;
+    tr.querySelectorAll('td[data-col]').forEach(td => {
+        const col = String(td.dataset.col || '').trim();
+        if (/^captur[oó]$/i.test(col)) celdas.capturo = td;
+        else if (_conciIsReceptionColumn(col)) celdas.recepcion = td;
+        else if (/^#\s*de\s*vuelo$/i.test(col)) celdas.vuelo = td;
+    });
+    return celdas;
+}
+
+function _conciFaltaRecepcion(tr) {
+    const { capturo, recepcion } = _conciCeldasClaveRecepcion(tr);
+    return !!(capturo && recepcion && _conciCeldaValor(capturo) && !_conciCeldaValor(recepcion));
+}
+
+function _conciMarcarFaltaRecepcion(tr) {
+    const { recepcion } = _conciCeldasClaveRecepcion(tr);
+    if (recepcion) recepcion.classList.toggle('conci-falta-recepcion', _conciFaltaRecepcion(tr));
+}
+
+// El renglón pudo repintarse (autoguardado, refresco): se busca el vigente
+// por su id o por su nombre propio (cliente_uuid).
+function _conciFilaVigente(tr) {
+    if (!tr) return null;
+    if (tr.isConnected) return tr;
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (!tbody) return null;
+    const esc = (s) => (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/"/g, '\\"');
+    const id = String(tr.dataset.rowId || '').trim();
+    const uuid = String(tr.dataset.clienteUuid || '').trim();
+    return (id && tbody.querySelector(`tr[data-row-id="${esc(id)}"]`))
+        || (uuid && tbody.querySelector(`tr[data-cliente-uuid="${esc(uuid)}"]`))
+        || null;
+}
+
+function _conciIrARecepcion(tr) {
+    let fila = _conciFilaVigente(tr);
+    if (!fila) return;
+    if (typeof _conciCanCurrentUserEdit === 'function' && _conciCanCurrentUserEdit() && !_conciEditMode) {
+        _conciEnterEditMode();
+        fila = _conciFilaVigente(fila);
+        if (!fila) return;
+    }
+    const { recepcion } = _conciCeldasClaveRecepcion(fila);
+    if (!recepcion) return;
+    if (typeof recepcion.scrollIntoView === 'function') {
+        try { recepcion.scrollIntoView({ block: 'center', inline: 'center' }); } catch (_) { /* navegadores viejos */ }
+    }
+    if (_conciEditMode) _conciActivateCellEditor(recepcion);
+}
+
+function _conciAvisarFaltaRecepcion(tr) {
+    const fila = _conciFilaVigente(tr);
+    if (!fila || !_conciFaltaRecepcion(fila)) return;
+    const { vuelo } = _conciCeldasClaveRecepcion(fila);
+    let aviso = document.getElementById('conci-aviso-recepcion');
+    if (!aviso) {
+        aviso = document.createElement('div');
+        aviso.id = 'conci-aviso-recepcion';
+        aviso.className = 'conci-aviso-recepcion';
+        aviso.setAttribute('role', 'alert');
+        document.body.appendChild(aviso);
+    }
+    const ocultar = () => { clearTimeout(aviso._conciTimer); aviso.classList.remove('visible'); };
+    aviso.innerHTML = '<i class="fas fa-triangle-exclamation" aria-hidden="true"></i>'
+        + '<span class="conci-aviso-recepcion-texto"><strong></strong>: falta HR. DE RECEPCIÓN</span>'
+        + '<button type="button" class="btn btn-sm btn-warning conci-aviso-recepcion-ir">Ir a capturarla</button>'
+        + '<button type="button" class="btn-close" aria-label="Cerrar"></button>';
+    aviso.querySelector('strong').textContent = _conciCeldaValor(vuelo) || 'Este manifiesto';
+    aviso.querySelector('.conci-aviso-recepcion-ir').addEventListener('click', () => { ocultar(); _conciIrARecepcion(fila); });
+    aviso.querySelector('.btn-close').addEventListener('click', ocultar);
+    clearTimeout(aviso._conciTimer);
+    aviso.classList.add('visible');
+    aviso._conciTimer = setTimeout(ocultar, 15000);
+}
+
+// Último renglón que esta persona editó (una celda marcada data-dirty="1").
+let _conciFaltaRecUltimaFila = null;
+
+function _conciVigilarFaltaRecepcion(tbody) {
+    if (!tbody || tbody._conciFaltaRecObs || typeof MutationObserver === 'undefined') return;
+    const obs = new MutationObserver((cambios) => {
+        const filas = new Set();
+        for (const m of cambios) {
+            const td = m.target;
+            const tr = td && td.closest ? td.closest('tr') : null;
+            if (!tr) continue;
+            filas.add(tr);
+            if (m.attributeName === 'data-dirty' && td.dataset.dirty === '1') _conciFaltaRecUltimaFila = tr;
+        }
+        filas.forEach(_conciMarcarFaltaRecepcion);
+    });
+    obs.observe(tbody, { subtree: true, attributes: true, attributeFilter: ['data-raw', 'data-pending-raw', 'data-dirty'] });
+    tbody._conciFaltaRecObs = obs;
+    // Se avisa al pasar a OTRO renglón. El autoguardado firma CAPTURÓ al
+    // cerrarse el editor, así que se le da un momento antes de revisar.
+    tbody.addEventListener('focusin', (ev) => {
+        const previa = _conciFaltaRecUltimaFila;
+        const tr = ev.target && ev.target.closest ? ev.target.closest('tr') : null;
+        if (!previa || !tr || tr === previa) return;
+        _conciFaltaRecUltimaFila = null;
+        setTimeout(() => _conciAvisarFaltaRecepcion(previa), 400);
+    });
+}
+
 function _conciUpdateResumen(data, columns) {
     let empate = 0, soloManifiesto = 0, soloVuelos = 0;
     let llegadas = 0, salidas = 0, pax = 0, carga = 0;
@@ -24393,6 +24513,10 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
             frag.appendChild(tr);
         }
 
+        // HR. DE RECEPCIÓN faltante en renglones ya capturados (ver
+        // _conciMarcarFaltaRecepcion); el observador cubre los cambios después.
+        frag.querySelectorAll('tr').forEach(_conciMarcarFaltaRecepcion);
+        _conciVigilarFaltaRecepcion(tbody);
         tbody.appendChild(frag);
         // Resalta en las filas recién insertadas las celdas que otros usuarios
         // conectados tengan abiertas ahora mismo (carga inicial y scroll perezoso).
