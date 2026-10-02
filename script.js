@@ -31580,9 +31580,11 @@ async function _conciFindExistingMovementRowId(client, payload, error) {
     const movementKey = _conciMovementKeyFromDuplicateError(error)
         || _conciMovementKeyFromPayload(payload);
     if (!movementKey) return null;
-    // Dos rotaciones del mismo vuelo el mismo día comparten la llave: la que
-    // choca es la de la misma hora de SLOT ASIGNADO (misma regla que el índice
-    // único uq_conciliacion_manifiestos_movement_key y _aifa_movement_slot).
+    // Dos operaciones del mismo vuelo con la misma FECHA comparten la llave: la
+    // que choca es la del mismo SLOT ASIGNADO, día y hora (misma regla que el
+    // índice único uq_conciliacion_manifiestos_movement_key y
+    // _aifa_movement_slot_fecha). Pasa con dos rotaciones del mismo día y con
+    // el vuelo de ayer retrasado pasada la medianoche junto al de hoy.
     const lookup = await client
         .from('Conciliación Manifiestos')
         .select('id')
@@ -31592,20 +31594,31 @@ async function _conciFindExistingMovementRowId(client, payload, error) {
     if (!lookup.error) {
         row = Array.isArray(lookup.data) ? lookup.data[0] : lookup.data;
     } else {
-        // maybeSingle falla con más de una fila: son rotaciones. Se elige la
-        // de la misma hora de SLOT; si ninguna coincide, no se adivina.
+        // maybeSingle falla con más de una fila. Se elige la del mismo SLOT
+        // (día y hora); si ninguna coincide, no se adivina.
         const varias = await client
             .from('Conciliación Manifiestos')
             .select('id,"SLOT ASIGNADO"')
             .eq('movement_key', movementKey);
         if (varias.error) return null;
         const filas = Array.isArray(varias.data) ? varias.data : (varias.data ? [varias.data] : []);
-        const horaSlot = (valor) => {
-            const m = String(valor ?? '').match(/(\d{1,2}):(\d{2})/);
-            return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
+        // "DD/MM HH:MM" para "08/09/2026 19:20", "2026-09-08 19:20" y "08SEP 19:20";
+        // "HH:MM" si sólo trae la hora. Igual que _aifa_movement_slot_fecha.
+        const MESES = { JAN: 1, ENE: 1, FEB: 2, MAR: 3, APR: 4, ABR: 4, MAY: 5, JUN: 6, JUL: 7, AUG: 8, AGO: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12, DIC: 12 };
+        const p2 = s => String(s).padStart(2, '0');
+        const slotDe = (valor) => {
+            const v = String(valor ?? '').trim().toUpperCase();
+            let m = v.match(/^(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?\s+(\d{1,2}):(\d{2})/);
+            if (m) return `${p2(m[1])}/${p2(m[2])} ${p2(m[3])}:${m[4]}`;
+            m = v.match(/^\d{4}-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})/);
+            if (m) return `${p2(m[2])}/${p2(m[1])} ${p2(m[3])}:${m[4]}`;
+            m = v.match(/^(\d{1,2})\s*([A-Z]{3})[A-Z]*\s+(\d{1,2}):(\d{2})/);
+            if (m && MESES[m[2]]) return `${p2(m[1])}/${p2(MESES[m[2]])} ${p2(m[3])}:${m[4]}`;
+            m = v.match(/(\d{1,2}):(\d{2})/);
+            return m ? `${p2(m[1])}:${m[2]}` : '';
         };
-        const slot = horaSlot(_conciPayloadIdentityValue(payload, ['SLOT ASIGNADO']));
-        row = slot ? (filas.find(r => horaSlot(r?.['SLOT ASIGNADO']) === slot) || null) : null;
+        const slot = slotDe(_conciPayloadIdentityValue(payload, ['SLOT ASIGNADO']));
+        row = slot ? (filas.find(r => slotDe(r?.['SLOT ASIGNADO']) === slot) || null) : null;
     }
     return row?.id !== undefined && row?.id !== null ? row.id : null;
 }

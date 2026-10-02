@@ -61,6 +61,8 @@
     // una reclasificación nacional↔internacional mueve la operación de bucket.
     const TABLA = 'v_conciliacion_manifiestos_reportable';
     const PAGINA = 1000;
+    // Páginas de la RPC reportable (ver descargar).
+    const PAGINA_RPC = 5000;
 
     const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
         'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
@@ -230,10 +232,22 @@
         const client = cliente();
         const epoch = cacheEpoch;
         if (typeof client.rpc === 'function') {
-            const respuesta = await client.rpc('conciliacion_reporte_reportable', { p_hasta: hastaIso });
-            if (respuesta.error) throw respuesta.error;
-            const filasRpc = Array.isArray(respuesta.data) ? respuesta.data
-                : (Array.isArray(respuesta.data?.filas) ? respuesta.data.filas : []);
+            // Por páginas: la base corta cada consulta en un máximo de renglones
+            // (10,000 aquí) y sin esto se perdía lo más reciente. Ver el mismo
+            // bloque en conci-reportes-pasajeros.js.
+            const filasRpc = [];
+            for (let desde = 0; ; ) {
+                const consulta = client.rpc('conciliacion_reporte_reportable', { p_hasta: hastaIso });
+                const paginada = consulta && typeof consulta.range === 'function';
+                const respuesta = await (paginada ? consulta.range(desde, desde + PAGINA_RPC - 1) : consulta);
+                if (respuesta.error) throw respuesta.error;
+                const pagina = Array.isArray(respuesta.data) ? respuesta.data
+                    : (Array.isArray(respuesta.data?.filas) ? respuesta.data.filas : []);
+                filasRpc.push(...pagina);
+                if (avisar) avisar(filasRpc.length);
+                if (!paginada || !pagina.length) break;
+                desde += pagina.length;
+            }
             const resultadoRpc = { hasta: hastaIso, filas: filasRpc, columnas: detectarColumnas(filasRpc[0] || {}), epoch };
             if (epoch === cacheEpoch) cache = resultadoRpc;
             return resultadoRpc;

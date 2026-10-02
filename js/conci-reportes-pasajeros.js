@@ -54,6 +54,8 @@
     // vuelo); una reclasificación mueve la operación de un bucket al otro.
     const TABLA = 'v_conciliacion_manifiestos_reportable';
     const PAGINA = 1000;
+    // Páginas de la RPC reportable (ver descargar).
+    const PAGINA_RPC = 5000;
 
     const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
         'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
@@ -203,10 +205,24 @@
         // CIERRE SUBSECRETARIA; los ajustes se incluyen por el corte que los
         // consumió, de modo que nunca se separa -ANTES/+DESPUÉS por FECHA.
         if (typeof client.rpc === 'function') {
-            const respuesta = await client.rpc('conciliacion_reporte_reportable', { p_hasta: hastaIso });
-            if (respuesta.error) throw respuesta.error;
-            const filasRpc = Array.isArray(respuesta.data) ? respuesta.data
-                : (Array.isArray(respuesta.data?.filas) ? respuesta.data.filas : []);
+            // La base entrega como máximo un número fijo de renglones por
+            // consulta (10,000 en este proyecto) y corta el resto en silencio:
+            // con más manifiestos, lo más reciente —el día pedido— no llegaba.
+            // Se pide por páginas hasta que una venga vacía; así no importa
+            // cuál sea ese máximo. La función ya ordena por _uid (orden total).
+            const filasRpc = [];
+            for (let desde = 0; ; ) {
+                const consulta = client.rpc('conciliacion_reporte_reportable', { p_hasta: hastaIso });
+                const paginada = consulta && typeof consulta.range === 'function';
+                const respuesta = await (paginada ? consulta.range(desde, desde + PAGINA_RPC - 1) : consulta);
+                if (respuesta.error) throw respuesta.error;
+                const pagina = Array.isArray(respuesta.data) ? respuesta.data
+                    : (Array.isArray(respuesta.data?.filas) ? respuesta.data.filas : []);
+                filasRpc.push(...pagina);
+                if (avisar) avisar(filasRpc.length);
+                if (!paginada || !pagina.length) break;
+                desde += pagina.length;
+            }
             const columnasRpc = detectarColumnas(filasRpc[0] || {});
             const resultadoRpc = { hasta: hastaIso, filas: filasRpc, columnas: columnasRpc, epoch };
             if (epoch === cacheEpoch) cache = resultadoRpc;

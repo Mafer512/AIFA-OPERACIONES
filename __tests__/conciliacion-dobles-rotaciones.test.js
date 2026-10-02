@@ -70,6 +70,18 @@ describe('dobles rotaciones', () => {
     expect(await api._conciFindExistingMovementRowId(cliente(filas), { 'SLOT ASIGNADO': '08/09/2026 6:00' }, error)).toBe(11);
   });
 
+  test('misma hora de slot pero distinto día: el vuelo de ayer retrasado y el de hoy', async () => {
+    // AEROLITORAL 875, FECHA 08/09: slot 07/09 19:20 (operó 00:03) y slot 08/09 19:20.
+    const filas = [
+      { id: 21, movement_key: '5D|875|2026-09-08|A|MERIDA', 'SLOT ASIGNADO': '07/09/2026 19:20' },
+      { id: 22, movement_key: '5D|875|2026-09-08|A|MERIDA', 'SLOT ASIGNADO': '08SEP 19:20' },
+    ];
+    const error = { code: '23505', details: 'Key (movement_key, _aifa_movement_slot_fecha("SLOT ASIGNADO"::text))=(5D|875|2026-09-08|A|MERIDA, 08/09 19:20) already exists.' };
+    expect(api._conciMovementKeyFromDuplicateError(error)).toBe('5D|875|2026-09-08|A|MERIDA');
+    expect(await api._conciFindExistingMovementRowId(cliente(filas), { 'SLOT ASIGNADO': '08/09/2026 19:20' }, error)).toBe(22);
+    expect(await api._conciFindExistingMovementRowId(cliente(filas), { 'SLOT ASIGNADO': '2026-09-07 19:20' }, error)).toBe(21);
+  });
+
   test('con una sola fila la regresa sin mirar el slot', async () => {
     const filas = [{ id: 7, movement_key: 'XN|1761|2026-09-30|A|MID', 'SLOT ASIGNADO': '' }];
     const error = { code: '23505', details: 'Key (movement_key)=(XN|1761|2026-09-30|A|MID) already exists.' };
