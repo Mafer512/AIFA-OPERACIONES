@@ -31491,8 +31491,12 @@ function _conciMovementKeyFromPayload(payload) {
 
 function _conciMovementKeyFromDuplicateError(error) {
     const errorText = [error?.details, error?.message, error?.hint].filter(Boolean).join(' ');
-    const match = errorText.match(/key\s*\(\s*movement_key\s*\)\s*=\s*\(([^)]+)\)\s*already exists/i);
-    return match ? String(match[1] || '').trim() : '';
+    // Desde que la unicidad incluye la hora del SLOT ASIGNADO (dos rotaciones
+    // del mismo vuelo el mismo día), el detalle trae dos columnas:
+    // "Key (movement_key, _aifa_movement_slot(...))=(llave, HH:MM)". La llave es
+    // la primera; no lleva comas.
+    const match = errorText.match(/key\s*\(\s*movement_key\b[^=]*=\s*\(([^)]+)\)\s*already exists/i);
+    return match ? String(match[1] || '').split(',')[0].trim() : '';
 }
 
 function _conciIsMovementKeyDuplicate(error) {
@@ -31576,13 +31580,33 @@ async function _conciFindExistingMovementRowId(client, payload, error) {
     const movementKey = _conciMovementKeyFromDuplicateError(error)
         || _conciMovementKeyFromPayload(payload);
     if (!movementKey) return null;
+    // Dos rotaciones del mismo vuelo el mismo día comparten la llave: la que
+    // choca es la de la misma hora de SLOT ASIGNADO (misma regla que el índice
+    // único uq_conciliacion_manifiestos_movement_key y _aifa_movement_slot).
     const lookup = await client
         .from('Conciliación Manifiestos')
         .select('id')
         .eq('movement_key', movementKey)
         .maybeSingle();
-    if (lookup.error) return null;
-    const row = Array.isArray(lookup.data) ? lookup.data[0] : lookup.data;
+    let row = null;
+    if (!lookup.error) {
+        row = Array.isArray(lookup.data) ? lookup.data[0] : lookup.data;
+    } else {
+        // maybeSingle falla con más de una fila: son rotaciones. Se elige la
+        // de la misma hora de SLOT; si ninguna coincide, no se adivina.
+        const varias = await client
+            .from('Conciliación Manifiestos')
+            .select('id,"SLOT ASIGNADO"')
+            .eq('movement_key', movementKey);
+        if (varias.error) return null;
+        const filas = Array.isArray(varias.data) ? varias.data : (varias.data ? [varias.data] : []);
+        const horaSlot = (valor) => {
+            const m = String(valor ?? '').match(/(\d{1,2}):(\d{2})/);
+            return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
+        };
+        const slot = horaSlot(_conciPayloadIdentityValue(payload, ['SLOT ASIGNADO']));
+        row = slot ? (filas.find(r => horaSlot(r?.['SLOT ASIGNADO']) === slot) || null) : null;
+    }
     return row?.id !== undefined && row?.id !== null ? row.id : null;
 }
 
