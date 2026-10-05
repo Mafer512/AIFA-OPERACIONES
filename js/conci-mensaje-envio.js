@@ -14,8 +14,10 @@
    toneladas enteras, repartidas entre nacional e internacional como en el
    oficio. Así el mensaje nunca dice algo distinto de los oficios.
 
-   Mientras el cierre no se registre a diario, los manifiestos capturados
-   (con HR. DE RECEPCIÓN) cuentan como cerrados en su FECHA: ver comoCerrados.
+   Sólo cuentan los manifiestos con CIERRE SUBSECRETARIA. Hubo una regla
+   provisional que contaba como cerrado en su FECHA lo capturado (con HR. DE
+   RECEPCIÓN) sin cierre; se quitó porque sumaba al mes manifiestos que el
+   oficio no incluye.
    ========================================================================== */
 (function () {
     'use strict';
@@ -54,30 +56,10 @@
         return `${a - 1}-${dos(m)}-${dos(Math.min(d, ultimo))}`;
     }
 
-    const normaliza = t => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase();
-
-    /**
-     * Por ahora el Cierre de Subsecretaría no se está registrando: un
-     * manifiesto CAPTURADO —con HR. DE RECEPCIÓN, el mismo criterio de
-     * "Capturados" en la tabla— cuenta como cerrado en su FECHA. Los que ya
-     * traen CIERRE SUBSECRETARIA lo conservan (así el histórico y el año
-     * anterior no cambian) y los que no están capturados ni cerrados no
-     * cuentan. Las filas originales no se tocan: las comparte la caché de
-     * Reportes.
-     */
-    function comoCerrados(leidos) {
-        const P = window.conciReportesPasajeros;
+    /** Lo leído tal cual: sólo cuenta lo que tiene CIERRE SUBSECRETARIA. */
+    function conCierre(leidos) {
         const columnas = leidos.columnas || {};
-        const cierre = columnas.cierre || 'CIERRE SUBSECRETARIA';
-        const recepcion = Object.keys(leidos.filas[0] || {})
-            .find(c => /^HR\.?\s*DE\s+RECEPCION/.test(normaliza(c)));
-        const filas = !recepcion ? leidos.filas : leidos.filas.map((fila) => {
-            if (String(fila[cierre] ?? '').trim() || !String(fila[recepcion] ?? '').trim()) return fila;
-            const fecha = P.aIso(columnas.fecha ? fila[columnas.fecha] : '')
-                || P.aIso(columnas.portal ? fila[columnas.portal] : '');
-            return fecha ? { ...fila, [cierre]: fecha } : fila;
-        });
-        return { ...leidos, filas, columnas: { ...columnas, cierre } };
+        return { ...leidos, columnas: { ...columnas, cierre: columnas.cierre || 'CIERRE SUBSECRETARIA' } };
     }
 
     /* ── cifras ─────────────────────────────────────────────────────────── */
@@ -221,7 +203,7 @@
         const dia = resumen.cifras.dia;
         const sinCierre = [dia.pax, dia.opsPax, dia.carga, dia.opsCarga].every(c => !c.total);
         aviso(sinCierre
-            ? `No hay manifiestos capturados (con HR. DE RECEPCIÓN) ni cerrados del ${fechaCorta(fecha)}.`
+            ? `No hay manifiestos con CIERRE SUBSECRETARIA del ${fechaCorta(fecha)}.`
             : '');
         const copiar = el('btn-conci-msg-copiar');
         if (copiar) copiar.disabled = false;
@@ -268,7 +250,7 @@
                 if (typeof window._ensureConciAirlineCatalog === 'function') {
                     try { await window._ensureConciAirlineCatalog(); } catch (_) { /* se usa lo capturado */ }
                 }
-                datos = comoCerrados(await P.leer(hoy, n => estado(`Leyendo manifiestos… ${numero(n)}`)));
+                datos = conCierre(await P.leer(hoy, n => estado(`Leyendo manifiestos… ${numero(n)}`)));
                 columnasCarga = { ...C.columnas(datos.filas[0] || {}), cierre: datos.columnas.cierre };
                 leidoEn = Date.now();
             }
@@ -347,6 +329,6 @@
     });
 
     window.conciMensajeEnvio = {
-        abrir, preparar, copiar, calcular, componer, mismoDiaAnioAnterior, ultimoCierre, comoCerrados
+        abrir, preparar, copiar, calcular, componer, mismoDiaAnioAnterior, ultimoCierre, conCierre
     };
 })();

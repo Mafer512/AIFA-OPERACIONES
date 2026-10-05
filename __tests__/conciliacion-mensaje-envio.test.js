@@ -230,7 +230,7 @@ describe('las cifras salen de los oficios a la Subsecretaría', () => {
   });
 });
 
-describe('mientras no se registre el cierre, lo capturado cuenta como cerrado', () => {
+describe('sólo cuenta lo que tiene CIERRE SUBSECRETARIA', () => {
   let api;
   beforeEach(() => {
     window._conciRowIsCargo = fila => fila['AEROLINEA'] === 'ESTAFETA';
@@ -248,27 +248,26 @@ describe('mientras no se registre el cierre, lo capturado cuenta como cerrado', 
     operacion: 'TIPO DE OPERACIÓN', aerolinea: 'AEROLINEA', pax: 'TOTAL PAX'
   };
 
-  test('un manifiesto con HR. DE RECEPCIÓN cuenta en su FECHA; sin ella, no; uno ya cerrado conserva su cierre', () => {
+  test('capturado (con HR. DE RECEPCIÓN) pero sin cierre NO cuenta; el cerrado va en su fecha de cierre', () => {
     const filas = [
       fila({ fecha: '2026-09-27', recepcion: '27/09/2026 10:15', pax: 70 }),
       fila({ fecha: '2026-09-27', pax: 500 }),
       fila({ fecha: '2026-09-27', recepcion: '28/09/2026 01:00', aerolinea: 'ESTAFETA', operacion: 'INTERNACIONAL', int: 3000 }),
       fila({ fecha: '2026-09-25', cierre: '2026-09-26', recepcion: '25/09/2026 09:00', pax: 40 })
     ];
-    const datos = api.comoCerrados({ filas, columnas: COLUMNAS_PAX });
+    const datos = api.conCierre({ filas, columnas: COLUMNAS_PAX });
     const C = window.conciReportesCarga;
     const colCarga = { ...C.columnas(datos.filas[0]), cierre: datos.columnas.cierre };
 
     const dia27 = api.calcular(datos, colCarga, '2026-09-27').cifras.dia;
-    expect(dia27.pax).toEqual(t(70, 70, 0));
-    expect(dia27.opsPax.total).toBe(1);
-    expect(dia27.carga).toEqual(t(3, 0, 3));
-    // El ya cerrado va en su fecha de cierre (26), no en su FECHA (25).
+    expect(dia27.pax).toEqual(t(0, 0, 0));
+    expect(dia27.opsPax.total).toBe(0);
+    expect(dia27.carga).toEqual(t(0, 0, 0));
+    // El cerrado va en su fecha de cierre (26), no en su FECHA (25).
     expect(api.calcular(datos, colCarga, '2026-09-26').cifras.dia.pax.total).toBe(40);
     expect(api.calcular(datos, colCarga, '2026-09-25').cifras.dia.pax.total).toBe(0);
-    // No se modifican las filas originales: las comparte la caché de Reportes.
-    expect(filas[0]['CIERRE SUBSECRETARIA']).toBe('');
-    expect(api.ultimoCierre(datos, '2026-09-27')).toBe('2026-09-27');
+    expect(api.ultimoCierre(datos, '2026-09-27')).toBe('2026-09-26');
+    expect(api.comoCerrados).toBeUndefined();
   });
 });
 
@@ -305,7 +304,7 @@ describe('la ventana', () => {
   test('al abrir lee los manifiestos hasta hoy y arma el mensaje del último cierre', async () => {
     await api.abrir();
     expect(mostrar).toHaveBeenCalled();
-    expect(rpc).toHaveBeenCalledWith('conciliacion_reporte_reportable', { p_hasta: '2026-09-28' });
+    expect(rpc).toHaveBeenCalledWith('conciliacion_reporte_reportable_pagina', { p_hasta: '2026-09-28', p_despues: '', p_limite: 5000 });
     expect(document.getElementById('conci-msg-fecha').value).toBe('2026-09-27');
     expect(texto()).toMatch(/^Se envía la información correspondiente \(carga y pasajeros\) al:\n\n27\/09\/2026\n\na\.\tPasajeros: 150 \(100 Nacionales, 50 Internacionales\)\./);
     expect(texto()).toContain('c. Carga: 6 (1 Nacionales, 5 Internacionales).');
@@ -324,7 +323,7 @@ describe('la ventana', () => {
     fecha.value = '2026-09-21';
     fecha.dispatchEvent(new Event('change', { bubbles: true }));
     expect(aviso().classList.contains('d-none')).toBe(false);
-    expect(aviso().textContent).toContain('No hay manifiestos capturados (con HR. DE RECEPCIÓN) ni cerrados del 21/09/2026');
+    expect(aviso().textContent).toContain('No hay manifiestos con CIERRE SUBSECRETARIA del 21/09/2026');
     expect(rpc).toHaveBeenCalledTimes(1);
   });
 

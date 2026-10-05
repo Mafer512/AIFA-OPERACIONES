@@ -227,27 +227,54 @@
         return c;
     }
 
+    const filasDe = r => Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.filas) ? r.data.filas : []);
+    const funcionNoExiste = e => /PGRST202|42883/.test(String(e?.code || ''))
+        || /could not find the function|does not exist/i.test(String(e?.message || ''));
+
+    // Lectura ligera y por cursor (migración 057); si la base aún no la tiene,
+    // la de siempre por páginas. Ver leerReportable en conci-reportes-pasajeros.js.
+    async function leerReportable(client, hastaIso, avisar) {
+        const filas = [];
+        let despues = '';
+        for (;;) {
+            const respuesta = await client.rpc('conciliacion_reporte_reportable_pagina',
+                { p_hasta: hastaIso, p_despues: despues, p_limite: PAGINA_RPC });
+            if (respuesta.error) {
+                if (!filas.length && funcionNoExiste(respuesta.error)) return leerReportableCompleto(client, hastaIso, avisar);
+                throw respuesta.error;
+            }
+            const pagina = filasDe(respuesta);
+            filas.push(...pagina);
+            if (avisar) avisar(filas.length);
+            const ultimo = pagina.length ? pagina[pagina.length - 1]._uid : null;
+            if (pagina.length < PAGINA_RPC || !ultimo) break;
+            despues = ultimo;
+        }
+        return filas;
+    }
+
+    async function leerReportableCompleto(client, hastaIso, avisar) {
+        const filas = [];
+        for (let desde = 0; ; ) {
+            const consulta = client.rpc('conciliacion_reporte_reportable', { p_hasta: hastaIso });
+            const paginada = consulta && typeof consulta.range === 'function';
+            const respuesta = await (paginada ? consulta.range(desde, desde + PAGINA_RPC - 1) : consulta);
+            if (respuesta.error) throw respuesta.error;
+            const pagina = filasDe(respuesta);
+            filas.push(...pagina);
+            if (avisar) avisar(filas.length);
+            if (!paginada || !pagina.length) break;
+            desde += pagina.length;
+        }
+        return filas;
+    }
+
     async function descargar(hastaIso, avisar) {
         if (cache && cache.hasta === hastaIso && cache.epoch === cacheEpoch) return cache;
         const client = cliente();
         const epoch = cacheEpoch;
         if (typeof client.rpc === 'function') {
-            // Por páginas: la base corta cada consulta en un máximo de renglones
-            // (10,000 aquí) y sin esto se perdía lo más reciente. Ver el mismo
-            // bloque en conci-reportes-pasajeros.js.
-            const filasRpc = [];
-            for (let desde = 0; ; ) {
-                const consulta = client.rpc('conciliacion_reporte_reportable', { p_hasta: hastaIso });
-                const paginada = consulta && typeof consulta.range === 'function';
-                const respuesta = await (paginada ? consulta.range(desde, desde + PAGINA_RPC - 1) : consulta);
-                if (respuesta.error) throw respuesta.error;
-                const pagina = Array.isArray(respuesta.data) ? respuesta.data
-                    : (Array.isArray(respuesta.data?.filas) ? respuesta.data.filas : []);
-                filasRpc.push(...pagina);
-                if (avisar) avisar(filasRpc.length);
-                if (!paginada || !pagina.length) break;
-                desde += pagina.length;
-            }
+            const filasRpc = await leerReportable(client, hastaIso, avisar);
             const resultadoRpc = { hasta: hastaIso, filas: filasRpc, columnas: detectarColumnas(filasRpc[0] || {}), epoch };
             if (epoch === cacheEpoch) cache = resultadoRpc;
             return resultadoRpc;
