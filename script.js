@@ -22602,6 +22602,10 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
     const cols = (Array.isArray(columns) && columns.length) ? columns : Object.keys(rows[0] || {});
     const optypeCol  = cols.find(c => /tipo.*oper|service\s*type/i.test(c)) || null;
     const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
+    // TIPO DE OPERACIÓN sale con la misma clasificación que muestra la celda de
+    // la tabla (la que usa también su filtro): el valor guardado si es Nacional /
+    // Internacional y, si no, el extremo de la ruta según llegada o salida.
+    const tipoOperacionDe = optypeCol ? _conciExcelFilterValueGetter(optypeCol) : () => '';
 
     const isCarga = kind === 'carga';
     const isTotal = kind === 'total';
@@ -22616,9 +22620,7 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
             const def = d.h === 'DATOS SUBSECRETARIA'
                 ? { ...d, h: 'CIERRE DE PRESENTACIÓN', a: ['CIERRE DE PRESENTACIÓN'] }
                 : d.h === 'DEMORA +-15 MIN'
-                    ? { ...d, h: 'DEMORA +-15', a: ['DEMORA +-15'] }
-                    : d.h === 'TIPO DE OPERACIÓN'
-                        ? { ...d, t: 'text', a: ['TIPO DE OPERACIÓN'] } : d;
+                    ? { ...d, h: 'DEMORA +-15', a: ['DEMORA +-15'] } : d;
             return [def];
         }).concat([
             { h: 'EXTEMPORANEO', t: 'text', a: ['EXTEMPORANEO'] },
@@ -22670,10 +22672,9 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
         if (/^[A-Za-z]{3}$/.test(s)) return window._iataToCity ? window._iataToCity(s.toUpperCase()) : s;
         return s;
     };
-    const firstCode = (raw) => (String(raw || '').toUpperCase().split(/[-\/\s]+/).filter(Boolean)[0] || '');
 
     // Calcula el valor y estilo de una celda destino según su tipo.
-    const computeCell = (def, row, isArr) => {
+    const computeCell = (def, row, isArr, tipoOperacion) => {
         const rawVal = def.a.length ? get(row, def.a) : '';
         switch (def.t) {
             case 'mes': {
@@ -22701,19 +22702,8 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
                 const name = code ? _conciAircraftTypeByCode.get(code) : '';
                 return { value: name || String(rawVal || '') };
             }
-            case 'optype': {
-                let code = '';
-                if (isCarga) {
-                    const o = get(row, ['ORIGEN']);
-                    const d = get(row, ['DESTINO']);
-                    code = firstCode(isArr ? (o || d) : (d || o));
-                } else {
-                    const routing = get(row, ['DESTINO / ORIGEN']);
-                    const parts = String(routing || '').toUpperCase().split(/[-\/]+/).filter(Boolean);
-                    code = parts.length >= 2 ? (isArr ? parts[0] : parts[parts.length - 1]) : (parts[0] || '');
-                }
-                return { value: code ? _conciOperacionNacInt(code) : '' };
-            }
+            case 'optype':
+                return { value: tipoOperacion };
             case 'vuelo':
                 // Como en la tabla: solo el número, como texto (conserva ceros a
                 // la izquierda). "Exportar por capturista" sigue con el vuelo completo.
@@ -22787,13 +22777,15 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
 
     // Data
     dataRows.forEach((row) => {
+        // Sobre la fila tal como está en la tabla, antes de la proyección de Carga.
+        const tipoOperacion = tipoOperacionDe(row);
         if (isCarga) row = _conciExportCargoRow(row, year);
         const tipoRaw = String(get(row, ['TIPO DE MANIFIESTO']) || '').toLowerCase();
         const isArr = /lleg|arr/.test(tipoRaw);
         const cells = defs.map(d =>
             // Distinguir los códigos (ORIGEN/DESTINO/ESCALA) de sus países.
             isCarga && ['ORIGEN', 'DESTINO', 'ESCALA', 'Origen', 'Destino', 'escala', 'TIEMPO DE DEMORA / ANTICIPACIÓN'].includes(d.h)
-                ? { value: row[d.h] ?? '' } : computeCell(d, row, isArr)
+                ? { value: row[d.h] ?? '' } : computeCell(d, row, isArr, tipoOperacion)
         );
         const xr = ws.addRow(cells.map(c => (c.value === undefined || c.value === null) ? '' : c.value));
         xr.eachCell((cell, colNumber) => {
@@ -22921,6 +22913,12 @@ async function _conciExportPorCapturista(kind) {
     const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
     const capturoCol = cols.find(c => /^captur[oó]$/i.test(c.trim())) || null;
     const airlineColIdx = cols.findIndex(c => /aerol[ií]nea|airline/i.test(c));
+    // TIPO DE OPERACIÓN: la misma clasificación que muestra la celda de la tabla
+    // (ver _conciExcelFilterValueGetter). Las filas que aún no se pintan traen el
+    // valor guardado, que puede ser el Service Type del itinerario ("J", "H") o
+    // venir vacío.
+    const optypeColIdx = cols.findIndex(c => /tipo.*oper|service\s*type/i.test(c));
+    const tipoOperacionDe = optypeColIdx >= 0 ? _conciExcelFilterValueGetter(cols[optypeColIdx]) : null;
 
     const capturados = rows.filter(r => recepcionCol && String(get(r, [recepcionCol])).trim() !== '');
     if (!capturados.length) {
@@ -22984,6 +22982,7 @@ async function _conciExportPorCapturista(kind) {
         const maxLen = cols.map(c => c.length);
         filas.forEach(row => {
             const values = cols.map(c => _conciExportCapturistaCellValue(get(row, [c])));
+            if (tipoOperacionDe) values[optypeColIdx] = tipoOperacionDe(row);
             // AEROLINEA: nombre comercial con los colores del catálogo, igual
             // que la exportación de Pasajeros/Carga (caso 'airline').
             const airlineMeta = airlineColIdx >= 0 ? _conciResolveAirlineMeta(values[airlineColIdx]) : null;
