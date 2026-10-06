@@ -21408,6 +21408,30 @@ function _conciRowPassesPillFilter(tr) {
     return true;
 }
 
+// Valor con el que el filtro desplegable lista y compara una fila: el valor
+// guardado, salvo en TIPO DE OPERACIÓN. Ahí la celda muestra Nacional /
+// Internacional, pero las filas que vienen del itinerario guardan su Service
+// Type IATA ("J", "F", "H", "C"…), que se conserva porque _conciRowIsCargo lo
+// usa para separar carga de pasajeros. Para esa columna el filtro usa la misma
+// clasificación que pinta la celda (ver _renderConciManifiestosTable): el valor
+// guardado si ya es Nacional / Internacional y, si no, la que da la ruta.
+function _conciExcelFilterValueGetter(col) {
+    const cols = (Array.isArray(_conciManifestosSummaryColumns) && _conciManifestosSummaryColumns.length)
+        ? _conciManifestosSummaryColumns
+        : Object.keys((_conciManifestosAllData && _conciManifestosAllData[0]) || {});
+    const stored = row => {
+        const v = row[col];
+        return (v === null || v === undefined) ? '' : String(v).trim();
+    };
+    if (col !== cols.find(c => /tipo.*oper|service\s*type/i.test(c))) return stored;
+    const routingCol = cols.find(c => /^routing$/i.test(c) || /origen|destino.*origen|routing/i.test(c)) || null;
+    const tipoCol = cols.find(c => /tipo.*(manif)/i.test(c)) || null;
+    return row => _conciNormalizeOperationType(stored(row)) || _conciResolveOperationTypeFromRoute(
+        routingCol ? String(row[routingCol] || '') : '',
+        tipoCol ? String(row[tipoCol] || '') : ''
+    );
+}
+
 // Determina si una fila pasa todos los filtros de texto por columna activos.
 function _conciRowPassesColFilter(tr) {
     // Filtros de texto (contiene)
@@ -21438,7 +21462,7 @@ function _conciRowPassesColFilter(tr) {
         if (!allowed) continue;
         const rowIdx = parseInt(tr.dataset.rowIndex, 10);
         const rowData = (Number.isFinite(rowIdx) && _conciManifestosAllData[rowIdx]) ? _conciManifestosAllData[rowIdx] : null;
-        const cellVal = rowData ? String(rowData[col] !== null && rowData[col] !== undefined ? rowData[col] : '').trim() : '';
+        const cellVal = rowData ? _conciExcelFilterValueGetter(col)(rowData) : '';
         if (!allowed.has(cellVal)) return false;
     }
     return true;
@@ -21810,10 +21834,7 @@ function _showConciExcelFilter(col, triggerEl) {
         `width:260px;border-radius:6px;padding:10px;font-size:.84rem;`;
 
     const activeSet = _conciExcelFilters[col] || null;
-    const values = [...new Set((_conciManifestosAllData || []).map(r => {
-        const v = r[col];
-        return (v === null || v === undefined) ? '' : String(v).trim();
-    }))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    const values = [...new Set((_conciManifestosAllData || []).map(_conciExcelFilterValueGetter(col)))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
     const esc2 = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
