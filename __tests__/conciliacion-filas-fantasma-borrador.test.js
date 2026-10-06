@@ -60,6 +60,8 @@ const api = new Function('document', 'localStorage', 'estado', 'encolados', 'avi
   function _conciCanCurrentUserEdit() { return estado.puedeEditar; }
   function _conciFechaUnicaDelFiltro() { return estado.fechaFiltro; }
   function _conciRefreshCalculatedCellsForRow() {}
+  // # DE VUELO se ve solo con el número; lo cubre conciliacion-numero-de-vuelo.
+  function _conciTextoVisibleDeCelda(td, v) { return v; }
   function _conciQueueAutoSave(tr) { encolados.push(tr); }
   function showNotification(msg, tipo) { avisos.push({ msg, tipo }); }
   function _conciActualizarIndicadorBorradores() {}

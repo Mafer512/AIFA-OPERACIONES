@@ -41,6 +41,8 @@ const api = new Function('document', 'localStorage', 'CSS', 'console', 'encolado
   function _conciFechaUnicaDelFiltro() { return '2026-08-11'; }
   function _conciQueueAutoSave(tr) { encolados.push(tr); }
   function _conciRefreshCalculatedCellsForRow(tr) { recalculadas.push(tr); }
+  // # DE VUELO se ve solo con el número; lo cubre conciliacion-numero-de-vuelo.
+  function _conciTextoVisibleDeCelda(td, v) { return v; }
   // Recrear filas nuevas y reintentar tienen su propia suite
   // (conciliacion-nunca-perder); aquí solo hacen falta como dependencias.
   function _conciRestaurarFilasNuevas() { return 0; }

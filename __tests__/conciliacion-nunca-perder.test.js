@@ -50,6 +50,8 @@ const api = new Function('document', 'setTimeout', 'clearTimeout', 'estado', 'en
   function _conciReintentarPendientes() { return estado.pendientes; }
   function _conciCanCurrentUserEdit() { return estado.puedeEditar; }
   function _conciRefreshCalculatedCellsForRow() {}
+  // # DE VUELO se ve solo con el número; lo cubre conciliacion-numero-de-vuelo.
+  function _conciTextoVisibleDeCelda(td, v) { return v; }
   function _conciQueueAutoSave(tr) { encolados.push(tr); }
   function showNotification(msg, tipo) { avisos.push({ msg, tipo }); }
   function _conciAddBlankRow() {

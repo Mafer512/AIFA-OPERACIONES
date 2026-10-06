@@ -62,6 +62,9 @@ const api = new Function('document', 'recalculadas', 'enviados', `
   function _conciIsAeronaveColumn(c) { return /^aeronave$/i.test(String(c).trim()); }
   function _conciAeronaveDisplay(v) { return { text: String(v ?? '') }; }
   function _conciMarcarAeronave() {}
+  // # DE VUELO se ve solo con el número; lo cubre conciliacion-numero-de-vuelo.
+  function _conciIsFlightNumberColumn(c) { return String(c).trim().toUpperCase() === '# DE VUELO'; }
+  function _conciTextoVisibleDeCelda(td, v) { return v; }
   function _conciRenderBarraPresencia() {}
   function _conciColorForUser() { return '#1976d2'; }
   let _conciMiFocoActual = { rowId: '', col: '' };

@@ -83,6 +83,8 @@ function construirApi() {
     function _conciNormalizedColumnName(c){ return String(c||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toUpperCase().trim(); }
     function _conciActualizarIndicadorBorradores() {}
     function _conciRefreshCalculatedCellsForRow() {}
+    // # DE VUELO se ve solo con el número; lo cubre conciliacion-numero-de-vuelo.
+    function _conciTextoVisibleDeCelda(td, v) { return v; }
     function _conciQueueAutoSave() {}
     function showNotification() {}
 

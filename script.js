@@ -20179,6 +20179,53 @@ function _conciFormatDisplayValue(columnName, value, row, fechaCol, fallbackYear
     return raw;
 }
 
+// "# DE VUELO" se ve solo con el número, sin el código de la aerolínea
+// ("EK 9915" → "9915"), en la tabla y en Exportar Excel. Lo guardado no cambia:
+// el vuelo completo sigue siendo la identidad de la fila, lo que cruza con el
+// Itinerario y lo que encuentran el buscador y los filtros.
+//
+// El código se reconoce por su forma, nunca quedándose con "todos los dígitos":
+// varios códigos IATA llevan uno ("M7", "W8", "L3", "K4") y "M7 6810" saldría
+// "76810". Un código es IATA (dos caracteres, al menos una letra) u OACI (tres
+// letras), y el número puede traer sufijo operacional ("123A"), igual que en la
+// llave de movimiento (_conciMovementKeyFromPayload). Se separa cuando viene:
+//  1. separado del número: "EK 9915", "M7 6810", "AM-998";
+//  2. pegado al código de la AEROLINEA de la fila, o al IATA que le da el
+//     catálogo: "M76810" con M7;
+//  3. pegado a un código solo de letras: "AM998".
+// Lo demás —un número sin prefijo, con sus ceros a la izquierda, o una forma
+// que no encaja— se muestra tal cual.
+function _conciNumeroDeVuelo(valor, aerolinea) {
+    const texto = String(valor ?? '').trim();
+    if (!texto) return '';
+    const separado = texto.match(/^(?:[A-Z]{3}|[A-Z][A-Z0-9]|[0-9][A-Z])[\s-]+(\d+[A-Z]?)$/i);
+    if (separado) return separado[1];
+    const codigoFila = String(aerolinea ?? '').trim().toUpperCase();
+    const codigos = codigoFila ? [codigoFila, _conciResolveAirlineMeta(codigoFila)?.iata] : [];
+    for (const codigo of codigos) {
+        // Todo código lleva al menos una letra: un número sin prefijo no se toca.
+        if (!/[A-Z]/.test(codigo || '') || !texto.toUpperCase().startsWith(codigo)) continue;
+        const pegado = texto.slice(codigo.length).match(/^(\d+[A-Z]?)$/i);
+        if (pegado) return pegado[1];
+    }
+    const conLetras = texto.match(/^[A-Z]{2,3}(\d+[A-Z]?)$/i);
+    return conLetras ? conLetras[1] : texto;
+}
+
+function _conciIsFlightNumberColumn(column) {
+    return _conciNormalizedColumnName(column) === '# de vuelo';
+}
+
+// Texto con el que se pinta en la tabla un valor capturado: el mismo valor,
+// salvo en "# DE VUELO", donde se ve solo el número (la AEROLINEA de la misma
+// fila ayuda a separar el código).
+function _conciTextoVisibleDeCelda(td, valor) {
+    if (!_conciIsFlightNumberColumn(td?.dataset?.col)) return valor;
+    const celdaAerolinea = [...(td.closest('tr')?.querySelectorAll('td[data-col]') || [])]
+        .find(celda => /aerol[ií]nea|airline/i.test(celda.dataset.col || ''));
+    return _conciNumeroDeVuelo(valor, celdaAerolinea ? _conciCeldaValorCrudo(celdaAerolinea) : '');
+}
+
 // Mismo orden de estatus AODB (Amadeus) que Itinerario de Vuelos
 // (js/parte-ops-flights.js, STATUS_ORDER) — el usuario pidió que Manifiestos
 // se vea en el mismo orden en que aparecen los vuelos en Itinerario, aunque
@@ -22261,7 +22308,7 @@ const _CONCI_EXPORT_COLS_PAX = [
     { h: 'AERONAVE', t: 'aircraft', a: ['AERONAVE'] },
     { h: 'MATRÍCULA', t: 'text', a: ['MATRÍCULA', 'MATRICULA'] },
     { h: 'ESTATUS MATRÍCULA', t: 'text', a: ['ESTATUS MATRÍCULA', 'ESTATUS MATRICULA'] },
-    { h: '# DE VUELO', t: 'text', a: ['# DE VUELO'] },
+    { h: '# DE VUELO', t: 'vuelo', a: ['# DE VUELO'] },
     { h: 'DESTINO / ORIGEN', t: 'routecity', a: ['DESTINO / ORIGEN'] },
     { h: 'RUTA', t: 'text', a: ['RUTA', 'DESTINO / ORIGEN', 'ROUTING'] },
     { h: 'SLOT ASIGNADO', t: 'datetime', a: ['SLOT ASIGNADO'] },
@@ -22302,7 +22349,7 @@ const _CONCI_EXPORT_COLS_CARGA = [
     { h: 'AEROLINEA', t: 'airline', a: ['AEROLINEA', 'AEROLÍNEA'] },
     { h: 'AERONAVE', t: 'aircraft', a: ['AERONAVE'] },
     { h: 'MATRÍCULA', t: 'text', a: ['MATRÍCULA', 'MATRICULA'] },
-    { h: '# DE VUELO', t: 'text', a: ['# DE VUELO'] },
+    { h: '# DE VUELO', t: 'vuelo', a: ['# DE VUELO'] },
     { h: 'ORIGEN', t: 'codecity', a: ['ORIGEN'] },
     { h: 'ESCALA', t: 'codecity', a: ['ESCALA'] },
     { h: 'DESTINO', t: 'codecity', a: ['DESTINO'] },
@@ -22492,8 +22539,9 @@ function _conciExportCargoRow(row, year) {
 // targetWb (interno): cuando 'total' arma un solo libro, agrega aquí la hoja de
 // Pasajeros o de Carga —idéntica a la de su descarga individual— en vez de
 // guardar su propio archivo. Devuelve true si agregó la hoja.
-// opts (interno, solo con targetWb): { rows, sheetName } para que "Exportar por
-// capturista" arme una hoja por persona con este mismo formato.
+// opts (interno, solo con targetWb): { rows, sheetName, vueloCompleto } para que
+// "Exportar por capturista" arme una hoja por persona con este mismo formato
+// (vueloCompleto: # DE VUELO con el código de la aerolínea, como lo guarda).
 async function _conciExportToExcel(kind, targetWb, opts = {}) {
     if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
         alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
@@ -22637,6 +22685,10 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
                 }
                 return { value: code ? _conciOperacionNacInt(code) : '' };
             }
+            case 'vuelo':
+                // Como en la tabla: solo el número, como texto (conserva ceros a
+                // la izquierda). "Exportar por capturista" sigue con el vuelo completo.
+                return { value: opts.vueloCompleto ? String(rawVal || '') : _conciNumeroDeVuelo(rawVal, get(row, ['AEROLINEA', 'AEROLÍNEA'])) };
             case 'routecity':
                 return { value: routeCity(rawVal, isArr) };
             case 'codecity':
@@ -22802,7 +22854,7 @@ async function _conciExportPorCapturistaFormato(kind) {
         const sheetName = sheetNameFor(nombre);
         // Con targetWb, _conciExportToExcel deja solo lo recibido (HR. DE
         // RECEPCIÓN con valor) del tipo pedido; sin nada, no agrega la hoja.
-        const agregada = await _conciExportToExcel(kind, wb, { rows: grupos.get(nombre), sheetName });
+        const agregada = await _conciExportToExcel(kind, wb, { rows: grupos.get(nombre), sheetName, vueloCompleto: true });
         if (agregada) {
             usedSheetNames.add(sheetName.toUpperCase());
             hojas++;
@@ -24086,6 +24138,8 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     // Detect semantic columns for smart city-name display in routing/origen cell
     const _tipoCol    = displayCols.find(c => /tipo.*(manif)/i.test(c)) || null;
     const _airlineCol = displayCols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
+    // Columna "# DE VUELO": muestra solo el número (ver _conciNumeroDeVuelo).
+    const _vueloCol = displayCols.find(_conciIsFlightNumberColumn) || null;
     const _matriculaStatusCol = displayCols.find(c => /estatus.*matr[ií]cula|status.*matr[ií]cula/i.test(c)) || null;
     // Columna "AERONAVE": muestra el nombre del modelo (catálogo aircraft type.csv) en vez del código IATA/ICAO crudo.
     const _aeronaveCol = displayCols.find(c => /^aeronave$/i.test(c.trim())) || null;
@@ -24337,6 +24391,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     const colMeta = displayCols.map(c => ({
         c,
         isAirline:   c === _airlineCol,
+        isVuelo:     c === _vueloCol,
         isMatriculaStatus: c === _matriculaStatusCol,
         isAeronave:  c === _aeronaveCol,
         isRouting:   c === _routingCol && (hasIataMap || hasAirportCatalog),
@@ -24453,6 +24508,10 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                     // El color lo aplica el mismo helper que usa el editor, para
                     // que abrir la celda no pueda repintarla de otro color.
                     _conciApplyAirlineCellPreview(td);
+                } else if (meta.isVuelo) {
+                    // data-raw conserva el vuelo completo ("EK 9915"): es lo que
+                    // se guarda, se edita y se busca. Solo se ve el número.
+                    td.textContent = _conciNumeroDeVuelo(rawStr, _airlineCol ? row[_airlineCol] : '');
                 } else if (meta.isAeronave) {
                     td.textContent = _conciAeronaveDisplay(rawStr).text;
                     _conciMarcarAeronave(td, rawStr);
@@ -27875,6 +27934,7 @@ function _conciAplicarCambioRemoto(rowId, col, valor, usuario) {
     // AERONAVE se ve igual que al pintar la tabla: nombre del modelo, no el código.
     const esAeronave = _conciIsAeronaveColumn(col);
     if (esAeronave) visible = _conciAeronaveDisplay(texto).text;
+    if (_conciIsFlightNumberColumn(col)) visible = _conciTextoVisibleDeCelda(td, texto);
 
     // Se conserva la etiqueta de autoria si ya estaba puesta.
     const etiqueta = td.querySelector('.conci-estela-autor');
@@ -27995,7 +28055,7 @@ function _conciAdoptarValorRemoto(td) {
     if (!info) { _conciLimpiarConflicto(rowId, col); return; }
     if (typeof td._conciCloseEditor === 'function') td._conciCloseEditor(false, false);
     _conciStageCellDraft(td, info.valor);
-    td.textContent = info.valor;
+    td.textContent = _conciTextoVisibleDeCelda(td, info.valor);
     _conciLimpiarConflicto(rowId, col);
     _conciQueueAutoSave(tr);
     if (typeof showNotification === 'function') {
@@ -29093,7 +29153,7 @@ function _conciRestaurarBorradores() {
                 delete entrada.celdas[col];
                 return;
             }
-            td.textContent = pendiente;
+            td.textContent = _conciTextoVisibleDeCelda(td, pendiente);
             td.dataset.pendingRaw = pendiente;
             td.dataset.dirty = '1';
             td.classList.add('conci-cell-borrador');
@@ -29232,7 +29292,7 @@ function _conciRestaurarFilasNuevas(datos) {
             const td = tdsFila.find(c => c.dataset.col === col);
             if (!td) return;
             const valor = String(celdas[col] ?? '');
-            td.textContent = valor;
+            td.textContent = _conciTextoVisibleDeCelda(td, valor);
             td.dataset.pendingRaw = valor;
             td.dataset.dirty = '1';
             td.classList.add('conci-cell-borrador');
@@ -29509,7 +29569,7 @@ function _conciAplicarPendienteRemoto(reg) {
     }
     const tr = td.closest('tr');
     _conciStageCellDraft(td, String(reg.valor ?? ''));
-    td.textContent = String(reg.valor ?? '');
+    td.textContent = _conciTextoVisibleDeCelda(td, String(reg.valor ?? ''));
     _conciQueueAutoSave(tr);
     _conciBorrarPendienteRemoto(reg.id);
     if (typeof showNotification === 'function') {
@@ -30822,7 +30882,7 @@ function _conciCommitCellRaw(td, nextRaw, move, displayText) {
         const committedMeta = isAirlineCol ? _conciResolveAirlineMeta(nextRaw) : null;
         td.textContent = isAirlineCol
             ? String(committedMeta?.name || nextRaw).toUpperCase()
-            : (displayText !== undefined ? displayText : nextRaw);
+            : _conciTextoVisibleDeCelda(td, displayText !== undefined ? displayText : nextRaw);
         _conciApplyAirlineCellPreview(td);
     }
     if (didChange) {

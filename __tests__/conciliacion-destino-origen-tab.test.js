@@ -112,7 +112,7 @@ describe('atravesar DESTINO / ORIGEN no marca la celda como capturada', () => {
       '_conciAutoSaveRow', '_conciBroadcastFoco', '_conciGetNextEditableCell',
       '_conciAsegurarCeldaVisible', '_conciActivateCellEditor', '_conciGetPrevEditableCell',
       '_conciFocusFilterOrAbove', '_conciFocusBelow', '_conciFirstEditableCellInRow',
-      '_conciMaybeApplyDeferredRemoteRefresh', '_conciEditMode',
+      '_conciMaybeApplyDeferredRemoteRefresh', '_conciEditMode', '_conciTextoVisibleDeCelda',
       trozo('_conciCeldaValorCrudo') + '\n' + trozo('_conciCommitCellRaw') + '\nreturn _conciCommitCellRaw;'
     )(
       normalize,
@@ -120,7 +120,9 @@ describe('atravesar DESTINO / ORIGEN no marca la celda como capturada', () => {
       nada, nada,
       col => String(col || '').toUpperCase().trim(),
       () => false, nada, () => null, nada, nada, nada, nada, nada, nada, nada, nada,
-      () => null, nada, nada, () => null, nada, nada, () => null, nada, true
+      () => null, nada, nada, () => null, nada, nada, () => null, nada, true,
+      // # DE VUELO se ve solo con el número; lo cubre conciliacion-numero-de-vuelo.
+      (td, v) => v
     );
   };
 

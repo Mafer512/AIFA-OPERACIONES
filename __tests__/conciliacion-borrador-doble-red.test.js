@@ -36,6 +36,8 @@ function construirApi({ primeraRedActiva = true } = {}) {
     function _conciCanCurrentUserEdit() { return true; }
     function _conciFechaUnicaDelFiltro() { return ''; }
     function _conciRefreshCalculatedCellsForRow() {}
+    // # DE VUELO se ve solo con el número; lo cubre conciliacion-numero-de-vuelo.
+    function _conciTextoVisibleDeCelda(td, v) { return v; }
     function _conciQueueAutoSave(tr) { encolados.push(tr); }
     function showNotification() {}
     function _conciBorradoresEscribir() {}
