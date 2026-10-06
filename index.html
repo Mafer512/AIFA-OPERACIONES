@@ -1243,6 +1243,34 @@ FF
             background: #e9ecef !important;
             box-shadow: inset 0 1px 0 #ced4da, inset 0 -1px 0 #ced4da;
         }
+        /* Celda con dato en MES, FECHA, TIPO DE MANIFIESTO, AEROLINEA, TIPO DE
+           OPERACIÓN, AERONAVE, MATRÍCULA, ESTATUS MATRÍCULA, # DE VUELO,
+           DESTINO / ORIGEN, RUTA, SLOT ASIGNADO, PUNTUALIDAD / CANCELACIÓN,
+           DEMORA +-15 MIN., CAPTURÓ y FACTOR DE OCUPACIÓN: azul grisáceo,
+           suave de día y profundo de noche, alternando el tono entre renglones
+           (la clase la pone _conciMarcarCeldaConDato). Pesa más que el tono,
+           hover, selección, validado y sobrecupo del renglón, también mientras
+           se desplaza; no tapa la celda en edición ni la que otra persona está
+           capturando. Solo cambian el fondo y el color de la línea: franjas,
+           marcas y bordes de estado siguen a la vista. */
+        #table-conci-manifiestos {
+            --conci-dato-bg: #EAF1F8;
+            --conci-dato-bg-alterno: #E2EBF5;
+            --conci-dato-linea: #CFDAE6;
+        }
+        body.dark-mode #table-conci-manifiestos {
+            --conci-dato-bg: #26364A;
+            --conci-dato-bg-alterno: #2D4056;
+            --conci-dato-linea: #3B4C62;
+        }
+        #table-conci-manifiestos tbody tr.conci-row-tone-1 > td.conci-cell-con-dato {
+            --conci-dato-bg: var(--conci-dato-bg-alterno);
+        }
+        #table-conci-manifiestos tbody tr > td.conci-cell-con-dato:not(.conci-cell-active):not(.conci-cell-remote-editing):not(.conci-cell-estela),
+        #conci-manifiestos-scroll.is-scrolling #table-conci-manifiestos tbody tr:hover > td.conci-cell-con-dato:not(.conci-cell-active):not(.conci-cell-remote-editing):not(.conci-cell-estela) {
+            background-color: var(--conci-dato-bg) !important;
+            border-color: var(--conci-dato-linea);
+        }
         .board-global-search {
             max-width: 320px;
             border-radius: 8px;

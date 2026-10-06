@@ -18809,7 +18809,7 @@ function _conciRenderMatriculaStatusCell(td, status, mismatch, expectedAirline) 
     if (mismatch) {
         const expected = escapeHTML(expectedAirline || 'la aerolínea del catálogo');
         td.innerHTML = `<span style="color:#198754">${etiqueta}</span> <i class="fas fa-exclamation-triangle text-warning" title="Matrícula no corresponde a la aerolínea. Catálogo: ${expected}" aria-label="Matrícula no corresponde a la aerolínea"></i>`;
-        td.style.setProperty('background', '#fff3cd', 'important');
+        // Sin fondo propio: la celda con dato lleva el resaltado (conci-cell-con-dato).
         td.style.setProperty('color', '#664d03', 'important');
         td.title = `Matrícula no corresponde a la aerolínea. Catálogo: ${expectedAirline || 'sin dato'}`;
     } else if (safeStatus === 'ACTIVA') {
@@ -21368,6 +21368,35 @@ function _conciVigilarFaltaRecepcion(tbody) {
         _conciFaltaRecUltimaFila = null;
         setTimeout(() => _conciAvisarFaltaRecepcion(previa), 400);
     });
+}
+
+// Columnas cuyas celdas con dato llevan fondo azul grisáceo (MES, FECHA,
+// AEROLINEA… CAPTURÓ, FACTOR DE OCUPACIÓN). Las fija cada render con los
+// mismos detectores con que pinta esas columnas, así no depende del nombre
+// exacto que traiga la base ("DEMORA +- 15 MIN." / "DEMORA +-15 MIN").
+let _conciColumnasConDato = new Set();
+
+// Una celda tiene dato si su valor vigente —lo tecleado aún sin guardar manda
+// sobre lo guardado— no está vacío ni es solo espacios. 0 y 0% sí cuentan. El
+// "-" de una columna calculada no: es el SI.ERROR de la fórmula, no un dato.
+function _conciMarcarCeldaConDato(td) {
+    if (!td || !td.dataset || td.dataset.col === undefined) return;
+    const col = td.dataset.col;
+    const valor = String((td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : td.dataset.raw) ?? '').trim();
+    const conDato = _conciColumnasConDato.has(col) && valor !== ''
+        && !(valor === '-' && _conciIsCalculatedColumn(col));
+    td.classList.toggle('conci-cell-con-dato', conDato);
+}
+
+// Capturas, recálculos, sincronización en vivo y borradores cambian el valor
+// de la celda (data-raw / data-pending-raw); el fondo la sigue sola.
+function _conciVigilarCeldasConDato(tbody) {
+    if (!tbody || tbody._conciConDatoObs || typeof MutationObserver === 'undefined') return;
+    const obs = new MutationObserver((cambios) => {
+        for (const m of cambios) _conciMarcarCeldaConDato(m.target);
+    });
+    obs.observe(tbody, { subtree: true, attributes: true, attributeFilter: ['data-raw', 'data-pending-raw'] });
+    tbody._conciConDatoObs = obs;
 }
 
 function _conciUpdateResumen(data, columns) {
@@ -24168,6 +24197,13 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     const _fechaCol   = displayCols.find(c => /(^|\b)fecha(\b|$)/i.test(c)) || null;
     _conciEditFallbackYear = fallbackYear;
     _conciEditFechaCol     = _fechaCol;
+    // Columnas que se resaltan en azul grisáceo cuando la celda tiene dato.
+    _conciColumnasConDato = new Set([
+        _mesCol, _fechaCol, _tipoCol, _airlineCol, _optypeCol, _aeronaveCol,
+        displayCols.find(c => _conciSummaryColumnKey(c) === 'MATRICULA'),
+        _matriculaStatusCol, _vueloCol, _routingCol, _rutaCol, _slotAsignadoCol,
+        _puntualidadCol, _demora15Col, _capturoCol, _factorOcupacionCol,
+    ].filter(Boolean));
 
     if (!data.length) {
         tbody.innerHTML = '<tr><td colspan="100%" class="text-center text-muted py-5">No se encontraron registros para los filtros seleccionados.</td></tr>';
@@ -24651,6 +24687,9 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
             frag.appendChild(tr);
         }
 
+        // Fondo azul grisáceo en las celdas con dato; el observador cubre los cambios después.
+        frag.querySelectorAll('td[data-col]').forEach(_conciMarcarCeldaConDato);
+        _conciVigilarCeldasConDato(tbody);
         // HR. DE RECEPCIÓN faltante en renglones ya capturados (ver
         // _conciMarcarFaltaRecepcion); el observador cubre los cambios después.
         frag.querySelectorAll('tr').forEach(_conciMarcarFaltaRecepcion);
@@ -25700,8 +25739,11 @@ function _conciApplyAirlineCellPreview(td) {
 
     const bg = meta.color || '#6c757d';
     const fg = meta.textColor || '#ffffff';
-    td.style.setProperty('background', bg, 'important');
-    td.style.setProperty('color', fg, 'important');
+    // La celda con dato lleva el resaltado (conci-cell-con-dato) con texto
+    // normal: el blanco de la aerolínea no se leía. El color de la aerolínea
+    // queda como vista previa en el editor.
+    td.style.removeProperty('background');
+    td.style.removeProperty('color');
     td.style.fontWeight = '700';
     if (input) {
         input.style.setProperty('background', bg, 'important');
