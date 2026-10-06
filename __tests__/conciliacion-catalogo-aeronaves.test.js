@@ -160,6 +160,27 @@ describe('en la tabla de Conciliación', () => {
       expect(win.__aero.nombre('74Y')).toBe('B747-400F');
     });
 
+    test('los Embraer E2 que manda el itinerario (295, 290) se reconocen', () => {
+      // 295 = E195-E2 e 290 = E190-E2 (IATA); ICAO E295 / E290 (Doc 8643).
+      // Antes no estaban en el catálogo y la celda mostraba "295" sin nombre.
+      expect(win.__aero.nombre('295')).toBe('E195-E2');
+      expect(win.__aero.nombre('290')).toBe('E190-E2');
+      expect(win.__aero.resolver('E295')).toEqual({ code: '295', name: 'E195-E2' });
+      expect(win.__aero.vista('295')).toMatchObject({ text: 'E195-E2', sinCatalogo: false });
+    });
+
+    test('un valor con dos equipos muestra ambos modelos y queda marcado', () => {
+      const doble = win.__aero.vista('295/E95');
+      expect(doble.text).toBe('E195-E2 / ERJ-195');
+      expect(doble.sinCatalogo).toBe(true);
+      expect(doble.title).toMatch(/varios modelos/);
+      expect(win.__aero.vista('E95/295').text).toBe('ERJ-195 / E195-E2');
+      // Si las dos partes son el mismo modelo, no hay duda que marcar.
+      expect(win.__aero.vista('295/E295')).toMatchObject({ text: 'E195-E2', sinCatalogo: false });
+      // Si una parte no existe, se ve tal cual.
+      expect(win.__aero.vista('295/XYZ')).toMatchObject({ text: '295/XYZ', sinCatalogo: true });
+    });
+
     test('un ICAO inequívoco se traduce; uno que cubre varias variantes no', () => {
       expect(win.__aero.nombre('B38M')).toBe('B737 MAX 8');
       expect(win.__aero.nombre('A21N')).toBe('A321neo');

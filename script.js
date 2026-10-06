@@ -26498,6 +26498,18 @@ function _conciAeronaveDisplay(raw) {
     if (name) return { text: name, title: name.toUpperCase() !== code ? valor : '', sinCatalogo: false };
     // Sin catálogo cargado no hay contra qué comparar: no se marca nada.
     if (!_conciAircraftTypeOptions.length) return { text: valor, title: '', sinCatalogo: false };
+    // El itinerario a veces trae dos equipos ("295/E95", "295/E90"): se ven
+    // los dos modelos, pero sigue marcado porque no dice cuál voló.
+    const partes = code.split('/').map(p => p.trim()).filter(Boolean);
+    if (partes.length > 1 && partes.every(p => _conciAircraftTypeByCode.has(p))) {
+        const nombres = partes.map(p => _conciAircraftTypeByCode.get(p));
+        if (new Set(nombres).size === 1) return { text: nombres[0], title: valor, sinCatalogo: false };
+        return {
+            text: nombres.join(' / '),
+            title: `"${valor}" trae varios modelos (${partes.map((p, i) => `${nombres[i]} [${p}]`).join(', ')}); no se asigna uno automáticamente.`,
+            sinCatalogo: true,
+        };
+    }
     const ambiguo = _conciAircraftIcaoAmbiguous.get(code);
     const title = ambiguo
         ? `"${valor}" corresponde a varios modelos del catálogo (${ambiguo.map(o => `${o.name} [${o.code}]`).join(', ')}); no se asigna uno automáticamente.`

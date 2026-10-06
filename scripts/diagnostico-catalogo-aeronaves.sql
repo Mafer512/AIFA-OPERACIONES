@@ -11,7 +11,7 @@
 -- de correr el resto.
 --
 -- El catálogo de modelos vive en data/master/aircraft type.csv; las consultas
--- 3, 8 y 9 lo traen embebido (versión corregida del 2026-10-06, 100 filas). Si el
+-- 3, 8 y 9 lo traen embebido (versión corregida del 2026-10-06, 102 filas con los E2). Si el
 -- CSV cambia, regenerar esa lista.
 -- Las consultas 7 y 8 requieren la migración 058 aplicada (COMMIT).
 --
@@ -125,7 +125,7 @@ WITH catalogo(iata, icao, nombre) AS (
         ('313', 'A310', 'A310-300'), ('F20', 'FA20', 'Falcon 20'), ('ANF', 'AN12', 'Antonov An-12'),
         ('76X', 'B762', 'B767-200 Freighter'), ('32A', 'A320', 'Airbus A320-200 Ceo'), ('M83', 'MD83', 'McDonnell Douglas 83'),
         ('7S8', 'B738', 'Boeing 737-800 (Scimitar wl)'), ('76Y', 'B763', 'B767-300F'), ('M11', 'MD11', 'McDonnell Douglas MD-11'),
-        ('32N', 'A20N', 'A320neo')
+        ('32N', 'A20N', 'A320neo'), ('290', 'E290', 'E190-E2'), ('295', 'E295', 'E195-E2')
 ),
 icao AS (
     SELECT icao, min(iata) AS iata, count(DISTINCT iata) AS variantes
@@ -283,7 +283,7 @@ WITH catalogo(iata, icao) AS (
         ('319', 'A319'), ('742', 'B742'), ('32Q', 'A21N'), ('743', 'B743'), ('321', 'A321'), ('77X', 'B77L'),
         ('318', 'A318'), ('SW3', NULL::text), ('312', 'A310'), ('320', 'A320'), ('EM2', 'E120'), ('310', 'A310'),
         ('313', 'A310'), ('F20', 'FA20'), ('ANF', 'AN12'), ('76X', 'B762'), ('32A', 'A320'), ('M83', 'MD83'),
-        ('7S8', 'B738'), ('76Y', 'B763'), ('M11', 'MD11'), ('32N', 'A20N')
+        ('7S8', 'B738'), ('76Y', 'B763'), ('M11', 'MD11'), ('32N', 'A20N'), ('290', 'E290'), ('295', 'E295')
 )
 SELECT m."AERONAVE", count(*) AS registros,
        count(DISTINCT m."MATRÍCULA") AS matriculas,
@@ -335,7 +335,7 @@ WITH catalogo(iata, icao, nombre) AS (
         ('313', 'A310', 'A310-300'), ('F20', 'FA20', 'Falcon 20'), ('ANF', 'AN12', 'Antonov An-12'),
         ('76X', 'B762', 'B767-200 Freighter'), ('32A', 'A320', 'Airbus A320-200 Ceo'), ('M83', 'MD83', 'McDonnell Douglas 83'),
         ('7S8', 'B738', 'Boeing 737-800 (Scimitar wl)'), ('76Y', 'B763', 'B767-300F'), ('M11', 'MD11', 'McDonnell Douglas MD-11'),
-        ('32N', 'A20N', 'A320neo')
+        ('32N', 'A20N', 'A320neo'), ('290', 'E290', 'E190-E2'), ('295', 'E295', 'E195-E2')
 ),
 usados AS (
     -- Sin NULL: un NULL dentro de NOT IN dejaría la consulta sin filas.

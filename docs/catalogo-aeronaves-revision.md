@@ -127,7 +127,7 @@ Límites del análisis:
 | `DC9,DC9,McDonnell-Douglas DC-9-33F` | ICAO `DC93` | Designador inexistente | Doc 8643: DC93 = DC-9-30 (la fila es un -33F) | Confirmado |
 | `SW3,LT2,Swearingen Aircraft` | ICAO vacío | Designador inexistente | LT2 no está en Doc 8643; no se pone otro sin saber qué representa SW3 | Confirmado (sólo se quita) |
 
-Quedan 100 modelos.
+Quedan 100 modelos (102 con los Embraer E2 de la sección 5c).
 
 ### `data/master/aircraft.csv`
 
@@ -210,6 +210,39 @@ Total: 431 registros con equivalencia confirmada (182 con variante IATA exacta y
 `A321`, `E-195` y `E-190`, que no se pueden asignar por el valor solo. Hay que
 resolverlos por matrícula una vez que el catálogo de matrículas sea confiable.
 
+## 5c. Embraer E2 de Mexicana ("295" en Conciliación)
+
+Corrección del 6 de octubre. En Conciliación, los vuelos de Mexicana mostraban
+AERONAVE "295", "295/E90", "295/E95" o "E95/295" sin nombre. No era un error de
+carga:
+
+- **295 es el código IATA del Embraer E195-E2 y 290 el del E190-E2.** En ICAO
+  Doc 8643 son E295 (ERJ-190-400 / E195-E2) y E290 (ERJ-190-300 / E190-E2).
+  El catálogo de tipos no tenía los E2, y por eso se veía el código crudo.
+- **Los Embraer de Mexicana son E2.**
+  - XA-MXA es un E195-E2 de 132 asientos: lo recibió en julio de 2025 y voló
+    por primera vez del AIFA a Tulum el 25-ago-2025 (prensa: Por Esto,
+    Aviacionline).
+  - El catálogo de matrículas ya los tenía como E2: MXA–MXD "E-195/E2", MXE
+    "ERJ 190-400" y MXF "ERJ 190-300", con pesos de E2 (MTOW 62.5 t y 56.4 t;
+    un E195 de primera generación pesa unas 52 t).
+
+Cambios:
+
+- `aircraft type.csv`: nuevas entradas `290,E290,E190-E2` y `295,E295,E195-E2`
+  (grupo C, como los demás E-Jets; sin especificaciones inventadas).
+- `aircraft.csv`:
+  - XA-MXA, MXB y MXC pasan de E95 (E195 de primera generación, 124 asientos)
+    a 295, con 132 asientos y MTOW 62,500.
+  - Se agregan XA-MXD y MXE (295) y XA-MXF (290, 108 asientos), con los datos
+    del catálogo de matrículas.
+- Pantalla: un valor con dos equipos ("295/E95") muestra los dos nombres
+  ("E195-E2 / ERJ-195") y queda marcado para revisión, porque el itinerario no
+  dice cuál voló.
+
+No se mapeó 295 al E195 de primera generación (E95): son variantes distintas,
+con distinta capacidad y peso.
+
 ## 5b. Datos reales: `maestra_manifiestos` (2022)
 
 Revisión hecha el 6 de octubre en la base de producción. La tabla tiene 9,633
@@ -287,7 +320,7 @@ N:
   - XA-VSI: A321 contra 32N.
   - XA-VUG, XA-VXT, XA-VXU: A321-271NX contra 321.
   - XA-VUP y CC-DBP: A320neo contra 320.
-  - XA-MXA, XA-MXB, XA-MXC: E-195/E2 contra E95.
+  - ~~XA-MXA, XA-MXB, XA-MXC: E-195/E2 contra E95.~~ Resuelto (sección 5c).
 
 **`matriculas_manifiestos`.** Según la carga inicial; la tabla viva pudo
 cambiar, y la consulta 10 la revisa.

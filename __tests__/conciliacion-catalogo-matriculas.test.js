@@ -64,6 +64,17 @@ describe('archivos de matrículas', () => {
     expect(tipo.N546VL).toBe('32N');      // A320-271N
   });
 
+  test('los Embraer de Mexicana son E2, como dice su catálogo de matrículas', () => {
+    // XA-MXA: E195-E2 de 132 asientos (prensa, ago-2025); el catálogo de
+    // matrículas tiene MXA-MXE como E195-E2 y MXF como ERJ 190-300 (E190-E2).
+    const fila = Object.fromEntries(aircraft.map((c) => [c[0], c]));
+    ['XAMXA', 'XAMXB', 'XAMXC', 'XAMXD', 'XAMXE'].forEach((m) => {
+      expect(fila[m][1]).toBe('295');
+      expect(fila[m][3]).toBe('132');
+    });
+    expect(fila.XAMXF[1]).toBe('290');
+  });
+
   test('la aerolínea corresponde al código del operador', () => {
     const fila = Object.fromEntries(aircraft.map((c) => [c[0], c]));
     expect(fila.HI1098[7]).toBe('Arajet');
