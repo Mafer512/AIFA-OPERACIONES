@@ -18548,9 +18548,9 @@ function _conciNormalizeMatricula(value) {
 function _conciFormatMatriculaForCatalog(value) {
     // Conserva la forma escrita por el usuario en el catálogo (incluido el
     // guion), mientras _conciNormalizeMatricula se usa únicamente como llave.
+    // Una matrícula nunca lleva espacios: "HP1536 CMP" entraba así al catálogo.
     return String(value || '')
-        .replace(/\u00a0/g, ' ')
-        .trim()
+        .replace(/\s+/g, '')
         .toUpperCase();
 }
 
@@ -18590,12 +18590,18 @@ async function _ensureConciMatriculaCatalog() {
     try {
         const sb = window.supabaseClient || (window.ensureSupabaseClient && await window.ensureSupabaseClient());
         if (!sb) throw new Error('Cliente Supabase no disponible.');
+        // Si una matrícula quedó repetida con otra escritura (XA-VBZ / XAVBZ),
+        // manda la editada más recientemente. Antes no había orden y la que se
+        // usaba —aerolínea y capacidad para el sobrecupo— cambiaba al azar.
         const { data, error } = await sb.from('matriculas_manifiestos')
             .select('matricula, aerolinea, estatus, pasajeros')
+            .order('updated_at', { ascending: false })
             .limit(5000);
         if (error) throw error;
+        const repetidas = [];
         (data || []).forEach(item => {
             const key = _conciNormalizeMatricula(item.matricula);
+            if (key && _conciMatriculaCatalogMap.has(key)) { repetidas.push(item.matricula); return; }
             if (key) _conciMatriculaCatalogMap.set(key, {
                 matricula: key,
                 aerolinea: String(item.aerolinea || '').trim(),
@@ -18603,6 +18609,9 @@ async function _ensureConciMatriculaCatalog() {
                 pasajeros: item.pasajeros === null || item.pasajeros === undefined || item.pasajeros === '' ? null : Number(item.pasajeros),
             });
         });
+        if (repetidas.length) {
+            console.warn(`[Conciliación] El catálogo de matrículas tiene ${repetidas.length} registro(s) repetido(s) con otra escritura; se usa el editado más recientemente:`, repetidas);
+        }
     } catch (error) {
         console.warn('[Conciliación] No se pudo cargar el catálogo de matrículas:', error);
     } finally {
@@ -19139,29 +19148,67 @@ async function _ensureIataCityMap() {
 // y para poblar el combo del editor de esa columna.
 // Se recarga desde el servidor en cada refresco de la tabla (sin caché de navegador ni
 // de sesión) para que los cambios al CSV se reflejen de inmediato.
-let _conciAircraftTypeByCode = new Map();
+//
+// El estándar del catálogo es el código IATA (lo que trae el itinerario y lo que se
+// guarda). Un código ICAO agrupa varias variantes IATA (B738 = 737-800, 737-800
+// winglets, 737-800 Freighter…), así que sólo se traduce cuando en el catálogo le
+// corresponde un único código IATA. Antes ganaba la última fila del CSV: "B738" se
+// mostraba como "737-800 (Scimitar wl)" y "A320" como "A320-200 Ceo" aunque el avión
+// fuera un neo, afirmando una variante que el dato no tiene.
+let _conciAircraftTypeByCode = new Map();      // IATA -> nombre; ICAO sólo si es inequívoco
 let _conciAircraftTypeOptions = []; // [{ code, name }] únicos por código IATA, ordenados por nombre
+let _conciAircraftIcaoToIata = new Map();      // ICAO inequívoco -> su único código IATA
+let _conciAircraftIcaoAmbiguous = new Map();   // ICAO -> [{ code, name }] cuando cubre varios IATA
+
+function _conciBuildAircraftTypeCatalog(csvText) {
+    const lines = String(csvText || '').split(/\r?\n/).filter(l => l.trim());
+    const byIata = new Map();
+    const icaoCodes = new Map(); // ICAO -> códigos IATA distintos, en orden del CSV
+    for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(',');
+        if (parts.length < 3) continue;
+        const iata = (parts[0] || '').trim().toUpperCase();
+        const icao = (parts[1] || '').trim().toUpperCase();
+        const name = (parts[2] || '').trim().replace(/^"|"$/g, '');
+        if (!name || !iata) continue;
+        // Un código IATA repetido es un error del CSV: se queda la primera fila.
+        if (byIata.has(iata)) {
+            console.warn(`[Conciliación] aircraft type.csv repite el código ${iata}; se usa "${byIata.get(iata)}".`);
+        } else {
+            byIata.set(iata, name);
+        }
+        if (icao) {
+            const codes = icaoCodes.get(icao) || [];
+            if (!codes.includes(iata)) codes.push(iata);
+            icaoCodes.set(icao, codes);
+        }
+    }
+    const byCode = new Map(byIata);
+    const icaoToIata = new Map();
+    const icaoAmbiguous = new Map();
+    icaoCodes.forEach((codes, icao) => {
+        if (byIata.has(icao)) return; // si el mismo texto es un código IATA, manda el IATA
+        if (codes.length === 1) {
+            byCode.set(icao, byIata.get(codes[0]));
+            icaoToIata.set(icao, codes[0]);
+        } else {
+            icaoAmbiguous.set(icao, codes.map(code => ({ code, name: byIata.get(code) })));
+        }
+    });
+    const options = Array.from(byIata, ([code, name]) => ({ code, name }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+    return { byCode, options, icaoToIata, icaoAmbiguous };
+}
 
 async function _ensureConciAircraftTypeMap() {
     try {
         const res = await fetch(`data/master/aircraft type.csv?t=${Date.now()}`, { cache: 'no-store' });
         const text = await res.text();
-        const lines = text.split(/\r?\n/).filter(l => l.trim());
-        const byCode = new Map();
-        const options = [];
-        for (let i = 1; i < lines.length; i++) {
-            const parts = lines[i].split(',');
-            if (parts.length < 3) continue;
-            const iata = (parts[0] || '').trim().toUpperCase();
-            const icao = (parts[1] || '').trim().toUpperCase();
-            const name = (parts[2] || '').trim().replace(/^"|"$/g, '');
-            if (!name) continue;
-            if (iata) { byCode.set(iata, name); options.push({ code: iata, name }); }
-            if (icao) byCode.set(icao, name);
-        }
-        options.sort((a, b) => a.name.localeCompare(b.name, 'es'));
-        _conciAircraftTypeByCode = byCode;
-        _conciAircraftTypeOptions = options;
+        const catalogo = _conciBuildAircraftTypeCatalog(text);
+        _conciAircraftTypeByCode = catalogo.byCode;
+        _conciAircraftTypeOptions = catalogo.options;
+        _conciAircraftIcaoToIata = catalogo.icaoToIata;
+        _conciAircraftIcaoAmbiguous = catalogo.icaoAmbiguous;
     } catch (e) {
         console.warn('[Conciliación] No se pudo cargar aircraft type.csv', e);
     }
@@ -24407,10 +24454,8 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                     // que abrir la celda no pueda repintarla de otro color.
                     _conciApplyAirlineCellPreview(td);
                 } else if (meta.isAeronave) {
-                    const code = rawStr.toUpperCase();
-                    const name = code ? _conciAircraftTypeByCode.get(code) : '';
-                    td.textContent = name || rawStr;
-                    if (name && name.toUpperCase() !== rawStr.toUpperCase()) td.title = rawStr;
+                    td.textContent = _conciAeronaveDisplay(rawStr).text;
+                    _conciMarcarAeronave(td, rawStr);
                 } else if (meta.isRouting) {
                     const tipo = _tipoCol ? String(row[_tipoCol] || '') : '';
                     const isArr = /lleg|arr/i.test(tipo);
@@ -24785,6 +24830,13 @@ function _conciEnsureEditStyles() {
         }
         #table-conci-manifiestos td[data-col].conci-cell-invalid-code {
             box-shadow: inset 0 0 0 2px #dc3545;
+        }
+        /* AERONAVE fuera del catálogo (o ambigua): se ve el dato tal cual,
+           subrayado en ámbar para que se revise; el título explica por qué. */
+        #table-conci-manifiestos td[data-col].conci-aeronave-sin-catalogo {
+            text-decoration: underline dotted #d97706;
+            text-underline-offset: 3px;
+            cursor: help;
         }
 
         /* Reparto de minutos entre los códigos de demora. Se pinta entre el
@@ -26401,24 +26453,64 @@ function _conciAeronaveHighlight(text, query) {
     return `${_conciCatalogEsc(before)}<mark>${_conciCatalogEsc(match)}</mark>${_conciCatalogEsc(after)}`;
 }
 
+// Un código del catálogo pasado a { code, name } con code siempre en IATA: un ICAO
+// inequívoco se traduce a su IATA; uno que cubre varios modelos no se resuelve.
+function _conciAeronaveCatalogCode(codeRaw) {
+    const c = String(codeRaw || '').trim().toUpperCase();
+    if (!c || !_conciAircraftTypeByCode.has(c)) return null;
+    const iata = _conciAircraftIcaoToIata.get(c) || c;
+    return { code: iata, name: _conciAircraftTypeByCode.get(iata) || _conciAircraftTypeByCode.get(c) };
+}
+
 // Resuelve lo escrito/elegido en el editor de AERONAVE a { code, name }.
 // Acepta la etiqueta completa "Nombre (CODIGO)" (lo que deja la sugerencia al dar
-// clic), un código suelto (IATA o ICAO) o un nombre exacto.
+// clic), un código suelto (IATA o ICAO) o un nombre exacto. Lo que corresponde a
+// varios modelos (un ICAO como B738, o un nombre repetido en el catálogo) regresa
+// sin nombre y con `ambiguous`, para que el capturista elija uno de la lista.
 function _conciResolveAeronaveInput(raw) {
     const text = String(raw || '').trim();
     if (!text) return { code: '', name: '' };
     const m = text.match(/\(([A-Za-z0-9]{2,4})\)\s*$/);
     if (m) {
-        const c = m[1].toUpperCase();
-        const n = _conciAircraftTypeByCode.get(c);
-        if (n) return { code: c, name: n };
+        const porEtiqueta = _conciAeronaveCatalogCode(m[1]);
+        if (porEtiqueta) return porEtiqueta;
     }
+    const porCodigo = _conciAeronaveCatalogCode(text);
+    if (porCodigo) return porCodigo;
     const upper = text.toUpperCase();
-    if (_conciAircraftTypeByCode.has(upper)) return { code: upper, name: _conciAircraftTypeByCode.get(upper) };
-    const byName = _conciAircraftTypeOptions.find(o => o.name.toLowerCase() === text.toLowerCase());
-    if (byName) return { code: byName.code, name: byName.name };
+    const icaoAmbiguo = _conciAircraftIcaoAmbiguous.get(upper);
+    if (icaoAmbiguo) return { code: text, name: '', ambiguous: icaoAmbiguo };
+    const byName = _conciAircraftTypeOptions.filter(o => o.name.toLowerCase() === text.toLowerCase());
+    if (byName.length === 1) return { code: byName[0].code, name: byName[0].name };
+    if (byName.length > 1) return { code: text, name: '', ambiguous: byName };
     // Sin coincidencia: se conserva tal cual lo escribió (no se pierde información).
     return { code: text, name: '' };
+}
+
+// Cómo se ve una celda AERONAVE. El dato guardado nunca se reemplaza: si no es un
+// código del catálogo (texto libre del Excel o del portal, un ICAO ambiguo, un
+// modelo mal escrito) se muestra tal cual y se marca para revisión.
+function _conciAeronaveDisplay(raw) {
+    const valor = String(raw ?? '').trim();
+    if (!valor) return { text: '', title: '', sinCatalogo: false };
+    const code = valor.toUpperCase();
+    const name = _conciAircraftTypeByCode.get(code);
+    if (name) return { text: name, title: name.toUpperCase() !== code ? valor : '', sinCatalogo: false };
+    // Sin catálogo cargado no hay contra qué comparar: no se marca nada.
+    if (!_conciAircraftTypeOptions.length) return { text: valor, title: '', sinCatalogo: false };
+    const ambiguo = _conciAircraftIcaoAmbiguous.get(code);
+    const title = ambiguo
+        ? `"${valor}" corresponde a varios modelos del catálogo (${ambiguo.map(o => `${o.name} [${o.code}]`).join(', ')}); no se asigna uno automáticamente.`
+        : `"${valor}" no está en el catálogo de aeronaves. Se conserva tal como se capturó; revísalo.`;
+    return { text: valor, title, sinCatalogo: true };
+}
+
+function _conciMarcarAeronave(td, raw) {
+    if (!td) return;
+    const vista = _conciAeronaveDisplay(raw);
+    td.classList.toggle('conci-aeronave-sin-catalogo', vista.sinCatalogo);
+    if (vista.title) td.title = vista.title;
+    else td.removeAttribute('title');
 }
 
 // Editor de la columna AERONAVE: campo de texto con un panel de sugerencias propio
@@ -26437,6 +26529,7 @@ function _conciActivateAeronaveEditor(td, currentRaw) {
     const code = String(currentRaw || '').trim().toUpperCase();
     const currentName = code ? _conciAircraftTypeByCode.get(code) : '';
     input.value = currentName ? `${currentName} (${code})` : code;
+    const initialValue = input.value;
 
     td.classList.add('conci-cell-active');
     td.textContent = '';
@@ -26516,11 +26609,21 @@ function _conciActivateAeronaveEditor(td, currentRaw) {
         closed = true;
         td._conciCloseEditor = null;
         closeSuggest();
-        const keepCurrent = () => _conciCommitCellRaw(td, code, move, currentName || code);
+        // Se devuelve el valor tal como estaba guardado (no en mayúsculas ni
+        // traducido): pasar por la celda no debe cambiar el dato.
+        const original = String(currentRaw ?? '').trim();
+        const keepCurrent = () => {
+            _conciCommitCellRaw(td, original, move, _conciAeronaveDisplay(original).text);
+            _conciMarcarAeronave(td, original);
+        };
         if (!accept) { keepCurrent(); return; }
 
         const typed = _conciNormalizeEditableCellText(input.value);
-        if (!typed) { _conciCommitCellRaw(td, '', move, ''); return; }  // vaciar sigue permitido
+        if (!typed) { _conciCommitCellRaw(td, '', move, ''); _conciMarcarAeronave(td, ''); return; }  // vaciar sigue permitido
+        // Sin tocar el texto no hay nada que resolver. Un valor heredado como
+        // "A321" (que también es un ICAO) se convertiría en "321" con sólo
+        // abrir y cerrar la celda, eligiendo una variante que nadie confirmó.
+        if (input.value === initialValue) { keepCurrent(); return; }
 
         const resolved = _conciResolveAeronaveInput(typed);
         // Sin catálogo cargado no se bloquea la captura; y un valor heredado que
@@ -26528,18 +26631,22 @@ function _conciActivateAeronaveEditor(td, currentRaw) {
         // para no interrumpir la navegación por filas ya existentes.
         const unchanged = resolved.code === code;
         if (!resolved.name && _conciAircraftTypeOptions.length && !unchanged) {
-            // Modelo inexistente: se descarta y la celda vuelve a su valor previo.
+            // Modelo inexistente o ambiguo: se descarta y la celda vuelve a su valor previo.
             keepCurrent();
             td.classList.add('conci-cell-invalid-code');
             setTimeout(() => td.classList.remove('conci-cell-invalid-code'), 1500);
             if (typeof showNotification === 'function') {
-                showNotification(`"${typed}" no existe en el catálogo de aeronaves.`, 'warning');
+                const aviso = resolved.ambiguous
+                    ? `"${typed}" corresponde a varios modelos (${resolved.ambiguous.map(o => `${o.name} [${o.code}]`).join(', ')}). Elige uno de la lista.`
+                    : `"${typed}" no existe en el catálogo de aeronaves.`;
+                showNotification(aviso, 'warning');
             }
             return;
         }
         const finalCode = resolved.code || code;
         const finalName = resolved.name || (finalCode ? (_conciAircraftTypeByCode.get(finalCode) || finalCode) : '');
         _conciCommitCellRaw(td, finalCode, move, finalName);
+        _conciMarcarAeronave(td, finalCode);
     };
     td._conciCloseEditor = closeEditor;
 
@@ -27753,11 +27860,15 @@ function _conciAplicarCambioRemoto(rowId, col, valor, usuario) {
         const fila = _conciReadLiveTableRow(td.closest('tr'));
         visible = _conciFormatDisplayValue(col, texto, fila, _conciEditFechaCol, _conciEditFallbackYear) || texto;
     } catch (_) { /* si el formateador no aplica, se muestra el valor crudo */ }
+    // AERONAVE se ve igual que al pintar la tabla: nombre del modelo, no el código.
+    const esAeronave = _conciIsAeronaveColumn(col);
+    if (esAeronave) visible = _conciAeronaveDisplay(texto).text;
 
     // Se conserva la etiqueta de autoria si ya estaba puesta.
     const etiqueta = td.querySelector('.conci-estela-autor');
     td.textContent = visible;
     if (etiqueta) td.appendChild(etiqueta);
+    if (esAeronave) _conciMarcarAeronave(td, texto);
 
     const tr = td.closest('tr');
     if (tr) {
@@ -31368,6 +31479,17 @@ async function _conciSaveScopedCatalog(event, kind) {
         if (!id && !airline) payload.fila_origen = Math.max(1, ..._conciScopedCatalogRows.map(row => Number(row.fila_origen) || 1)) + 1;
         if (airline && !payload.name) throw new Error('El nombre es obligatorio.');
         if (!airline && !payload.matricula) throw new Error('La matrícula es obligatoria.');
+        if (!airline) {
+            // La base sólo impide repetir la matrícula escrita igual; XA-VBZ y
+            // XAVBZ entraban como dos aeronaves y la tabla usaba cualquiera.
+            const llave = _conciNormalizeMatricula(payload.matricula);
+            const repetida = _conciScopedCatalogRows.find(row =>
+                String(row.id) !== String(id) && _conciNormalizeMatricula(row.matricula) === llave);
+            if (repetida) {
+                throw new Error(`la matrícula ${payload.matricula} ya está en el catálogo como ${repetida.matricula}`
+                    + `${repetida.aerolinea ? ` (${repetida.aerolinea})` : ''}. Edita ese registro.`);
+            }
+        }
         const result = id ? await sb.from(table).update(payload).eq('id', id) : await sb.from(table).insert(payload);
         if (result.error) throw result.error;
         if (airline) { _conciAirlineCatalogLoaded = false; _conciRenderCache.clear(); window.dispatchEvent(new CustomEvent('airline-catalog-updated', { detail: { scope: 'conciliacion' } })); }

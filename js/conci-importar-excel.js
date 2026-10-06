@@ -629,9 +629,31 @@
         if (caja) caja.innerHTML = `<div class="alert alert-${tono} py-2 px-3 mb-0" style="font-size:.8rem">${html}</div>`;
     }
 
+    /* AERONAVE que el archivo trae y el catálogo no reconoce (texto libre como
+       "A-320", un ICAO que cubre varios modelos, un modelo mal escrito). Se
+       importan tal cual —no se pierde el dato— pero se avisan antes de aplicar,
+       y en la tabla quedan marcadas para revisión. Sin el catálogo cargado no
+       hay contra qué comparar y no se avisa nada. */
+    function aeronavesFueraDeCatalogo(plan) {
+        const vista = window._conciAeronaveDisplay;
+        if (typeof vista !== 'function') return [];
+        const cuenta = new Map();
+        [...(plan?.insertar || []), ...(plan?.actualizar || [])].forEach(({ payload }) => {
+            const columna = Object.keys(payload || {}).find(c => /^aeronave$/i.test(String(c).trim()));
+            const valor = columna ? texto(payload[columna]) : '';
+            if (!valor || !vista(valor).sinCatalogo) return;
+            cuenta.set(valor, (cuenta.get(valor) || 0) + 1);
+        });
+        return [...cuenta].map(([valor, filas]) => ({ valor, filas }))
+            .sort((a, b) => b.filas - a.filas || a.valor.localeCompare(b.valor, 'es'));
+    }
+
     function pintarResumen(plan) {
         const caja = $('conci-import-resumen');
         if (!caja) return;
+        const sinCatalogo = aeronavesFueraDeCatalogo(plan);
+        const avisoAeronaves = sinCatalogo.length ? `<details class="mt-2"><summary class="text-warning" style="cursor:pointer">AERONAVE fuera del catálogo: se importa tal cual y queda marcada para revisión (${sinCatalogo.length})</summary>
+                <ul class="mb-0 mt-1" style="font-size:.75rem">${sinCatalogo.slice(0, 20).map(a => `<li>"${esc(a.valor)}" · ${a.filas} fila${a.filas === 1 ? '' : 's'}</li>`).join('')}${sinCatalogo.length > 20 ? `<li>… y ${sinCatalogo.length - 20} más</li>` : ''}</ul></details>` : '';
         const lista = (items, titulo, tono) => {
             if (!items.length) return '';
             const muestra = items.slice(0, 12).map(o => `<li>Renglón ${o.renglon}: ${esc(o.motivo || '')}</li>`).join('');
@@ -651,7 +673,8 @@
                 ${conflictos.length ? `<span class="badge bg-warning text-dark">${conflictos.length} con diferencias</span>` : ''}
             </div>
             ${lista(plan.omitidas, 'Filas que no se tocarán', 'secondary')}
-            ${lista(conflictos, 'Diferencias contra lo ya capturado (no se sobrescriben)', 'warning')}`;
+            ${lista(conflictos, 'Diferencias contra lo ya capturado (no se sobrescriben)', 'warning')}
+            ${avisoAeronaves}`;
         caja.classList.remove('d-none');
     }
 
@@ -826,7 +849,7 @@
         esColumnaDelSistema, direccionDeManifiesto, fechaIso, numeroDeVuelo,
         llaveDeFila, clasificaFila, combinar, paraInsertar, planificar, diaDesplazado,
         puntuaEncabezado, encabezadoDeMatriz, elegirHoja, leerLibro, valorDeCelda, formatoDeFecha,
-        huella, emparejar,
+        huella, emparejar, aeronavesFueraDeCatalogo,
         leerArchivo, leerExistentes, aplicar, abrir, enlazar
     };
 })();

@@ -58,6 +58,10 @@ const api = new Function('document', 'recalculadas', 'enviados', `
   function _conciReadLiveTableRow() { return {}; }
   function _conciRefreshCalculatedCellsForRow(tr) { recalculadas.push(tr); }
   function _conciRefreshMatriculaValidationForRow() {}
+  // AERONAVE se pinta con el catálogo de modelos (otra prueba lo cubre).
+  function _conciIsAeronaveColumn(c) { return /^aeronave$/i.test(String(c).trim()); }
+  function _conciAeronaveDisplay(v) { return { text: String(v ?? '') }; }
+  function _conciMarcarAeronave() {}
   function _conciRenderBarraPresencia() {}
   function _conciColorForUser() { return '#1976d2'; }
   let _conciMiFocoActual = { rowId: '', col: '' };
