@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20260923-barra-8">
+    <link rel="stylesheet" href="style.css?v=20261001-falta-recepcion">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -1701,6 +1701,11 @@ FF
                         <div class="d-flex align-items-center justify-content-between gap-3 header-title-row">
                             <img src="images/nlu-operacion.png" alt="Logo de Operación NLU" class="header-logo" loading="eager" decoding="async" />
                             <h1 class="main-title"><span class="main-title-app">AEROPUERTO INTERNACIONAL FELIPE ÁNGELES</span><span class="main-title-est">Consulta y analiza la operación del aeropuerto en tiempo real</span></h1>
+                            <!-- Botón Inicio: dentro de un módulo regresa a la pantalla de tarjetas
+                                 (js/navigation.js). Va centrado entre el título y el botón de usuario. -->
+                            <button type="button" id="navdeck-back" class="navdeck-back-btn" title="Volver al inicio" aria-label="Volver al inicio">
+                                <span class="navdeck-back-ico" aria-hidden="true"><i class="fas fa-house"></i></span><span class="navdeck-back-texto">Inicio</span>
+                            </button>
                             <!-- Botón de usuario (pantalla de inicio): icono, nombre, rol, dirección y
                                  correo; despliega las opciones de la sesión (js/inicio-usuario.js). -->
                             <div class="hdr-user" id="hdr-user">
@@ -1821,6 +1826,8 @@ FF
                 <span class="ag-tb-hint" aria-hidden="true"><i class="fas fa-calendar-alt"></i> Ver agenda</span>
             </div>
             <div class="ag-tb-actions ms-auto">
+                <!-- Fecha completa de hoy ("Jueves, 24 de septiembre de 2026"); la pinta el script de la barra. -->
+                <span class="ag-tb-fecha"><i class="fas fa-calendar" aria-hidden="true"></i><span id="ag-tb-fecha"></span></span>
                 <button id="btn-mapa-interactivo" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1" onclick="toggleMapaInteractivo()" title="Abrir Mapa Interactivo del Aeropuerto">
                     <i class="fas fa-map-marked-alt"></i>
                     <span class="d-none d-md-inline">Mapa Interactivo</span>
@@ -22953,8 +22960,8 @@ FF
                                         <li class="nav-item ms-auto d-flex align-items-center conci-tabs-menu-item" role="presentation">
                                             <button class="btn btn-sm btn-primary conci-toolbar-menu-btn" id="btn-conci-main-menu" type="button"
                                                 onclick="window.conciReturnToMainMenu &amp;&amp; window.conciReturnToMainMenu()"
-                                                title="Volver al menú principal" aria-label="Volver al menú principal">
-                                                <i class="fas fa-grip me-1"></i>Menú
+                                                title="Volver al inicio" aria-label="Volver al inicio">
+                                                <i class="fas fa-house me-1"></i>Inicio
                                             </button>
                                         </li>
                                     </ul>
@@ -23572,6 +23579,10 @@ FF
                                                         <button class="btn btn-sm btn-outline-primary" id="btn-conci-matricula-catalog" title="Administrar catálogo de matrículas">
                                                             <i class="fas fa-id-card me-1"></i>Catálogo de matrículas
                                                         </button>
+                                                        <!-- Importar Excel (js/conci-importar-excel.js): solo editor o admin; la barra lo muestra. -->
+                                                        <button class="btn btn-sm btn-outline-success d-none" type="button" id="btn-conci-importar-excel" title="Importar Excel: manifiestos desde un .xlsx, .xls o .csv sin pisar lo ya capturado" aria-label="Importar Excel">
+                                                            <i class="fas fa-file-import" aria-hidden="true"></i>
+                                                        </button>
                                                         <button class="btn btn-sm btn-outline-secondary d-none" id="btn-conci-historial" title="Ver historial de cambios">
                                                             <i class="fas fa-history me-1"></i>Historial
                                                         </button>
@@ -23708,6 +23719,13 @@ FF
                                                         <button class="btn btn-sm btn-outline-secondary shadow-sm" type="button" id="btn-conci-clear-filters" title="Quitar todos los filtros aplicados a la tabla">
                                                             <i class="fas fa-filter-circle-xmark me-1"></i>Limpiar filtros
                                                         </button>
+                                                        <!-- Mensaje para WhatsApp o Webex (js/conci-mensaje-envio.js). -->
+                                                        <button class="btn btn-sm btn-outline-success shadow-sm" type="button" id="btn-conci-enviar-mensaje"
+                                                            title="Mensaje para WhatsApp o Webex" aria-label="Mensaje para WhatsApp o Webex">
+                                                            <i class="fas fa-paper-plane me-1" aria-hidden="true"></i>SWEAR
+                                                        </button>
+                                                        <!-- Exportar y capturar: van juntos; si no caben en el renglón, bajan en bloque a la derecha. -->
+                                                        <div class="conci-manifest-acciones">
                                                         <div class="dropdown">
                                                             <button class="btn btn-sm btn-outline-success shadow-sm dropdown-toggle" type="button" id="dropdownExportConci" data-bs-toggle="dropdown" aria-expanded="false">
                                                                 <i class="fas fa-file-excel me-1"></i>Exportar Excel
@@ -23720,9 +23738,18 @@ FF
                                                                 <li><a class="dropdown-item" href="#" onclick="window.conciExportExcel &amp;&amp; window.conciExportExcel('carga'); return false;"><i class="fas fa-box-open text-warning me-2"></i>Carga</a></li>
                                                             </ul>
                                                         </div>
-                                                        <button class="btn btn-sm btn-outline-success shadow-sm" type="button" id="btn-conci-export-por-capturista" title="Descarga un Excel con los manifiestos ya capturados, organizados por capturista (una hoja por persona)" onclick="window.conciExportPorCapturista && window.conciExportPorCapturista(); return false;">
-                                                            <i class="fas fa-user-tag me-1"></i>Exportar por capturista
-                                                        </button>
+                                                        <!-- Mismo formato de Exportar Excel › Pasajeros/Carga, con una hoja por capturista. -->
+                                                        <div class="dropdown">
+                                                            <button class="btn btn-sm btn-outline-success shadow-sm dropdown-toggle" type="button" id="btn-conci-export-por-capturista" data-bs-toggle="dropdown" aria-expanded="false" title="Descarga un Excel con los manifiestos ya capturados, organizados por capturista (una hoja por persona)">
+                                                                <i class="fas fa-user-tag me-1"></i>Exportar por capturista
+                                                            </button>
+                                                            <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="btn-conci-export-por-capturista" style="font-size:0.85rem;">
+                                                                <li><h6 class="dropdown-header py-1" style="font-size:0.72rem;line-height:1.25;font-weight:600;">Solo lo capturado, una hoja por capturista<br><span class="fw-normal text-muted">Los filtros de la tabla no se aplican</span></h6></li>
+                                                                <li><hr class="dropdown-divider my-1"></li>
+                                                                <li><a class="dropdown-item" href="#" onclick="window.conciExportPorCapturista &amp;&amp; window.conciExportPorCapturista('pax'); return false;"><i class="fas fa-users text-primary me-2"></i>Pasajeros</a></li>
+                                                                <li><a class="dropdown-item" href="#" onclick="window.conciExportPorCapturista &amp;&amp; window.conciExportPorCapturista('carga'); return false;"><i class="fas fa-box-open text-warning me-2"></i>Carga</a></li>
+                                                            </ul>
+                                                        </div>
                                                         <button class="btn btn-sm btn-outline-success shadow-sm" type="button" id="btn-conci-manifiestos-capturados" title="Consulta los manifiestos capturados en una fecha, agrupados por capturista" onclick="window.conciAbrirManifiestosCapturados && window.conciAbrirManifiestosCapturados(); return false;">
                                                             <i class="fas fa-calendar-check me-1"></i>Manifiestos capturados
                                                         </button>
@@ -23738,6 +23765,7 @@ FF
                                                                 <li><a class="dropdown-item" href="#" onclick="window.openConciDigitalManifest &amp;&amp; window.openConciDigitalManifest('salida-carga', 'Salida — Carga'); return false;"><i class="fas fa-truck-loading text-warning me-2"></i>Salida (Carga)</a></li>
                                                             </ul>
                                                         </div>
+                                                        </div><!-- /conci-manifest-acciones -->
                                                     </div>
                                                 </div>
                                                 <div class="card-body p-0 conci-manifest-data">
@@ -24633,8 +24661,8 @@ FF
                                 <h2 class="section-title mb-0 fs-4 fw-bold text-primary"><i class="fas fa-chart-pie me-2"></i>Reportes</h2>
                             </div>
                             <button class="btn btn-sm btn-primary conci-toolbar-menu-btn" id="btn-conci-reportes-menu" type="button"
-                                title="Volver al menú principal" aria-label="Volver al menú principal">
-                                <i class="fas fa-grip me-1"></i>Menú
+                                title="Volver al inicio" aria-label="Volver al inicio">
+                                <i class="fas fa-house me-1"></i>Inicio
                             </button>
                         </div>
                         <div class="card-body p-0">
@@ -39115,7 +39143,7 @@ FF
 
     <!-- Modular JS (non-invasive): delegates to existing functions in script.js -->
     <script src="js/core.js"></script>
-    <script src="js/navigation.js?v=20260819-salir-al-menu"></script>
+    <script src="js/navigation.js?v=20260925-inicio-encabezado"></script>
     <script src="js/inicio.js"></script>
     <script src="js/itinerario.js?v=4"></script>
     <script src="js/demoras.js"></script>
@@ -39336,7 +39364,7 @@ FF
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
     <script src="js/conci-export-total.js?v=20260925-recepcion" defer></script>
-    <script src="script.js?v=20260922-rango-1" defer></script>
+    <script src="script.js?v=20261002-slot-con-fecha" defer></script>
     <!-- Campos de fecha en dd/mm/aaaa sin importar el idioma del navegador. -->
     <script src="js/fecha-ddmm.js?v=20260912-fecha-1" defer></script>
     <!-- Botón y menú de usuario del encabezado de inicio. -->
@@ -40160,6 +40188,50 @@ FF
         </div>
     </div>
 </div>
+<!-- MODAL: MENSAJE PARA WHATSAPP O WEBEX (js/conci-mensaje-envio.js) — las cifras de los
+     oficios a la Subsecretaría en el texto que se envía a diario, listo para copiar. -->
+<div class="modal fade" id="modalConciMensaje" tabindex="-1" aria-labelledby="modalConciMensajeLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header conci-msg-cabeza">
+                <h5 class="modal-title" id="modalConciMensajeLabel">
+                    <i class="fas fa-paper-plane me-2" aria-hidden="true"></i>Mensaje para WhatsApp o Webex
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="conci-msg-barra">
+                    <label for="conci-msg-fecha-texto">Datos al</label>
+                    <div class="input-group input-group-sm" style="width:auto">
+                        <input type="text" class="form-control form-control-sm conci-fecha-mask" id="conci-msg-fecha-texto" data-conci-fecha-para="conci-msg-fecha"
+                            placeholder="dd/mm/aaaa" inputmode="numeric" maxlength="10" autocomplete="off" style="width:110px"
+                            title="Fecha del cierre (dd/mm/aaaa)" aria-label="Fecha del cierre (dd/mm/aaaa)">
+                        <button class="btn btn-outline-secondary conci-fecha-calendario" type="button" data-conci-fecha-para="conci-msg-fecha"
+                            title="Abrir calendario" aria-label="Abrir calendario de la fecha del cierre" tabindex="-1"><i class="far fa-calendar-alt"></i></button>
+                        <input type="date" id="conci-msg-fecha" class="conci-fecha-iso" tabindex="-1" aria-hidden="true">
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-conci-msg-actualizar" title="Volver a leer los manifiestos para traer lo último capturado">
+                        <i class="fas fa-rotate me-1" aria-hidden="true"></i>Actualizar
+                    </button>
+                    <span class="conci-msg-estado" id="conci-msg-estado" aria-live="polite"></span>
+                </div>
+                <div class="alert alert-warning py-2 px-3 small d-none" id="conci-msg-aviso" role="status"></div>
+                <div class="alert alert-danger py-2 px-3 small d-none" id="conci-msg-error" role="alert"></div>
+                <textarea class="form-control conci-msg-texto" id="conci-msg-texto" rows="20" spellcheck="false"
+                    aria-label="Mensaje para enviar" placeholder="Calculando el mensaje…"></textarea>
+                <p class="conci-msg-nota mb-0">Cuentan los manifiestos capturados (con HR. DE RECEPCIÓN) en su fecha y los ya cerrados en su fecha de cierre, con las fórmulas de los oficios a la Subsecretaría. Puedes corregir el texto antes de copiarlo.</p>
+            </div>
+            <div class="modal-footer bg-light py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">
+                    <i class="fas fa-xmark me-1" aria-hidden="true"></i>Cerrar
+                </button>
+                <button type="button" class="btn btn-success btn-sm" id="btn-conci-msg-copiar" disabled>
+                    <i class="fas fa-copy me-1" aria-hidden="true"></i>Copiar mensaje
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 <!-- MODAL: CATLOGO TIPO DE SERVICIO -->
 <div class="modal fade" id="modalFlightServiceType" tabindex="-1" aria-labelledby="modalFlightServiceTypeLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
@@ -40678,10 +40750,14 @@ FF
 <!-- Reportes de Conciliación (Carga / Pasajeros) -->
 <script src="js/conci-reportes.js?v=20260911-v1" defer></script>
 <script src="js/conci-reportes-edicion.js?v=20260911-v1" defer></script>
-<script src="js/conci-reportes-pasajeros.js?v=20260922-reportable" defer></script>
+<script src="js/conci-reportes-pasajeros.js?v=20261005-cursor" defer></script>
 <script src="js/conci-carga-catalogo.js?v=20260910-v1" defer></script>
 <script src="js/conci-presentacion-carga.js?v=20260911-v1" defer></script>
-<script src="js/conci-reportes-carga.js?v=20260922-reportable" defer></script>
+<script src="js/conci-reportes-carga.js?v=20261005-cursor" defer></script>
+<!-- Mensaje para WhatsApp o Webex: usa las cifras de los dos reportes de arriba. -->
+<script src="js/conci-mensaje-envio.js?v=20261005-solo-cierre" defer></script>
+<!-- Importar Excel: botón btn-conci-importar-excel de la barra de Conciliación. -->
+<script src="js/conci-importar-excel.js?v=20260930-boton" defer></script>
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
 <script src="js/estadistico-informe-core.js?v=20260912-ag-directorio" defer></script>
 <script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>
@@ -41499,6 +41575,21 @@ window.AeropuertosModule = (function () {
     const DIAS  = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
     const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
     function _fmtDate(d) { return DIAS[d.getDay()] + ' ' + d.getDate() + ' ' + MESES[d.getMonth()]; }
+
+    /* Fecha completa al final de la barra. No espera a Supabase: se pinta de
+       inmediato y se revisa cada minuto para que cambie sola a medianoche. */
+    const DIAS_LARGOS  = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+    const MESES_LARGOS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    function _fechaLarga(d) {
+        const dia = DIAS_LARGOS[d.getDay()];
+        return dia.charAt(0).toUpperCase() + dia.slice(1) + ', ' + d.getDate() + ' de ' + MESES_LARGOS[d.getMonth()] + ' de ' + d.getFullYear();
+    }
+    function _pintarFecha() {
+        const el = document.getElementById('ag-tb-fecha');
+        if (el) el.textContent = _fechaLarga(new Date());
+    }
+    _pintarFecha();
+    setInterval(_pintarFecha, 60000);
 
     const _FB = { bg:'#f1f5f9', color:'#475569', border:'#94a3b8' };
     function _style(area) {

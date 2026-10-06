@@ -11357,13 +11357,15 @@ window.updateOpsSummary = updateOpsSummary;
    un detalle con el desglose diario que proyecta esa métrica.
    ════════════════════════════════════════════════════════════════════════ */
 
+/* titulo: el nombre completo que lleva la tarjeta. label y sub siguen
+   armando el encabezado de los detalles ("Comercial · Operaciones"). */
 const NDW_CARD_DEFS = [
-    { cat: 'comercial', metric: 'operaciones', label: 'Comercial', sub: 'Operaciones semana', icon: 'fas fa-plane-departure', img: 'images/Aviones%20pax.jpeg', accent: '#3b82f6', bgPos: 'center 28%' },
-    { cat: 'comercial', metric: 'pasajeros', label: 'Comercial', sub: 'Pasajeros semana', icon: 'fas fa-user-friends', img: 'images/Pax.jpeg', accent: '#3b82f6', bgPos: 'center center' },
-    { cat: 'carga', metric: 'operaciones', label: 'Carga', sub: 'Operaciones semana', icon: 'fas fa-box-open', img: 'images/Aeronaves%20carga.jpg', accent: '#f59e0b', bgPos: 'center center' },
-    { cat: 'carga', metric: 'toneladas', label: 'Carga', sub: 'Toneladas semana', icon: 'fas fa-weight-hanging', img: 'images/Carga%20a%C3%A9rea.jpg', accent: '#f59e0b', bgPos: 'center center' },
-    { cat: 'general', metric: 'operaciones', label: 'General', sub: 'Operaciones semana', icon: 'fas fa-paper-plane', img: 'images/Aviones%20FBO.png', accent: '#22c55e', bgPos: 'center 72%' },
-    { cat: 'general', metric: 'pasajeros', label: 'General', sub: 'Pasajeros semana', icon: 'fas fa-user-check', img: 'images/Pasajero%20FBO.jpg', accent: '#22c55e', bgPos: 'center center' }
+    { cat: 'comercial', metric: 'operaciones', titulo: 'Operaciones comerciales', label: 'Comercial', sub: 'Operaciones semana', icon: 'fas fa-plane-departure', img: 'images/Aviones%20pax.jpeg', accent: '#3b82f6', bgPos: 'center 28%' },
+    { cat: 'comercial', metric: 'pasajeros', titulo: 'Pasajeros comerciales', label: 'Comercial', sub: 'Pasajeros semana', icon: 'fas fa-user-friends', img: 'images/Pax.jpeg', accent: '#3b82f6', bgPos: 'center center' },
+    { cat: 'carga', metric: 'operaciones', titulo: 'Operaciones carga', label: 'Carga', sub: 'Operaciones semana', icon: 'fas fa-box-open', img: 'images/Aeronaves%20carga.jpg', accent: '#f59e0b', bgPos: 'center center' },
+    { cat: 'carga', metric: 'toneladas', titulo: 'Toneladas de carga', label: 'Carga', sub: 'Toneladas semana', icon: 'fas fa-weight-hanging', img: 'images/Carga%20a%C3%A9rea.jpg', accent: '#f59e0b', bgPos: 'center center' },
+    { cat: 'general', metric: 'operaciones', titulo: 'Operaciones aviación general', label: 'General', sub: 'Operaciones semana', icon: 'fas fa-paper-plane', img: 'images/Aviones%20FBO.png', accent: '#22c55e', bgPos: 'center 72%' },
+    { cat: 'general', metric: 'pasajeros', titulo: 'Pasajeros aviación general', label: 'General', sub: 'Pasajeros semana', icon: 'fas fa-user-check', img: 'images/Pasajero%20FBO.jpg', accent: '#22c55e', bgPos: 'center center' }
 ];
 
 function ndwFormatValue(value, metric) {
@@ -11374,168 +11376,7 @@ function ndwFormatValue(value, metric) {
 }
 
 /* ── NDW shared view state ── */
-let NDW_VIEW_STATE = { mode: 'weekly', year: null, monthIdx: null, monthTouched: false };
-let _ndwDetailChart = null;
-
-/* ── Peak-line chart config (badge labels + gradient fill) for NDW modals ── */
-function ndwBuildPeakLineCfg(canvas, labels, data, def, highlightIdx) {
-    const accent  = def.accent;
-    const gCtx    = canvas.getContext('2d');
-    const h       = canvas.offsetHeight || canvas.parentElement?.offsetHeight || 260;
-    const grad    = gCtx.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, hexToRgba(accent, 0.40));
-    grad.addColorStop(1, hexToRgba(accent, 0.02));
-
-    /* Badge-label plugin (scoped per chart instance) */
-    const badgePlugin = {
-        id: 'ndwBadge',
-        afterDraw(chart) {
-            try {
-                const meta = chart.getDatasetMeta(0);
-                if (!meta?.data?.length) return;
-                const cctx  = chart.ctx;
-                const vals  = chart.data.datasets[0].data;
-                const lbls  = chart.data.labels;
-                const area  = chart.chartArea;
-                const placed = [];
-
-                meta.data.forEach((pt, i) => {
-                    const raw = vals[i];
-                    if (raw == null || !Number.isFinite(Number(raw))) return;
-                    const isHl  = i === highlightIdx;
-                    const line1 = String(lbls[i]);
-                    const line2 = ndwFormatValue(Number(raw), def.metric);
-
-                    cctx.save();
-                    const fontSize1 = 10;
-                    const fontSize2 = isHl ? 13 : 11;
-                    cctx.font = `600 ${fontSize1}px system-ui,-apple-system,sans-serif`;
-                    const tw1 = cctx.measureText(line1).width;
-                    cctx.font = `bold ${fontSize2}px system-ui,-apple-system,sans-serif`;
-                    const tw2 = cctx.measureText(line2).width;
-                    const bw = Math.max(tw1, tw2) + 20;
-                    const bh = isHl ? 42 : 36;
-                    const br = 7;
-
-                    /* Position: prefer above, clamp to chart area */
-                    let bx = pt.x - bw / 2;
-                    let by = pt.y - bh - 14;
-                    bx = Math.max(area.left + 2, Math.min(bx, area.right - bw - 2));
-                    if (by < area.top) by = pt.y + 14; /* flip below if no room */
-
-                    /* Avoid overlap with already-placed badges */
-                    const overlaps = placed.some(p =>
-                        bx < p.x + p.w + 4 && bx + bw > p.x - 4 &&
-                        by < p.y + p.h + 4 && by + bh > p.y - 4
-                    );
-                    if (overlaps) { cctx.restore(); return; }
-                    placed.push({ x: bx, y: by, w: bw, h: bh });
-
-                    /* Shadow */
-                    cctx.shadowColor   = 'rgba(0,0,0,0.30)';
-                    cctx.shadowBlur    = 9;
-                    cctx.shadowOffsetY = 3;
-
-                    /* Rounded rect */
-                    cctx.fillStyle = isHl ? accent : hexToRgba(accent, 0.80);
-                    cctx.beginPath();
-                    cctx.moveTo(bx + br, by);
-                    cctx.lineTo(bx + bw - br, by);
-                    cctx.quadraticCurveTo(bx + bw, by,      bx + bw, by + br);
-                    cctx.lineTo(bx + bw, by + bh - br);
-                    cctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - br, by + bh);
-                    cctx.lineTo(bx + br, by + bh);
-                    cctx.quadraticCurveTo(bx, by + bh,      bx, by + bh - br);
-                    cctx.lineTo(bx, by + br);
-                    cctx.quadraticCurveTo(bx, by,           bx + br, by);
-                    cctx.closePath();
-                    cctx.fill();
-
-                    cctx.shadowColor = 'transparent';
-
-                    /* Text */
-                    const cx = bx + bw / 2;
-                    const gap = isHl ? 11 : 9;
-                    cctx.textAlign    = 'center';
-                    cctx.textBaseline = 'middle';
-                    cctx.font      = `600 ${fontSize1}px system-ui,-apple-system,sans-serif`;
-                    cctx.fillStyle = 'rgba(255,255,255,0.80)';
-                    cctx.fillText(line1, cx, by + bh / 2 - gap);
-                    cctx.font      = `bold ${fontSize2}px system-ui,-apple-system,sans-serif`;
-                    cctx.fillStyle = '#ffffff';
-                    cctx.fillText(line2, cx, by + bh / 2 + gap);
-                    cctx.restore();
-                });
-            } catch (_) { /* noop */ }
-        }
-    };
-
-    const processed = data.map(v => { const n = Number(v); return Number.isFinite(n) ? n : null; });
-    const nums      = processed.filter(v => v !== null);
-    const maxVal    = nums.length ? Math.max(...nums) : 0;
-    const minVal    = nums.length ? Math.min(...nums) : 0;
-    const span      = Math.max(0, maxVal - minVal);
-    const yPadUp    = span > 0 ? span * 0.55 : maxVal * 0.25 || 10;  /* room for badges */
-    const yPadDown  = span > 0 ? span * 0.25 : maxVal * 0.10 || 5;
-
-    return {
-        type: 'line',
-        plugins: [badgePlugin],
-        data: {
-            labels,
-            datasets: [{
-                label: def.label,
-                data: processed,
-                fill: true,
-                backgroundColor: grad,
-                borderColor: accent,
-                borderWidth: 2.5,
-                tension: 0.4,
-                cubicInterpolationMode: 'monotone',
-                pointBackgroundColor: processed.map((_, i) => i === highlightIdx ? '#fff' : accent),
-                pointBorderColor:     processed.map((_, i) => i === highlightIdx ? accent : 'rgba(255,255,255,0.4)'),
-                pointBorderWidth:     processed.map((_, i) => i === highlightIdx ? 3 : 1.5),
-                pointRadius:          processed.map((_, i) => i === highlightIdx ? 7 : 4.5),
-                pointHoverRadius: 7,
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            layout: { padding: { top: 8, right: 14, bottom: 8, left: 8 } },
-            animation: { duration: 750, easing: 'easeOutCubic' },
-            plugins: {
-                legend: { display: false },
-                datalabels: { display: false },
-                tooltip: {
-                    backgroundColor: 'rgba(8,14,28,.92)',
-                    borderColor:     'rgba(148,186,255,.2)',
-                    borderWidth: 1,
-                    titleColor: '#fff',
-                    bodyColor:  '#b4d0f0',
-                    padding: 10,
-                    callbacks: { label: (ctx) => '  ' + ndwFormatValue(ctx.raw, def.metric) }
-                }
-            },
-            scales: {
-                x: {
-                    grid:  { color: 'rgba(148,186,255,.08)' },
-                    ticks: { color: 'rgba(190,214,255,.65)', font: { size: 11, weight: '600' } }
-                },
-                y: {
-                    min: Math.max(0, minVal - yPadDown),
-                    max: maxVal + yPadUp,
-                    grid:  { color: 'rgba(148,186,255,.08)' },
-                    ticks: {
-                        color: 'rgba(190,214,255,.65)', font: { size: 11 },
-                        maxTicksLimit: 5,
-                        callback: v => ndwFormatValue(v, def.metric)
-                    }
-                }
-            }
-        }
-    };
-}
+let NDW_VIEW_STATE = { mode: 'weekly', year: null, monthIdx: null, monthTouched: false, weekStart: null };
 
 function ndwGetAvailableYears() {
     if (!AVIATION_ANALYTICS_DATA) return [];
@@ -11685,6 +11526,107 @@ function ndwGetAnnualVal(cat, metric, yearStr) {
     return total;
 }
 
+/* ── Semana del banner ────────────────────────────────────────────────────
+   Cada mes se parte en tramos de lunes a domingo recortados al mes
+   (septiembre de 2026: 1-6, 7-13, 14-20, 21-27, 28-30). Las cifras de un
+   tramo salen de las capturas diarias (daily_operations): las del año en curso
+   ya vienen en WEEKLY_OPERATIONS_DATASETS y las de otros años se piden al
+   entrar a un mes de ese año. */
+const NDW_DAILY_YEARS = {};
+
+function ndwIsoDay(year, monthIdx, day) {
+    return `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function ndwWeeksOfMonth(year, monthIdx) {
+    const ultimo = new Date(year, monthIdx + 1, 0).getDate();
+    const tramos = [];
+    for (let desde = 1; desde <= ultimo;) {
+        const diaSemana = new Date(year, monthIdx, desde).getDay(); // 0 = domingo
+        const hasta = Math.min(ultimo, desde + (diaSemana === 0 ? 0 : 7 - diaSemana));
+        tramos.push({ desde, hasta, inicio: ndwIsoDay(year, monthIdx, desde), fin: ndwIsoDay(year, monthIdx, hasta) });
+        desde = hasta + 1;
+    }
+    return tramos;
+}
+
+function ndwDayHasData(day) {
+    return [day?.comercial?.operaciones, day?.comercial?.pasajeros,
+            day?.general?.operaciones, day?.general?.pasajeros,
+            day?.carga?.operaciones, day?.carga?.toneladas]
+        .some((v) => Number(v) > 0);
+}
+
+/* Capturas diarias por fecha; si una fecha llega de dos fuentes, gana la más reciente. */
+function ndwDailyDaysByDate() {
+    const fuentes = [
+        ...(Array.isArray(WEEKLY_OPERATIONS_DATASETS) ? WEEKLY_OPERATIONS_DATASETS : []),
+        staticData?.operacionesSemanaActual,
+        ...Object.values(NDW_DAILY_YEARS)
+    ].filter(Boolean);
+    const porFecha = new Map();
+    let index = 0;
+    fuentes.forEach((fuente) => (Array.isArray(fuente.dias) ? fuente.dias : []).forEach((day) => {
+        const fecha = normalizeOpsDateKey(day?.fecha);
+        if (!fecha) return;
+        const candidato = { day, index: index++ };
+        if (shouldReplaceDailyCandidate(porFecha.get(fecha), candidato)) porFecha.set(fecha, candidato);
+    }));
+    return porFecha;
+}
+
+async function ndwLoadDailyYear(year) {
+    const key = String(year);
+    if (NDW_DAILY_YEARS[key]) return;
+    NDW_DAILY_YEARS[key] = { status: 'loading', dias: [] };
+    try {
+        const filas = await window.dataManager.getDailyOperationsForYear(Number(year));
+        NDW_DAILY_YEARS[key] = {
+            status: 'ready',
+            dias: (filas || []).map((d) => ({
+                fecha: d.date,
+                created_at: d.created_at,
+                updated_at: d.updated_at,
+                label: formatDateLabel(d.date),
+                comercial: { operaciones: d.comercial_ops, pasajeros: d.comercial_pax },
+                general: { operaciones: d.general_ops, pasajeros: d.general_pax },
+                carga: { operaciones: d.carga_ops, toneladas: d.carga_tons }
+            }))
+        };
+    } catch (error) {
+        NDW_DAILY_YEARS[key] = { status: 'error', dias: [] };
+        console.warn(`[Inicio Semana] No se pudieron consultar las capturas diarias de ${key}:`, error);
+    }
+    renderNavdeckWeeklyBanner();
+}
+
+/* El tramo elegido en el banner con sus capturas. Sin elección, el tramo del
+   último día con capturas de la semana activa (la del módulo de Operaciones),
+   o el de hoy. estado: 'ready', 'loading', 'error' o 'pendiente' (otro año que
+   aún no se pide). */
+function ndwResolveWeek() {
+    const hoy = new Date();
+    const hoyIso = ndwIsoDay(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+    const activa = (typeof getActiveWeeklyDataset === 'function') ? getActiveWeeklyDataset() : null;
+    const conCapturas = (Array.isArray(activa?.dias) ? activa.dias : [])
+        .filter(ndwDayHasData).map((d) => d.fecha).sort();
+    const base = NDW_VIEW_STATE.weekStart || conCapturas[conCapturas.length - 1] || hoyIso;
+    const [year, month] = base.split('-').map(Number);
+    const monthIdx = month - 1;
+    const tramos = ndwWeeksOfMonth(year, monthIdx);
+    const tramo = tramos.find((t) => base >= t.inicio && base <= t.fin) || tramos[0];
+    const estado = year === hoy.getFullYear() ? 'ready' : (NDW_DAILY_YEARS[year]?.status || 'pendiente');
+    const dias = [...ndwDailyDaysByDate()]
+        .filter(([fecha]) => fecha >= tramo.inicio && fecha <= tramo.fin)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, candidato]) => candidato.day);
+    const mes = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][monthIdx];
+    const titulo = tramo.desde === tramo.hasta
+        ? `${tramo.desde} de ${mes} de ${year}`
+        : `${tramo.desde} al ${tramo.hasta} de ${mes} de ${year}`;
+    return { year, monthIdx, tramos, tramo, dias, estado, titulo, hoyIso };
+}
+
 async function ndwLoadCurrentManifestDay(dateKey, force = false) {
     const cache = window._ndwCurrentManifestDays ||= {};
     if (cache[dateKey]?.status === 'loading' || (!force && cache[dateKey])) return;
@@ -11755,7 +11697,7 @@ function renderNavdeckWeeklyBanner() {
         const MONTH_SHORT = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
         const MONTH_FULL  = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
-        /* ── compute preliminary / latest-data note (shared across all modes) ── */
+        /* ── selected date and loaded weeks (shared across all modes) ── */
         const _now = new Date();
         const currentDateKey = NDW_VIEW_STATE.date || `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
         const currentDate = parseIsoDay(currentDateKey);
@@ -11764,48 +11706,17 @@ function renderNavdeckWeeklyBanner() {
         const _MONTH_NAMES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
         const _DOW_ES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
         const _capitalizar = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-        const _hoyTexto = `${_capitalizar(_DOW_ES[_now.getDay()])}, ${_now.getDate()} de ${_MONTH_NAMES_ES[_now.getMonth()]} de ${_now.getFullYear()}`;
-        const _allCapDays = [];
-        const _seenCapFechas = new Set();
         const _weekSrcsShared = [
             ...(Array.isArray(WEEKLY_OPERATIONS_DATASETS) ? WEEKLY_OPERATIONS_DATASETS : []),
             staticData?.operacionesSemanaActual
         ].filter(Boolean);
-        _weekSrcsShared.forEach((wk) => {
-            if (!Array.isArray(wk?.dias)) return;
-            wk.dias.forEach((d) => {
-                if (!d?.fecha || _seenCapFechas.has(d.fecha)) return;
-                const _hasVal = [d?.comercial?.operaciones, d?.comercial?.pasajeros,
-                                 d?.general?.operaciones, d?.general?.pasajeros,
-                                 d?.carga?.operaciones, d?.carga?.toneladas]
-                    .some((v) => { const n = Number(v); return Number.isFinite(n) && n > 0; });
-                if (!_hasVal) return;
-                _seenCapFechas.add(d.fecha);
-                _allCapDays.push(d.fecha);
-            });
-        });
-        _allCapDays.sort();
-        const _lastCapFecha = _allCapDays.length ? _allCapDays[_allCapDays.length - 1] : null;
-        const _lastCapDate  = _lastCapFecha ? parseIsoDay(_lastCapFecha) : null;
-        const _lastCapDateStr = _lastCapDate
-            ? `${_DOW_ES[_lastCapDate.getDay()]} ${_lastCapDate.getDate()} de ${_MONTH_NAMES_ES[_lastCapDate.getMonth()]}`
-            : null;
-        const _showPrelim = _lastCapDate
-            && _lastCapDate.getMonth() === _now.getMonth()
-            && _lastCapDate.getFullYear() === _now.getFullYear();
-        const _prelimHtml = _showPrelim ? `
-            <div class="ndw-prelim-banner-group">
-                <p class="ndw-prelim-banner-note" aria-live="polite">
-                    <span class="ndw-prelim-banner-dot" aria-hidden="true"></span>
-                    <i class="fas fa-clock-rotate-left" aria-hidden="true"></i>
-                    <span>Cifras preliminares &mdash; <strong>${MONTH_FULL[_now.getMonth()]} ${_now.getFullYear()}</strong> en curso</span>
-                </p>
-                ${_lastCapDateStr ? `
-                <p class="ndw-prelim-last-date" aria-live="polite">
-                    <i class="fas fa-calendar-check" aria-hidden="true"></i>
-                    <span>Datos al <strong>${_lastCapDateStr}</strong></span>
-                </p>` : ''}
-            </div>` : '';
+
+        /* ── semana elegida; las capturas de otro año se piden al entrar a él ── */
+        const semana = mode === 'weekly' ? ndwResolveWeek() : null;
+        if (semana?.estado === 'pendiente') {
+            ndwLoadDailyYear(semana.year);
+            semana.estado = 'loading';
+        }
 
         /* ── hero content per mode ── */
         let heroIcon, heroKicker, heroTitle, periodPickerHtml = '';
@@ -11823,21 +11734,40 @@ function renderNavdeckWeeklyBanner() {
                     : currentManifest?.status === 'error' ? 'No fue posible consultar los manifiestos. Intenta actualizar.' : 'Consultando manifiestos…'}</p>
                 <p class="ndw-tap-hint">Aviación General: captura diaria de la misma fecha; 0 si no hay captura.</p>`;
         } else if (mode === 'weekly') {
-            const rangeLabel = (typeof formatWeekLabel === 'function')
-                ? formatWeekLabel(weekly)
-                : (weekly?.rango?.descripcion || 'Semana reciente');
+            /* Como la vista de mes: el periodo, y abajo las semanas del mes y el
+               selector de mes. Las semanas que aún no empiezan no se eligen. */
             heroIcon   = 'fas fa-calendar-week';
             heroKicker = 'Periodo activo';
-            heroTitle  = rangeLabel;
+            heroTitle  = semana.titulo;
 
-            /* Show preliminary note when the active week is in the current month */
-            const _wkStartFecha = weekly?.rango?.inicio || days[0]?.fecha;
-            const _wkStartDate  = _wkStartFecha ? parseIsoDay(_wkStartFecha) : null;
-            if (_wkStartDate
-                && _wkStartDate.getMonth()    === _now.getMonth()
-                && _wkStartDate.getFullYear() === _now.getFullYear()) {
-                periodPickerHtml = _prelimHtml;
-            }
+            const weekChipsHtml = semana.tramos.map((t) => {
+                const activo = t.inicio === semana.tramo.inicio;
+                return `<button type="button" class="ndw-period-chip ndw-period-chip--year${activo ? ' is-active' : ''}" data-ndw-week="${t.inicio}" aria-pressed="${activo}" aria-label="Semana del ${t.desde} al ${t.hasta}"${t.inicio > semana.hoyIso ? ' disabled' : ''}>${t.desde === t.hasta ? t.desde : `${t.desde}-${t.hasta}`}</button>`;
+            }).join('');
+            const primerAnio = availableYears.length ? Math.min(...availableYears.map(Number)) : _now.getFullYear();
+            const canPrev = semana.year > primerAnio || semana.monthIdx > 0;
+            const canNext = semana.year < _now.getFullYear()
+                || (semana.year === _now.getFullYear() && semana.monthIdx < _now.getMonth());
+            const aviso = semana.estado === 'loading' ? `Cargando las capturas diarias de ${semana.year}…`
+                : semana.estado === 'error' ? `No fue posible consultar las capturas diarias de ${semana.year}.`
+                : !semana.dias.length ? 'Sin capturas diarias en esta semana.'
+                : '';
+
+            periodPickerHtml = `
+                <div class="ndw-period-picker ndw-period-picker--compact">
+                    <div class="ndw-period-group">${weekChipsHtml}</div><span class="ndw-period-sep" aria-hidden="true"></span>
+                    <div class="ndw-month-stepper">
+                        <button type="button" class="ndw-month-step" data-ndw-week-step="-1" aria-label="Mes anterior" ${canPrev ? '' : 'disabled'}>‹</button>
+                        <span class="ndw-month-step-label">
+                            <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                            ${MONTH_FULL[semana.monthIdx]} ${semana.year}
+                        </span>
+                        <button type="button" class="ndw-month-step" data-ndw-week-step="1" aria-label="Mes siguiente" ${canNext ? '' : 'disabled'}>›</button>
+                    </div>
+                </div>
+                ${aviso
+                    ? `<p class="ndw-tap-hint" aria-live="polite">${aviso}</p>`
+                    : '<p class="ndw-tap-hint" aria-label="Las tarjetas son interactivas"><i class="fas fa-hand-pointer" aria-hidden="true"></i><span>Toca una tarjeta para ver el desglose por día</span></p>'}`;
 
         } else if (mode === 'monthly') {
             heroIcon   = 'fas fa-calendar-alt';
@@ -11864,8 +11794,7 @@ function renderNavdeckWeeklyBanner() {
                         <button type="button" class="ndw-month-step" data-ndw-step="1" aria-label="Mes siguiente" ${canNext ? '' : 'disabled'}>›</button>
                     </div>
                 </div>
-                <p class="ndw-tap-hint" aria-label="Las tarjetas son interactivas"><i class="fas fa-hand-pointer" aria-hidden="true"></i><span>Toca una tarjeta para ver el análisis completo</span></p>
-                ${_prelimHtml}`;
+                <p class="ndw-tap-hint" aria-label="Las tarjetas son interactivas"><i class="fas fa-hand-pointer" aria-hidden="true"></i><span>Toca una tarjeta para ver el análisis completo</span></p>`;
 
         } else if (mode === 'annual') {
             heroIcon   = 'fas fa-calendar';
@@ -11877,8 +11806,7 @@ function renderNavdeckWeeklyBanner() {
             ).join('');
             periodPickerHtml = `
                 <div class="ndw-period-picker ndw-period-picker--compact"><div class="ndw-period-group">${yearChipsHtml}</div></div>
-                <p class="ndw-tap-hint" aria-label="Las tarjetas son interactivas"><i class="fas fa-hand-pointer" aria-hidden="true"></i><span>Toca una tarjeta para ver el histórico anual</span></p>
-                ${_prelimHtml}`;
+                <p class="ndw-tap-hint" aria-label="Las tarjetas son interactivas"><i class="fas fa-hand-pointer" aria-hidden="true"></i><span>Toca una tarjeta para ver el histórico anual</span></p>`;
 
         } else { /* historic */
             heroIcon   = 'fas fa-history';
@@ -11887,35 +11815,26 @@ function renderNavdeckWeeklyBanner() {
                 ? `${availableYears[0]}–${availableYears[availableYears.length - 1]}`
                 : (availableYears[0] || currentYear);
             periodPickerHtml = `
-                <p class="ndw-tap-hint" aria-label="Las tarjetas son interactivas"><i class="fas fa-hand-pointer" aria-hidden="true"></i><span>Suma de todos los años disponibles</span></p>
-                ${_prelimHtml}`;
+                <p class="ndw-tap-hint" aria-label="Las tarjetas son interactivas"><i class="fas fa-hand-pointer" aria-hidden="true"></i><span>Suma de todos los años disponibles</span></p>`;
         }
 
         /* ── foto del banner: va según la hora local (ver ndwHeroImgPorHora) ── */
         const heroImg = ndwHeroImgPorHora();
 
-        /* ── view toggle ── */
+        /* ── view toggle: va arriba a la izquierda del banner ── */
         const viewToggleHtml = `
             <div class="ndw-view-toggle" role="group" aria-label="Seleccionar vista">
-                <button type="button" class="ndw-view-btn${mode === 'current' ? ' is-active' : ''}" data-ndw-mode="current" aria-pressed="${mode === 'current'}">
-                    <i class="fas fa-bolt" aria-hidden="true"></i>Actual
-                </button>
-                <button type="button" class="ndw-view-btn${mode === 'weekly'  ? ' is-active' : ''}" data-ndw-mode="weekly"  aria-pressed="${mode === 'weekly'}">
-                    <i class="fas fa-calendar-week" aria-hidden="true"></i>Semanal
-                </button>
-                <button type="button" class="ndw-view-btn${mode === 'monthly' ? ' is-active' : ''}" data-ndw-mode="monthly" aria-pressed="${mode === 'monthly'}">
-                    <i class="fas fa-calendar-alt" aria-hidden="true"></i>Mensual
-                </button>
-                <button type="button" class="ndw-view-btn${mode === 'annual'  ? ' is-active' : ''}" data-ndw-mode="annual"  aria-pressed="${mode === 'annual'}">
-                    <i class="fas fa-calendar" aria-hidden="true"></i>Anual
-                </button>
-                <button type="button" class="ndw-view-btn${mode === 'historic' ? ' is-active' : ''}" data-ndw-mode="historic" aria-pressed="${mode === 'historic'}">
-                    <i class="fas fa-history" aria-hidden="true"></i>Histórico
-                </button>
+                <button type="button" class="ndw-view-btn${mode === 'current' ? ' is-active' : ''}" data-ndw-mode="current" aria-pressed="${mode === 'current'}">Día</button>
+                <button type="button" class="ndw-view-btn${mode === 'weekly'  ? ' is-active' : ''}" data-ndw-mode="weekly"  aria-pressed="${mode === 'weekly'}">Semana</button>
+                <button type="button" class="ndw-view-btn${mode === 'monthly' ? ' is-active' : ''}" data-ndw-mode="monthly" aria-pressed="${mode === 'monthly'}">Mes</button>
+                <button type="button" class="ndw-view-btn${mode === 'annual'  ? ' is-active' : ''}" data-ndw-mode="annual"  aria-pressed="${mode === 'annual'}">Año</button>
+                <button type="button" class="ndw-view-btn${mode === 'historic' ? ' is-active' : ''}" data-ndw-mode="historic" aria-pressed="${mode === 'historic'}">Histórico total</button>
+                <span class="ndw-view-sep" aria-hidden="true"></span>
+                <button type="button" class="ndw-view-btn ndw-view-reset" data-ndw-reset title="Regresar al periodo actual" aria-label="Regresar al periodo actual"><i class="fas fa-rotate-right" aria-hidden="true"></i></button>
             </div>`;
 
         /* ── card values per mode ── */
-        const subSuffix = { current: 'del día', weekly: 'semana', monthly: 'mes', annual: 'año', historic: 'histórico' }[mode] || 'histórico';
+        const cardPeriodo = { current: 'Total del día', weekly: 'Total de la semana', monthly: 'Total del mes', annual: 'Total del año', historic: 'Total histórico' }[mode] || 'Total histórico';
         const getCardVal = (def) => {
             if (mode === 'current') {
                 if (def.cat !== 'general') return currentManifest?.status === 'ready' ? currentManifest.totals[def.cat]?.[def.metric] || 0 : null;
@@ -11924,7 +11843,10 @@ function renderNavdeckWeeklyBanner() {
                     .find(Boolean);
                 return dia ? getWeeklyValue(dia, def.cat, def.metric) : 0;
             }
-            if (mode === 'weekly')  return days.reduce((acc, d) => acc + getWeeklyValue(d, def.cat, def.metric), 0);
+            if (mode === 'weekly') {
+                if (semana.estado !== 'ready') return null;
+                return semana.dias.reduce((acc, d) => acc + getWeeklyValue(d, def.cat, def.metric), 0);
+            }
             if (mode === 'monthly') return ndwGetMonthlyVal(def.cat, def.metric, selYear, selMonthIdx);
             if (mode === 'annual')  return ndwGetAnnualVal(def.cat, def.metric, selYear);
             /* historic: sum all available years */
@@ -11933,17 +11855,19 @@ function renderNavdeckWeeklyBanner() {
 
         const cardsHtml = NDW_CARD_DEFS.map((def, idx) => {
             const total = getCardVal(def);
-            const sub   = def.sub.replace('semana', subSuffix);
+            const valor = total === null ? '—' : ndwFormatValue(total, def.metric);
+            // Cifras de 9 caracteres o más (millones del histórico) van un
+            // punto más chicas para no salirse de la tarjeta.
             return `
             <button type="button" class="ndw-card ndw-card--${def.cat}" data-ndw-idx="${idx}"
                     style="--ndw-accent:${def.accent};--ndw-img:url('${def.img}');background-image:url('${def.img}');background-position:${def.bgPos || 'center center'};"
-                    aria-label="${escapeHTML(def.label)} — ${escapeHTML(sub)}">
+                    aria-label="${escapeHTML(def.titulo)} — ${escapeHTML(cardPeriodo)}">
                 <span class="ndw-card-overlay" aria-hidden="true"></span>
                 <span class="ndw-card-icon"><i class="${def.icon}" aria-hidden="true"></i></span>
                 <span class="ndw-card-body">
-                    <span class="ndw-card-tag">${escapeHTML(def.label)}</span>
-                    <span class="ndw-card-value">${total === null ? '—' : ndwFormatValue(total, def.metric)}</span>
-                    <span class="ndw-card-sub">${escapeHTML(sub)}</span>
+                    <span class="ndw-card-tag">${escapeHTML(def.titulo)}</span>
+                    <span class="ndw-card-value${valor.length >= 9 ? ' ndw-card-value--largo' : ''}">${valor}</span>
+                    <span class="ndw-card-sub">${escapeHTML(cardPeriodo)}</span>
                 </span>
                 <span class="ndw-card-cta" aria-hidden="true"><i class="fas fa-${(mode === 'weekly' || mode === 'current') ? 'chart-column' : 'chart-line'}"></i> ${(mode === 'weekly' || mode === 'current') ? 'Ver detalle' : 'Ver análisis'}</span>
             </button>`;
@@ -11953,7 +11877,7 @@ function renderNavdeckWeeklyBanner() {
             <div class="ndw-hero ndw-hero--${mode}" style="--ndw-hero-img:url('${heroImg}')" data-ndw-hero-img="${heroImg}">
                 <div class="ndw-hero-media" aria-hidden="true"><span class="ndw-hero-foto"></span></div>
                 <div class="ndw-hero-main">
-                    <span class="ndw-hero-welcome">Bienvenido al sistema</span>
+                    ${viewToggleHtml}
                     <div class="ndw-hero-card">
                         <span class="ndw-hero-icon" aria-hidden="true"><i class="${heroIcon}"></i></span>
                         <div class="ndw-hero-text">
@@ -11962,9 +11886,7 @@ function renderNavdeckWeeklyBanner() {
                             ${periodPickerHtml}
                         </div>
                     </div>
-                    <span class="ndw-hero-fecha"><i class="far fa-calendar" aria-hidden="true"></i>${escapeHTML(_hoyTexto)}</span>
                 </div>
-                ${viewToggleHtml}
             </div>
             <div class="ndw-cards">${cardsHtml}</div>
         `;
@@ -11987,6 +11909,17 @@ function renderNavdeckWeeklyBanner() {
                     renderNavdeckWeeklyBanner();
                     return;
                 }
+                /* Regresa la vista abierta a su periodo actual: hoy, la semana del
+                   último día capturado, el mes y el año en curso. */
+                if (ev.target.closest('[data-ndw-reset]')) {
+                    NDW_VIEW_STATE.date = null;
+                    NDW_VIEW_STATE.weekStart = null;
+                    NDW_VIEW_STATE.year = null;
+                    NDW_VIEW_STATE.monthIdx = null;
+                    NDW_VIEW_STATE.monthTouched = false;
+                    renderNavdeckWeeklyBanner();
+                    return;
+                }
                 const modeBtn = ev.target.closest('[data-ndw-mode]');
                 if (modeBtn) {
                     NDW_VIEW_STATE.mode = modeBtn.getAttribute('data-ndw-mode');
@@ -12005,6 +11938,23 @@ function renderNavdeckWeeklyBanner() {
                     const next      = Math.max(0, Math.min(cutoff, (NDW_VIEW_STATE.monthIdx ?? 0) + delta));
                     NDW_VIEW_STATE.monthIdx = next;
                     NDW_VIEW_STATE.monthTouched = true;
+                    renderNavdeckWeeklyBanner();
+                    return;
+                }
+                const weekChip = ev.target.closest('[data-ndw-week]');
+                if (weekChip && !weekChip.disabled) {
+                    NDW_VIEW_STATE.weekStart = weekChip.getAttribute('data-ndw-week');
+                    renderNavdeckWeeklyBanner();
+                    return;
+                }
+                /* Cambiar de mes en Semana deja elegida su primera semana. */
+                const weekStep = ev.target.closest('[data-ndw-week-step]');
+                if (weekStep && !weekStep.disabled) {
+                    const { year, monthIdx } = ndwResolveWeek();
+                    const destino = new Date(year, monthIdx + Number(weekStep.getAttribute('data-ndw-week-step')), 1);
+                    NDW_VIEW_STATE.weekStart = ndwIsoDay(destino.getFullYear(), destino.getMonth(), 1);
+                    // Si la consulta de ese año falló, se reintenta al volver a entrar.
+                    if (NDW_DAILY_YEARS[destino.getFullYear()]?.status === 'error') delete NDW_DAILY_YEARS[destino.getFullYear()];
                     renderNavdeckWeeklyBanner();
                     return;
                 }
@@ -12061,12 +12011,201 @@ function ndwActualizarFotoPorHora() {
     hero.setAttribute('style', `--ndw-hero-img:url('${img}')`);
 }
 
+/* ── Detalle de una tarjeta: los números al frente ──────────────────────────
+   Las tres ventanas (Semana o Día, Mes, Año o Histórico) comparten el cuerpo:
+   arriba, la cifra del periodo en foco en grande, con su cambio contra el
+   periodo anterior y contra el promedio, qué parte del total es y su lugar;
+   abajo, una ficha por día, mes o año con su cifra y su cambio. Tocar una
+   ficha la pone en foco, y las fichas se ordenan por fecha o de mayor a menor.
+
+   det = { def, rango, periodos, stats, foco, kpis, aviso, pie, ctx }
+     periodos: [{ corto, nombre, largo, valor (null si no hay dato), activo, enCurso }]
+     ctx: { anterior: 'día' | 'mes' | 'año', lista, pico, enCurso } */
+
+function ndwDetailStats(periodos) {
+    const conDato = periodos
+        .map((p, i) => ({ valor: p.valor, i }))
+        .filter((p) => p.valor !== null && Number.isFinite(p.valor));
+    const total = conDato.reduce((suma, p) => suma + p.valor, 0);
+    let previo = null;
+    const anteriores = periodos.map((p, i) => {
+        const anterior = previo;
+        if (p.valor !== null) previo = i;
+        return anterior;
+    });
+    return {
+        total,
+        promedio: conDato.length ? total / conDato.length : null,
+        maximo: conDato.length ? Math.max(...conDato.map((p) => p.valor)) : 0,
+        ranking: [...conDato].sort((a, b) => b.valor - a.valor).map((p) => p.i),
+        anteriores
+    };
+}
+
+function ndwDetailPct(valor, base) {
+    if (valor === null || base === null || !Number.isFinite(base) || base === 0) return null;
+    return ((valor - base) / base) * 100;
+}
+
+function ndwDetailDeltaHtml(pct, texto) {
+    const detalle = texto ? ` <small>${texto}</small>` : '';
+    if (pct === null) return `<span class="ndw-delta is-flat"><b>—</b>${detalle}</span>`;
+    const dir = pct >= 0.05 ? 'up' : pct <= -0.05 ? 'down' : 'flat';
+    const icono = dir === 'up' ? 'fa-arrow-up' : dir === 'down' ? 'fa-arrow-down' : 'fa-equals';
+    return `<span class="ndw-delta is-${dir}"><i class="fas ${icono}" aria-hidden="true"></i><b>${pct > 0 ? '+' : ''}${pct.toFixed(1)}%</b>${detalle}</span>`;
+}
+
+function ndwDetailFocusHtml(det, i) {
+    const { periodos, stats, def, ctx } = det;
+    const p = periodos[i];
+    const previo = stats.anteriores[i];
+    const lugar = stats.ranking.indexOf(i);
+    const parte = p.valor !== null && stats.total > 0 ? (p.valor / stats.total) * 100 : null;
+    const etiquetas = [
+        p.enCurso ? '<span class="ndw-focus-tag is-prelim"><i class="fas fa-clock-rotate-left" aria-hidden="true"></i>En curso</span>' : '',
+        p.pico ? `<span class="ndw-focus-tag is-peak"><i class="fas fa-crown" aria-hidden="true"></i>${escapeHTML(ctx.pico)}</span>` : '',
+        p.activo ? '<span class="ndw-focus-tag is-active">Periodo activo</span>' : ''
+    ].join('');
+    return `
+        <div class="ndw-focus-head"><span class="ndw-focus-lbl">${escapeHTML(p.largo)}</span>${etiquetas}</div>
+        <div class="ndw-focus-val" data-ndw-focus-val>${p.valor === null ? '—' : ndwFormatValue(p.valor, def.metric)}</div>
+        <div class="ndw-focus-stats">
+            ${ndwDetailDeltaHtml(previo === null ? null : ndwDetailPct(p.valor, periodos[previo].valor),
+                previo === null ? `sin ${ctx.anterior} anterior` : `vs ${escapeHTML(periodos[previo].nombre)}`)}
+            ${ndwDetailDeltaHtml(ndwDetailPct(p.valor, stats.promedio), 'vs promedio')}
+            <span class="ndw-stat"><b>${parte === null ? '—' : `${parte.toFixed(1)}%`}</b> <small>del total</small></span>
+            <span class="ndw-stat"><b>${lugar < 0 ? '—' : `${lugar + 1}.º`}</b> <small>lugar de ${stats.ranking.length}</small></span>
+        </div>
+        ${p.enCurso && ctx.enCurso ? `<p class="ndw-focus-note"><i class="fas fa-circle-info" aria-hidden="true"></i>${escapeHTML(ctx.enCurso)}</p>` : ''}`;
+}
+
+function ndwDetailTilesHtml(det) {
+    const { periodos, stats, def, foco } = det;
+    return periodos.map((p, i) => {
+        const previo = stats.anteriores[i];
+        const pct = previo === null ? null : ndwDetailPct(p.valor, periodos[previo].valor);
+        const ancho = p.valor !== null && stats.maximo > 0 ? (p.valor / stats.maximo) * 100 : 0;
+        const clases = ['ndw-tile', p.pico ? 'is-peak' : '', p.enCurso ? 'is-prelim' : '', i === foco ? 'is-focus' : '']
+            .filter(Boolean).join(' ');
+        const cifra = p.valor === null ? '—' : ndwFormatValue(p.valor, def.metric);
+        return `
+        <button type="button" class="${clases}" data-ndw-tile="${i}" aria-pressed="${i === foco}" aria-label="${escapeHTML(p.largo)}: ${p.valor === null ? 'sin dato' : cifra}">
+            <span class="ndw-tile-lbl">${escapeHTML(p.corto)}${p.pico ? ' <i class="fas fa-crown" aria-hidden="true"></i>' : ''}${p.enCurso ? ' <i class="fas fa-clock-rotate-left" aria-hidden="true"></i>' : ''}</span>
+            <span class="ndw-tile-val">${cifra}</span>
+            ${ndwDetailDeltaHtml(pct, '')}
+            <span class="ndw-tile-bar" aria-hidden="true"><span style="width:${ancho.toFixed(1)}%"></span></span>
+        </button>`;
+    }).join('');
+}
+
+/* La cifra en foco cuenta del valor anterior al nuevo (sin animación si el
+   sistema pide menos movimiento). */
+function ndwDetailCountUp(el, desde, hasta, metric) {
+    if (!el || hasta === null || desde === null || desde === undefined || desde === hasta) return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const inicio = performance.now();
+    const paso = (ahora) => {
+        const t = Math.min(1, (ahora - inicio) / 420);
+        const suave = 1 - Math.pow(1 - t, 3);
+        el.textContent = ndwFormatValue(desde + (hasta - desde) * suave, metric);
+        if (t < 1 && el.isConnected) requestAnimationFrame(paso);
+    };
+    requestAnimationFrame(paso);
+}
+
+function ndwDetailFocus(overlay, i) {
+    const det = overlay._ndwDetalle;
+    if (!det || !det.periodos[i]) return;
+    const antes = det.periodos[det.foco]?.valor;
+    det.foco = i;
+    overlay.querySelectorAll('[data-ndw-tile]').forEach((ficha) => {
+        const enFoco = Number(ficha.getAttribute('data-ndw-tile')) === i;
+        ficha.classList.toggle('is-focus', enFoco);
+        ficha.setAttribute('aria-pressed', String(enFoco));
+    });
+    const panel = overlay.querySelector('[data-ndw-focus]');
+    if (!panel) return;
+    panel.innerHTML = ndwDetailFocusHtml(det, i);
+    ndwDetailCountUp(panel.querySelector('[data-ndw-focus-val]'), antes, det.periodos[i].valor, det.def.metric);
+}
+
+function ndwDetailSort(overlay, modo) {
+    const det = overlay._ndwDetalle;
+    const rejilla = overlay.querySelector('[data-ndw-tiles]');
+    if (!det || !rejilla) return;
+    const indice = (ficha) => Number(ficha.getAttribute('data-ndw-tile'));
+    const valor = (ficha) => det.periodos[indice(ficha)].valor ?? -1;
+    const fichas = [...rejilla.children].sort((a, b) => (modo === 'valor'
+        ? valor(b) - valor(a) || indice(a) - indice(b)
+        : indice(a) - indice(b)));
+    rejilla.append(...fichas);
+    overlay.querySelectorAll('[data-ndw-orden]').forEach((boton) => {
+        const activo = boton.getAttribute('data-ndw-orden') === modo;
+        boton.classList.toggle('is-active', activo);
+        boton.setAttribute('aria-pressed', String(activo));
+    });
+}
+
+function ndwOpenDetailModal(det) {
+    const { def, rango, kpis, aviso, pie, ctx, stats, periodos } = det;
+    const primero = stats.ranking[0];
+    if (primero !== undefined && periodos[primero].valor > 0) periodos[primero].pico = true;
+    const kpisHtml = kpis.map((k) => `
+        <div class="ndw-kpi">
+            <span class="ndw-kpi-val">${k.valor}</span>
+            <span class="ndw-kpi-lbl">${escapeHTML(k.etiqueta)}</span>
+            ${k.detalle ? `<span class="ndw-kpi-sub">${escapeHTML(k.detalle)}</span>` : ''}
+        </div>`).join('');
+
+    const overlay = _ndwGetOrCreateOverlay();
+    overlay._ndwDetalle = det;
+    overlay.innerHTML = `
+        <div class="ndw-modal-card ndw-modal-card--${def.cat}" role="dialog" aria-modal="true" aria-label="Detalle ${escapeHTML(def.titulo)} — ${escapeHTML(rango)}">
+            <div class="ndw-modal-head" style="--ndw-accent:${def.accent};background-image:url('${def.img}');background-position:${def.bgPos || 'center center'};">
+                <span class="ndw-modal-head-overlay" aria-hidden="true"></span>
+                <i class="${def.icon} ndw-modal-deco" aria-hidden="true"></i>
+                <div class="ndw-modal-head-topbar">
+                    <button type="button" class="ndw-modal-close" data-ndw-close aria-label="Cerrar"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="ndw-modal-head-bottom">
+                    <span class="ndw-modal-head-icon"><i class="${def.icon}"></i></span>
+                    <div class="ndw-modal-head-text">
+                        <span class="ndw-modal-tag"><i class="${def.icon} me-1" style="font-size:.75em;opacity:.85"></i>${escapeHTML(def.label)} · ${escapeHTML(def.sub.replace(' semana', ''))}</span>
+                        <span class="ndw-modal-range">${escapeHTML(rango)}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="ndw-modal-kpis">${kpisHtml}</div>
+            <div class="ndw-modal-body">
+                ${aviso || ''}
+                <section class="ndw-focus" data-ndw-focus aria-live="polite">${ndwDetailFocusHtml(det, det.foco)}</section>
+                <div class="ndw-tiles-head">
+                    <div class="ndw-detail-title"><i class="fas fa-table-cells-large" aria-hidden="true"></i>${escapeHTML(ctx.lista)}</div>
+                    ${periodos.length > 1 ? `
+                    <div class="ndw-orden" role="group" aria-label="Ordenar">
+                        <button type="button" class="is-active" data-ndw-orden="fecha" aria-pressed="true">Por fecha</button>
+                        <button type="button" data-ndw-orden="valor" aria-pressed="false">Mayor a menor</button>
+                    </div>` : ''}
+                </div>
+                <div class="ndw-tiles" data-ndw-tiles>${ndwDetailTilesHtml(det)}</div>
+            </div>
+            <div class="ndw-modal-foot">${pie}</div>
+        </div>`;
+
+    requestAnimationFrame(() => overlay.classList.add('is-open'));
+    document.body.classList.add('ndw-modal-open');
+    if (overlay._ndwEsc) document.removeEventListener('keydown', overlay._ndwEsc);
+    overlay._ndwEsc = (e) => { if (e.key === 'Escape') closeNavdeckWeeklyDetail(); };
+    document.addEventListener('keydown', overlay._ndwEsc);
+}
+
 function openNavdeckWeeklyDetail(idx) {
     const def = NDW_CARD_DEFS[idx];
     if (!def) return;
-    const weekly = (typeof getActiveWeeklyDataset === 'function') ? getActiveWeeklyDataset() : null;
-    let days = Array.isArray(weekly?.dias) ? weekly.dias : [];
     const isCurrent = NDW_VIEW_STATE.mode === 'current';
+    // En Semana, los días del tramo elegido en el banner.
+    const semana = isCurrent ? null : ndwResolveWeek();
+    let days = semana ? semana.dias : [];
     if (isCurrent) {
         const dateKey = document.querySelector('[data-ndw-date]')?.value;
         const manifest = window._ndwCurrentManifestDays?.[dateKey];
@@ -12078,21 +12217,28 @@ function openNavdeckWeeklyDetail(idx) {
     }
     if (!days.length) return;
 
-    const rangeLabel = isCurrent ? days[0].fecha : (typeof formatWeekLabel === 'function') ? formatWeekLabel(weekly) : 'Semana reciente';
-    const rows = days.map(d => ({
-        label: d.labelFull || d.label || d.fecha || '',
-        value: getWeeklyValue(d, def.cat, def.metric)
-    }));
-    const total = rows.reduce((a, r) => a + r.value, 0);
-    const maxVal = rows.reduce((m, r) => Math.max(m, r.value), 0);
-    const activeDays = rows.filter(r => r.value > 0).length || rows.length;
-    const avg = total / activeDays;
-    const peak = rows.reduce((best, r) => (r.value > (best?.value ?? -1) ? r : best), null);
+    const DIAS_C = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const DIAS_L = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+    const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const periodos = days.map((d) => {
+        const fecha = d.fecha ? parseIsoDay(d.fecha) : null;
+        const corto = fecha ? `${DIAS_C[fecha.getDay()]} ${fecha.getDate()}` : (d.label || d.fecha || '');
+        return {
+            corto,
+            nombre: corto.toLowerCase(),
+            largo: fecha
+                ? `${DIAS_L[fecha.getDay()]} ${fecha.getDate()} de ${MESES[fecha.getMonth()]} de ${fecha.getFullYear()}`
+                : (d.labelFull || d.label || d.fecha || ''),
+            valor: getWeeklyValue(d, def.cat, def.metric)
+        };
+    });
+    const stats = ndwDetailStats(periodos);
+    const rango = isCurrent ? periodos[0].largo : semana.titulo;
 
     /* ── Detect if this week belongs to the current in-progress month ── */
     const _MONTH_F_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const _today = new Date();
-    const _weekStartFecha = weekly?.rango?.inicio || days[0]?.fecha;
+    const _weekStartFecha = semana?.tramo.inicio || days[0]?.fecha;
     const _weekStartDate  = _weekStartFecha ? parseIsoDay(_weekStartFecha) : null;
     const _weekIsCurrentMonth = _weekStartDate
         && _weekStartDate.getMonth()    === _today.getMonth()
@@ -12105,75 +12251,26 @@ function openNavdeckWeeklyDetail(idx) {
            </div>`
         : '';
 
-    const rowsHtml = rows.map(r => {
-        const pct = total > 0 ? (r.value / total) * 100 : 0;
-        const barPct = maxVal > 0 ? (r.value / maxVal) * 100 : 0;
-        const isPeak = peak && r.value === peak.value && r.value > 0;
-        return `
-        <div class="ndw-detail-row${isPeak ? ' is-peak' : ''}">
-            <div class="ndw-detail-row-top">
-                <span class="ndw-detail-day">${escapeHTML(r.label)}${isPeak ? ' <span class="ndw-peak-tag">pico</span>' : ''}</span>
-                <span class="ndw-detail-val">${ndwFormatValue(r.value, def.metric)}<span class="ndw-detail-pct">${pct.toFixed(1)}%</span></span>
-            </div>
-            <div class="ndw-detail-bar"><span style="width:${barPct.toFixed(1)}%"></span></div>
-        </div>`;
-    }).join('');
-
-    let overlay = document.getElementById('ndw-modal');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'ndw-modal';
-        overlay.className = 'ndw-modal';
-        document.body.appendChild(overlay);
-        overlay.addEventListener('click', (ev) => {
-            if (ev.target === overlay || ev.target.closest('[data-ndw-close]')) closeNavdeckWeeklyDetail();
-        });
-    }
-
-    overlay.innerHTML = `
-        <div class="ndw-modal-card ndw-modal-card--${def.cat}" role="dialog" aria-modal="true" aria-label="Detalle ${def.label} ${def.sub}">
-            <div class="ndw-modal-head" style="--ndw-accent:${def.accent};background-image:url('${def.img}');background-position:${def.bgPos || 'center center'};">  
-                <span class="ndw-modal-head-overlay" aria-hidden="true"></span>
-                <i class="${def.icon} ndw-modal-deco" aria-hidden="true"></i>
-                <!-- Barra superior: cerrar -->
-                <div class="ndw-modal-head-topbar">
-                    <button type="button" class="ndw-modal-close" data-ndw-close aria-label="Cerrar"><i class="fas fa-times"></i></button>
-                </div>
-                <!-- Barra inferior: ícono + info -->
-                <div class="ndw-modal-head-bottom">
-                    <span class="ndw-modal-head-icon"><i class="${def.icon}"></i></span>
-                    <div class="ndw-modal-head-text">
-                        <span class="ndw-modal-tag"><i class="${def.icon} me-1" style="font-size:.75em;opacity:.85"></i>${escapeHTML(def.label)} · ${escapeHTML(def.sub.replace(' semana', ''))}</span>
-                        <span class="ndw-modal-range">${escapeHTML(rangeLabel)}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="ndw-modal-kpis">
-                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(total, def.metric)}</span><span class="ndw-kpi-lbl">${isCurrent ? 'Total del día' : 'Total semana'}</span></div>
-                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(avg, def.metric)}</span><span class="ndw-kpi-lbl">Promedio diario</span></div>
-                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(peak?.value || 0, def.metric)}</span><span class="ndw-kpi-lbl">Día pico</span></div>
-            </div>
-            <div class="ndw-modal-body">
-                ${weekPrelimNote}
-                <div class="ndw-detail-title"><i class="fas fa-calendar-day"></i>Desglose por día</div>
-                ${rowsHtml}
-            </div>
-            <div class="ndw-modal-foot">
-                <i class="fas fa-plane-circle-check"></i>${escapeHTML(def.label)} — ${escapeHTML(def.sub.replace(' semana', '').toLowerCase())} del periodo activo${_weekIsCurrentMonth ? ' &nbsp;·&nbsp; <i class="fas fa-triangle-exclamation ms-1 me-1"></i>Cifras preliminares' : ''}
-            </div>
-        </div>`;
-
-    requestAnimationFrame(() => overlay.classList.add('is-open'));
-    document.body.classList.add('ndw-modal-open');
-    overlay._ndwEsc = (e) => { if (e.key === 'Escape') closeNavdeckWeeklyDetail(); };
-    document.addEventListener('keydown', overlay._ndwEsc);
+    const pico = stats.ranking[0];
+    ndwOpenDetailModal({
+        def, rango, periodos, stats,
+        foco: periodos.length - 1,
+        kpis: [
+            { valor: ndwFormatValue(stats.total, def.metric), etiqueta: isCurrent ? 'Total del día' : 'Total semana' },
+            { valor: stats.promedio === null ? '—' : ndwFormatValue(stats.promedio, def.metric), etiqueta: 'Promedio diario' },
+            { valor: pico === undefined ? '—' : ndwFormatValue(periodos[pico].valor, def.metric), etiqueta: 'Día pico', detalle: pico === undefined ? '' : periodos[pico].largo.replace(/ de .*$/, '') }
+        ],
+        aviso: weekPrelimNote,
+        ctx: { anterior: 'día', lista: isCurrent ? 'El día' : 'Día por día', pico: 'Día pico', enCurso: '' },
+        pie: `<i class="fas fa-plane-circle-check"></i>${escapeHTML(def.label)} — ${escapeHTML(def.sub.replace(' semana', '').toLowerCase())} del periodo activo${_weekIsCurrentMonth ? ' &nbsp;·&nbsp; <i class="fas fa-triangle-exclamation ms-1 me-1"></i>Cifras preliminares' : ''}`
+    });
 }
 
 function closeNavdeckWeeklyDetail() {
     const overlay = document.getElementById('ndw-modal');
     if (!overlay) return;
-    if (_ndwDetailChart) { try { _ndwDetailChart.destroy(); } catch (_) {} _ndwDetailChart = null; }
     overlay.classList.remove('is-open');
+    overlay._ndwDetalle = null;
     document.body.classList.remove('ndw-modal-open');
     if (overlay._ndwEsc) { document.removeEventListener('keydown', overlay._ndwEsc); overlay._ndwEsc = null; }
     setTimeout(() => { if (overlay && !overlay.classList.contains('is-open')) overlay.innerHTML = ''; }, 240);
@@ -12187,29 +12284,20 @@ function _ndwGetOrCreateOverlay() {
         overlay.className = 'ndw-modal';
         document.body.appendChild(overlay);
         overlay.addEventListener('click', (ev) => {
-            if (ev.target === overlay || ev.target.closest('[data-ndw-close]')) closeNavdeckWeeklyDetail();
+            if (ev.target === overlay || ev.target.closest('[data-ndw-close]')) {
+                closeNavdeckWeeklyDetail();
+                return;
+            }
+            const ficha = ev.target.closest('[data-ndw-tile]');
+            if (ficha) {
+                ndwDetailFocus(overlay, Number(ficha.getAttribute('data-ndw-tile')));
+                return;
+            }
+            const orden = ev.target.closest('[data-ndw-orden]');
+            if (orden) ndwDetailSort(overlay, orden.getAttribute('data-ndw-orden'));
         });
     }
     return overlay;
-}
-
-function _ndwOpenChartModal(overlayHtml, def, chartLabels, chartData) {
-    const overlay = _ndwGetOrCreateOverlay();
-    overlay.innerHTML = overlayHtml;
-    requestAnimationFrame(() => {
-        overlay.classList.add('is-open');
-        requestAnimationFrame(() => {
-            const canvas = document.getElementById('ndw-chart-canvas');
-            if (!canvas || typeof Chart === 'undefined') return;
-            if (_ndwDetailChart) { try { _ndwDetailChart.destroy(); } catch (_) {} _ndwDetailChart = null; }
-            const highlightIdx = chartData._selectedIdx ?? null;
-            const cfg = ndwBuildPeakLineCfg(canvas, chartLabels, chartData.values, def, highlightIdx);
-            _ndwDetailChart = new Chart(canvas, cfg);
-        });
-    });
-    document.body.classList.add('ndw-modal-open');
-    overlay._ndwEsc = (e) => { if (e.key === 'Escape') closeNavdeckWeeklyDetail(); };
-    document.addEventListener('keydown', overlay._ndwEsc);
 }
 
 function openNavdeckMonthlyDetail(idx) {
@@ -12217,7 +12305,6 @@ function openNavdeckMonthlyDetail(idx) {
     if (!def) return;
     const selYear     = NDW_VIEW_STATE.year;
     const rawSelMonth = NDW_VIEW_STATE.monthIdx ?? 0;
-    const MONTH_S = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
     const MONTH_F = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
     /* ── Respect the same cutoff the historical charts use ── */
@@ -12231,104 +12318,37 @@ function openNavdeckMonthlyDetail(idx) {
     const prelimIdx    = (isCutoffYear && cutoffIdx === todayMonth) ? cutoffIdx : -1;
 
     const resolvedMonths = indices.map(i => ndwResolveMonthlyVal(def.cat, def.metric, selYear, i));
-    const valuesForSummary = resolvedMonths.map((entry) => entry.hasData ? entry.value : null);
-    const summaryEngine = window.AifaOperationsMetrics;
-    const metricSummary = summaryEngine && typeof summaryEngine.summarizeMetricValues === 'function'
-        ? summaryEngine.summarizeMetricValues(valuesForSummary)
-        : {
-            total: valuesForSummary.reduce((sum, value) => sum + (Number.isFinite(Number(value)) ? Number(value) : 0), 0),
-            count: valuesForSummary.filter((value) => value !== null).length,
-            average: 0,
-            peakIndex: -1,
-            peakValue: null,
-            percentages: valuesForSummary.map(() => 0)
-        };
-    if (!metricSummary.average && metricSummary.count) {
-        metricSummary.average = metricSummary.total / metricSummary.count;
-    }
-    if (metricSummary.peakIndex < 0) {
-        valuesForSummary.forEach((value, valueIndex) => {
-            if (value === null) return;
-            if (metricSummary.peakValue === null || Number(value) > Number(metricSummary.peakValue)) {
-                metricSummary.peakValue = Number(value);
-                metricSummary.peakIndex = valueIndex;
-            }
-        });
-    }
-    if (!metricSummary.percentages.some((value) => value > 0) && metricSummary.total) {
-        metricSummary.percentages = valuesForSummary.map((value) => value === null ? 0 : (Number(value) / metricSummary.total) * 100);
-    }
-    const monthVals    = valuesForSummary;
-    const chartLabels  = indices.map(i => MONTH_S[i]);
-    const yearTotal    = metricSummary.total;
-    const maxVal       = Number(metricSummary.peakValue || 0);
-    const peakIdx      = metricSummary.peakIndex;
-    const monthAvg     = metricSummary.average;
-    const sub          = def.sub.replace('semana', 'mes');
-
-    const rowsHtml = indices.map(i => {
-        const v      = monthVals[i] ?? 0;
-        const pct    = metricSummary.percentages[i] || 0;
-        const barPct = maxVal > 0 ? (v / maxVal) * 100 : 0;
-        const isPeak = i === peakIdx && maxVal > 0;
-        const isSel  = i === selMonthIdx;
-        const isPrelim = i === prelimIdx;
-        return `
-        <div class="ndw-detail-row${isPeak ? ' is-peak' : ''}${isSel ? ' is-selected' : ''}${isPrelim ? ' is-prelim' : ''}">
-            <div class="ndw-detail-row-top">
-                <span class="ndw-detail-day">${MONTH_F[i]}${
-                    isPeak ? ' <span class="ndw-peak-tag">pico</span>' : ''}
-                    ${isSel ? ' <span class="ndw-sel-tag">activo</span>' : ''}
-                    ${isPrelim ? ' <span class="ndw-prelim-tag"><i class="fas fa-clock-rotate-left me-1" style="font-size:.7em"></i>En curso</span>' : ''}</span>
-                <span class="ndw-detail-val">${ndwFormatValue(v, def.metric)}<span class="ndw-detail-pct">${pct.toFixed(1)}%</span></span>
-            </div>
-            <div class="ndw-detail-bar"><span style="width:${barPct.toFixed(1)}%"></span></div>
-        </div>`;
-    }).join('');
+    const periodos = indices.map((i) => ({
+        corto: MONTH_F[i].slice(0, 3),
+        nombre: MONTH_F[i].toLowerCase(),
+        largo: `${MONTH_F[i]} ${selYear}`,
+        valor: resolvedMonths[i].hasData ? resolvedMonths[i].value : null,
+        activo: i === selMonthIdx,
+        enCurso: i === prelimIdx
+    }));
+    const stats = ndwDetailStats(periodos);
+    const pico = stats.ranking[0];
 
     const prelimLastDate = prelimIdx >= 0 ? resolvedMonths[prelimIdx]?.lastDate : null;
     const prelimLastDateLabel = prelimLastDate ? formatSpanishDate(prelimLastDate) : '';
     const prelimNote = prelimIdx >= 0
         ? `<div class="ndw-prelim-note"><i class="fas fa-triangle-exclamation me-1"></i>Cifras preliminares — ${MONTH_F[prelimIdx]} aún en curso${prelimLastDateLabel ? ` · Datos al ${escapeHTML(prelimLastDateLabel)}` : ''}</div>`
         : '';
+    const sub = def.sub.replace('semana', 'mes');
 
-    const html = `
-        <div class="ndw-modal-card ndw-modal-card--${def.cat}" role="dialog" aria-modal="true" aria-label="Detalle ${def.label} ${sub}">
-            <div class="ndw-modal-head" style="--ndw-accent:${def.accent};background-image:url('${def.img}');background-position:${def.bgPos || 'center center'};">
-                <span class="ndw-modal-head-overlay" aria-hidden="true"></span>
-                <i class="${def.icon} ndw-modal-deco" aria-hidden="true"></i>
-                <div class="ndw-modal-head-topbar">
-                    <button type="button" class="ndw-modal-close" data-ndw-close aria-label="Cerrar"><i class="fas fa-times"></i></button>
-                </div>
-                <div class="ndw-modal-head-bottom">
-                    <span class="ndw-modal-head-icon"><i class="${def.icon}"></i></span>
-                    <div class="ndw-modal-head-text">
-                        <span class="ndw-modal-tag"><i class="${def.icon} me-1" style="font-size:.75em;opacity:.85"></i>${escapeHTML(def.label)} · ${escapeHTML(def.sub.replace(' semana',''))}</span>
-                        <span class="ndw-modal-range">${escapeHTML(MONTH_F[selMonthIdx])} ${escapeHTML(selYear)}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="ndw-modal-kpis">
-                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(yearTotal, def.metric)}</span><span class="ndw-kpi-lbl">Total ${escapeHTML(selYear)}</span></div>
-                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(monthAvg, def.metric)}</span><span class="ndw-kpi-lbl">Promedio mensual</span></div>
-                <div class="ndw-kpi"><span class="ndw-kpi-val">${peakIdx >= 0 ? escapeHTML(MONTH_S[peakIdx]) : '—'}</span><span class="ndw-kpi-lbl">Mes pico</span></div>
-            </div>
-            <div class="ndw-modal-body">
-                <div class="ndw-detail-title"><i class="fas fa-chart-bar"></i>Evolución mensual ${escapeHTML(selYear)}</div>
-                ${prelimNote}
-                <div class="ndw-chart-wrap"><canvas id="ndw-chart-canvas"></canvas></div>
-                <div class="ndw-detail-title" style="margin-top:18px"><i class="fas fa-list"></i>Desglose por mes</div>
-                ${rowsHtml}
-            </div>
-            <div class="ndw-modal-foot">
-                <i class="fas fa-calendar-alt"></i>${escapeHTML(def.label)} — ${escapeHTML(sub.replace(' mes','').toLowerCase())} mensual ${escapeHTML(selYear)}${prelimIdx >= 0 ? ' · <i class="fas fa-triangle-exclamation ms-1 me-1"></i>Cifras preliminares' : ''}
-            </div>
-        </div>`;
-
-    _ndwOpenChartModal(html, def,
-        chartLabels,
-        { values: monthVals, _selectedIdx: selMonthIdx }
-    );
+    ndwOpenDetailModal({
+        def, periodos, stats,
+        rango: `${MONTH_F[selMonthIdx]} ${selYear}`,
+        foco: selMonthIdx,
+        kpis: [
+            { valor: ndwFormatValue(stats.total, def.metric), etiqueta: `Total ${selYear}` },
+            { valor: stats.promedio === null ? '—' : ndwFormatValue(stats.promedio, def.metric), etiqueta: 'Promedio mensual' },
+            { valor: pico === undefined ? '—' : ndwFormatValue(periodos[pico].valor, def.metric), etiqueta: 'Mes pico', detalle: pico === undefined ? '' : MONTH_F[pico] }
+        ],
+        aviso: prelimNote,
+        ctx: { anterior: 'mes', lista: 'Mes por mes', pico: 'Mes pico', enCurso: 'Mes en curso: la cifra sigue creciendo con cada día capturado.' },
+        pie: `<i class="fas fa-calendar-alt"></i>${escapeHTML(def.label)} — ${escapeHTML(sub.replace(' mes', '').toLowerCase())} mensual ${escapeHTML(selYear)}${prelimIdx >= 0 ? ' · <i class="fas fa-triangle-exclamation ms-1 me-1"></i>Cifras preliminares' : ''}`
+    });
 }
 
 function openNavdeckAnnualDetail(idx) {
@@ -12338,87 +12358,34 @@ function openNavdeckAnnualDetail(idx) {
     const availableYears = ndwGetAvailableYears();
     if (!availableYears.length) return;
 
-    const yearVals   = availableYears.map(y => ndwGetAnnualVal(def.cat, def.metric, y));
-    const selYearIdx = availableYears.indexOf(selYear);
-    const selVal     = selYearIdx >= 0 ? yearVals[selYearIdx] : 0;
-    const isHistoric = NDW_VIEW_STATE.mode === 'historic';
-    const historicTotal = yearVals.reduce((sum, value) => sum + Number(value || 0), 0);
-    const historicAverage = availableYears.length ? historicTotal / availableYears.length : 0;
-    const summaryValue = isHistoric ? historicTotal : selVal;
-    const summaryLabel = isHistoric ? 'Total histórico' : selYear;
-    const maxVal     = Math.max(...yearVals, 0);
-    const peakIdx    = maxVal > 0 ? yearVals.indexOf(maxVal) : -1;
-    const sub        = def.sub.replace('semana', 'año');
+    const isHistoric  = NDW_VIEW_STATE.mode === 'historic';
+    const currentYear = String(new Date().getFullYear());
+    const selYearIdx  = availableYears.indexOf(selYear);
+    const periodos = availableYears.map((y) => ({
+        corto: y,
+        nombre: y,
+        largo: y,
+        valor: ndwGetAnnualVal(def.cat, def.metric, y),
+        activo: !isHistoric && y === selYear,
+        enCurso: y === currentYear
+    }));
+    const stats = ndwDetailStats(periodos);
+    const pico = stats.ranking[0];
+    const resumen = isHistoric ? stats.total : (selYearIdx >= 0 ? periodos[selYearIdx].valor : 0);
 
-    const isCurrentYear = selYear === String(new Date().getFullYear());
-
-    let yoyLabel = '—';
-    let yoyLbl   = 'Var. vs año ant.';
-    if (isHistoric) {
-        yoyLabel = ndwFormatValue(historicAverage, def.metric);
-        yoyLbl = 'Promedio anual';
-    } else if (isCurrentYear) {
-        yoyLabel = `${selYear} En curso`;
-        yoyLbl   = 'Estado del año';
-    } else if (selYearIdx > 0 && yearVals[selYearIdx - 1] > 0) {
-        const pct  = ((selVal - yearVals[selYearIdx - 1]) / yearVals[selYearIdx - 1]) * 100;
-        const sign = pct >= 0 ? '+' : '';
-        yoyLabel   = `${sign}${pct.toFixed(1)}%`;
-    }
-
-    const rowsHtml = availableYears.map((y, i) => {
-        const v      = yearVals[i] || 0;
-        const barPct = maxVal > 0 ? (v / maxVal) * 100 : 0;
-        const isPeak = i === peakIdx && maxVal > 0;
-        const isSel  = !isHistoric && y === selYear;
-        return `
-        <div class="ndw-detail-row${isPeak ? ' is-peak' : ''}${isSel ? ' is-selected' : ''}">
-            <div class="ndw-detail-row-top">
-                <span class="ndw-detail-day">${escapeHTML(y)}${
-                    isPeak ? ' <span class="ndw-peak-tag">mejor</span>' : ''}
-                    ${isSel ? ' <span class="ndw-sel-tag">activo</span>' : ''}</span>
-                <span class="ndw-detail-val">${ndwFormatValue(v, def.metric)}</span>
-            </div>
-            <div class="ndw-detail-bar"><span style="width:${barPct.toFixed(1)}%"></span></div>
-        </div>`;
-    }).join('');
-
-    const html = `
-        <div class="ndw-modal-card ndw-modal-card--${def.cat}" role="dialog" aria-modal="true" aria-label="Detalle ${def.label} ${sub}">
-            <div class="ndw-modal-head" style="--ndw-accent:${def.accent};background-image:url('${def.img}');background-position:${def.bgPos || 'center center'};">
-                <span class="ndw-modal-head-overlay" aria-hidden="true"></span>
-                <i class="${def.icon} ndw-modal-deco" aria-hidden="true"></i>
-                <div class="ndw-modal-head-topbar">
-                    <button type="button" class="ndw-modal-close" data-ndw-close aria-label="Cerrar"><i class="fas fa-times"></i></button>
-                </div>
-                <div class="ndw-modal-head-bottom">
-                    <span class="ndw-modal-head-icon"><i class="${def.icon}"></i></span>
-                    <div class="ndw-modal-head-text">
-                        <span class="ndw-modal-tag"><i class="${def.icon} me-1" style="font-size:.75em;opacity:.85"></i>${escapeHTML(def.label)} · ${escapeHTML(def.sub.replace(' semana',''))}</span>
-                        <span class="ndw-modal-range">${isHistoric ? `${escapeHTML(availableYears[0])}–${escapeHTML(availableYears[availableYears.length - 1])}` : `${escapeHTML(selYear)} · Histórico`}</span>
-                    </div>
-                </div>
-            </div>
-            <div class="ndw-modal-kpis">
-                <div class="ndw-kpi"><span class="ndw-kpi-val">${ndwFormatValue(summaryValue, def.metric)}</span><span class="ndw-kpi-lbl">${escapeHTML(summaryLabel)}</span></div>
-                <div class="ndw-kpi"><span class="ndw-kpi-val">${peakIdx >= 0 ? escapeHTML(availableYears[peakIdx]) : '—'}</span><span class="ndw-kpi-lbl">Mejor año</span></div>
-                <div class="ndw-kpi"><span class="ndw-kpi-val${!isHistoric && isCurrentYear ? ' ndw-kpi-val--incourse' : ''}">${escapeHTML(yoyLabel)}</span><span class="ndw-kpi-lbl">${escapeHTML(yoyLbl)}</span></div>
-            </div>
-            <div class="ndw-modal-body">
-                <div class="ndw-detail-title"><i class="fas fa-chart-bar"></i>Histórico por año</div>
-                <div class="ndw-chart-wrap"><canvas id="ndw-chart-canvas"></canvas></div>
-                <div class="ndw-detail-title" style="margin-top:18px"><i class="fas fa-list"></i>Desglose por año</div>
-                ${rowsHtml}
-            </div>
-            <div class="ndw-modal-foot">
-                <i class="fas fa-calendar"></i>${escapeHTML(def.label)} — histórico anual
-            </div>
-        </div>`;
-
-    _ndwOpenChartModal(html, def,
-        availableYears,
-        { values: yearVals, _selectedIdx: !isHistoric && selYearIdx >= 0 ? selYearIdx : null }
-    );
+    ndwOpenDetailModal({
+        def, periodos, stats,
+        rango: isHistoric ? `${availableYears[0]}–${availableYears[availableYears.length - 1]}` : `${selYear} · Histórico`,
+        foco: !isHistoric && selYearIdx >= 0 ? selYearIdx : periodos.length - 1,
+        kpis: [
+            { valor: ndwFormatValue(resumen, def.metric), etiqueta: isHistoric ? 'Total histórico' : `Total ${selYear}` },
+            { valor: pico === undefined ? '—' : ndwFormatValue(periodos[pico].valor, def.metric), etiqueta: 'Mejor año', detalle: pico === undefined ? '' : periodos[pico].corto },
+            { valor: stats.promedio === null ? '—' : ndwFormatValue(stats.promedio, def.metric), etiqueta: 'Promedio anual' }
+        ],
+        aviso: '',
+        ctx: { anterior: 'año', lista: 'Año por año', pico: 'Mejor año', enCurso: 'Año en curso: la cifra sigue creciendo mes con mes.' },
+        pie: `<i class="fas fa-calendar"></i>${escapeHTML(def.label)} — histórico anual`
+    });
 }
 
 window.renderNavdeckWeeklyBanner = renderNavdeckWeeklyBanner;
@@ -19011,6 +18978,13 @@ function _conciRefreshEditToolbar() {
         btnMatriculaCatalog.classList.toggle('d-none', !canManage);
         btnMatriculaCatalog.disabled = !canManage;
     }
+    // Importar Excel: la misma regla que los catalogos, editor o admin. El
+    // boton vive en index.html y su logica en js/conci-importar-excel.js.
+    const btnImportarExcel = document.getElementById('btn-conci-importar-excel');
+    if (btnImportarExcel) {
+        btnImportarExcel.classList.toggle('d-none', !canManage);
+        btnImportarExcel.disabled = !canManage;
+    }
 
     const controlsLocked = _conciEditMode;
     if (btnRefresh) btnRefresh.disabled = controlsLocked;
@@ -20295,6 +20269,38 @@ function _conciRowMatchesWindow(row, columns, year, ventana) {
     return !sawParseable;
 }
 
+// Con una sola fecha en el filtro, la tabla anexa lo del día previo que sigue
+// SIN CAPTURAR: la fila cae en ese día (mismo criterio que la ventana) y su
+// HR. DE RECEPCIÓN está vacía —la misma autoridad que el pill "Sin capturar".
+// Una fila sin ninguna fecha legible no se arrastra: ya entra por la ventana.
+// Los cancelados tampoco: ni por Status (misma regla que excluye los vuelos
+// cancelados o no operativos en _conciBuildEnriched), ni por PUNTUALIDAD /
+// CANCELACIÓN, ni cuando OBSERVACIONES lo dice ("CANCELADO", "CANCELLED").
+function _conciEsPendienteDelDiaPrevio(row, columns, year, diaPrevioIso) {
+    if (!row || !diaPrevioIso) return false;
+    const keys = Array.isArray(columns) && columns.length ? columns : Object.keys(row);
+    const recepcionCol = keys.find(_conciIsReceptionColumn);
+    if (recepcionCol && String(row[recepcionCol] ?? '').trim()) return false;
+    const valorDe = (re) => keys.filter(c => re.test(c)).map(c => String(row[c] ?? '')).join(' ');
+    if (/cancel|not.?oper|no.?opera|cnx|nop\b/i.test(valorDe(/^status$/i))) return false;
+    if (/cancel/i.test(valorDe(/cancelaci[oó]n/i))) return false;
+    if (/\bcancelad[oa]s?\b|\bcancelled\b/i.test(valorDe(/observaci/i))) return false;
+    const opCol    = keys.find(c => /hr\.?\s*de\s*oper/i.test(c));
+    const slotCol  = keys.find(c => /slot\s*asignad/i.test(c));
+    const fechaCol = keys.find(c => /(^|\b)fecha(\b|$)/i.test(c));
+    for (const col of [opCol, slotCol, fechaCol]) {
+        if (!col) continue;
+        const val = row[col];
+        if (val === null || val === undefined || String(val).trim() === '') continue;
+        const parts = _conciParseDateTimeParts(val, year);
+        if (parts && Number.isFinite(parts.day) && Number.isFinite(parts.month)) {
+            const anio = Number.isFinite(parts.year) ? parts.year : year;
+            if (_conciIsoDateKey(anio, parts.month, parts.day) === diaPrevioIso) return true;
+        }
+    }
+    return false;
+}
+
 function _conciRowMatchesOperationDay(row, columns, year, month, day) {
     if (!day) return true;
     const keys = Array.isArray(columns) && columns.length ? columns : Object.keys(row || {});
@@ -20848,7 +20854,12 @@ async function loadConciliacionManifiestos(options = {}) {
     // caché: sin ella, "16 de septiembre" y "del 16 de septiembre al 3 de
     // octubre" compartían clave y se pintaba lo del otro filtro.
     const ventana = _conciVentanaDelFiltro();
-    let cacheKey = `${year}|${month || 0}|${day || 0}|${dayEnd || 0}|${ventana ? ventana.hasta : ''}`;
+    // Con una sola fecha en el filtro se anexan los manifiestos SIN CAPTURAR
+    // del día previo (ver _conciEsPendienteDelDiaPrevio): la consulta abarca
+    // ambos días y el filtro fino decide qué entra de cada uno.
+    const diaPrevio = (ventana && ventana.desde === ventana.hasta) ? _conciIsoDesplazado(ventana.desde, -1) : '';
+    const ventanaConsulta = diaPrevio ? { desde: diaPrevio, hasta: ventana.hasta } : ventana;
+    let cacheKey = `${year}|${month || 0}|${day || 0}|${dayEnd || 0}|${ventana ? ventana.hasta : ''}${diaPrevio ? '|previo' : ''}`;
 
     // When auto-detecting the latest date we skip the render-cache short-circuit
     // because we don’t know the effective key until we scan the raw data.
@@ -20972,7 +20983,7 @@ async function loadConciliacionManifiestos(options = {}) {
             return;
         }
 
-        const mResult = await _conciFetchManifestsForDate(client, year, month, day, dayEnd, ventana);
+        const mResult = await _conciFetchManifestsForDate(client, year, month, day, dayEnd, ventanaConsulta);
         if (requestSeq !== _conciLoadRequestSeq) return;
         if (mResult.error) throw mResult.error;
         manifestRows = mResult.data || [];
@@ -20985,7 +20996,7 @@ async function loadConciliacionManifiestos(options = {}) {
         // tras el cruce de medianoche (p. ej. programado 27 pero operado 28). El filtro fino
         // por HR. DE OPERACIÓN se aplica más abajo sobre las filas ya enriquecidas.
         const filteredVuelos = vuelosRows.filter(r => {
-            if (ventana) return _conciVueloEnVentana(r, year, ventana);
+            if (ventanaConsulta) return _conciVueloEnVentana(r, year, ventanaConsulta);
             if (!month && !day) return true;
             for (const isArr of [true, false]) {
                 const dp = _conciExtractVueloDateParts(r, isArr);
@@ -21040,7 +21051,12 @@ async function loadConciliacionManifiestos(options = {}) {
         // operación). Esto corrige el caso en que un vuelo programado un día opera en otro
         // tras el cruce de medianoche y aparecía en el día equivocado.
         const dayFilteredRows = ventana
-            ? rows.filter(r => _conciRowMatchesWindow(r, columns, year, ventana))
+            ? rows.filter(r => {
+                if (_conciRowMatchesWindow(r, columns, year, ventana)) return true;
+                if (!diaPrevio || !_conciEsPendienteDelDiaPrevio(r, columns, year, diaPrevio)) return false;
+                r._conci_dia_previo = diaPrevio;
+                return true;
+            })
             : (day
                 ? rows.filter(r => _conciRowMatchesOperationDay(r, columns, year, month, day))
                 : rows);
@@ -21130,6 +21146,126 @@ window.conciliacionBulkDelete = {
 
 function _conciIsReceptionColumn(column) {
     return /^hr\.?\s+de\s+recepcion$/.test(_conciNormalizedColumnName(column));
+}
+
+// ─── HR. DE RECEPCIÓN pendiente en un renglón ya capturado ─────────────────
+// HR. DE RECEPCIÓN es la llave de "capturado". Si un renglón ya tiene CAPTURÓ
+// (se firma solo con la primera captura, ver el autoguardado) y esa hora sigue
+// vacía, la celda se ilumina en ámbar con "Falta capturar" (style.css,
+// .conci-falta-recepcion). Depende sólo de lo que trae el renglón, así que se
+// ve igual tras recargar y para todos los capturistas. Al salir de un renglón
+// editado sin ella, un aviso lleva directo a la celda.
+function _conciCeldaValor(td) {
+    if (!td) return '';
+    const v = _conciNormalizeEditableCellText(td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || ''));
+    return /^[-–—]$/.test(v) ? '' : v;
+}
+
+function _conciCeldasClaveRecepcion(tr) {
+    const celdas = { capturo: null, recepcion: null, vuelo: null };
+    if (!tr) return celdas;
+    tr.querySelectorAll('td[data-col]').forEach(td => {
+        const col = String(td.dataset.col || '').trim();
+        if (/^captur[oó]$/i.test(col)) celdas.capturo = td;
+        else if (_conciIsReceptionColumn(col)) celdas.recepcion = td;
+        else if (/^#\s*de\s*vuelo$/i.test(col)) celdas.vuelo = td;
+    });
+    return celdas;
+}
+
+function _conciFaltaRecepcion(tr) {
+    const { capturo, recepcion } = _conciCeldasClaveRecepcion(tr);
+    return !!(capturo && recepcion && _conciCeldaValor(capturo) && !_conciCeldaValor(recepcion));
+}
+
+function _conciMarcarFaltaRecepcion(tr) {
+    const { recepcion } = _conciCeldasClaveRecepcion(tr);
+    if (recepcion) recepcion.classList.toggle('conci-falta-recepcion', _conciFaltaRecepcion(tr));
+}
+
+// El renglón pudo repintarse (autoguardado, refresco): se busca el vigente
+// por su id o por su nombre propio (cliente_uuid).
+function _conciFilaVigente(tr) {
+    if (!tr) return null;
+    if (tr.isConnected) return tr;
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (!tbody) return null;
+    const esc = (s) => (window.CSS && CSS.escape) ? CSS.escape(s) : String(s).replace(/"/g, '\\"');
+    const id = String(tr.dataset.rowId || '').trim();
+    const uuid = String(tr.dataset.clienteUuid || '').trim();
+    return (id && tbody.querySelector(`tr[data-row-id="${esc(id)}"]`))
+        || (uuid && tbody.querySelector(`tr[data-cliente-uuid="${esc(uuid)}"]`))
+        || null;
+}
+
+function _conciIrARecepcion(tr) {
+    let fila = _conciFilaVigente(tr);
+    if (!fila) return;
+    if (typeof _conciCanCurrentUserEdit === 'function' && _conciCanCurrentUserEdit() && !_conciEditMode) {
+        _conciEnterEditMode();
+        fila = _conciFilaVigente(fila);
+        if (!fila) return;
+    }
+    const { recepcion } = _conciCeldasClaveRecepcion(fila);
+    if (!recepcion) return;
+    if (typeof recepcion.scrollIntoView === 'function') {
+        try { recepcion.scrollIntoView({ block: 'center', inline: 'center' }); } catch (_) { /* navegadores viejos */ }
+    }
+    if (_conciEditMode) _conciActivateCellEditor(recepcion);
+}
+
+function _conciAvisarFaltaRecepcion(tr) {
+    const fila = _conciFilaVigente(tr);
+    if (!fila || !_conciFaltaRecepcion(fila)) return;
+    const { vuelo } = _conciCeldasClaveRecepcion(fila);
+    let aviso = document.getElementById('conci-aviso-recepcion');
+    if (!aviso) {
+        aviso = document.createElement('div');
+        aviso.id = 'conci-aviso-recepcion';
+        aviso.className = 'conci-aviso-recepcion';
+        aviso.setAttribute('role', 'alert');
+        document.body.appendChild(aviso);
+    }
+    const ocultar = () => { clearTimeout(aviso._conciTimer); aviso.classList.remove('visible'); };
+    aviso.innerHTML = '<i class="fas fa-triangle-exclamation" aria-hidden="true"></i>'
+        + '<span class="conci-aviso-recepcion-texto"><strong></strong>: falta HR. DE RECEPCIÓN</span>'
+        + '<button type="button" class="btn btn-sm btn-warning conci-aviso-recepcion-ir">Ir a capturarla</button>'
+        + '<button type="button" class="btn-close" aria-label="Cerrar"></button>';
+    aviso.querySelector('strong').textContent = _conciCeldaValor(vuelo) || 'Este manifiesto';
+    aviso.querySelector('.conci-aviso-recepcion-ir').addEventListener('click', () => { ocultar(); _conciIrARecepcion(fila); });
+    aviso.querySelector('.btn-close').addEventListener('click', ocultar);
+    clearTimeout(aviso._conciTimer);
+    aviso.classList.add('visible');
+    aviso._conciTimer = setTimeout(ocultar, 15000);
+}
+
+// Último renglón que esta persona editó (una celda marcada data-dirty="1").
+let _conciFaltaRecUltimaFila = null;
+
+function _conciVigilarFaltaRecepcion(tbody) {
+    if (!tbody || tbody._conciFaltaRecObs || typeof MutationObserver === 'undefined') return;
+    const obs = new MutationObserver((cambios) => {
+        const filas = new Set();
+        for (const m of cambios) {
+            const td = m.target;
+            const tr = td && td.closest ? td.closest('tr') : null;
+            if (!tr) continue;
+            filas.add(tr);
+            if (m.attributeName === 'data-dirty' && td.dataset.dirty === '1') _conciFaltaRecUltimaFila = tr;
+        }
+        filas.forEach(_conciMarcarFaltaRecepcion);
+    });
+    obs.observe(tbody, { subtree: true, attributes: true, attributeFilter: ['data-raw', 'data-pending-raw', 'data-dirty'] });
+    tbody._conciFaltaRecObs = obs;
+    // Se avisa al pasar a OTRO renglón. El autoguardado firma CAPTURÓ al
+    // cerrarse el editor, así que se le da un momento antes de revisar.
+    tbody.addEventListener('focusin', (ev) => {
+        const previa = _conciFaltaRecUltimaFila;
+        const tr = ev.target && ev.target.closest ? ev.target.closest('tr') : null;
+        if (!previa || !tr || tr === previa) return;
+        _conciFaltaRecUltimaFila = null;
+        setTimeout(() => _conciAvisarFaltaRecepcion(previa), 400);
+    });
 }
 
 function _conciUpdateResumen(data, columns) {
@@ -21565,9 +21701,23 @@ function _conciApplyQuickFlightSearch(term, options) {
     // tecleara Enter ni ↓. Lo que seguía escribiendo para terminar de buscar
     // cala entonces en esa celda real, no en el buscador: eso es lo que se
     // reportaba como "se filtran letras a CIERRE SUBSECRETARIA".
+    // Enter/↓ regresan además la barra horizontal al principio de la tabla
+    // (CIERRE SUBSECRETARIA), aunque antes se hubiera desplazado a la derecha.
     if (opts.focusFirst) {
-        requestAnimationFrame(() => _conciFocusFirstCaptureCell());
+        requestAnimationFrame(() => {
+            _conciFocusFirstCaptureCell();
+            _conciScrollManifiestosAlInicio();
+        });
     }
+}
+
+// El editor que abre _conciFocusFirstCaptureCell puede enfocar su campo un
+// cuadro después y el navegador lo desplaza a la vista; por eso se repite.
+function _conciScrollManifiestosAlInicio() {
+    const wrap = document.getElementById('conci-manifiestos-scroll');
+    if (!wrap) return;
+    wrap.scrollLeft = 0;
+    requestAnimationFrame(() => { wrap.scrollLeft = 0; });
 }
 
 function _conciClearQuickFlightSearch(focusInput) {
@@ -22213,7 +22363,10 @@ function _conciGetExportRows() {
         rows.push(row);
     });
 
-    return rows;
+    // Los pendientes del día previo que la tabla anexa (ver
+    // _conciEsPendienteDelDiaPrevio) son de otro día: no entran en lo que se
+    // exporta del día elegido. Se filtra al final para no mover los índices.
+    return rows.filter(r => !(r && r._conci_dia_previo));
 }
 
 // Proyección exclusiva del Excel de Carga; no modifica las filas capturadas.
@@ -22279,12 +22432,14 @@ function _conciExportCargoRow(row, year) {
 // targetWb (interno): cuando 'total' arma un solo libro, agrega aquí la hoja de
 // Pasajeros o de Carga —idéntica a la de su descarga individual— en vez de
 // guardar su propio archivo. Devuelve true si agregó la hoja.
-async function _conciExportToExcel(kind, targetWb) {
+// opts (interno, solo con targetWb): { rows, sheetName } para que "Exportar por
+// capturista" arme una hoja por persona con este mismo formato.
+async function _conciExportToExcel(kind, targetWb, opts = {}) {
     if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
         alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
         return;
     }
-    const rows = _conciGetExportRows();
+    const rows = (targetWb && Array.isArray(opts.rows)) ? opts.rows : _conciGetExportRows();
     if (!rows.length) {
         alert('No hay datos cargados para exportar.');
         return;
@@ -22327,13 +22482,16 @@ async function _conciExportToExcel(kind, targetWb) {
                     ? { ...d, h: 'DEMORA +-15', a: ['DEMORA +-15'] }
                     : d.h === 'TIPO DE OPERACIÓN'
                         ? { ...d, t: 'text', a: ['TIPO DE OPERACIÓN'] } : d;
-            return d.h === 'TRANSITO' ? [def, { h: 'Total dia', t: 'num', a: ['Total dia'] }] : [def];
+            return [def];
         }).concat([
             { h: 'EXTEMPORANEO', t: 'text', a: ['EXTEMPORANEO'] },
             { h: 'TIEMPO DE DEMORA / ANTICIPACIÓN', t: 'num', a: ['TIEMPO DE DEMORA / ANTICIPACIÓN'] },
             { h: 'Origen', t: 'text', a: ['Origen'] },
             { h: 'Destino', t: 'text', a: ['Destino'] },
             { h: 'escala', t: 'text', a: ['escala'] },
+            // Última columna, a un lado de "escala" (antes iba tras TRANSITO).
+            // El libro Total arma su hoja Carga por esta misma ruta.
+            { h: 'Total dia', t: 'num', a: ['Total dia'] },
         ]) : _CONCI_EXPORT_COLS_PAX
             // Solo Pasajeros: estructura DATA; conservar los alias de origen y
             // el catálogo compartido con Total y la exportación por capturista.
@@ -22466,7 +22624,7 @@ async function _conciExportToExcel(kind, targetWb) {
 
     const sheetLabel = isTotal ? 'Total' : (isCarga ? 'Carga' : 'Pasajeros');
     const wb = targetWb || new ExcelJS.Workbook();
-    const ws = wb.addWorksheet(sheetLabel, {
+    const ws = wb.addWorksheet((targetWb && opts.sheetName) || sheetLabel, {
         views: [{ state: 'frozen', ySplit: 1 }],
     });
     const headers = defs.map(d => d.h.trim());
@@ -22544,11 +22702,69 @@ function _conciExportCapturistaCellValue(raw) {
     return s;
 }
 
-async function _conciExportPorCapturista() {
+// kind 'pax' | 'carga' (menú "Exportar por capturista"): cada hoja es la de
+// Exportar Excel › Pasajeros/Carga, solo con lo capturado por esa persona.
+// Sin kind (botón de la ventana "Manifiestos capturados"): tabla con las
+// columnas de pantalla y el nombre como encabezado.
+async function _conciExportPorCapturistaFormato(kind) {
+    const isCarga = kind === 'carga';
+    const rows = _conciGetExportRows();
+    if (!rows.length) {
+        alert('No hay datos cargados para exportar.');
+        return;
+    }
+    const cols = (Array.isArray(_conciManifestosSummaryColumns) && _conciManifestosSummaryColumns.length)
+        ? _conciManifestosSummaryColumns
+        : Object.keys(rows[0] || {});
+    const capturoCol = cols.find(c => /^captur[oó]$/i.test(String(c).trim())) || null;
+
+    const grupos = new Map();
+    rows.forEach(r => {
+        const nombre = String((capturoCol ? _conciExportGetField(r, [capturoCol]) : '') || '').trim() || 'SIN CAPTURISTA IDENTIFICADO';
+        if (!grupos.has(nombre)) grupos.set(nombre, []);
+        grupos.get(nombre).push(r);
+    });
+
+    const wb = new ExcelJS.Workbook();
+    const usedSheetNames = new Set();
+    const sheetNameFor = (nombre) => {
+        const base = nombre.replace(/[*?:\/\\\[\]]/g, ' ').trim().slice(0, 31) || 'Capturista';
+        let candidate = base;
+        let n = 2;
+        while (usedSheetNames.has(candidate.toUpperCase())) {
+            const suffix = ` (${n++})`;
+            candidate = base.slice(0, 31 - suffix.length) + suffix;
+        }
+        return candidate;
+    };
+    let hojas = 0;
+    for (const nombre of [...grupos.keys()].sort((a, b) => a.localeCompare(b, 'es'))) {
+        const sheetName = sheetNameFor(nombre);
+        // Con targetWb, _conciExportToExcel deja solo lo recibido (HR. DE
+        // RECEPCIÓN con valor) del tipo pedido; sin nada, no agrega la hoja.
+        const agregada = await _conciExportToExcel(kind, wb, { rows: grupos.get(nombre), sheetName });
+        if (agregada) {
+            usedSheetNames.add(sheetName.toUpperCase());
+            hojas++;
+        }
+    }
+    if (!hojas) {
+        alert(`No hay manifiestos de ${isCarga ? 'carga' : 'pasajeros'} capturados en el día cargado.`);
+        return;
+    }
+
+    const buf = await wb.xlsx.writeBuffer();
+    const stamp = new Date().toISOString().slice(0, 10);
+    const fname = `Conciliacion_Por_Capturista_${isCarga ? 'Carga' : 'Pasajeros'}_${stamp}.xlsx`;
+    saveAs(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), fname);
+}
+
+async function _conciExportPorCapturista(kind) {
     if (typeof ExcelJS === 'undefined' || typeof saveAs === 'undefined') {
         alert('No se pudo cargar la librería de Excel. Verifica tu conexión e inténtalo de nuevo.');
         return;
     }
+    if (kind === 'pax' || kind === 'carga') return _conciExportPorCapturistaFormato(kind);
     const rows = _conciGetExportRows();
     if (!rows.length) {
         alert('No hay datos cargados para exportar.');
@@ -22563,6 +22779,7 @@ async function _conciExportPorCapturista() {
     const get = _conciExportGetField;
     const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
     const capturoCol = cols.find(c => /^captur[oó]$/i.test(c.trim())) || null;
+    const airlineColIdx = cols.findIndex(c => /aerol[ií]nea|airline/i.test(c));
 
     const capturados = rows.filter(r => recepcionCol && String(get(r, [recepcionCol])).trim() !== '');
     if (!capturados.length) {
@@ -22626,6 +22843,10 @@ async function _conciExportPorCapturista() {
         const maxLen = cols.map(c => c.length);
         filas.forEach(row => {
             const values = cols.map(c => _conciExportCapturistaCellValue(get(row, [c])));
+            // AEROLINEA: nombre comercial con los colores del catálogo, igual
+            // que la exportación de Pasajeros/Carga (caso 'airline').
+            const airlineMeta = airlineColIdx >= 0 ? _conciResolveAirlineMeta(values[airlineColIdx]) : null;
+            if (airlineMeta) values[airlineColIdx] = String(airlineMeta.name || values[airlineColIdx] || '').toUpperCase();
             const xr = ws.addRow(values);
             xr.eachCell((cell, colNumber) => {
                 const isObservaciones = /observacion/i.test(cols[colNumber - 1] || '');
@@ -22634,6 +22855,10 @@ async function _conciExportPorCapturista() {
                     ? { vertical: 'middle', horizontal: 'left', wrapText: true }
                     : { vertical: 'middle', horizontal: typeof cell.value === 'number' ? 'right' : 'center' };
                 cell.border = border;
+                if (airlineMeta && colNumber - 1 === airlineColIdx) {
+                    cell.font = { ...baseFont, bold: true, color: { argb: _conciHexToArgb(airlineMeta.textColor || '#ffffff') } };
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: _conciHexToArgb(airlineMeta.color || '#6c757d') } };
+                }
                 const len = String(cell.value ?? '').length;
                 if (len > maxLen[colNumber - 1]) maxLen[colNumber - 1] = len;
             });
@@ -24122,6 +24347,12 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                 tr.classList.add('conci-row-overcapacity');
                 tr.title = `Sobrecupo: ${row._conci_overcapacity_diff} pasajero(s) por encima de la capacidad máxima de la aeronave.`;
             }
+            // Pendiente del día previo anexado a la vista de un solo día.
+            if (row._conci_dia_previo) {
+                tr.classList.add('conci-row-dia-previo');
+                tr.dataset.conciDiaPrevio = row._conci_dia_previo;
+                if (!tr.title) tr.title = `Sin capturar del día anterior (${row._conci_dia_previo.split('-').reverse().join('/')}).`;
+            }
 
             displayCols.forEach((c, ci) => {
                 const meta = colMeta[ci];
@@ -24303,6 +24534,10 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
             frag.appendChild(tr);
         }
 
+        // HR. DE RECEPCIÓN faltante en renglones ya capturados (ver
+        // _conciMarcarFaltaRecepcion); el observador cubre los cambios después.
+        frag.querySelectorAll('tr').forEach(_conciMarcarFaltaRecepcion);
+        _conciVigilarFaltaRecepcion(tbody);
         tbody.appendChild(frag);
         // Resalta en las filas recién insertadas las celdas que otros usuarios
         // conectados tengan abiertas ahora mismo (carga inicial y scroll perezoso).
@@ -31277,8 +31512,12 @@ function _conciMovementKeyFromPayload(payload) {
 
 function _conciMovementKeyFromDuplicateError(error) {
     const errorText = [error?.details, error?.message, error?.hint].filter(Boolean).join(' ');
-    const match = errorText.match(/key\s*\(\s*movement_key\s*\)\s*=\s*\(([^)]+)\)\s*already exists/i);
-    return match ? String(match[1] || '').trim() : '';
+    // Desde que la unicidad incluye la hora del SLOT ASIGNADO (dos rotaciones
+    // del mismo vuelo el mismo día), el detalle trae dos columnas:
+    // "Key (movement_key, _aifa_movement_slot(...))=(llave, HH:MM)". La llave es
+    // la primera; no lleva comas.
+    const match = errorText.match(/key\s*\(\s*movement_key\b[^=]*=\s*\(([^)]+)\)\s*already exists/i);
+    return match ? String(match[1] || '').split(',')[0].trim() : '';
 }
 
 function _conciIsMovementKeyDuplicate(error) {
@@ -31362,13 +31601,46 @@ async function _conciFindExistingMovementRowId(client, payload, error) {
     const movementKey = _conciMovementKeyFromDuplicateError(error)
         || _conciMovementKeyFromPayload(payload);
     if (!movementKey) return null;
+    // Dos operaciones del mismo vuelo con la misma FECHA comparten la llave: la
+    // que choca es la del mismo SLOT ASIGNADO, día y hora (misma regla que el
+    // índice único uq_conciliacion_manifiestos_movement_key y
+    // _aifa_movement_slot_fecha). Pasa con dos rotaciones del mismo día y con
+    // el vuelo de ayer retrasado pasada la medianoche junto al de hoy.
     const lookup = await client
         .from('Conciliación Manifiestos')
         .select('id')
         .eq('movement_key', movementKey)
         .maybeSingle();
-    if (lookup.error) return null;
-    const row = Array.isArray(lookup.data) ? lookup.data[0] : lookup.data;
+    let row = null;
+    if (!lookup.error) {
+        row = Array.isArray(lookup.data) ? lookup.data[0] : lookup.data;
+    } else {
+        // maybeSingle falla con más de una fila. Se elige la del mismo SLOT
+        // (día y hora); si ninguna coincide, no se adivina.
+        const varias = await client
+            .from('Conciliación Manifiestos')
+            .select('id,"SLOT ASIGNADO"')
+            .eq('movement_key', movementKey);
+        if (varias.error) return null;
+        const filas = Array.isArray(varias.data) ? varias.data : (varias.data ? [varias.data] : []);
+        // "DD/MM HH:MM" para "08/09/2026 19:20", "2026-09-08 19:20" y "08SEP 19:20";
+        // "HH:MM" si sólo trae la hora. Igual que _aifa_movement_slot_fecha.
+        const MESES = { JAN: 1, ENE: 1, FEB: 2, MAR: 3, APR: 4, ABR: 4, MAY: 5, JUN: 6, JUL: 7, AUG: 8, AGO: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12, DIC: 12 };
+        const p2 = s => String(s).padStart(2, '0');
+        const slotDe = (valor) => {
+            const v = String(valor ?? '').trim().toUpperCase();
+            let m = v.match(/^(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?\s+(\d{1,2}):(\d{2})/);
+            if (m) return `${p2(m[1])}/${p2(m[2])} ${p2(m[3])}:${m[4]}`;
+            m = v.match(/^\d{4}-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})/);
+            if (m) return `${p2(m[2])}/${p2(m[1])} ${p2(m[3])}:${m[4]}`;
+            m = v.match(/^(\d{1,2})\s*([A-Z]{3})[A-Z]*\s+(\d{1,2}):(\d{2})/);
+            if (m && MESES[m[2]]) return `${p2(m[1])}/${p2(MESES[m[2]])} ${p2(m[3])}:${m[4]}`;
+            m = v.match(/(\d{1,2}):(\d{2})/);
+            return m ? `${p2(m[1])}:${m[2]}` : '';
+        };
+        const slot = slotDe(_conciPayloadIdentityValue(payload, ['SLOT ASIGNADO']));
+        row = slot ? (filas.find(r => slotDe(r?.['SLOT ASIGNADO']) === slot) || null) : null;
+    }
     return row?.id !== undefined && row?.id !== null ? row.id : null;
 }
 

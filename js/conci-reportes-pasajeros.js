@@ -54,6 +54,8 @@
     // vuelo); una reclasificación mueve la operación de un bucket al otro.
     const TABLA = 'v_conciliacion_manifiestos_reportable';
     const PAGINA = 1000;
+    // Páginas de la RPC reportable (ver descargar).
+    const PAGINA_RPC = 5000;
 
     const MESES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
         'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
@@ -188,6 +190,56 @@
         return c;
     }
 
+    const filasDe = r => Array.isArray(r.data) ? r.data : (Array.isArray(r.data?.filas) ? r.data.filas : []);
+    const funcionNoExiste = e => /PGRST202|42883/.test(String(e?.code || ''))
+        || /could not find the function|does not exist/i.test(String(e?.message || ''));
+
+    /**
+     * Los manifiestos reportables hasta la fecha. Hay que leerlos todos (los
+     * acumulados del año y desde el inicio los necesitan) y la API corta cada
+     * respuesta en 10,000 renglones. La función de la migración 057 regresa
+     * sólo las columnas de los reportes y pagina por cursor (_uid): cada página
+     * sigue donde quedó la anterior, sin recalcular todo. Si la base todavía no
+     * la tiene, se usa la de siempre, por páginas.
+     */
+    async function leerReportable(client, hastaIso, avisar) {
+        const filas = [];
+        let despues = '';
+        for (;;) {
+            const respuesta = await client.rpc('conciliacion_reporte_reportable_pagina',
+                { p_hasta: hastaIso, p_despues: despues, p_limite: PAGINA_RPC });
+            if (respuesta.error) {
+                if (!filas.length && funcionNoExiste(respuesta.error)) return leerReportableCompleto(client, hastaIso, avisar);
+                throw respuesta.error;
+            }
+            const pagina = filasDe(respuesta);
+            filas.push(...pagina);
+            if (avisar) avisar(filas.length);
+            const ultimo = pagina.length ? pagina[pagina.length - 1]._uid : null;
+            // Una página corta es la última (la función nunca da más de las pedidas).
+            if (pagina.length < PAGINA_RPC || !ultimo) break;
+            despues = ultimo;
+        }
+        return filas;
+    }
+
+    // La función de siempre (fila completa), por páginas de offset.
+    async function leerReportableCompleto(client, hastaIso, avisar) {
+        const filas = [];
+        for (let desde = 0; ; ) {
+            const consulta = client.rpc('conciliacion_reporte_reportable', { p_hasta: hastaIso });
+            const paginada = consulta && typeof consulta.range === 'function';
+            const respuesta = await (paginada ? consulta.range(desde, desde + PAGINA_RPC - 1) : consulta);
+            if (respuesta.error) throw respuesta.error;
+            const pagina = filasDe(respuesta);
+            filas.push(...pagina);
+            if (avisar) avisar(filas.length);
+            if (!paginada || !pagina.length) break;
+            desde += pagina.length;
+        }
+        return filas;
+    }
+
     /**
      * Descarga los manifiestos hasta la fecha del reporte, en páginas. Se pide
      * una fila de muestra primero para saber qué columnas existen y bajar solo
@@ -203,10 +255,7 @@
         // CIERRE SUBSECRETARIA; los ajustes se incluyen por el corte que los
         // consumió, de modo que nunca se separa -ANTES/+DESPUÉS por FECHA.
         if (typeof client.rpc === 'function') {
-            const respuesta = await client.rpc('conciliacion_reporte_reportable', { p_hasta: hastaIso });
-            if (respuesta.error) throw respuesta.error;
-            const filasRpc = Array.isArray(respuesta.data) ? respuesta.data
-                : (Array.isArray(respuesta.data?.filas) ? respuesta.data.filas : []);
+            const filasRpc = await leerReportable(client, hastaIso, avisar);
             const columnasRpc = detectarColumnas(filasRpc[0] || {});
             const resultadoRpc = { hasta: hastaIso, filas: filasRpc, columnas: columnasRpc, epoch };
             if (epoch === cacheEpoch) cache = resultadoRpc;
@@ -994,6 +1043,9 @@
 
     window.conciReportesPasajeros = {
         generar, agregar, mostrar, aIso, imprimir, nombreAerolinea,
+        // Los manifiestos hasta una fecha, con su caché. (`descargar` es el
+        // Excel.) Lo usa el mensaje para WhatsApp, js/conci-mensaje-envio.js.
+        leer: descargar,
         descargar: descargar_,
         filasPlantilla1, filasPlantilla2,
         _cache: () => cache,

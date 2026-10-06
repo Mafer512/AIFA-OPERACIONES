@@ -125,9 +125,13 @@ describe('el cargador usa la ventana', () => {
 
   test('los dos filtros del navegador comparan contra la ventana, no contra un solo dia', () => {
     expect(cargador).toContain('const ventana = _conciVentanaDelFiltro();');
-    expect(cargador).toContain('if (ventana) return _conciVueloEnVentana(r, year, ventana);');
+    // Con un rango, la ventana de la consulta es la del filtro tal cual; con
+    // una sola fecha se amplía al día previo para anexar sus sin capturar
+    // (ver conciliacion-pendientes-dia-previo.test.js).
+    expect(cargador).toContain("const ventanaConsulta = diaPrevio ? { desde: diaPrevio, hasta: ventana.hasta } : ventana;");
+    expect(cargador).toContain('if (ventanaConsulta) return _conciVueloEnVentana(r, year, ventanaConsulta);');
     expect(cargador).toContain('_conciRowMatchesWindow(r, columns, year, ventana)');
     // La consulta tambien recibe la ventana, para los rangos que cambian de mes.
-    expect(cargador).toContain('_conciFetchManifestsForDate(client, year, month, day, dayEnd, ventana)');
+    expect(cargador).toContain('_conciFetchManifestsForDate(client, year, month, day, dayEnd, ventanaConsulta)');
   });
 });
