@@ -18212,7 +18212,8 @@ function _conciShowChangeTip(cell) {
     title.textContent = 'Valor anterior';
     const value = document.createElement('div');
     value.className = 'conci-change-tip-value';
-    value.textContent = previousValue === '' ? '(vacío)' : previousValue;
+    value.textContent = previousValue === '' ? '(vacío)'
+        : (_conciIsMatriculaStatusColumn(cell.dataset.col) ? _conciEstatusMatriculaEtiqueta(previousValue) : previousValue);
     tip.appendChild(title);
     tip.appendChild(value);
 
@@ -18706,6 +18707,12 @@ function _conciApplyTuaCoherence(rows, columns) {
 
 const _CONCI_ESTATUS_MATRICULA = ["ACTIVA", "NO IDENTIFICADA"];
 
+// Texto con que se muestra un estatus en pantalla. Solo cambia la etiqueta: el
+// valor que se guarda, se compara y se exporta sigue siendo "NO IDENTIFICADA".
+function _conciEstatusMatriculaEtiqueta(status) {
+    return status === 'NO IDENTIFICADA' ? 'NO ACTIVA' : status;
+}
+
 // Estatus de una matricula, en este orden:
 //
 //   1. Si esta en el catalogo, manda el catalogo: ACTIVA.
@@ -18784,6 +18791,7 @@ function _conciLiveCellValue(td) {
 function _conciRenderMatriculaStatusCell(td, status, mismatch, expectedAirline) {
     if (!td) return;
     const safeStatus = status || 'NO IDENTIFICADA';
+    const etiqueta = escapeHTML(_conciEstatusMatriculaEtiqueta(safeStatus));
     td.dataset.raw = safeStatus;
     // Ya no se marca de solo lectura: se corrige con un combo de dos opciones.
     delete td.dataset.conciReadonly;
@@ -18791,15 +18799,15 @@ function _conciRenderMatriculaStatusCell(td, status, mismatch, expectedAirline) 
     td.style.textAlign = 'center';
     if (mismatch) {
         const expected = escapeHTML(expectedAirline || 'la aerolínea del catálogo');
-        td.innerHTML = `<span style="color:#198754">${escapeHTML(safeStatus)}</span> <i class="fas fa-exclamation-triangle text-warning" title="Matrícula no corresponde a la aerolínea. Catálogo: ${expected}" aria-label="Matrícula no corresponde a la aerolínea"></i>`;
+        td.innerHTML = `<span style="color:#198754">${etiqueta}</span> <i class="fas fa-exclamation-triangle text-warning" title="Matrícula no corresponde a la aerolínea. Catálogo: ${expected}" aria-label="Matrícula no corresponde a la aerolínea"></i>`;
         td.style.setProperty('background', '#fff3cd', 'important');
         td.style.setProperty('color', '#664d03', 'important');
         td.title = `Matrícula no corresponde a la aerolínea. Catálogo: ${expectedAirline || 'sin dato'}`;
     } else if (safeStatus === 'ACTIVA') {
-        td.innerHTML = `<span style="color:#198754">${escapeHTML(safeStatus)}</span>`;
+        td.innerHTML = `<span style="color:#198754">${etiqueta}</span>`;
         td.title = 'Matrícula encontrada en el catálogo.';
     } else {
-        td.innerHTML = `<span style="color:#dc3545">${escapeHTML(safeStatus)}</span>`;
+        td.innerHTML = `<span style="color:#dc3545">${etiqueta}</span>`;
         td.title = 'Matrícula no encontrada en el catálogo.';
     }
 }
@@ -21992,6 +22000,9 @@ function _showConciExcelFilter(col, triggerEl) {
     // comercial tomado del mismo cat\u00e1logo (tabla `airlines`) que ya usa la
     // celda de la tabla, para que el capturista no tenga que memorizar c\u00f3digos.
     const _isAirlineFilterCol = /aerol[i\u00ed]nea|airline/i.test(col);
+    // ESTATUS MATR\u00cdCULA filtra por su valor guardado ("NO IDENTIFICADA"), pero
+    // muestra y busca la misma etiqueta que la celda ("NO ACTIVA").
+    const _isMatriculaStatusFilterCol = _conciIsMatriculaStatusColumn(col);
     const airlineLabelFor = (v) => {
         const meta = _conciResolveAirlineMeta(v);
         if (meta && meta.name) return `${esc2(v)} \u2014 ${esc2(meta.name)}`;
@@ -22008,7 +22019,8 @@ function _showConciExcelFilter(col, triggerEl) {
         <div style="max-height:200px;overflow-y:auto;border:1px solid #eee;border-radius:4px;padding:4px;margin-bottom:10px;background:#f8f9fa;" id="conci-ef-list">
             ${values.map((v, i) => {
         const checked = !activeSet || activeSet.has(v);
-        const label = v === '' ? '(Vac\u00edo)' : (_isAirlineFilterCol ? airlineLabelFor(v) : esc2(v));
+        const label = v === '' ? '(Vac\u00edo)' : (_isAirlineFilterCol ? airlineLabelFor(v)
+            : esc2(_isMatriculaStatusFilterCol ? _conciEstatusMatriculaEtiqueta(v) : v));
         const safeVal = esc2(v);
         // El buscador de este panel debe encontrar tanto el codigo IATA crudo
         // (p.ej. "E7") como el nombre comercial que la etiqueta realmente
@@ -22017,7 +22029,8 @@ function _showConciExcelFilter(col, triggerEl) {
         // con el codigo y esas quedaban invisibles al usar "Seleccionar todo"
         // despues de buscar.
         const airlineSearchMeta = _isAirlineFilterCol ? _conciResolveAirlineMeta(v) : null;
-        const searchKey = ((airlineSearchMeta && airlineSearchMeta.name) ? `${v} ${airlineSearchMeta.name}` : v).toLowerCase();
+        const searchKey = ((airlineSearchMeta && airlineSearchMeta.name) ? `${v} ${airlineSearchMeta.name}`
+            : (_isMatriculaStatusFilterCol ? `${v} ${_conciEstatusMatriculaEtiqueta(v)}` : v)).toLowerCase();
         return `<div class="conci-ef-item d-flex align-items-center gap-2" style="padding:2px 4px;cursor:pointer;" data-value="${safeVal}" data-search="${esc2(searchKey)}">
                     <input class="form-check-input conci-ef-chk" type="checkbox" id="conci-ef-${i}" value="${safeVal}" ${checked ? 'checked' : ''}>
                     <label class="conci-ef-label flex-grow-1" data-value="${safeVal}" title="click: solo este valor" style="cursor:pointer;margin:0;">${label}</label>
@@ -27303,7 +27316,7 @@ function _conciActivateMatriculaStatusEditor(td, currentRaw) {
     _CONCI_ESTATUS_MATRICULA.forEach(valor => {
         const option = document.createElement('option');
         option.value = valor;
-        option.textContent = valor;
+        option.textContent = _conciEstatusMatriculaEtiqueta(valor);
         select.appendChild(option);
     });
     const actual = _conciNormalizeEditableCellText(currentRaw).toUpperCase();
@@ -27324,7 +27337,7 @@ function _conciActivateMatriculaStatusEditor(td, currentRaw) {
         const nextRaw = accept && userChanged && _CONCI_ESTATUS_MATRICULA.includes(elegido)
             ? elegido
             : fallbackRaw;
-        _conciCommitCellRaw(td, nextRaw, move, nextRaw);
+        _conciCommitCellRaw(td, nextRaw, move, _conciEstatusMatriculaEtiqueta(nextRaw));
     };
     td._conciCloseEditor = closeEditor;
     select.addEventListener('change', () => { userChanged = true; closeEditor(true, false); });
