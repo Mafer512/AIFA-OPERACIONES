@@ -6,6 +6,17 @@ const fs = require('fs');
 const path = require('path');
 
 const Core = require('../js/estadistico-informe-core');
+const { crearTotalesFake } = require('../test-utils/totales-fake');
+
+// Totales de la capa unificada (oficial hasta el corte, detalle después).
+// Diciembre 2024 trae oficial de Comercial y General; enero 2025, de Carga y
+// General. Lo que el oficial no trae sale del detalle (aquí, nada).
+const oficialRows = [
+  { anio: 2024, mes: 12, categoria: 'comercial', operaciones: 15, pasajeros: 1600 },
+  { anio: 2024, mes: 12, categoria: 'general', operaciones: 3, pasajeros: 9 },
+  { anio: 2025, mes: 1, categoria: 'carga', operaciones: 6, toneladas: 13 },
+  { anio: 2025, mes: 1, categoria: 'general', operaciones: 2, pasajeros: 6 },
+];
 
 const uiSource = fs.readFileSync(path.resolve(__dirname, '..', 'js', 'estadistico-informe.js'), 'utf8');
 
@@ -133,6 +144,7 @@ async function mount(role) {
   chartConfigs = [];
   window.InformeEstadisticoCore = Core;
   window.supabaseClient = buildSupabaseStub();
+  window.TotalesService = crearTotalesFake({ corte: '2025-01-31', oficial: oficialRows });
   window.sectionLevel = () => role;
   window.Chart = class ChartStub {
     constructor(_canvas, config) { this.config = config; chartConfigs.push(config); }
@@ -157,6 +169,7 @@ describe('interfaz del Informe Estadístico', () => {
       consoleError.mockRestore();
       delete window.InformeEstadisticoCore;
       delete window.supabaseClient;
+      delete window.TotalesService;
       delete window.sectionLevel;
       delete window.Chart;
     });
@@ -245,9 +258,8 @@ describe('interfaz del Informe Estadístico', () => {
     });
 
     test('las tarjetas de acumulados suman Comercial + General y muestran Carga aparte', () => {
-      // General sale de monthly_operations (3 en dic-2024 + 2 en ene-2025) y
-      // Comercial/Carga de manifiestos, porque en esta fixture la tabla mensual
-      // no trae columnas de esos dos tipos.
+      // Todo sale de la capa unificada: Comercial 15/1,600 (dic-2024),
+      // General 3+2 / 9+6 y Carga 6 ops / 13 t (ene-2025).
       const text = document.getElementById('informe-est-acumulado').textContent;
       expect(text).toContain('20');
       expect(text).toContain('1,615');
@@ -303,6 +315,7 @@ describe('interfaz del Informe Estadístico', () => {
       const el = document.getElementById('informe-est-frescura');
       expect(el.classList.contains('d-none')).toBe(false);
       expect(el.textContent).toMatch(/^Datos al /);
+      expect(el.textContent).toContain('Cifras oficiales hasta enero 2025 · posteriores: conciliación de manifiestos');
     });
 
     test('"Actualizar" le pide al servidor recalcular antes de releer', async () => {
@@ -333,6 +346,7 @@ describe('interfaz del Informe Estadístico', () => {
       consoleError.mockRestore();
       delete window.InformeEstadisticoCore;
       delete window.supabaseClient;
+      delete window.TotalesService;
       delete window.sectionLevel;
       delete window.Chart;
     });

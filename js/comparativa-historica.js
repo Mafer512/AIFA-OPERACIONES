@@ -145,60 +145,15 @@
 
     async function loadYoYData(client) {
         try {
-            const today = new Date();
-            const curYear = today.getFullYear();
-
-            // Fetch monthly_operations with is_official flag
-            const { data, error } = await client
-                .from('monthly_operations')
-                .select('year, month, comercial_ops, comercial_pax, general_ops, general_pax, carga_ops, is_official')
-                .order('year', { ascending: true })
-                .order('month', { ascending: true });
-
-            if (error) throw error;
-            if (!data) return;
-
-            // Fetch daily_operations for current year to build preliminary monthly sums
-            const { data: dailyData } = await client
-                .from('daily_operations')
-                .select('date, comercial_ops, comercial_pax, general_ops, general_pax, carga_ops')
-                .gte('date', `${curYear}-01-01`)
-                .lte('date', `${curYear}-12-31`);
-
-            // Aggregate daily data by year+month
-            const dailyByMonth = {};
-            (dailyData || []).forEach(row => {
-                const d = new Date(row.date + 'T00:00:00');
-                const m = d.getMonth() + 1;
-                const yr = d.getFullYear();
-                const key = `${yr}_${m}`;
-                if (!dailyByMonth[key]) dailyByMonth[key] = { year: yr, month: m, comercial_ops: 0, comercial_pax: 0, general_ops: 0, general_pax: 0, carga_ops: 0, is_official: false };
-                dailyByMonth[key].comercial_ops += Number(row.comercial_ops) || 0;
-                dailyByMonth[key].comercial_pax += Number(row.comercial_pax) || 0;
-                dailyByMonth[key].general_ops   += Number(row.general_ops)   || 0;
-                dailyByMonth[key].general_pax   += Number(row.general_pax)   || 0;
-                dailyByMonth[key].carga_ops     += Number(row.carga_ops)     || 0;
-            });
-
-            // Build merged cache and track official/preliminary status per month
+            // Totales de la capa unificada (js/totales-service.js): cifras
+            // oficiales hasta el corte y Conciliación después — los mismos que
+            // las tarjetas del Inicio. "preliminar" = mes posterior al corte.
+            const data = await window.TotalesService.filasMensuales();
             monthStatusCache = {};
-            const merged = [...data];
             data.forEach(row => {
-                monthStatusCache[`${row.year}_${row.month}`] = (row.is_official !== false) ? 'oficial' : 'preliminar';
+                monthStatusCache[`${row.year}_${row.month}`] = row.is_official ? 'oficial' : 'preliminar';
             });
-
-            // Inject daily-aggregated months that have no official monthly record
-            Object.values(dailyByMonth).forEach(agg => {
-                const key = `${agg.year}_${agg.month}`;
-                const idx = merged.findIndex(r => r.year === agg.year && r.month === agg.month);
-                if (idx === -1) {
-                    merged.push(agg);
-                    monthStatusCache[key] = 'preliminar';
-                } else if (merged[idx].is_official === false) {
-                    merged[idx] = { ...merged[idx], ...agg, is_official: false };
-                    monthStatusCache[key] = 'preliminar';
-                }
-            });
+            const merged = data.slice();
 
             opsDataCache = merged;
 

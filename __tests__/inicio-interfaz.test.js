@@ -199,8 +199,12 @@ describe('el banner de inicio', () => {
 
   // detalleReal: usa las ventanas de detalle de verdad en lugar del espía.
   // mensual(i): lo que devuelve ndwResolveMonthlyVal para el mes i.
+  // detalle: detalle por año (TotalesService.getDetalleDiario) para Día y
+  // Semana; por omisión, 2026 con los números de la semana de prueba.
+  // totales: totales mensuales de la capa unificada (Mes, Año, Histórico).
   const sinMes = () => ({ value: 0, hasData: false, lastDate: null });
-  function montarBanner({ anual = 0, detalleReal = false, mensual = sinMes } = {}) {
+  const LEYENDA = 'Cifras oficiales hasta agosto 2026 · posteriores: conciliación de manifiestos';
+  function montarBanner({ anual = 0, detalleReal = false, mensual = sinMes, detalle: detalleAnios, totales } = {}) {
     window._ndwCurrentManifestDays = {
       '2026-09-15': { status: 'ready', count: 3, totals: {
         comercial: { operaciones: 2, pasajeros: 240 }, carga: { operaciones: 1, toneladas: 3.5 }
@@ -221,6 +225,10 @@ describe('el banner de inicio', () => {
       });
     }
     const semana = { rango: { inicio: '2026-09-07', fin: '2026-09-13' }, dias };
+    window._ndwDetalle = detalleAnios !== undefined ? detalleAnios : {
+      2026: { status: 'ready', porFecha: new Map(dias.map((d) => [d.fecha, { comercial: d.comercial, carga: d.carga, general: d.general }])) }
+    };
+    window._ndwTotales = totales !== undefined ? totales : { status: 'ready', porMes: new Map(), leyenda: LEYENDA };
     const detalle = jest.fn();
     const api = new Function('detalle', 'semana', 'anual', 'mensual', `
       const WEEKLY_OPERATIONS_DATASETS = [semana];
@@ -341,7 +349,7 @@ describe('el banner de inicio', () => {
       semanas()[0].click();
       expect(titulo()).toBe('1 al 6 de septiembre de 2026');
       expect(banner.querySelector('.ndw-card-value').textContent).toBe('0');
-      expect(banner.textContent).toContain('Sin capturas diarias en esta semana.');
+      expect(banner.textContent).toContain('Detalle por FECHA del manifiesto');
       banner.querySelector('[data-ndw-week="2026-09-07"]').click();
       expect(banner.querySelector('.ndw-card-value').textContent).toBe('770');
 
@@ -358,30 +366,32 @@ describe('el banner de inicio', () => {
     }
   });
 
-  test('al pasar a un mes de otro año, pide una vez sus capturas diarias y suma la semana', async () => {
+  test('al pasar a un mes de otro año, pide una vez el detalle de ese año (las tres aviaciones)', async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-09-15T12:00:00'));
-    const pedir = jest.fn().mockResolvedValue([
-      { date: '2025-12-01', comercial_ops: 50, comercial_pax: 5000, general_ops: 2, general_pax: 4, carga_ops: 9, carga_tons: 12.5 },
-      { date: '2025-12-03', comercial_ops: 60, comercial_pax: 6000, general_ops: 1, general_pax: 2, carga_ops: 8, carga_tons: 10 },
-      { date: '2025-12-09', comercial_ops: 70, comercial_pax: 7000, general_ops: 3, general_pax: 6, carga_ops: 7, carga_tons: 9 }
-    ]);
-    window.dataManager = { getDailyOperationsForYear: pedir };
+    const dia = (com, gen) => ({ comercial: { operaciones: com, pasajeros: com * 100 }, carga: { operaciones: 3, toneladas: 2 }, general: { operaciones: gen, pasajeros: gen * 2 } });
+    const pedir = jest.fn().mockResolvedValue(new Map([
+      ['2025-12-02', dia(140, 2)], ['2025-12-03', dia(10, 1)], ['2025-12-09', dia(150, 3)]
+    ]));
+    window.TotalesService = { getDetalleDiario: pedir };
     try {
       const { banner } = montarBanner();
+      const valores = () => [...banner.querySelectorAll('.ndw-card-value')].map((v) => v.textContent);
       for (let i = 0; i < 9; i += 1) banner.querySelector('[data-ndw-week-step="-1"]').click();
       expect(banner.querySelector('.ndw-hero-title').textContent).toBe('1 al 7 de diciembre de 2025');
-      expect(pedir).toHaveBeenCalledWith(2025);
-      expect(banner.querySelector('.ndw-card-value').textContent).toBe('—');
-      expect(banner.textContent).toContain('Cargando las capturas diarias de 2025');
+      expect(pedir).toHaveBeenCalledWith('2025-01-01', '2025-12-31');
+      expect(valores()).toEqual(['—', '—', '—', '—', '—', '—']);
+      expect(banner.textContent).toContain('Cargando el detalle de 2025');
       for (let i = 0; i < 5; i += 1) await Promise.resolve();
       expect([...banner.querySelectorAll('[data-ndw-week]')].map((c) => c.textContent)).toEqual(['1-7', '8-14', '15-21', '22-28', '29-31']);
-      expect(banner.querySelector('.ndw-card-value').textContent).toBe('110');
+      expect(valores()[0]).toBe('150');   // comercial 140 + 10
+      expect(valores()[4]).toBe('3');     // general 2 + 1 (directorio de la Gerencia)
       banner.querySelector('[data-ndw-week="2025-12-08"]').click();
-      expect(banner.querySelector('.ndw-card-value').textContent).toBe('70');
+      expect(valores()[0]).toBe('150');
+      expect(valores()[4]).toBe('3');
       expect(pedir).toHaveBeenCalledTimes(1);
     } finally {
-      delete window.dataManager;
+      delete window.TotalesService;
       jest.useRealTimers();
     }
   });
@@ -538,8 +548,51 @@ describe('el banner de inicio', () => {
     input.dispatchEvent(new Event('change', { bubbles: true }));
     expect(banner.querySelector('.ndw-hero-title').textContent).toBe('Sábado 12 de septiembre de 2026');
     expect(banner.querySelector('.ndw-card-value').textContent).toBe('0');
-    expect(banner.textContent).toContain('Sin manifiestos capturados');
+    expect(banner.textContent).toContain('Sin manifiestos para esta fecha');
     } finally { jest.useRealTimers(); }
+  });
+
+  test('Mes, Año e Histórico salen de la capa unificada: "—" mientras se consulta y su leyenda en el hero', () => {
+    const { banner, api } = montarBanner({ totales: { status: 'loading', porMes: new Map(), leyenda: '' } });
+    const valores = () => [...banner.querySelectorAll('.ndw-card-value')].map((v) => v.textContent);
+    banner.querySelector('[data-ndw-mode="monthly"]').click();
+    expect(valores()).toEqual(['—', '—', '—', '—', '—', '—']);
+    window._ndwTotales = { status: 'ready', porMes: new Map(), leyenda: LEYENDA };
+    api.render();
+    expect(banner.textContent).toContain(LEYENDA);
+    window._ndwTotales = { status: 'error', porMes: new Map(), leyenda: '' };
+    api.render();
+    expect(banner.textContent).toContain('No fue posible consultar los totales');
+    // Semana es detalle: lo dice el hero.
+    banner.querySelector('[data-ndw-mode="weekly"]').click();
+    expect(banner.textContent).toContain('Detalle por FECHA del manifiesto');
+  });
+
+  test('el aviso "Carga ene–ago 2026 incompleta" sale discreto sólo en los periodos que lo tocan', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-09-15T12:00:00'));
+    const avisosApi = require('../js/manifiestos-avisos.js');
+    const avisos = [{ clave: 'carga_2026_ene_ago', texto: 'Carga ene–ago 2026 incompleta', desde: '2026-01-01',
+      hasta: '2026-08-31', categoria: 'carga', ambitos: ['inicio', 'estadistica'], activo: true }];
+    window.ManifiestosAvisos = { cargar: () => Promise.resolve(avisos), para: (a, d, h, c) => avisosApi.filtrar(avisos, a, d, h, c) };
+    window._ndwAvisosPedidos = true;
+    try {
+      const { banner } = montarBanner();
+      const aviso = () => banner.querySelector('.ndw-aviso-periodo');
+      expect(aviso()).toBeNull();                      // semana del 7 al 13 de septiembre
+      banner.querySelector('[data-ndw-mode="annual"]').click();
+      expect(aviso().textContent).toContain('Carga ene–ago 2026 incompleta');
+      banner.querySelector('[data-ndw-mode="monthly"]').click();
+      expect(aviso()).toBeNull();                      // septiembre
+      banner.querySelector('[data-ndw-step="-1"]').click();
+      expect(aviso().textContent).toContain('Carga ene–ago 2026 incompleta');   // agosto
+      banner.querySelector('[data-ndw-mode="historic"]').click();
+      expect(aviso()).not.toBeNull();
+    } finally {
+      delete window.ManifiestosAvisos;
+      delete window._ndwAvisosPedidos;
+      jest.useRealTimers();
+    }
   });
 
   test('la foto va según la hora local del sitio, en sus cuatro horarios', () => {

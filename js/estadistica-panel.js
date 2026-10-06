@@ -6,8 +6,11 @@
  * toca, sólo se acomoda a su lado.
  *
  * DE DÓNDE SALEN LAS CIFRAS
- *   De un único RPC, public.estadistica_agregado (migración 038), que suma en
- *   PostgreSQL sobre mv_estadistica_operaciones. Aquí NO se recorre ninguna
+ *   De un único RPC, public.estadistica_agregado (migraciones 043/060), que
+ *   suma en PostgreSQL sobre mv_estadistica_operaciones. Desde la 060 esa
+ *   vista lee SOLO de manifiestos_hechos: maestra_manifiestos para FECHA hasta
+ *   2025 y "Conciliación Manifiestos" desde 2026; cada manifiesto cuenta en la
+ *   fecha de su cierre de Subsecretaría o, si no tiene, en su FECHA. Aquí NO se recorre ninguna
  *   tabla con reduce/filter/map para calcular una métrica: el navegador recibe
  *   renglones ya agregados —decenas, no decenas de miles— y sólo los pinta.
  *   Las únicas cuentas que se hacen del lado del cliente son las que operan
@@ -91,29 +94,32 @@
 
     // ── Consultas ────────────────────────────────────────────────────────────
     //
-    // anota `.oficial` (Motor.oficialOperacion) en los renglones que devuelve
-    // el RPC, SIN tocar ninguno de sus demás campos: sólo cuando no hay ningún
-    // filtro de la barra activo (el override no tiene desgloses por
-    // aerolínea/matrícula/tipo de aeronave/etc., así que aplicarlo con un
-    // filtro puesto sería fabricar un dato que no existe) y sólo para las dos
-    // formas de agregado para las que el override sí trae cifra: el total del
-    // periodo (sin dimensiones) y la serie mensual (dimensión anio_mes). Cada
-    // pantalla decide si usa `.oficial` o el campo calculado de siempre; nada
-    // se sobrescribe aquí, así que quien no lo lea sigue viendo exactamente lo
-    // que ya veía.
-    function anotarOficial(filas, dimensiones, desde, hasta, filtros) {
-        if (Object.keys(filtros || {}).length > 0) return filas;
+    // anota `.oficial` en los renglones que devuelve el RPC, SIN tocar ninguno
+    // de sus demás campos: son los totales de la capa unificada
+    // (js/totales-service.js), los mismos del Inicio. Sólo sin filtros
+    // dimensionales (con filtros no hay cifra oficial: se queda el detalle y
+    // se avisa) y sólo para el total del periodo (sin dimensiones) y la serie
+    // mensual (anio_mes).
+    async function anotarOficial(filas, dimensiones, desde, hasta, filtros) {
         const dims = dimensiones || [];
-        if (dims.length === 0) {
-            if (filas[0]) filas[0].oficial = Motor.oficialOperacion(desde, hasta);
-        } else if (dims.length === 1 && dims[0] === 'anio_mes') {
-            filas.forEach((fila) => {
-                const [anio, mes] = String(fila.d1 || '').split('-').map(Number);
-                if (!anio || !mes) return;
-                const primerDia = `${anio}-${String(mes).padStart(2, '0')}-01`;
-                const ultimoDia = `${anio}-${String(mes).padStart(2, '0')}-${String(new Date(anio, mes, 0).getDate()).padStart(2, '0')}`;
-                fila.oficial = Motor.oficialOperacion(primerDia, ultimoDia);
-            });
+        const esTotal = dims.length === 0;
+        const esMensual = dims.length === 1 && dims[0] === 'anio_mes';
+        const servicio = window.TotalesService;
+        if ((!esTotal && !esMensual) || !servicio || servicio.hayFiltros(filtros)) return filas;
+        try {
+            const r = await servicio.getTotales({ desde, hasta, granularidad: esMensual ? 'mes' : 'total' });
+            if (esTotal) {
+                if (!filas.length) filas.push(Motor.normalizarFila({}));
+                filas[0].oficial = Motor.oficialDesdeTotales(r.total, r.leyenda);
+            } else {
+                const porMes = new Map(r.periodos.map((p) => [p.clave, p]));
+                filas.forEach((fila) => {
+                    const p = porMes.get(String(fila.d1 || ''));
+                    if (p) fila.oficial = Motor.oficialDesdeTotales(p, r.leyenda);
+                });
+            }
+        } catch (error) {
+            console.warn('[Estadística] Sin totales unificados; se muestra el detalle:', error);
         }
         return filas;
     }
@@ -154,7 +160,8 @@
     function pintarAvisos(avisos) {
         const host = $('est-avisos');
         if (!host) return;
-        const lista = (avisos || []).filter((a) => a.nivel !== 'info' || a.clave === 'canceladas');
+        const lista = (avisos || []).filter((a) => a.nivel !== 'info' || a.clave === 'canceladas'
+            || String(a.clave || '').startsWith('periodo_'));
         if (!lista.length) { host.classList.add('d-none'); host.innerHTML = ''; return; }
         host.classList.remove('d-none');
         host.innerHTML = lista.map((a) => {
@@ -437,9 +444,9 @@
             return {
                 nivel: 'error',
                 clave: 'vacio_total',
-                mensaje: 'La estadística no tiene ningún movimiento cargado. Falta aplicar las '
-                    + 'migraciones del módulo o refrescar la vista materializada '
-                    + '(REFRESH MATERIALIZED VIEW public.mv_estadistica_operaciones).'
+                mensaje: 'La estadística no tiene ningún manifiesto cargado. Falta aplicar las '
+                    + 'migraciones 058 a 060 (manifiestos_hechos) o esperar a que termine su llenado '
+                    + '(059_manifiestos_hechos_seguimiento.sql).'
             };
         }
 
@@ -464,7 +471,36 @@
     async function pintarAvisosDe(total) {
         const avisos = Motor.validar(total);
         const vacio = await avisoDeVacio(total);
-        pintarAvisos(vacio ? [vacio].concat(avisos) : avisos);
+        const periodo = await avisosDePeriodo();
+        pintarAvisos((vacio ? [vacio] : []).concat(avisos, periodo, avisoFuente(total)));
+    }
+
+    // De dónde salen los totales que se están viendo.
+    function avisoFuente(total) {
+        const servicio = window.TotalesService;
+        if (!servicio) return [];
+        if (servicio.hayFiltros(Motor.filtrosAJson(state.filtros))) {
+            return [{ nivel: 'aviso', clave: 'periodo_detalle', mensaje: servicio.AVISO_DETALLE }];
+        }
+        const oficial = total && total.oficial;
+        if (!oficial || !oficial.leyenda) return [];
+        return [{
+            nivel: 'info', clave: 'periodo_fuente',
+            mensaje: oficial.leyenda + (oficial.fuente === 'mixta'
+                ? ' · Este periodo combina cifra oficial (meses completos hasta el corte) y detalle.' : '')
+        }];
+    }
+
+    // Huecos conocidos de las fuentes (tabla manifiestos_avisos_periodo, ver
+    // js/manifiestos-avisos.js): hoy, "Carga ene–ago 2026 incompleta". Se
+    // muestran discretos, al pie, sólo si el periodo elegido los toca.
+    async function avisosDePeriodo() {
+        const api = window.ManifiestosAvisos;
+        if (!api || typeof api.cargar !== 'function') return [];
+        try { await api.cargar(); } catch (_) { return []; }
+        return api.para('estadistica', desde(), hasta()).map((a) => ({
+            nivel: 'info', clave: `periodo_${a.clave}`, mensaje: a.texto
+        }));
     }
 
     async function mostrarFrescura() {
@@ -493,18 +529,7 @@
     // horizontales con el valor al final de la barra. Todo se arma con lo que
     // ya devolvió el servidor: aquí sólo se reparten proporciones y se escribe.
     const negrita = (texto) => `<b>${esc(texto)}</b>`;
-    // El corte oficial (window.OFFICIAL_STATISTICS_OVERRIDES.corteIso) nunca
-    // tiene datos después de esa fecha: si el filtro pide hasta el 31 de
-    // diciembre pero el informe institucional corta el 14 de septiembre, el
-    // texto debe decir "al 14/09/2026", no prometer un año que no terminó.
-    // Sólo cambia lo que se MUESTRA aquí — el rango que se manda al RPC
-    // (desde()/hasta()) no se toca, así que el resto del filtro sigue igual.
-    const hastaMostrado = () => {
-        const ov = window.OFFICIAL_STATISTICS_OVERRIDES;
-        const corte = ov && ov.activo && ov.corteIso;
-        const h = hasta();
-        return (corte && h && h > corte) ? corte : h;
-    };
+    const hastaMostrado = () => hasta();
     const periodoTexto = () => `Del ${fboFecha(desde())} al ${fboFecha(hastaMostrado())}`;
 
     function pintarFrase(id, html) {
@@ -697,9 +722,9 @@
         const chips = (campo, soloAnio) => (soloAnio ? '' : `${chipVariacion(vOf(campo, totalAnterior), 'vs periodo anterior')}<br>`)
             + chipVariacion(vAnioOf(campo, totalAnioAnterior), 'vs año anterior');
 
-        // total.oficial (Motor.oficialOperacion, vía agregado()/totalPeriodo())
+        // total.oficial (Motor.oficialDesdeTotales, vía agregado()/totalPeriodo())
         // es la MISMA fuente que ya usa el PDF Informe Estadístico
-        // (OFFICIAL_STATISTICS_OVERRIDES): si el periodo pedido es cubrible,
+        // (capa unificada, js/totales-service.js): sin filtros,
         // Operaciones/Pasajeros/Carga se muestran con la cifra oficial; si no,
         // se sigue mostrando lo que calcula estadistica_agregado, igual que
         // antes. El resto de los campos (llegadas/salidas, ocupación,
@@ -719,7 +744,7 @@
                 : ` El ${negrita(Motor.fmtPorcentaje(total.puntualidadPorcentaje))} de las operaciones evaluables cumplió la ventana del slot.`)
             + cambioTexto(vAnioOf('operaciones', totalAnioAnterior), 'las operaciones'));
 
-        const notaOficial = total.oficial ? 'Cifra oficial · ' : '';
+        const notaOficial = total.oficial ? `${Motor.etiquetaFuente(total.oficial)} · ` : '';
         const notaDisponibles = total.oficial ? ' (de los registros disponibles)' : '';
         $('est-resumen-tarjetas').innerHTML = [
             kpiFbo({ icono: 'fa-plane', color: '#0d6efd', titulo: 'Operaciones', valor: Motor.fmtEntero(opsMostrado),
@@ -758,7 +783,7 @@
                 labels: mensual.map((f) => fboMes(f.d1)),
                 datasets: [
                     // Cada mes usa su propia cifra oficial (f.oficial, anotada
-                    // por agregado() vía Motor.oficialOperacion) cuando existe
+                    // por agregado() vía Motor.oficialDesdeTotales) cuando existe
                     // — así septiembre no aparece con lo poco que ya se
                     // capturó localmente en vez del total oficial a la fecha.
                     { type: 'bar', label: 'Operaciones', data: mensual.map((f) => f.oficial ? f.oficial.operaciones : f.operaciones), backgroundColor: '#0d6efd', borderRadius: 4, maxBarThickness: 48, yAxisID: 'y' },
@@ -1349,7 +1374,7 @@
         const fmtT = (t) => `${Motor.fmtDecimal(t)} t`;
 
         // Misma fuente oficial que Resumen (total.oficial, vía
-        // Motor.oficialOperacion): sólo se usa para el TOTAL de la tarjeta y
+        // Motor.oficialDesdeTotales): sólo se usa para el TOTAL de la tarjeta y
         // la frase. El desglose nacional/internacional, el detalle por
         // aerolínea y el resto de las tarjetas (descargada/embarcada/tránsito/
         // correo/importación-exportación/equipaje) siguen siendo lo que ya
@@ -1367,7 +1392,7 @@
 
         $('est-carga-tarjetas').innerHTML = [
             kpiFbo({ icono: 'fa-box', color: '#fd7e14', titulo: 'Carga transportada', valor: Motor.fmtToneladas(cargaMostrada),
-                detalle: `${total.oficial ? 'Cifra oficial · ' : ''}Nacional ${Motor.fmtToneladas(total.cargaNacionalKg)} · Internacional ${Motor.fmtToneladas(total.cargaInternacionalKg)}${total.oficial ? ' (de los registros disponibles)' : ''}` }),
+                detalle: `${total.oficial ? `${Motor.etiquetaFuente(total.oficial)} · ` : ''}Nacional ${Motor.fmtToneladas(total.cargaNacionalKg)} · Internacional ${Motor.fmtToneladas(total.cargaInternacionalKg)}${total.oficial ? ' (de los registros disponibles)' : ''}` }),
             kpiFbo({ icono: 'fa-arrow-down', color: '#0d6efd', titulo: 'Descargada en AIFA', valor: Motor.fmtToneladas(total.cargaDescargadaKg),
                 detalle: 'Movimientos de llegada' }),
             kpiFbo({ icono: 'fa-arrow-up', color: '#20c997', titulo: 'Embarcada en AIFA', valor: Motor.fmtToneladas(total.cargaEmbarcadaKg),
@@ -1968,6 +1993,22 @@
         return filas;
     }
 
+    // Copia de un renglón con Operaciones/Pasajeros/Carga como se ven en
+    // pantalla: si trae `.oficial` (capa unificada) manda ésa.
+    function conOficial(fila) {
+        const copia = Object.assign({}, fila);
+        const servicio = window.TotalesService;
+        if (fila && fila.oficial) {
+            copia.operaciones = fila.oficial.operaciones;
+            copia.paxTotal = fila.oficial.paxTotal;
+            copia.cargaTotalKg = fila.oficial.cargaTotalKg;
+            copia.fuenteTotales = `${Motor.etiquetaFuente(fila.oficial)} · ${fila.oficial.leyenda}`;
+        } else {
+            copia.fuenteTotales = servicio ? servicio.AVISO_DETALLE : 'Detalle de manifiestos';
+        }
+        return copia;
+    }
+
     async function generarDocumento(clave, formato) {
         const sufijo = `${desde()}_a_${hasta()}`;
         const doc = DOCUMENTOS.find((d) => d.clave === clave);
@@ -1983,7 +2024,7 @@
         }
 
         if (clave === 'resumen') {
-            const total = await totalPeriodo(desde(), hasta());
+            const total = conOficial(await totalPeriodo(desde(), hasta()));
             const columnas = [{ titulo: 'Indicador', clave: 'indicador' }, { titulo: 'Valor', clave: 'valor' }];
             const filas = [
                 ['Periodo', Motor.etiquetaRango(desde(), hasta())],
@@ -2003,7 +2044,8 @@
                 ['Factor de ocupación (%)', total.factorOcupacion],
                 ['Puntualidad (%)', total.puntualidadPorcentaje],
                 ['Demora promedio (min)', total.demoraPromedio],
-                ['Operaciones sin clasificar', total.operacionesSinClasificar]
+                ['Operaciones sin clasificar', total.operacionesSinClasificar],
+                ['Fuente de los totales', total.fuenteTotales]
             ].map(([indicador, valor]) => ({ indicador, valor }))
                 .concat(Motor.calidad(total).map((c) => ({ indicador: c.etiqueta, valor: c.texto })));
             if (formato === 'csv') descargarCsv(columnas, filas, `estadistica_resumen_${sufijo}`);
@@ -2068,8 +2110,9 @@
         };
         const dims = dimensionPorDocumento[clave];
         if (!dims) return;
-        const filas = await agregado(desde(), hasta(), dims, null, 5000);
-        const columnas = COLUMNAS_DOC[clave] || COLUMNAS_DOC.mensual;
+        const filas = (await agregado(desde(), hasta(), dims, null, 5000)).map(conOficial);
+        const columnas = (COLUMNAS_DOC[clave] || COLUMNAS_DOC.mensual)
+            .concat(dims[0] === 'anio_mes' ? [{ titulo: 'Fuente de los totales', clave: 'fuenteTotales' }] : []);
         const nombre = `estadistica_${clave}_${sufijo}`;
         if (formato === 'csv') descargarCsv(columnas, filas, nombre);
         else await descargarExcel([{ titulo: doc ? doc.titulo : clave, columnas, filas }], nombre);
@@ -2151,6 +2194,30 @@
         };
         if (state.fboFiltro) filtros[state.fboFiltro.campo] = state.fboFiltro.valor;
         return filtros;
+    }
+
+    // Sin filtros de FBO (movimiento, territorial o una selección del tablero)
+    // los totales de Aviación General salen de la capa unificada: cifra oficial
+    // hasta el corte y, después, el mismo directorio con la misma regla. Así el
+    // Inicio y FBO dicen lo mismo. Con filtros se queda el directorio.
+    async function totalesAgFbo(rango, anterior) {
+        const servicio = window.TotalesService;
+        const f = filtrosFbo(rango.desde, rango.hasta);
+        if (!servicio || state.fboFiltro || f.tipo_operacion || f.ambito_operacion) return null;
+        try {
+            const [actual, previo] = await Promise.all([
+                servicio.getTotales({ desde: rango.desde, hasta: rango.hasta }),
+                anterior ? servicio.getTotales({ desde: anterior.desde, hasta: anterior.hasta }).catch(() => null) : null
+            ]);
+            return {
+                actual: actual.total.general,
+                previo: previo ? previo.total.general : null,
+                leyenda: actual.leyenda + (actual.total.fuente === 'mixta' ? ' · combina cifra oficial y detalle' : '')
+            };
+        } catch (error) {
+            console.warn('[FBO] Sin totales unificados; se muestra el directorio:', error);
+            return null;
+        }
     }
 
     async function resumenFbo(filtros) {
@@ -2482,12 +2549,15 @@
         const nota = $('est-fbo-nota');
         if (!nota) return;
         const ajenos = FBO_FILTROS_AJENOS.filter(([campo]) => (state.filtros[campo] || []).length).map(([, etiqueta]) => etiqueta);
-        nota.classList.toggle('d-none', !ajenos.length);
-        nota.innerHTML = ajenos.length
+        const fuente = state.fboFuente
+            ? `<span class="d-block"><i class="fas fa-circle-info me-1" aria-hidden="true"></i>Totales: ${esc(state.fboFuente)}. Desgloses: directorio de la Gerencia.</span>`
+            : '';
+        nota.classList.toggle('d-none', !ajenos.length && !fuente);
+        nota.innerHTML = (ajenos.length
             ? '<i class="fas fa-circle-info me-1" aria-hidden="true"></i>En FBO se aplican el periodo, Movimiento y Territorial. '
                 + `${esc(ajenos.join(', '))} ${ajenos.length === 1 ? 'es un filtro' : 'son filtros'} de las otras ventanas `
                 + `y aquí no se aplica${ajenos.length === 1 ? '' : 'n'}.`
-            : '';
+            : '') + fuente;
     }
 
     async function pintarVacioFbo(rango) {
@@ -2523,6 +2593,16 @@
         ]);
         state.fboUltimo = actual;
         const t = actual.totales || {};
+        const fuenteAg = await totalesAgFbo(rango, anterior);
+        if (fuenteAg) {
+            t.movimientos = fuenteAg.actual.operaciones;
+            t.pax = fuenteAg.actual.pasajeros;
+            if (previo && previo.totales && fuenteAg.previo) {
+                previo.totales.movimientos = fuenteAg.previo.operaciones;
+                previo.totales.pax = fuenteAg.previo.pasajeros;
+            }
+        }
+        state.fboFuente = fuenteAg ? fuenteAg.leyenda : (window.TotalesService ? window.TotalesService.AVISO_DETALLE : '');
         const vacio = !fboNum(t.movimientos);
         pintarFiltroFbo(vacio);
         pintarNotaFbo();

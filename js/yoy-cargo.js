@@ -270,51 +270,14 @@
                 const client = window.supabaseClient;
                 if (!client) return;
                 if (!dataLoaded) {
-                    var today = new Date();
-                    var curYear = today.getFullYear();
-                    Promise.all([
-                        client.from('monthly_operations')
-                            .select('year, month, carga_ops, carga_tons, is_official')
-                            .order('year',{ascending:true}).order('month',{ascending:true}),
-                        client.from('daily_operations')
-                            .select('date, carga_ops, carga_tons')
-                            .gte('date', curYear + '-01-01')
-                            .lte('date', curYear + '-12-31')
-                    ]).then(function(results) {
-                        var monthRes = results[0], dailyRes = results[1];
-                        if (monthRes.error) { console.error('YoY Carga:', monthRes.error); return; }
-                        var monthData = monthRes.data || [];
-                        var dailyData = dailyRes.data || [];
-
-                        // Aggregate daily data by year+month
-                        var dailyByMonth = {};
-                        dailyData.forEach(function(row) {
-                            var d = new Date(row.date + 'T00:00:00');
-                            var m = d.getMonth() + 1;
-                            var yr = d.getFullYear();
-                            var key = yr + '_' + m;
-                            if (!dailyByMonth[key]) dailyByMonth[key] = { year: yr, month: m, carga_ops: 0, carga_tons: 0, is_official: false };
-                            dailyByMonth[key].carga_ops  += Number(row.carga_ops)  || 0;
-                            dailyByMonth[key].carga_tons += Number(row.carga_tons) || 0;
-                        });
-
-                        // Build merged cache
+                    // Totales de la capa unificada (js/totales-service.js):
+                    // oficial hasta el corte, Conciliación después.
+                    window.TotalesService.filasMensuales().then(function(rows) {
                         monthStatusCache = {};
-                        var merged = monthData.slice();
-                        monthData.forEach(function(row) {
-                            monthStatusCache[row.year + '_' + row.month] = (row.is_official !== false) ? 'oficial' : 'preliminar';
+                        rows.forEach(function(row) {
+                            monthStatusCache[row.year + '_' + row.month] = row.is_official ? 'oficial' : 'preliminar';
                         });
-                        Object.values(dailyByMonth).forEach(function(agg) {
-                            var key = agg.year + '_' + agg.month;
-                            var idx = merged.findIndex(function(r){ return r.year === agg.year && r.month === agg.month; });
-                            if (idx === -1) {
-                                merged.push(agg);
-                                monthStatusCache[key] = 'preliminar';
-                            } else if (merged[idx].is_official === false) {
-                                merged[idx] = Object.assign({}, merged[idx], agg, { is_official: false });
-                                monthStatusCache[key] = 'preliminar';
-                            }
-                        });
+                        var merged = rows.slice();
 
                         cache = merged;
                         dataLoaded = true;

@@ -3,10 +3,16 @@
  * Desglose mensual de las tres aviaciones: monthly_operations /
  * annual_operations, la cifra oficial que captura el área (misma tabla y misma
  * regla de "oficial vs preliminar" que js/comparativa-historica.js).
+ * TOTALES mensuales y anuales (tarjetas, desglose mensual, gráfica, PDF y
+ * Excel): js/totales-service.js — cifra oficial hasta fn_fecha_corte_oficial y
+ * detalle después, los mismos del Inicio.
  * Detalle diario (cifras del día de corte, factor de ocupación, participación
- * por aerolínea) y meses todavía no ratificados: manifiestos ya conciliados,
- * vía v_informe_estadistico_resumen / _aerolinea / v_informe_manifiestos_
- * normalizado — ver supabase/migrations/027 y 028 (esta última los materializa).
+ * por aerolínea) y desglose de los meses de detalle: manifiestos, vía
+ * v_informe_estadistico_resumen / _aerolinea / v_informe_manifiestos_
+ * normalizado. Desde la migración 060 esas vistas leen SOLO de
+ * manifiestos_hechos: maestra_manifiestos para FECHA hasta 2025 y
+ * "Conciliación Manifiestos" desde 2026; cada manifiesto cuenta en la fecha
+ * de su cierre de Subsecretaría o, si no tiene, en su FECHA.
  */
 (function () {
     'use strict';
@@ -105,9 +111,9 @@
     // mostrar algo:
     //   1) el núcleo del informe (vistas ya agregadas por año/mes) — se pinta
     //      en cuanto llega;
-    //   2) el detalle diario, que es lo caro, porque sale de
-    //      v_informe_manifiestos_normalizado (esa vista recorre toda
-    //      maestra_operaciones con joins laterales por renglón).
+    //   2) el detalle diario, que sale renglón por renglón de
+    //      v_informe_manifiestos_normalizado (una operación por renglón de
+    //      manifiestos_hechos, indexada por fecha).
     // La tanda 2 hace UNA sola pasada de 15 días: antes eran dos consultas
     // distintas al mismo rango (cifras del día + factor de ocupación), o sea
     // el doble de trabajo en el servidor para los mismos renglones.
@@ -137,22 +143,26 @@
     }
 
     async function loadCore(client) {
-        const [resumenRows, monthlyRows, annualRows, aeropuertos, , directorioAg] = await Promise.all([
+        if (!window.TotalesService) throw new Error('No se cargó js/totales-service.js.');
+        const [resumenRows, meses, corteOficial, aeropuertos] = await Promise.all([
             fetchAllRows(client, 'v_informe_estadistico_resumen', COLUMNAS_RESUMEN),
-            fetchAllRows(client, 'monthly_operations', '*'),
-            fetchAllRows(client, 'annual_operations', '*'),
+            window.TotalesService.historiaMensual(),
+            window.TotalesService.getCorteOficial(),
             loadAeropuertos(client),
-            loadFrescura(client),
-            resumenAviacionGeneral(client, {})
+            loadFrescura(client)
         ]);
 
-        const aggregated = Core.mergeOficiales(Core.aggregateResumen(resumenRows), monthlyRows, annualRows);
-        state.generalDirectorio = Core.aplicarAviacionGeneral(aggregated, directorioAg && directorioAg.por_mes);
+        // Totales: la capa unificada (oficial hasta el corte, detalle después),
+        // los mismos del Inicio, para las tres aviaciones. La vista de
+        // manifiestos sólo aporta el desglose de los meses de detalle. Así la
+        // pantalla, el PDF, el Excel y el Resumen Estadístico leen lo mismo.
+        const aggregated = Core.aplicarTotalesUnificados(Core.aggregateResumen(resumenRows), meses);
+        // Aviación General también sale del directorio de la Gerencia (por la
+        // capa): el corte del día se pide a aviacion_general_resumen.
+        state.generalDirectorio = true;
+        state.leyendaFuente = window.TotalesService.leyendaFuente(corteOficial);
         state.aggregated = aggregated;
-        // state.acumulado alimenta tanto las tarjetas (renderAcumulado) como
-        // el encabezado del PDF (buildReportHtml): se parcha aquí, una sola
-        // vez, para que ambas lean el mismo número oficial.
-        state.acumulado = aplicarOverrideAcumulado(Core.buildAcumulado(aggregated));
+        state.acumulado = Core.buildAcumulado(aggregated);
         state.aeropuertos = aeropuertos;
         state.anios = aggregated.anios.slice().sort((a, b) => b - a);
         if (!state.anios.includes(state.anioSeleccionado)) {
@@ -222,10 +232,6 @@
             const general = Core.contadorAviacionGeneral(dia && dia.totales);
             if (general) state.diaCorte.general = general;
         }
-        // Misma fuente que state.acumulado: la tarjeta "Cifras del día" y el
-        // recuadro "Cifras del <fecha>" de cada sección del PDF quedan con el
-        // mismo corte oficial, no con lo que haya (o no) en manifiestos hoy.
-        state.diaCorte = aplicarOverrideDiaCorte(state.diaCorte);
     }
 
     // Sólo el año seleccionado: la tabla de participación no usa los demás.
@@ -432,10 +438,13 @@
     function renderFrescura() {
         const el = $('informe-est-frescura');
         if (!el) return;
-        if (!state.datosAl) { el.classList.add('d-none'); el.textContent = ''; return; }
-        const fecha = new Date(state.datosAl);
+        const leyenda = state.leyendaFuente || '';
+        if (!state.datosAl && !leyenda) { el.classList.add('d-none'); el.textContent = ''; return; }
+        const datosAl = state.datosAl
+            ? `Datos al ${new Date(state.datosAl).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}`
+            : '';
         el.classList.remove('d-none');
-        el.textContent = `Datos al ${fecha.toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}`;
+        el.textContent = [datosAl, leyenda].filter(Boolean).join(' · ');
         el.title = 'Hora del último recálculo del informe. "Actualizar" lo recalcula.';
     }
 
@@ -676,7 +685,8 @@
         const host = $('informe-est-alertas');
         if (!host) return;
         const faltantes = Core.findMissingDays(state.ocupacionRowsRaw, state.ocupacionDesde, state.ocupacionHasta);
-        if (!faltantes.length) {
+        const periodo = avisosDePeriodo();
+        if (!faltantes.length && !periodo.length) {
             host.classList.add('d-none');
             host.innerHTML = '';
             return;
@@ -684,11 +694,32 @@
         host.classList.remove('d-none');
         // Al pie de la página, como texto sobre el fondo blanco, igual que los
         // avisos de las demás ventanas de Estadística.
-        host.innerHTML = '<p class="est-aviso est-aviso-aviso"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><span>' +
-            `${faltantes.length} día(s) sin ningún manifiesto capturado en los últimos 15 días: ` +
-            `${faltantes.map((f) => escapeHtml(f)).join(', ')} — revisar si falta captura.</span></p>`;
+        host.innerHTML = (faltantes.length
+            ? '<p class="est-aviso est-aviso-aviso"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><span>' +
+              `${faltantes.length} día(s) sin ningún manifiesto capturado en los últimos 15 días: ` +
+              `${faltantes.map((f) => escapeHtml(f)).join(', ')} — revisar si falta captura.</span></p>`
+            : '') +
+            periodo.map((a) => '<p class="est-aviso est-aviso-info"><i class="fas fa-circle-info" aria-hidden="true"></i>' +
+                `<span>${escapeHtml(a.texto)}</span></p>`).join('');
     }
 
+    // Huecos conocidos de las fuentes en el año elegido (tabla
+    // manifiestos_avisos_periodo, ver js/manifiestos-avisos.js): hoy, "Carga
+    // ene–ago 2026 incompleta". La primera vez se piden y se vuelve a pintar.
+    let avisosPedidos = false;
+    function avisosDePeriodo() {
+        const api = window.ManifiestosAvisos;
+        const anio = state.anioSeleccionado;
+        if (!api || typeof api.para !== 'function' || !anio) return [];
+        if (!avisosPedidos && typeof api.cargar === 'function') {
+            avisosPedidos = true;
+            Promise.resolve(api.cargar()).then(() => renderAlertas()).catch(() => {});
+        }
+        return api.para('estadistica', `${anio}-01-01`, `${anio}-12-31`);
+    }
+
+    // Desde la 060 todo sale de manifiestos (operaciones_respaldo_itinerario
+    // llega en 0); la nota sólo aparece si la base vieja sigue activa.
     function respaldoNota(counters) {
         const n = counters?.opsRespaldoItinerario || 0;
         return n > 0 ? `<small class="text-warning">${fmt(n)} de itinerario, aún sin conciliar</small>` : '';
@@ -1064,135 +1095,11 @@
             </table>`;
     }
 
-    // ── Override temporal de cifras oficiales (módulo Estadística) ──────────
-    // Ver js/estadistico-informe-overrides.js para el qué/por qué/cómo
-    // desactivarlo. ÚNICA fuente: se parcha una sola vez, justo después de
-    // calcular state.acumulado (loadCore) y state.diaCorte (loadDetalle), así
-    // que tanto las tarjetas de pantalla (renderAcumulado/renderDiaCorte)
-    // como el PDF (buildReportHtml, que lee esos mismos state.*) quedan con
-    // las mismas cifras sin duplicar nada. La tabla mensual/cronológica del
-    // PDF (pivot/cronológico) no vive en state — se recalcula cada vez que se
-    // arma el PDF — así que a esa se le aplica aparte, en seccionTipoHtml,
-    // con el mismo objeto de override. No escribe nada en Supabase ni toca
-    // state.aggregated (de ahí sigue leyendo, sin parchar, la exportación a
-    // Excel, el desglose mensual del año seleccionado y el Resumen Estadístico).
-    function overrideOficialActivo() {
-        const ov = window.OFFICIAL_STATISTICS_OVERRIDES;
-        return (ov && ov.activo) ? ov : null;
-    }
-
-    function overrideOficialTipo(tipo) {
-        const ov = overrideOficialActivo();
-        return (ov && ov.tipos && ov.tipos[tipo]) || null;
-    }
-
-    // Parcha las tarjetas principales (Operaciones Comercial+General,
-    // Pasajeros, Carga) con el mismo total oficial que usa el PDF.
-    function aplicarOverrideAcumulado(acumulado) {
-        const ov = overrideOficialActivo();
-        if (!ov || !acumulado) return acumulado;
-        Core.TIPOS.forEach((tipo) => {
-            const ovTipo = ov.tipos[tipo];
-            if (!ovTipo || !ovTipo.acumulado || !acumulado[tipo]) return;
-            const t = ovTipo.acumulado;
-            acumulado[tipo].ops = t.ops || 0;
-            if (tipo === 'carga') acumulado[tipo].kg = (t.tons || 0) * 1000;
-            else acumulado[tipo].pax = t.pax || 0;
-        });
-        if (ov.encabezado) {
-            acumulado.totalOperaciones = ov.encabezado.totalOperaciones;
-            acumulado.totalPasajeros = ov.encabezado.totalPasajeros;
-        }
-        return acumulado;
-    }
-
-    // Parcha la tarjeta "Cifras del día" con el corte oficial (ops/pax/kg de
-    // cada tipo) en vez del día real, que en la base local puede estar sin
-    // manifiestos capturados todavía. `general` se crea aquí si hiciera
-    // falta: aggregateDiaCorte no trae esa clave por default.
-    function aplicarOverrideDiaCorte(diaCorte) {
-        const ov = overrideOficialActivo();
-        if (!ov) return diaCorte;
-        const base = diaCorte || { fecha: null, comercial: { ops: 0, pax: 0, kg: 0 }, carga: { ops: 0, pax: 0, kg: 0 } };
-        Core.TIPOS.forEach((tipo) => {
-            const ovTipo = ov.tipos[tipo];
-            if (!ovTipo || !ovTipo.diaCorte) return;
-            const t = ovTipo.diaCorte;
-            base[tipo] = {
-                ops: t.ops || 0,
-                pax: tipo === 'carga' ? 0 : (t.pax || 0),
-                kg: tipo === 'carga' ? (t.tons || 0) * 1000 : 0
-            };
-        });
-        base.fecha = ov.corteIso || base.fecha;
-        return base;
-    }
-
-    // Parcha en el sitio la tabla mensual (pivot) ya calculada: celdas
-    // mes×año donde el informe oficial trae el dato, TOTAL POR AÑO de los
-    // años señalados, y el gran total (ACUMULADO). Los años/meses que el
-    // override no menciona se quedan con lo ya calculado.
-    function aplicarOverrideMensual(pivot, ovTipo, esKg) {
-        Object.keys(ovTipo.mensual || {}).forEach((anioStr) => {
-            const anio = Number(anioStr);
-            if (!pivot.totalPorAnio[anio]) return;
-            const porMes = ovTipo.mensual[anioStr];
-            pivot.rows.forEach((row, idx) => {
-                const celda = porMes[idx + 1];
-                const destino = row.celdas[anio];
-                if (!celda || !destino) return;
-                if (celda.ops !== undefined) destino.ops = celda.ops;
-                if (esKg) {
-                    if (celda.tons !== undefined) destino.kg = celda.tons * 1000;
-                } else if (celda.pax !== undefined) {
-                    destino.pax = celda.pax;
-                }
-            });
-        });
-        Object.keys(ovTipo.totalPorAnio || {}).forEach((anioStr) => {
-            const anio = Number(anioStr);
-            if (!pivot.totalPorAnio[anio]) return;
-            const t = ovTipo.totalPorAnio[anioStr];
-            pivot.totalPorAnio[anio] = {
-                ops: t.ops || 0,
-                pax: esKg ? 0 : (t.pax || 0),
-                kg: esKg ? (t.tons || 0) * 1000 : 0
-            };
-        });
-        if (ovTipo.acumulado) {
-            pivot.totalGeneral = {
-                ops: ovTipo.acumulado.ops || 0,
-                pax: esKg ? 0 : (ovTipo.acumulado.pax || 0),
-                kg: esKg ? (ovTipo.acumulado.tons || 0) * 1000 : 0
-            };
-        }
-    }
-
     function seccionTipoHtml(titulo, tipo, unidadSecundaria, diaCorteCounters, corte) {
         const anios = state.anios;
         const pivot = Core.buildTablaMensualPorAnios(state.aggregated, tipo, anios);
-        let cronologico = Core.buildResumenCronologico(state.aggregated, tipo, anios, corte, diaCorteCounters);
+        const cronologico = Core.buildResumenCronologico(state.aggregated, tipo, anios, corte, diaCorteCounters);
         const esKg = unidadSecundaria === 'kg';
-
-        // Override temporal de cifras oficiales (ver js/estadistico-informe-overrides.js):
-        // se aplica DESPUÉS de calcular pivot/cronológico normalmente, como un
-        // parche de último paso — no toca state.aggregated ni ninguna otra
-        // pestaña/exportación que reutilice esos datos.
-        const ovTipo = overrideOficialTipo(tipo);
-        if (ovTipo) {
-            aplicarOverrideMensual(pivot, ovTipo, esKg);
-            if (Array.isArray(ovTipo.cronologico)) {
-                cronologico = ovTipo.cronologico.map((r) => ({
-                    label: r.label,
-                    ops: r.ops || 0,
-                    pax: esKg ? 0 : (r.pax || 0),
-                    kg: esKg ? (r.tons || 0) * 1000 : 0
-                }));
-            }
-            // diaCorteCounters (parámetro) ya viene parchado: sale de
-            // state.diaCorte, que aplicarOverrideDiaCorte ya ajustó en
-            // loadDetalle() — misma fuente, sin repetir el override aquí.
-        }
 
         const secTexto = esKg ? 'TONELADAS' : 'PASAJEROS';
         const secValor = diaCorteCounters
@@ -1492,14 +1399,12 @@
     }
 
     function buildReportHtml() {
-        const ovGlobal = overrideOficialActivo();
-        const corte = ovGlobal ? ovGlobal.corte : (state.corte || parseIsoDate(corteIsoPorOmision()));
+        const corte = state.corte || parseIsoDate(corteIsoPorOmision());
         const corteDate = new Date(corte.anio, corte.mes - 1, corte.dia);
-        const corteTexto = ovGlobal ? ovGlobal.corteTexto : formatDateLong(corteDate);
-        const actualizacionTexto = ovGlobal ? ovGlobal.actualizacionTexto : formatDateLong(new Date());
-        // state.acumulado/state.diaCorte: misma fuente ya parchada que usan
-        // las tarjetas de pantalla (aplicarOverrideAcumulado/DiaCorte en
-        // loadCore/loadDetalle) — el PDF no vuelve a leer el override aparte.
+        const corteTexto = formatDateLong(corteDate);
+        const actualizacionTexto = formatDateLong(new Date());
+        // state.acumulado/state.diaCorte: misma fuente que las tarjetas de
+        // pantalla (ya con las cifras oficiales capturadas aplicadas).
         const a = state.acumulado;
         const d = state.diaCorte || Core.aggregateDiaCorte([]);
         const encabezado = encabezadoHtml(actualizacionTexto, corteTexto);

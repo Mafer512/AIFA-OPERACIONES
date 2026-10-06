@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 
 const Core = require('../js/estadistico-informe-core');
+const { crearTotalesFake } = require('../test-utils/totales-fake');
 
 const uiSource = fs.readFileSync(path.resolve(__dirname, '..', 'js', 'estadistico-informe.js'), 'utf8');
 
@@ -146,22 +147,23 @@ describe('Informe Estadístico con el directorio de Aviación General', () => {
 
   afterEach(() => {
     delete window.supabaseClient;
+    delete window.TotalesService;
     delete window.sectionLevel;
   });
 
-  test('las cifras de General y el corte del día vienen del directorio', async () => {
-    const client = await montar((filtros) => (filtros.fecha_desde
-      ? { data: { totales: { movimientos: 3, pax: 9, llegadas: 2, salidas: 1 } }, error: null }
-      : { data: { totales: { movimientos: 50 }, por_mes: [
-        { periodo: '2025-01', anio: 2025, mes: 1, movimientos: 40, pax: 120 },
-        { periodo: '2024-12', anio: 2024, mes: 12, movimientos: 10, pax: 30 },
-      ] }, error: null }));
+  test('los totales de General salen de la capa unificada y el corte del día, del directorio', async () => {
+    window.TotalesService = crearTotalesFake({
+      corte: '2025-01-31',
+      oficial: [
+        { anio: 2025, mes: 1, categoria: 'comercial', operaciones: 10, pasajeros: 1000 },
+        { anio: 2025, mes: 1, categoria: 'general', operaciones: 40, pasajeros: 120 },
+        { anio: 2024, mes: 12, categoria: 'general', operaciones: 10, pasajeros: 30 },
+      ],
+    });
+    const client = await montar((filtros) => ({ data: { totales: { movimientos: 3, pax: 9, llegadas: 2, salidas: 1 } }, error: null }));
 
-    // Todo el histórico, y el día de corte solo.
-    expect(client.llamadasAg[0]).toEqual({});
-    const dia = client.llamadasAg.find((f) => f.fecha_desde);
-    expect(dia.fecha_desde).toBe(dia.fecha_hasta);
-
+    // Del directorio ya sólo se pide el día de corte (los totales vienen de la capa).
+    expect(client.llamadasAg.every((f) => f.fecha_desde && f.fecha_desde === f.fecha_hasta)).toBe(true);
     const acumulado = document.getElementById('informe-est-acumulado').textContent;
     expect(acumulado).toContain('Comercial 10 · General 50');
     expect(acumulado).toContain('Comercial 1,000 · General 150');
@@ -170,10 +172,13 @@ describe('Informe Estadístico con el directorio de Aviación General', () => {
     expect(tarjetaDia).not.toContain('sin corte diario');
   });
 
-  test('si la función del directorio no responde, General se queda con la tabla mensual', async () => {
-    await montar(() => ({ data: null, error: { code: 'PGRST202', message: 'Could not find the function' } }));
-    const acumulado = document.getElementById('informe-est-acumulado').textContent;
-    expect(acumulado).toContain('Comercial 10 · General 2');
-    expect(document.getElementById('informe-est-dia').textContent).toContain('sin corte diario');
+  test('sin la capa de totales el informe avisa en vez de inventar cifras', async () => {
+    delete window.TotalesService;
+    const errores = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await montar(() => ({ data: null, error: null }));
+      expect(document.getElementById('informe-est-acumulado').textContent).not.toContain('General 2');
+      expect(document.getElementById('informe-est-error').classList.contains('d-none')).toBe(false);
+    } finally { errores.mockRestore(); }
   });
 });

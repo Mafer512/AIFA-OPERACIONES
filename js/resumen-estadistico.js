@@ -6,8 +6,8 @@
  * la operación aérea.
  *
  * De esas 17 hojas, el sistema hoy tiene fuente para seis:
- *   · aviación comercial / general / carga  -> monthly_operations + manifiestos
- *   · desglose mensual                      -> monthly_operations
+ *   · aviación comercial / general / carga  -> totales unificados (js/totales-service.js)
+ *   · desglose mensual                      -> totales unificados, vía state.aggregated del Informe
  *   · participación por aerolínea           -> airline_monthly_statistics
  *   · factor de ocupación                   -> manifiestos conciliados
  *   · puntos de conexión                    -> dato estático transcrito

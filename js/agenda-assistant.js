@@ -335,10 +335,8 @@ Fecha de hoy: ${todayStr}.\n`;
         if (_cache.annualOps) return _cache.annualOps;
         const sb = _sb();
         if (!sb) return [];
-        const { data } = await sb
-            .from('annual_operations')
-            .select('*')
-            .order('year', { ascending: false });
+        // Mismos totales anuales que el Inicio (js/totales-service.js).
+        const data = window.TotalesService ? await window.TotalesService.filasAnuales() : [];
         _cache.annualOps = data || [];
         return _cache.annualOps;
     }

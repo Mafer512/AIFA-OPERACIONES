@@ -24,6 +24,12 @@ const aerolineaRows = [
   { anio: 2025, mes: 1, aerolinea: 'VOLARIS', tipo_aviacion: 'comercial', direccion: 'A', operaciones: 10, pax_total: 1000, carga_kg_total: 0 },
 ];
 const monthlyOpsRows = [{ year: 2025, month: 1, general_ops: 2, general_pax: 6 }];
+const { crearTotalesFake } = require('../test-utils/totales-fake');
+const oficialRows = [
+  { anio: 2025, mes: 1, categoria: 'comercial', operaciones: 10, pasajeros: 1000 },
+  { anio: 2025, mes: 1, categoria: 'general', operaciones: 2, pasajeros: 6 },
+  { anio: 2025, mes: 1, categoria: 'carga', operaciones: 0, toneladas: 0 },
+];
 const annualOpsRows = [{ year: 2025, general_ops_total: 2, general_pax_total: 6 }];
 // Con capacidad_matricula para que sí se construya la tabla de Factor de
 // Ocupación (si va vacía, esa sección cae al mensaje de "sin datos").
@@ -118,6 +124,7 @@ describe('generación de PDF del Informe Estadístico (visto bueno)', () => {
     document.body.innerHTML = domMarkup();
     window.InformeEstadisticoCore = Core;
     window.supabaseClient = buildSupabaseStub();
+    window.TotalesService = crearTotalesFake({ corte: '2025-01-31', oficial: oficialRows });
     window.sectionLevel = () => 'admin';
     // jsdom no implementa URL.createObjectURL/revokeObjectURL (los navegadores reales sí).
     window.URL.createObjectURL = jest.fn(() => 'blob:mock');
@@ -137,6 +144,7 @@ describe('generación de PDF del Informe Estadístico (visto bueno)', () => {
     consoleError.mockRestore();
     delete window.InformeEstadisticoCore;
     delete window.supabaseClient;
+    delete window.TotalesService;
     delete window.sectionLevel;
     delete window.html2pdf;
     delete window.html2canvas;

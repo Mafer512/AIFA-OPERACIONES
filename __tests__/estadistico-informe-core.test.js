@@ -292,8 +292,10 @@ describe('InformeEstadisticoCore', () => {
     expect(ocupacionRows[0]).toEqual(['Aerolínea', 'Destino', 'Factor de salida', 'Factor de llegada', 'Factor total']);
   });
 
-  test('la interfaz consume el núcleo (mergeOficiales/buildAcumulado) y carga primero el núcleo', () => {
-    expect(uiSource).toContain('Core.mergeOficiales(Core.aggregateResumen(resumenRows)');
+  test('la interfaz consume el núcleo (aplicarTotalesUnificados/buildAcumulado) y carga primero el núcleo', () => {
+    expect(uiSource).toContain('Core.aplicarTotalesUnificados(Core.aggregateResumen(resumenRows), meses)');
+    expect(uiSource).not.toContain('Core.mergeOficiales(');
+    expect(uiSource).not.toContain("'monthly_operations'");
     expect(uiSource).toContain('Core.buildAcumulado(aggregated)');
     expect(uiSource).toContain('Core.aggregateAerolinea(');
     expect(uiSource).toContain('Core.computeOccupancyFactors(');

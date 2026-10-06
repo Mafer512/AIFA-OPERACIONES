@@ -1236,15 +1236,20 @@ async function syncStaticDataFromDB(targetYear = null, options = {}) {
         } else {
             console.log('Iniciando sincronización de datos estáticos desde DB...');
             let rawMonthlyRows;
+            // Totales mensuales y anuales: la capa unificada (js/totales-service.js),
+            // cifras oficiales hasta el corte y Conciliación después. Es la misma
+            // fuente de las tarjetas del Inicio, así que ningún total del módulo
+            // Operaciones puede salir distinto. Las capturas diarias se siguen
+            // leyendo para las gráficas de detalle, no para los totales.
             [annualRows, rawMonthlyRows, dailyRows] = await Promise.all([
-                window.dataManager.getAnnualOperations(),
-                window.dataManager.getMonthlyOperations(),
+                window.TotalesService.filasAnuales(),
+                window.TotalesService.filasMensuales(),
                 loadCurrentYearDailyOperations().catch((err) => {
-                    console.warn('Unable to load daily totals while reconciling operation cards:', err);
+                    console.warn('Unable to load daily operations for detail charts:', err);
                     return [];
                 })
             ]);
-            monthlyRows = resolveOperationsMonthlyRows(rawMonthlyRows, dailyRows);
+            monthlyRows = rawMonthlyRows;
             window.cachedStaticRows = {
                 annual: annualRows,
                 monthly: monthlyRows,
@@ -11370,7 +11375,7 @@ const NDW_CARD_DEFS = [
 
 function ndwFormatValue(value, metric) {
     if (metric === 'toneladas') {
-        return Number(value || 0).toLocaleString('es-MX', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+        return Number(value || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     return Number(value || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 });
 }
@@ -11379,96 +11384,30 @@ function ndwFormatValue(value, metric) {
 let NDW_VIEW_STATE = { mode: 'weekly', year: null, monthIdx: null, monthTouched: false, weekStart: null };
 
 function ndwGetAvailableYears() {
+    // Los años salen de los totales unificados; mientras llegan, del catálogo
+    // que ya había (sólo para pintar los botones de año).
+    const totales = window._ndwTotales;
+    if (totales?.status === 'ready' && totales.porMes.size) {
+        return [...new Set([...totales.porMes.keys()].map((k) => k.slice(0, 4)))].sort();
+    }
     if (!AVIATION_ANALYTICS_DATA) return [];
     const yearsArr = AVIATION_ANALYTICS_DATA.comercial?.years;
     return Array.isArray(yearsArr) ? [...yearsArr] : [];
 }
 
-function ndwGetStoredMonthlyRow(yearStr, monthIdx) {
-    const cache = window.cachedStaticRows || {};
-    const rows = Array.isArray(cache.rawMonthly) && cache.rawMonthly.length
-        ? cache.rawMonthly
-        : (Array.isArray(cache.monthly) ? cache.monthly : []);
-    return rows.find((row) => Number(row?.year) === Number(yearStr)
-        && Number(row?.month) === Number(monthIdx) + 1) || null;
-}
-
-/* Sum captured daily operations for a given year/month from weekly datasets. */
-function ndwComputeMonthDailyAggregate(cat, metric, yearStr, monthIdx) {
-    const yearNum = Number(yearStr);
-    if (!Number.isFinite(yearNum)) return { value: 0, hasData: false, days: 0, lastDate: null };
-    const monthNum = Number(monthIdx) + 1;
-    if (!Number.isFinite(monthNum) || monthNum < 1 || monthNum > 12) {
-        return { value: 0, hasData: false, days: 0, lastDate: null };
-    }
-    const targetMonthKey = `${String(yearNum).padStart(4, '0')}-${String(monthNum).padStart(2, '0')}`;
-    const dailyField = metric === 'pasajeros' ? 'pasajeros'
-        : metric === 'toneladas' ? 'toneladas'
-        : 'operaciones';
-    const weekSources = [
-        ...(Array.isArray(WEEKLY_OPERATIONS_DATASETS) ? WEEKLY_OPERATIONS_DATASETS : []),
-        staticData?.operacionesSemanaActual
-    ].filter(Boolean);
-    const latestByDate = new Map();
-    let candidateIndex = 0;
-    weekSources.forEach((week) => {
-        if (!Array.isArray(week?.dias)) return;
-        week.dias.forEach((day) => {
-            const dateKey = normalizeOpsDateKey(day?.fecha);
-            if (!dateKey || dateKey.slice(0, 7) !== targetMonthKey) return;
-            const raw = day?.[cat]?.[dailyField];
-            if (raw === null || raw === undefined || raw === '') return;
-            const num = Number(raw);
-            if (!Number.isFinite(num)) return;
-            const candidate = { day, value: num, index: candidateIndex };
-            candidateIndex += 1;
-            const existing = latestByDate.get(dateKey);
-            if (shouldReplaceDailyCandidate(existing, candidate)) {
-                latestByDate.set(dateKey, candidate);
-            }
-        });
-    });
-    let total = 0;
-    let lastDate = null;
-    latestByDate.forEach((candidate, dateKey) => {
-        total += candidate.value;
-        if (!lastDate || dateKey > lastDate) lastDate = dateKey;
-    });
-    const capturedDays = latestByDate.size;
-    return { value: total, hasData: capturedDays > 0, days: capturedDays, lastDate };
-}
-
-function ndwComputeMonthFromDailyData(cat, metric, yearStr, monthIdx) {
-    return ndwComputeMonthDailyAggregate(cat, metric, yearStr, monthIdx).value;
-}
-
 function ndwResolveMonthlyVal(cat, metric, yearStr, monthIdx) {
-    const metricKey = metric === 'toneladas' ? 'tons_transportadas' : metric;
-    const monthKey = AVIATION_ANALYTICS_MONTH_KEYS[monthIdx];
-    const raw = AVIATION_ANALYTICS_DATA?.[cat]?.[metricKey]?.years?.[yearStr]?.months?.[monthKey];
-    const monthlyValue = raw != null && Number.isFinite(Number(raw)) ? Number(raw) : null;
-    const daily = ndwComputeMonthDailyAggregate(cat, metric, yearStr, monthIdx);
-    const storedRow = ndwGetStoredMonthlyRow(yearStr, monthIdx);
-    const engine = window.AifaOperationsMetrics;
-    const isCurrentMonth = engine && typeof engine.isSameCalendarMonth === 'function'
-        ? engine.isSameCalendarMonth(yearStr, Number(monthIdx) + 1, new Date())
-        : Number(yearStr) === (new Date()).getFullYear() && Number(monthIdx) === (new Date()).getMonth();
-    const preferDaily = daily.hasData && (
-        isCurrentMonth
-        || !storedRow
-        || storedRow.is_official === false
-        || monthlyValue === null
-    );
-    if (preferDaily) {
-        return { value: daily.value, hasData: true, source: 'daily', lastDate: daily.lastDate };
-    }
-    if (monthlyValue !== null) {
-        return { value: monthlyValue, hasData: true, source: 'monthly', lastDate: null };
-    }
-    if (daily.hasData) {
-        return { value: daily.value, hasData: true, source: 'daily', lastDate: daily.lastDate };
-    }
-    return { value: 0, hasData: false, source: 'none', lastDate: null };
+    // Las tres aviaciones salen de la capa unificada (ver ndwLoadTotales).
+    const totales = window._ndwTotales;
+    const mes = totales?.status === 'ready'
+        ? totales.porMes.get(`${yearStr}-${String(Number(monthIdx) + 1).padStart(2, '0')}`)
+        : null;
+    if (!mes) return { value: 0, hasData: false, source: 'none', lastDate: null };
+    return {
+        value: Number(mes[cat]?.[metric]) || 0,
+        hasData: true,
+        source: mes.fuentes?.[cat] || mes.fuente,
+        lastDate: mes.lastDate || null
+    };
 }
 
 function ndwGetMonthlyVal(cat, metric, yearStr, monthIdx) {
@@ -11478,22 +11417,13 @@ function ndwGetMonthlyVal(cat, metric, yearStr, monthIdx) {
 /* Returns the last available month index for a given year — mirrors AVIATION_ANALYTICS_LAST_CLOSED_MONTH_INDEX
    for the cutoff year, and 11 (all months) for fully-closed past years. */
 function ndwGetMonthCutoff(yearStr) {
-    const cutoffYear = String(AVIATION_ANALYTICS_CUTOFF_YEAR);
-    if (yearStr === cutoffYear) {
-        const baseCutoff = Number.isFinite(AVIATION_ANALYTICS_LAST_CLOSED_MONTH_INDEX)
-            ? AVIATION_ANALYTICS_LAST_CLOSED_MONTH_INDEX
-            : new Date().getMonth();
-        const todayMonth = new Date().getMonth(); // 0-based
-        // Extend cutoff to include the current in-progress month when daily captures exist
-        if (todayMonth > baseCutoff) {
-            const hasCurrentMonthData = ['comercial', 'general', 'carga'].some((cat) => {
-                const metric = cat === 'carga' ? 'toneladas' : 'operaciones';
-                return ndwComputeMonthDailyAggregate(cat, metric, yearStr, todayMonth).hasData;
-            });
-            if (hasCurrentMonthData) return todayMonth;
-        }
-        return baseCutoff;
+    const totales = window._ndwTotales;
+    if (totales?.status === 'ready') {
+        const meses = [...totales.porMes.keys()].filter((k) => k.slice(0, 4) === String(yearStr))
+            .map((k) => Number(k.slice(5, 7)) - 1);
+        return meses.length ? Math.max(...meses) : 11;
     }
+    if (String(yearStr) === String(new Date().getFullYear())) return new Date().getMonth();
     return 11;
 }
 
@@ -11509,30 +11439,26 @@ function ndwGetPreferredMonthIdx(yearStr, cutoffIdx) {
 }
 
 function ndwGetAnnualVal(cat, metric, yearStr) {
-    if (!AVIATION_ANALYTICS_DATA) return 0;
-    const metricKey = metric === 'toneladas' ? 'tons_transportadas' : metric;
-    const annual = AVIATION_ANALYTICS_DATA[cat]?.[metricKey]?.years?.[yearStr];
-    const isCurrentYear = Number(yearStr) === (new Date()).getFullYear();
-    if (!isCurrentYear && annual && Number.isFinite(Number(annual.dbTotal)) && Number(annual.dbTotal) > 0) {
-        return Number(annual.dbTotal);
-    }
-    // The active year is always the sum of the same resolved month values used
-    // by the six cards and their detail modals.
-    const cutoff = ndwGetMonthCutoff(yearStr);
+    // Suma de sus meses: así el año, el mes y el histórico nunca discrepan.
+    const totales = window._ndwTotales;
+    if (totales?.status !== 'ready') return 0;
     let total = 0;
-    for (let i = 0; i <= cutoff; i++) {
-        total += ndwGetMonthlyVal(cat, metric, yearStr, i);
-    }
+    totales.porMes.forEach((mes, clave) => {
+        if (clave.slice(0, 4) === String(yearStr)) total += Number(mes[cat]?.[metric]) || 0;
+    });
     return total;
 }
 
 /* ── Semana del banner ────────────────────────────────────────────────────
    Cada mes se parte en tramos de lunes a domingo recortados al mes
-   (septiembre de 2026: 1-6, 7-13, 14-20, 21-27, 28-30). Las cifras de un
-   tramo salen de las capturas diarias (daily_operations): las del año en curso
-   ya vienen en WEEKLY_OPERATIONS_DATASETS y las de otros años se piden al
-   entrar a un mes de ese año. */
-const NDW_DAILY_YEARS = {};
+   (septiembre de 2026: 1-6, 7-13, 14-20, 21-27, 28-30). Día y Semana son
+   DETALLE: salen de TotalesService.getDetalleDiario (totales_detalle_por_dia,
+   migración 062b) por la FECHA del manifiesto —maestra_manifiestos hasta
+   fn_fecha_corte_maestra, "Conciliación Manifiestos" después— y Aviación
+   General del directorio de la Gerencia (aviacion_general_operaciones).
+   El detalle se pide por año, al entrar a un mes de ese año.
+   window._ndwDetalle = { [año]: { status, porFecha: Map(fecha → día) } }. */
+const NDW_DETALLE_AYUDA = 'Detalle por FECHA del manifiesto · Aviación General: directorio de la Gerencia (FBO)';
 
 function ndwIsoDay(year, monthIdx, day) {
     return `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
@@ -11557,74 +11483,107 @@ function ndwDayHasData(day) {
         .some((v) => Number(v) > 0);
 }
 
-/* Capturas diarias por fecha; si una fecha llega de dos fuentes, gana la más reciente. */
-function ndwDailyDaysByDate() {
-    const fuentes = [
-        ...(Array.isArray(WEEKLY_OPERATIONS_DATASETS) ? WEEKLY_OPERATIONS_DATASETS : []),
-        staticData?.operacionesSemanaActual,
-        ...Object.values(NDW_DAILY_YEARS)
-    ].filter(Boolean);
-    const porFecha = new Map();
-    let index = 0;
-    fuentes.forEach((fuente) => (Array.isArray(fuente.dias) ? fuente.dias : []).forEach((day) => {
-        const fecha = normalizeOpsDateKey(day?.fecha);
-        if (!fecha) return;
-        const candidato = { day, index: index++ };
-        if (shouldReplaceDailyCandidate(porFecha.get(fecha), candidato)) porFecha.set(fecha, candidato);
-    }));
-    return porFecha;
+function ndwDiaVacio() {
+    return {
+        comercial: { operaciones: 0, pasajeros: 0 },
+        carga: { operaciones: 0, toneladas: 0 },
+        general: { operaciones: 0, pasajeros: 0 }
+    };
 }
 
-async function ndwLoadDailyYear(year) {
+async function ndwLoadDetalleAnio(year, force = false) {
     const key = String(year);
-    if (NDW_DAILY_YEARS[key]) return;
-    NDW_DAILY_YEARS[key] = { status: 'loading', dias: [] };
+    const store = window._ndwDetalle ||= {};
+    if (store[key]?.status === 'loading' || (!force && store[key])) return;
+    store[key] = { status: 'loading', porFecha: store[key]?.porFecha || new Map() };
     try {
-        const filas = await window.dataManager.getDailyOperationsForYear(Number(year));
-        NDW_DAILY_YEARS[key] = {
-            status: 'ready',
-            dias: (filas || []).map((d) => ({
-                fecha: d.date,
-                created_at: d.created_at,
-                updated_at: d.updated_at,
-                label: formatDateLabel(d.date),
-                comercial: { operaciones: d.comercial_ops, pasajeros: d.comercial_pax },
-                general: { operaciones: d.general_ops, pasajeros: d.general_pax },
-                carga: { operaciones: d.carga_ops, toneladas: d.carga_tons }
-            }))
-        };
+        if (!window.TotalesService) throw new Error('No se cargó js/totales-service.js');
+        const porFecha = await window.TotalesService.getDetalleDiario(`${key}-01-01`, `${key}-12-31`);
+        store[key] = { status: 'ready', porFecha };
     } catch (error) {
-        NDW_DAILY_YEARS[key] = { status: 'error', dias: [] };
-        console.warn(`[Inicio Semana] No se pudieron consultar las capturas diarias de ${key}:`, error);
+        store[key] = { status: 'error', porFecha: new Map() };
+        console.warn(`[Inicio Semana] No se pudo consultar el detalle de ${key}:`, error);
     }
     renderNavdeckWeeklyBanner();
 }
 
-/* El tramo elegido en el banner con sus capturas. Sin elección, el tramo del
-   último día con capturas de la semana activa (la del módulo de Operaciones),
-   o el de hoy. estado: 'ready', 'loading', 'error' o 'pendiente' (otro año que
-   aún no se pide). */
+/* El tramo elegido en el banner con su detalle por día. Sin elección, el
+   tramo del último día con datos del año en curso (o el de hoy). estado:
+   'ready', 'loading', 'error' o 'pendiente' (año que aún no se pide). */
 function ndwResolveWeek() {
     const hoy = new Date();
     const hoyIso = ndwIsoDay(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-    const activa = (typeof getActiveWeeklyDataset === 'function') ? getActiveWeeklyDataset() : null;
-    const conCapturas = (Array.isArray(activa?.dias) ? activa.dias : [])
-        .filter(ndwDayHasData).map((d) => d.fecha).sort();
-    const base = NDW_VIEW_STATE.weekStart || conCapturas[conCapturas.length - 1] || hoyIso;
+    const detalleHoy = window._ndwDetalle?.[String(hoy.getFullYear())];
+    const conDatos = detalleHoy?.status === 'ready'
+        ? [...detalleHoy.porFecha.entries()].filter(([f, d]) => f <= hoyIso && ndwDayHasData(d)).map(([f]) => f).sort()
+        : [];
+    const base = NDW_VIEW_STATE.weekStart || conDatos[conDatos.length - 1] || hoyIso;
     const [year, month] = base.split('-').map(Number);
     const monthIdx = month - 1;
     const tramos = ndwWeeksOfMonth(year, monthIdx);
     const tramo = tramos.find((t) => base >= t.inicio && base <= t.fin) || tramos[0];
-    const estado = year === hoy.getFullYear() ? 'ready' : (NDW_DAILY_YEARS[year]?.status || 'pendiente');
-    const dias = [...ndwDailyDaysByDate()]
-        .filter(([fecha]) => fecha >= tramo.inicio && fecha <= tramo.fin)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([, candidato]) => candidato.day);
+    const detalle = window._ndwDetalle?.[String(year)];
+    const estado = detalle?.status || 'pendiente';
+    const dias = [];
+    if (estado === 'ready') {
+        const fin = tramo.fin < hoyIso ? tramo.fin : hoyIso;
+        for (let d = parseIsoDay(tramo.inicio); d; d.setDate(d.getDate() + 1)) {
+            const fecha = ndwIsoDay(d.getFullYear(), d.getMonth(), d.getDate());
+            if (fecha > fin) break;
+            const dia = detalle.porFecha.get(fecha) || ndwDiaVacio();
+            dias.push({ fecha, label: fecha, comercial: dia.comercial, carga: dia.carga, general: dia.general });
+        }
+    }
     const mes = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][monthIdx];
     const titulo = tramo.desde === tramo.hasta
         ? `${tramo.desde} de ${mes} de ${year}`
         : `${tramo.desde} al ${tramo.hasta} de ${mes} de ${year}`;
     return { year, monthIdx, tramos, tramo, dias, estado, titulo, hoyIso };
+}
+
+/* ── Totales mensuales y anuales del inicio ──────────────────────────────
+   Mes, Año, Histórico total y sus ventanas de detalle salen de la capa
+   unificada (TotalesService): cifras oficiales hasta fn_fecha_corte_oficial y
+   Conciliación después. Es la misma fuente que Comparativa Histórica,
+   Operaciones, Estadística y el Informe: ningún total mensual o anual puede
+   salir distinto en otra pantalla.
+   window._ndwTotales = { status, porMes: Map('AAAA-MM' → mes), leyenda }. */
+async function ndwLoadTotales(force = false) {
+    const actual = window._ndwTotales;
+    if (actual?.status === 'loading' || (!force && actual)) return;
+    window._ndwTotales = { status: 'loading', porMes: actual?.porMes || new Map(), leyenda: actual?.leyenda || '' };
+    try {
+        if (!window.TotalesService) throw new Error('No se cargó js/totales-service.js');
+        const [meses, corte] = await Promise.all([
+            window.TotalesService.historiaMensual(),
+            window.TotalesService.getCorteOficial()
+        ]);
+        const hoy = new Date();
+        const hoyIso = ndwIsoDay(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+        const porMes = new Map(meses.map((m) => [m.clave, Object.assign({}, m, {
+            lastDate: m.fuente === 'oficial' ? null : (m.hasta < hoyIso ? m.hasta : hoyIso)
+        })]));
+        window._ndwTotales = { status: 'ready', porMes, leyenda: window.TotalesService.leyendaFuente(corte) };
+    } catch (error) {
+        window._ndwTotales = { status: 'error', porMes: new Map(), leyenda: '' };
+        console.warn('[Inicio] No se pudieron consultar los totales mensuales:', error);
+    }
+    renderNavdeckWeeklyBanner();
+}
+
+function ndwMonthBounds(yearStr, monthIdx) {
+    const mm = String(Number(monthIdx) + 1).padStart(2, '0');
+    return [`${yearStr}-${mm}-01`, `${yearStr}-${mm}-31`];
+}
+
+/* Avisos de periodo de los manifiestos (tabla manifiestos_avisos_periodo, ver
+   js/manifiestos-avisos.js). */
+function ndwAvisosPeriodoHtml(desde, hasta) {
+    const api = window.ManifiestosAvisos;
+    if (!api || typeof api.para !== 'function' || !desde) return '';
+    return api.para('inicio', desde, hasta).map((a) =>
+        `<p class="ndw-tap-hint ndw-aviso-periodo" title="${escapeHTML(a.detalle || a.texto)}"><i class="fas fa-circle-info" aria-hidden="true"></i><span>${escapeHTML(a.texto)}</span></p>`
+    ).join('');
 }
 
 async function ndwLoadCurrentManifestDay(dateKey, force = false) {
@@ -11634,27 +11593,14 @@ async function ndwLoadCurrentManifestDay(dateKey, force = false) {
     try {
         const client = window.supabaseClient || (window.ensureSupabaseClient && await window.ensureSupabaseClient());
         if (!client) throw new Error('No hay conexión con manifiestos');
+        if (!window.TotalesService) throw new Error('No se cargó js/totales-service.js');
+        // Trae lo capturado en Conciliación en los últimos minutos (freno de 2
+        // minutos en el servidor). Si el RPC no existe, se sigue con lo que haya.
         const { error: refreshError } = await client.rpc('refrescar_informe_estadistico', { p_forzar: false });
-        // Antes de la migración 028 la vista es en vivo y no existe este RPC.
         if (refreshError && !['PGRST202', '42883'].includes(refreshError.code)) throw refreshError;
-        const totals = { comercial: { operaciones: 0, pasajeros: 0 }, carga: { operaciones: 0, toneladas: 0 } };
-        let count = 0;
-        for (let offset = 0; ; offset += 1000) {
-            const { data, error } = await client.from('v_informe_manifiestos_normalizado')
-                .select('fecha_operacion,es_carga,pax_total,carga_kg')
-                .eq('fecha_operacion', dateKey).eq('capturado', true)
-                .order('manifiesto_id', { ascending: true }).range(offset, offset + 999);
-            if (error) throw error;
-            const rows = data || [];
-            rows.forEach(row => {
-                const category = row.es_carga ? 'carga' : 'comercial';
-                totals[category].operaciones += 1;
-                if (category === 'carga') totals.carga.toneladas += (Number(row.carga_kg) || 0) / 1000;
-                else totals.comercial.pasajeros += Number(row.pax_total) || 0;
-            });
-            count += rows.length;
-            if (rows.length < 1000) break;
-        }
+        const porFecha = await window.TotalesService.getDetalleDiario(dateKey, dateKey, { forzar: force });
+        const totals = porFecha.get(dateKey) || ndwDiaVacio();
+        const count = totals.comercial.operaciones + totals.carga.operaciones;
         cache[dateKey] = { status: 'ready', totals, count };
     } catch (error) {
         cache[dateKey] = { status: 'error' };
@@ -11703,18 +11649,21 @@ function renderNavdeckWeeklyBanner() {
         const currentDate = parseIsoDay(currentDateKey);
         const currentManifest = window._ndwCurrentManifestDays?.[currentDateKey];
         if (mode === 'current' && !currentManifest) ndwLoadCurrentManifestDay(currentDateKey);
+        // Mes, Año e Histórico: totales de la capa unificada (oficial + Conciliación).
+        if (['monthly', 'annual', 'historic'].includes(mode) && !window._ndwTotales) ndwLoadTotales();
+        const totalesInicio = window._ndwTotales;
+        if (window.ManifiestosAvisos && !window._ndwAvisosPedidos) {
+            window._ndwAvisosPedidos = true;
+            window.ManifiestosAvisos.cargar().then(() => renderNavdeckWeeklyBanner()).catch(() => {});
+        }
         const _MONTH_NAMES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
         const _DOW_ES = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
         const _capitalizar = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-        const _weekSrcsShared = [
-            ...(Array.isArray(WEEKLY_OPERATIONS_DATASETS) ? WEEKLY_OPERATIONS_DATASETS : []),
-            staticData?.operacionesSemanaActual
-        ].filter(Boolean);
 
         /* ── semana elegida; las capturas de otro año se piden al entrar a él ── */
         const semana = mode === 'weekly' ? ndwResolveWeek() : null;
         if (semana?.estado === 'pendiente') {
-            ndwLoadDailyYear(semana.year);
+            ndwLoadDetalleAnio(semana.year);
             semana.estado = 'loading';
         }
 
@@ -11730,9 +11679,9 @@ function renderNavdeckWeeklyBanner() {
                 <div class="ndw-current-picker"><label>Fecha de manifiestos <input type="date" data-ndw-date value="${currentDateKey}"></label>
                 <button type="button" data-ndw-refresh>Actualizar cifras</button></div>
                 <p class="ndw-tap-hint" aria-live="polite">${currentManifest?.status === 'ready'
-                    ? (currentManifest.count ? 'Manifiestos capturados de la fecha seleccionada · Cifras preliminares' : 'Sin manifiestos capturados para esta fecha')
+                    ? (currentManifest.count ? 'Manifiestos de la fecha (su cierre de Subsecretaría o, sin cierre, la fecha del vuelo) · Cifras preliminares' : 'Sin manifiestos para esta fecha')
                     : currentManifest?.status === 'error' ? 'No fue posible consultar los manifiestos. Intenta actualizar.' : 'Consultando manifiestos…'}</p>
-                <p class="ndw-tap-hint">Aviación General: captura diaria de la misma fecha; 0 si no hay captura.</p>`;
+                <p class="ndw-tap-hint">${escapeHTML(NDW_DETALLE_AYUDA)}</p>`;
         } else if (mode === 'weekly') {
             /* Como la vista de mes: el periodo, y abajo las semanas del mes y el
                selector de mes. Las semanas que aún no empiezan no se eligen. */
@@ -11748,9 +11697,9 @@ function renderNavdeckWeeklyBanner() {
             const canPrev = semana.year > primerAnio || semana.monthIdx > 0;
             const canNext = semana.year < _now.getFullYear()
                 || (semana.year === _now.getFullYear() && semana.monthIdx < _now.getMonth());
-            const aviso = semana.estado === 'loading' ? `Cargando las capturas diarias de ${semana.year}…`
-                : semana.estado === 'error' ? `No fue posible consultar las capturas diarias de ${semana.year}.`
-                : !semana.dias.length ? 'Sin capturas diarias en esta semana.'
+            const aviso = semana.estado === 'loading' || semana.estado === 'pendiente' ? `Cargando el detalle de ${semana.year}…`
+                : semana.estado === 'error' ? `No fue posible consultar el detalle de ${semana.year}.`
+                : !semana.dias.length ? 'Sin datos en esta semana.'
                 : '';
 
             periodPickerHtml = `
@@ -11818,6 +11767,21 @@ function renderNavdeckWeeklyBanner() {
                 <p class="ndw-tap-hint" aria-label="Las tarjetas son interactivas"><i class="fas fa-hand-pointer" aria-hidden="true"></i><span>Suma de todos los años disponibles</span></p>`;
         }
 
+        /* ── de dónde salen las cifras y avisos del periodo ── */
+        const periodoAvisos = mode === 'current' ? [currentDateKey, currentDateKey]
+            : mode === 'weekly' ? [semana.tramo.inicio, semana.tramo.fin]
+            : mode === 'monthly' ? ndwMonthBounds(selYear, selMonthIdx)
+            : mode === 'annual' ? [`${selYear}-01-01`, `${selYear}-12-31`]
+            : [`${availableYears[0] || currentYear}-01-01`, `${availableYears[availableYears.length - 1] || currentYear}-12-31`];
+        if (mode === 'weekly') {
+            periodPickerHtml += `<p class="ndw-tap-hint ndw-fuente">${escapeHTML(NDW_DETALLE_AYUDA)}</p>`;
+        } else if (mode !== 'current') {
+            periodPickerHtml += totalesInicio?.status === 'error'
+                ? '<p class="ndw-tap-hint" aria-live="polite">No fue posible consultar los totales. Intenta más tarde.</p>'
+                : `<p class="ndw-tap-hint ndw-fuente">${escapeHTML(totalesInicio?.leyenda || 'Consultando totales…')}</p>`;
+        }
+        periodPickerHtml += ndwAvisosPeriodoHtml(periodoAvisos[0], periodoAvisos[1]);
+
         /* ── foto del banner: va según la hora local (ver ndwHeroImgPorHora) ── */
         const heroImg = ndwHeroImgPorHora();
 
@@ -11836,17 +11800,16 @@ function renderNavdeckWeeklyBanner() {
         /* ── card values per mode ── */
         const cardPeriodo = { current: 'Total del día', weekly: 'Total de la semana', monthly: 'Total del mes', annual: 'Total del año', historic: 'Total histórico' }[mode] || 'Total histórico';
         const getCardVal = (def) => {
+            // Día y Semana: detalle. Mes, Año e Histórico: capa unificada.
+            // "—" mientras se consultan.
             if (mode === 'current') {
-                if (def.cat !== 'general') return currentManifest?.status === 'ready' ? currentManifest.totals[def.cat]?.[def.metric] || 0 : null;
-                const dia = _weekSrcsShared
-                    .map((wk) => (Array.isArray(wk?.dias) ? wk.dias.find((d) => d?.fecha === currentDateKey) : null))
-                    .find(Boolean);
-                return dia ? getWeeklyValue(dia, def.cat, def.metric) : 0;
+                return currentManifest?.status === 'ready' ? currentManifest.totals[def.cat]?.[def.metric] || 0 : null;
             }
             if (mode === 'weekly') {
                 if (semana.estado !== 'ready') return null;
                 return semana.dias.reduce((acc, d) => acc + getWeeklyValue(d, def.cat, def.metric), 0);
             }
+            if (totalesInicio?.status !== 'ready') return null;
             if (mode === 'monthly') return ndwGetMonthlyVal(def.cat, def.metric, selYear, selMonthIdx);
             if (mode === 'annual')  return ndwGetAnnualVal(def.cat, def.metric, selYear);
             /* historic: sum all available years */
@@ -11905,6 +11868,10 @@ function renderNavdeckWeeklyBanner() {
             });
             container.addEventListener('click', (ev) => {
                 if (ev.target.closest('[data-ndw-refresh]')) {
+                    // Los totales y el detalle por año se vuelven a pedir al cambiar de vista.
+                    window.TotalesService?.invalidar?.();
+                    if (window._ndwTotales?.status !== 'loading') window._ndwTotales = null;
+                    window._ndwDetalle = {};
                     ndwLoadCurrentManifestDay(container.querySelector('[data-ndw-date]').value, true);
                     renderNavdeckWeeklyBanner();
                     return;
@@ -11954,7 +11921,7 @@ function renderNavdeckWeeklyBanner() {
                     const destino = new Date(year, monthIdx + Number(weekStep.getAttribute('data-ndw-week-step')), 1);
                     NDW_VIEW_STATE.weekStart = ndwIsoDay(destino.getFullYear(), destino.getMonth(), 1);
                     // Si la consulta de ese año falló, se reintenta al volver a entrar.
-                    if (NDW_DAILY_YEARS[destino.getFullYear()]?.status === 'error') delete NDW_DAILY_YEARS[destino.getFullYear()];
+                    if (window._ndwDetalle?.[destino.getFullYear()]?.status === 'error') delete window._ndwDetalle[destino.getFullYear()];
                     renderNavdeckWeeklyBanner();
                     return;
                 }
@@ -12209,11 +12176,11 @@ function openNavdeckWeeklyDetail(idx) {
     if (isCurrent) {
         const dateKey = document.querySelector('[data-ndw-date]')?.value;
         const manifest = window._ndwCurrentManifestDays?.[dateKey];
-        if (def.cat !== 'general' && manifest?.status !== 'ready') return;
-        const sources = [...(typeof WEEKLY_OPERATIONS_DATASETS !== 'undefined' ? WEEKLY_OPERATIONS_DATASETS : []), staticData.operacionesSemanaActual];
-        const generalDay = sources.flatMap(w => w?.dias || []).find(d => d.fecha === dateKey);
-        days = [{ fecha: dateKey, label: dateKey, comercial: manifest?.totals?.comercial,
-            carga: manifest?.totals?.carga, general: generalDay?.general || {} }];
+        if (manifest?.status !== 'ready') return;
+        days = [{ fecha: dateKey, label: dateKey, comercial: manifest.totals.comercial,
+            carga: manifest.totals.carga, general: manifest.totals.general }];
+    } else if (semana.estado !== 'ready') {
+        return;
     }
     if (!days.length) return;
 

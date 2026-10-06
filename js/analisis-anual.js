@@ -434,13 +434,9 @@
         container.innerHTML = `<div class="text-center py-3 text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Cargando datos clave...</div>`;
 
         try {
-            const { data, error } = await window.supabaseClient
-                .from('annual_operations')
-                .select('*')
-                .eq('year', year)
-                .maybeSingle();
-
-            if (error) throw error;
+            // Mismo total anual que el Inicio (js/totales-service.js).
+            const filas = await window.TotalesService.filasAnuales();
+            const data = filas.find((r) => Number(r.year) === Number(year)) || null;
 
             if (!data) {
                 container.innerHTML = `<div class="alert alert-secondary py-2">No hay datos anuales consolidados para ${year}.</div>`;
@@ -459,7 +455,7 @@
         if (!container) return;
 
         const fmt = n => (n != null ? Number(n).toLocaleString('es-MX') : '—');
-        const fmtDec = n => (n != null ? Number(n).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) : '—');
+        const fmtDec = n => (n != null ? Number(n).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—');
 
         const totalOps = (data.comercial_ops_total || 0) + (data.carga_ops_total || 0) + (data.general_ops_total || 0);
         const totalPax = (data.comercial_pax_total || 0) + (data.general_pax_total || 0);

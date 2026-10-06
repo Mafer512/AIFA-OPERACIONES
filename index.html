@@ -22985,6 +22985,11 @@ FF
                                                 <i class="fas fa-chart-line me-2 text-info"></i>Estadística
                                             </button>
                                         </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link fw-semibold" id="tab-conci-oficial-detalle" data-bs-toggle="tab" data-bs-target="#pane-conci-oficial-detalle" type="button" role="tab">
+                                                <i class="fas fa-scale-balanced me-2 text-warning"></i>Oficial vs Detalle
+                                            </button>
+                                        </li>
                                         <li class="nav-item ms-auto d-flex align-items-center conci-tabs-menu-item" role="presentation">
                                             <button class="btn btn-sm btn-primary conci-toolbar-menu-btn" id="btn-conci-main-menu" type="button"
                                                 onclick="window.conciReturnToMainMenu &amp;&amp; window.conciReturnToMainMenu()"
@@ -23814,6 +23819,28 @@ FF
                                     </div><!-- /pane-conci-comercial -->
 
                                     <!--  Tab: Estadística  -->
+                                    <!--  Tab: Oficial vs Detalle (js/conci-oficial-vs-detalle.js)  -->
+                                    <div class="tab-pane fade p-4" id="pane-conci-oficial-detalle" role="tabpanel">
+                                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                            <h6 class="mb-0 me-auto"><i class="fas fa-scale-balanced me-2 text-warning"></i>Cifra oficial contra detalle de manifiestos, por mes</h6>
+                                            <label class="small text-muted d-flex align-items-center gap-1" for="conci-ovd-anio">Año
+                                                <select id="conci-ovd-anio" class="form-select form-select-sm w-auto"></select>
+                                            </label>
+                                            <button id="conci-ovd-actualizar" class="btn btn-sm btn-outline-primary" type="button">
+                                                <i class="fas fa-rotate me-1" aria-hidden="true"></i>Actualizar
+                                            </button>
+                                        </div>
+                                        <p class="small text-muted mb-2">Sólo meses completos hasta el corte oficial. Diferencia = detalle − oficial; % sobre la cifra oficial.</p>
+                                        <p class="small text-muted mb-2" data-totales-leyenda></p>
+                                        <div id="conci-ovd-estado" class="small text-muted mb-2" aria-live="polite"></div>
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover align-middle" id="conci-ovd-tabla">
+                                                <thead></thead>
+                                                <tbody></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
                                     <div class="tab-pane fade p-4" id="pane-conci-estadistica" role="tabpanel">
                                         <!-- ───────────────────────────────────────────────────────────
                                              Módulo estadístico de operaciones.
@@ -29950,6 +29977,7 @@ FF
                 <!-- Análisis de Operaciones Section -->
                 <div id="analisis-operaciones-section" class="content-section">
                     <div class="card shadow-sm border-0">
+                        <p class="small text-muted px-3 pt-2 mb-0" data-totales-leyenda="detalle"></p>
 
                         <!-- Main Section Tabs: Slots | Manifiestos | Carga -->
                         <div class="card-header bg-white py-0 border-bottom">
@@ -31692,6 +31720,7 @@ FF
                             class="card-header bg-transparent d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center">
                             <div class="d-flex flex-column">
                                 <h2 class="section-title mb-2 mb-md-0">Operaciones Totales</h2>
+                                <small class="text-muted" data-totales-leyenda></small>
                             </div>
 
                         </div>
@@ -32567,6 +32596,7 @@ FF
                                 
                                 <div class="tab-pane fade show active" id="analisis-yoy-pane" role="tabpanel" aria-labelledby="comparativa-yoy-tab" tabindex="0">
                                     <div class="ag-wrapper">
+                                        <p class="small text-muted mb-2" data-totales-leyenda></p>
 
                                         <!-- Hidden triggers for JS module init/reload -->
                                         <div style="display:none" aria-hidden="true">
@@ -32844,6 +32874,7 @@ FF
                             <div class="small text-muted">Documentos oficiales (PDF)</div>
                         </div>
                         <div class="card-body pdf-container">
+                            <p class="small text-muted mb-2" data-totales-leyenda="detalle"></p>
                             <ul class="nav nav-tabs" id="frecuenciasTab" role="tablist">
                                 <li class="nav-item" role="presentation">
                                     <button class="nav-link active" id="frecuencias-auto-tab" data-bs-toggle="tab"
@@ -39392,7 +39423,11 @@ FF
     <script src="js/frecuencias_upload_test.js" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
     <script src="js/conci-export-total.js?v=20260925-recepcion" defer></script>
-    <script src="script.js?v=20261002-slot-con-fecha" defer></script>
+    <!-- Avisos por periodo de los manifiestos (tabla manifiestos_avisos_periodo, migración 058) -->
+    <!-- Capa única de totales (oficial hasta el corte, detalle después): ver el archivo -->
+    <script src="js/totales-service.js?v=20261006-totales" defer></script>
+    <script src="js/manifiestos-avisos.js?v=20261005-manifiestos-hechos" defer></script>
+    <script src="script.js?v=20261006-totales" defer></script>
     <!-- Campos de fecha en dd/mm/aaaa sin importar el idioma del navegador. -->
     <script src="js/fecha-ddmm.js?v=20260912-fecha-1" defer></script>
     <!-- Botón y menú de usuario del encabezado de inicio. -->
@@ -40787,14 +40822,14 @@ FF
 <!-- Importar Excel: botón btn-conci-importar-excel de la barra de Conciliación. -->
 <script src="js/conci-importar-excel.js?v=20260930-boton" defer></script>
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
-<script src="js/estadistico-informe-core.js?v=20260912-ag-directorio" defer></script>
+<script src="js/estadistico-informe-core.js?v=20261006-totales" defer></script>
 <script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>
-<!-- Override TEMPORAL de cifras oficiales para el PDF "Informe Estadístico" (ver comentario en el archivo). Quitar este <script> cuando la BD esté al corriente. -->
-<script src="js/estadistico-informe-overrides.js?v=20260915-oficial-corte-10sep" defer></script>
-<script src="js/estadistico-informe.js?v=20260915-grafica-1" defer></script>
+<script src="js/estadistico-informe.js?v=20261006-totales" defer></script>
 <!-- Modulo estadistico de operaciones (pestana Estadistica de Conciliacion) -->
-<script src="js/estadistica-motor.js?v=20260915-avisos-1" defer></script>
-<script src="js/estadistica-panel.js?v=20260915-avisos-1" defer></script>
+<script src="js/estadistica-motor.js?v=20261006-totales" defer></script>
+<script src="js/estadistica-panel.js?v=20261006-totales" defer></script>
+<!-- Conciliación: Oficial vs Detalle por mes -->
+<script src="js/conci-oficial-vs-detalle.js?v=20261006-totales" defer></script>
 <script src="js/estadistica-clasificacion.js?v=20260908-v1" defer></script>
 
 <!-- ═══ Aviación General · FBO (GAG · Servicios Conexos) ═══

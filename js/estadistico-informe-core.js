@@ -236,6 +236,54 @@
     // Cuando llega, reemplaza a monthly_operations en TODOS los meses (un mes
     // sin movimientos en el directorio vale cero) y se rehacen los totales por
     // año de General a partir de sus meses. Sin datos no toca nada.
+    // Totales de la capa unificada (js/totales-service.js → historiaMensual):
+    // cifra oficial en los meses completos hasta el corte y detalle después,
+    // para las TRES aviaciones. Son los mismos totales del Inicio.
+    //
+    // aggregated (de aggregateResumen) sólo aporta el DESGLOSE —llegada/salida,
+    // nacional/internacional— de Comercial y Carga en los meses de detalle: la
+    // cifra oficial no lo trae y se deja en cero (fuente 'oficial'), igual que
+    // hacía mergeOficiales. Cada año es la suma de sus meses.
+    function aplicarTotalesUnificados(aggregated, meses) {
+        const salida = { porAnio: new Map(), porAnioMes: new Map(), anios: [] };
+        (meses || []).forEach((m) => {
+            const anio = Number(m?.anio);
+            const mes = Number(m?.mes);
+            if (!Number.isInteger(anio) || !Number.isInteger(mes) || mes < 1 || mes > 12) return;
+            const clave = `${anio}-${mes}`;
+            const previo = aggregated?.porAnioMes?.get(clave) || {};
+            const entrada = {};
+            TIPOS.forEach((tipo) => {
+                const valores = m[tipo] || {};
+                const fuente = (m.fuentes && m.fuentes[tipo]) || m.fuente || 'detalle';
+                const conDesglose = fuente === 'detalle' && tipo !== 'general' && previo[tipo];
+                const c = conDesglose ? Object.assign(emptyCounters(), previo[tipo]) : emptyCounters();
+                c.ops = toNumber(valores.operaciones);
+                if (tipo === 'carga') {
+                    c.kg = toNumber(valores.toneladas) * 1000;
+                    if (!conDesglose) c.pax = 0;
+                } else {
+                    c.pax = toNumber(valores.pasajeros);
+                    if (!conDesglose) c.kg = 0;
+                }
+                c.fuente = fuente === 'oficial' ? 'oficial' : 'detalle';
+                entrada[tipo] = c;
+            });
+            salida.porAnioMes.set(clave, entrada);
+            if (!salida.porAnio.has(anio)) {
+                const vacio = {};
+                TIPOS.forEach((tipo) => { vacio[tipo] = emptyCounters(); });
+                salida.porAnio.set(anio, vacio);
+            }
+            const acumulado = salida.porAnio.get(anio);
+            TIPOS.forEach((tipo) => {
+                CAMPOS_CONTADOR.forEach((campo) => { acumulado[tipo][campo] += entrada[tipo][campo] || 0; });
+            });
+        });
+        salida.anios = [...salida.porAnio.keys()].sort((a, b) => a - b);
+        return salida;
+    }
+
     function aplicarAviacionGeneral(aggregated, porMes) {
         const filas = (porMes || []).filter(f => Number.isInteger(Number(f?.anio)) && Number.isInteger(Number(f?.mes)));
         if (!aggregated || !filas.length) return false;
@@ -744,6 +792,7 @@
         toNumber,
         aggregateResumen,
         mergeOficiales,
+        aplicarTotalesUnificados,
         aplicarAviacionGeneral,
         contadorAviacionGeneral,
         buildAcumulado,
