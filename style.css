@@ -23491,6 +23491,28 @@ body.dark-mode .tb-doc-icono {
    font-variant-numeric: tabular-nums;
 }
 
+/* Reporte de Carga: las tablas de la hoja del libro, kilos arriba y
+   operaciones abajo, cada detalle con su resumen debajo. El detalle de kilos
+   no cabe junto a su resumen en el ancho de la hoja; en pantallas angostas
+   cada tabla se desplaza sola. */
+.conci-rep-rc-par {
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   gap: 1rem;
+   margin-bottom: 1.4rem;
+}
+
+.conci-rep-rc-marco {
+   min-width: 0;
+   max-width: 100%;
+   overflow-x: auto;
+}
+
+.conci-rep-plantilla.conci-rep-rc {
+   width: auto;
+}
+
 .conci-rep-p2-pie {
    display: flex;
    gap: 2.4rem;

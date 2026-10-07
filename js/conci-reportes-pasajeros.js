@@ -432,12 +432,29 @@
             // expediente operativo; simplemente no reescribe un informe.
             if (esAjuste) continue;
 
+            // Como en el libro: a las Plantillas entra lo cerrado (CIERRE
+            // SUBSECRETARIA) y lo cargado del libro aunque no traiga cierre
+            // (cierre_aerolinea_reportada: p. ej. vuelos del 31/08 que el libro
+            // de agosto cuenta en su Plantilla pero en ningún oficio). Una copia
+            // vieja sin cierre o una captura a medias no entra: duplicaba días
+            // enteros de la Plantilla 2.
+            const delLibro = columnas.aerolineaReportada && String(fila[columnas.aerolineaReportada] ?? '').trim();
+            if (!cierre && !delLibro) continue;
+
             const fecha = aIso(columnas.fecha ? fila[columnas.fecha] : '');
             if (!fecha || fecha > fechaIso) continue;
 
+            // "EDICIÓN POSTERIOR": renglón añadido para cuadrar las Plantillas
+            // con la Numeralia oficial cuando el libro no trae el detalle. No
+            // es un vuelo: si su TOTAL PAX es negativo, RESTA una operación
+            // (el oficial tiene uno menos ese día). Va sin cierre, así que
+            // nunca entra a un oficio.
+            const edicionPosterior = normaliza(delLibro || '') === 'EDICION POSTERIOR';
+            const opsFila = edicionPosterior && pax < 0 ? -signo : signo;
+
             if (fecha.startsWith(prefijoAnio)) {
                 anioPlantillas.pax += pax;
-                anioPlantillas.ops += cuentaSiHay(tipo) ? signo : 0;
+                anioPlantillas.ops += cuentaSiHay(tipo) ? opsFila : 0;
             }
 
             if (fecha === fechaIso || fecha.startsWith(prefijoMes)) {
@@ -452,7 +469,7 @@
                         acc.pax += pax;
                         // El libro cuenta TIPO DE OPERACIÓN en el bloque del día
                         // y AEROLINEA en el acumulado; aquí ambos existen.
-                        acc.ops += (alcance === 'dia' ? cuentaSiHay(operacion) : true) ? signo : 0;
+                        acc.ops += (alcance === 'dia' ? cuentaSiHay(operacion) : true) ? opsFila : 0;
                         // El código capturado se guarda para el tooltip, igual
                         // que hace la celda de aerolínea en la tabla.
                         if (bruto && bruto.toUpperCase() !== aerolinea) acc.codigos.add(bruto.toUpperCase());
@@ -469,7 +486,7 @@
                 if (casilla) {
                     const carril = llegada ? 'llegada' : 'salida';
                     casilla.pax[carril] += pax;
-                    casilla.ops[carril] += cuentaSiHay(tipo) ? signo : 0;
+                    casilla.ops[carril] += cuentaSiHay(tipo) ? opsFila : 0;
                     casilla.hayDatos = true;
                 }
             }
@@ -655,10 +672,23 @@
      * Se usa en los tres sitios que dibujan o cuentan esos renglones (pantalla,
      * Excel y el cálculo de los offsets data-xl), para que no puedan divergir.
      */
+    // Renglones que suman al TOTAL pero no se muestran ni se descargan:
+    // "EDICIÓN POSTERIOR" son los ajustes para cuadrar con la Numeralia
+    // oficial cuando el libro no trae el detalle (no son una aerolínea).
+    const OCULTAS_PLANTILLA1 = new Set(['EDICION POSTERIOR']);
+
     function entradasVisibles(mapa) {
         return [...mapa.entries()]
-            .filter(([, v]) => v.pax !== 0 || v.ops !== 0)
+            .filter(([a, v]) => (v.pax !== 0 || v.ops !== 0) && !OCULTAS_PLANTILLA1.has(normaliza(a)))
             .sort((a, b) => a[0].localeCompare(b[0], 'es'));
+    }
+
+    /** TOTAL de un bloque: todas las aerolíneas, también las que no se muestran. */
+    function totalesPlantilla1(mapa) {
+        let pax = 0;
+        let ops = 0;
+        for (const v of mapa.values()) { pax += v.pax; ops += v.ops; }
+        return { pax, ops };
     }
 
     /**
@@ -668,8 +698,7 @@
     function tablaAerolineas(mapa, inicio) {
         const xl = (r, c) => (inicio === undefined ? '' : ` data-xl="${r},${c}"`);
         const filas = entradasVisibles(mapa);
-        const totalPax = filas.reduce((a, [, v]) => a + v.pax, 0);
-        const totalOps = filas.reduce((a, [, v]) => a + v.ops, 0);
+        const { pax: totalPax, ops: totalOps } = totalesPlantilla1(mapa);
         const cuerpo = filas.length
             ? filas.map(([aerolinea, v], i) => {
                 const c = colorAerolinea(aerolinea);
@@ -918,13 +947,12 @@
     function filasPlantilla1(datos) {
         const bloque = (mapa, encabezado) => {
             const filas = entradasVisibles(mapa);
+            const total = totalesPlantilla1(mapa);
             return [
                 [encabezado],
                 ['AEROLÍNEA', 'PAX TRANSPORTADOS', 'NÚMERO DE OPERACIONES'],
                 ...filas.map(([a, v]) => [a, v.pax, v.ops]),
-                ['TOTAL',
-                    filas.reduce((s, [, v]) => s + v.pax, 0),
-                    filas.reduce((s, [, v]) => s + v.ops, 0)],
+                ['TOTAL', total.pax, total.ops],
                 []
             ];
         };

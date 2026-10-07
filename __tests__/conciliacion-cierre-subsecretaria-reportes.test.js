@@ -482,10 +482,12 @@ describe('CARGA — corrección numérica y reclasificación', () => {
       })
     ];
     const r = agregar(datos, DIA_B);
-    // El Reporte de Carga sólo cuenta carga internacional: como se reportó
-    // nacional, sigue en cero, y la operación internacional tampoco aparece.
+    // El Reporte de Carga se queda con lo que se reportó: nacional. La
+    // carga y la operación no pasan a internacional.
     expect(r.porMes[8].impKg).toBe(0);
     expect(r.porMes[8].opsIntLlegada).toBe(0);
+    expect(r.porMes[8].nacLlegadaKg).toBe(3000);
+    expect(r.porMes[8].opsNacLlegada).toBe(1);
     // Pero el oficio del corte B sí mueve el bucket.
     expect(r.sub.actual.dia.LLEGADA.NACIONAL.kg).toBe(-3000);
     expect(r.sub.actual.dia.LLEGADA.INTERNACIONAL.kg).toBe(3000);

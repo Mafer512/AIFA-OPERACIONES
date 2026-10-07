@@ -245,30 +245,79 @@ describe('Reporte de Carga', () => {
   });
   afterEach(() => { delete window._conciRowIsCargo; });
 
-  test('reparte la carga internacional por mes, en llegada y salida', () => {
+  test('reparte la carga internacional y la nacional por mes, en llegada y salida', () => {
+    // Enero de "BASE DE CARGA 2026", hoja REPORTE CARGA.
     const r = api.agregar({
       filas: [
-        manifiesto({ fecha: '2026-01-15', tipo: 'LLEGADA', int: 26048504 }),
-        manifiesto({ fecha: '2026-01-20', tipo: 'SALIDA', int: 4879391 }),
+        manifiesto({ fecha: '2026-01-15', tipo: 'LLEGADA', int: 26048504.1, nac: 297429 }),
+        manifiesto({ fecha: '2026-01-20', tipo: 'SALIDA', int: 4879391.03, nac: 354447 }),
         manifiesto({ fecha: '2026-08-10', tipo: 'LLEGADA', int: 30355652 })
       ],
       columnas: COLUMNAS
     }, '2026-09-01');
-    expect(r.porMes[0].impKg).toBe(26048504);
-    expect(r.porMes[0].expKg).toBe(4879391);
+    expect(r.porMes[0]).toEqual(expect.objectContaining({
+      impKg: 26048504.1, expKg: 4879391.03, nacLlegadaKg: 297429, nacSalidaKg: 354447
+    }));
     expect(r.porMes[7].impKg).toBe(30355652);
     expect(r.porMes[1].impKg).toBe(0);
   });
 
-  test('no cuenta operaciones mixtas: solo las internacionales declaradas', () => {
+  test('cuenta operaciones internacionales y nacionales, sin las de aerolíneas mixtas', () => {
     const r = api.agregar({
       filas: [
         manifiesto({ fecha: '2026-03-01', tipo: 'LLEGADA', operacion: 'INTERNACIONAL', int: 100 }),
-        manifiesto({ fecha: '2026-03-02', tipo: 'LLEGADA', operacion: 'NACIONAL', nac: 100 })
+        manifiesto({ fecha: '2026-03-02', tipo: 'LLEGADA', operacion: 'NACIONAL', nac: 100 }),
+        manifiesto({ fecha: '2026-03-02', tipo: 'SALIDA', operacion: 'NACIONAL', nac: 50, aerolinea: 'ESTAFETA' }),
+        // Mixtas: sus kilos sí, sus operaciones no.
+        manifiesto({ fecha: '2026-03-03', tipo: 'SALIDA', operacion: 'INTERNACIONAL', int: 700, aerolinea: 'VOLARIS' }),
+        manifiesto({ fecha: '2026-03-03', tipo: 'LLEGADA', operacion: 'NACIONAL', nac: 300, aerolinea: 'AEROMÉXICO' }),
+        { ...manifiesto({ fecha: '2026-03-04', tipo: 'SALIDA', operacion: 'NACIONAL', nac: 20, aerolinea: 'VB' }),
+          cierre_aerolinea_reportada: 'VIVA AEROBUS' }
+      ],
+      columnas: { ...COLUMNAS, aerolineaReportada: 'cierre_aerolinea_reportada' }
+    }, '2026-09-01');
+    const marzo = r.porMes[2];
+    expect(marzo).toEqual(expect.objectContaining({
+      opsIntLlegada: 1, opsIntSalida: 0, opsNacLlegada: 1, opsNacSalida: 1,
+      impKg: 100, expKg: 700, nacLlegadaKg: 400, nacSalidaKg: 70
+    }));
+  });
+
+  test('la vista trae las cuatro tablas de la hoja, con el total en toneladas', () => {
+    document.body.innerHTML = `
+      <button data-conci-rep-carga="subsecretaria" class="active"></button>
+      <button data-conci-rep-carga="reportecarga"></button>
+      <div id="conci-rep-carga-salida"></div>`;
+    api = cargar();
+    api.mostrar(api.agregar({
+      filas: [
+        manifiesto({ fecha: '2026-01-15', tipo: 'LLEGADA', operacion: 'INTERNACIONAL', int: 26048504.1, nac: 297429 }),
+        manifiesto({ fecha: '2026-01-20', tipo: 'SALIDA', operacion: 'NACIONAL', int: 4879391.03, nac: 354447 }),
+        manifiesto({ fecha: '2026-01-21', tipo: 'SALIDA', operacion: 'INTERNACIONAL', int: 10, aerolinea: 'CONVIASA' })
       ],
       columnas: COLUMNAS
-    }, '2026-09-01');
-    expect(r.porMes[2].opsIntLlegada).toBe(1);
+    }, '2026-09-30'));
+    document.querySelector('[data-conci-rep-carga="reportecarga"]').click();
+    const salida = document.getElementById('conci-rep-carga-salida');
+    const tablas = [...salida.querySelectorAll('table.conci-rep-rc')];
+    expect(tablas).toHaveLength(4);
+    const bandas = tablas.map(t => [...t.querySelectorAll('.conci-rep-banda')].map(th => th.textContent.trim()));
+    expect(bandas).toEqual([
+      ['CARGA INTERNACIONAL KG', 'CARGA NACIONAL KG', 'CARGA EN TONELADAS'],
+      ['CARGA (KG.)', 'CARGA EN TONELADAS'],
+      ['OPERACIONES INTERNACIONALES', 'OPERACIONES NACIONALES', ''],
+      ['OPERACIONES']
+    ]);
+    const celdas = (tabla, fila) => [...tabla.querySelectorAll('tbody tr')[fila].querySelectorAll('td')].map(td => td.textContent.trim());
+    // ENERO: 26,048,504.10 + 4,879,401.03 + 297,429 + 354,447 kg = 31,579.78 t
+    expect(celdas(tablas[0], 0)).toEqual(['ENERO', '26,048,504.10', '4,879,401.03', '30,927,905.13',
+      '297,429.00', '354,447.00', '651,876.00', '31,579.78']);
+    expect(celdas(tablas[1], 0)).toEqual(['ENERO', '26,345,933.10', '5,233,848.03', '31,579.78']);
+    // La de CONVIASA es mixta: no cuenta como operación.
+    expect(celdas(tablas[2], 0)).toEqual(['ENERO', '1', '0', '1', '0', '1', '1', '2']);
+    expect(celdas(tablas[3], 0)).toEqual(['ENERO', '1', '1', '2']);
+    expect(celdas(tablas[0], 1)[1]).toBe('—');
+    expect(salida.textContent).toContain('No se consideran operaciones mixtas.');
   });
 });
 

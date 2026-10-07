@@ -37,9 +37,11 @@
      HOJA 2         las mismas cifras en tarjetas, que es la maqueta de la
                     presentación.
 
-     REPORTE CARGA  concentrado del año por mes: carga internacional en kilos
-                    (llegada, salida, subtotal) y operaciones internacionales.
-                    No considera operaciones mixtas.
+     REPORTE CARGA  la hoja del mismo nombre: concentrado del año por mes de
+                    FECHA. Carga internacional y nacional en kilos (llegada,
+                    salida, subtotal) y el total en toneladas; operaciones
+                    internacionales y nacionales. No considera operaciones
+                    mixtas: sus kilos sí cuentan, sus operaciones no.
 
      PRESENTACIÓN   réplica de la baraja: portada, resumen de la terminal,
                     tarjetas por modalidad, totales y los catálogos.
@@ -169,6 +171,19 @@
                 ? window._conciResolveAirlineMeta(String(valor ?? '').trim()) : null;
             return meta && meta.iata ? String(meta.iata).toUpperCase() : '';
         } catch (_) { return ''; }
+    }
+
+    /**
+     * Aerolíneas de operación mixta (pasajeros y carga). En el Reporte de
+     * Carga sus kilos cuentan y sus operaciones no: es la nota del libro y así
+     * sale el concentrado mensual de Estadística. Las marca el catálogo de la
+     * presentación; si no cargó, la lista de su diapositiva 8.
+     */
+    const MIXTAS = new Set(['AEROMEXICO', 'CONVIASA', 'MEXICANA', 'VIVA AEROBUS', 'VOLARIS']);
+    function esMixta(nombre, iata) {
+        const C = CAT();
+        const entrada = C && typeof C.entradaDe === 'function' ? C.entradaDe(nombre, iata) : null;
+        return entrada ? entrada.grupo === 'mixta' : MIXTAS.has(normaliza(nombre));
     }
 
     /**
@@ -352,8 +367,10 @@
 
         const porAerolinea = new Map();               // Hoja 1 y Hoja 2
         const porMes = Array.from({ length: 12 }, () => ({
-            impKg: 0, expKg: 0, opsIntLlegada: 0, opsIntSalida: 0
+            impKg: 0, expKg: 0, nacLlegadaKg: 0, nacSalidaKg: 0,
+            opsIntLlegada: 0, opsIntSalida: 0, opsNacLlegada: 0, opsNacSalida: 0
         }));                                           // REPORTE CARGA
+        const mixtas = new Map();                      // aerolínea → ¿mixta?
         const anioActual = { ops: 0, kg: 0 };          // presentación
         const delDia = { ops: 0, kg: 0 };
         let descartadosPax = 0;
@@ -451,6 +468,12 @@
             // que estos bloques ven exactamente lo que se reportó.
             if (esAjuste) continue;
 
+            // Como en el libro: entra lo cerrado y lo cargado del libro aunque
+            // no traiga cierre (cierre_aerolinea_reportada). Una copia vieja sin
+            // cierre de los mismos vuelos duplicaba días enteros.
+            const delLibro = columnas.aerolineaReportada && String(fila[columnas.aerolineaReportada] ?? '').trim();
+            if (!cierre && !delLibro) continue;
+
             const fecha = aIso(columnas.fecha ? fila[columnas.fecha] : '');
             if (!fecha || fecha > fechaIso) continue;
 
@@ -469,12 +492,21 @@
 
                 const casilla = porMes[Number(fecha.slice(5, 7)) - 1];
                 if (casilla) {
-                    if (llegada) casilla.impKg += intKg; else casilla.expKg += intKg;
-                    // El reporte no considera operaciones mixtas: solo cuenta
-                    // las que el manifiesto declara internacionales.
-                    if (esInternacional(operacion)) {
-                        if (llegada) casilla.opsIntLlegada += opDelta;
-                        else casilla.opsIntSalida += opDelta;
+                    // Los cuatro campos del libro: IMPORTACIÓN, EXPORTACIÓN,
+                    // KGS CARGA LLEGADA NLU y KG. DE CARGA SALIDA NLU.
+                    if (llegada) {
+                        casilla.impKg += intKg;
+                        casilla.nacLlegadaKg += nacKg;
+                    } else {
+                        casilla.expKg += intKg;
+                        casilla.nacSalidaKg += nacKg;
+                    }
+                    // Operaciones del lado que diga TIPO DE OPERACIÓN, como la
+                    // tabla dinámica del libro; las de aerolíneas mixtas no.
+                    if (!mixtas.has(aerolinea)) mixtas.set(aerolinea, esMixta(aerolinea, iataDe(bruto)));
+                    if (!mixtas.get(aerolinea)) {
+                        const lado = esInternacional(operacion) ? 'Int' : 'Nac';
+                        casilla[`ops${lado}${llegada ? 'Llegada' : 'Salida'}`] += opDelta;
                     }
                 }
             }
@@ -777,44 +809,77 @@
 
     /* ── Reporte 4: Reporte de Carga — concentrado del año ──────────────── */
 
+    /**
+     * La hoja REPORTE CARGA del libro: arriba los kilos —internacional y
+     * nacional, llegada y salida— con el total en toneladas, y su resumen por
+     * llegada/salida; abajo las operaciones, con el mismo par de tablas.
+     */
     function renderReporteCarga(datos) {
         const { porMes, anio, fechaIso } = datos;
+        const kg = { formato: dosDec };
+        const ops = { formato: entero };
+        const kilosDe = m => m.impKg + m.expKg + m.nacLlegadaKg + m.nacSalidaKg;
+        const opsDe = m => m.opsIntLlegada + m.opsIntSalida + m.opsNacLlegada + m.opsNacSalida;
+        const toneladas = { titulo: 'CARGA EN TONELADAS', columnas: [{ ...kg, titulo: 'TOTAL', valor: m => kilosDe(m) / 1000 }] };
 
-        const tabla = (titulo, llegada, salida) => {
+        // grupos: [{ titulo, columnas: [{ titulo, valor(mes), formato }] }]
+        const tabla = (grupos, hay) => {
+            const columnas = grupos.flatMap(g => g.columnas);
             const filas = porMes.map((m, i) => {
-                const l = llegada(m), s = salida(m);
-                const hay = l || s;
-                return `<tr${hay ? '' : ' class="conci-rep-sin-datos"'}>
+                const con = hay(m);
+                return `<tr${con ? '' : ' class="conci-rep-sin-datos"'}>
                     <td>${MESES[i]}</td>
-                    <td class="num">${hay ? entero(l) : '—'}</td>
-                    <td class="num">${hay ? entero(s) : '—'}</td>
-                    <td class="num">${hay ? entero(l + s) : '—'}</td>
+                    ${columnas.map(c => `<td class="num">${con ? c.formato(c.valor(m)) : '—'}</td>`).join('')}
                 </tr>`;
             }).join('');
-            const tl = porMes.reduce((a, m) => a + llegada(m), 0);
-            const ts = porMes.reduce((a, m) => a + salida(m), 0);
+            const total = columnas.map(c => `<td class="num"><u>${c.formato(porMes.reduce((a, m) => a + c.valor(m), 0))}</u></td>`);
             return `
-            <table class="conci-rep-plantilla conci-rep-p2">
+            <div class="conci-rep-rc-marco">
+            <table class="conci-rep-plantilla conci-rep-p2 conci-rep-rc">
                 <thead>
-                    <tr><th class="conci-rep-banda" colspan="4">${titulo}</th></tr>
-                    <tr class="conci-rep-subcabecera"><th>MES</th><th>LLEGADA</th><th>SALIDA</th><th>SUBTOTAL</th></tr>
+                    <tr><th></th>${grupos.map(g => `<th class="conci-rep-banda" colspan="${g.columnas.length}">${g.titulo}</th>`).join('')}</tr>
+                    <tr class="conci-rep-subcabecera"><th>MES</th>${columnas.map(c => `<th>${c.titulo}</th>`).join('')}</tr>
                 </thead>
                 <tbody>${filas}</tbody>
                 <tfoot>
-                    <tr class="conci-rep-fila-total">
-                        <td>TOTAL</td>
-                        <td class="num"><u>${entero(tl)}</u></td>
-                        <td class="num"><u>${entero(ts)}</u></td>
-                        <td class="num"><u>${entero(tl + ts)}</u></td>
-                    </tr>
+                    <tr class="conci-rep-fila-total"><td>TOTAL</td>${total.join('')}</tr>
                 </tfoot>
-            </table>`;
+            </table>
+            </div>`;
         };
+        const lados = (titulo, llegada, salida, formato, suma = 'SUBTOTAL') => ({
+            titulo,
+            columnas: [
+                { ...formato, titulo: 'LLEGADA', valor: llegada },
+                { ...formato, titulo: 'SALIDA', valor: salida },
+                { ...formato, titulo: suma, valor: m => llegada(m) + salida(m) }
+            ]
+        });
 
         const cuerpo = `
-            <div class="conci-rep-p2-rejilla">
-                ${tabla('CARGA INTERNACIONAL KG', m => m.impKg, m => m.expKg)}
-                ${tabla('OPERACIONES INTERNACIONALES', m => m.opsIntLlegada, m => m.opsIntSalida)}
+            <div class="conci-rep-rc-par">
+                ${tabla([
+                    lados('CARGA INTERNACIONAL KG', m => m.impKg, m => m.expKg, kg),
+                    lados('CARGA NACIONAL KG', m => m.nacLlegadaKg, m => m.nacSalidaKg, kg),
+                    toneladas
+                ], m => kilosDe(m) !== 0)}
+                ${tabla([
+                    { titulo: 'CARGA (KG.)', columnas: [
+                        { ...kg, titulo: 'LLEGADA', valor: m => m.impKg + m.nacLlegadaKg },
+                        { ...kg, titulo: 'SALIDA', valor: m => m.expKg + m.nacSalidaKg }
+                    ] },
+                    toneladas
+                ], m => kilosDe(m) !== 0)}
+            </div>
+            <div class="conci-rep-rc-par">
+                ${tabla([
+                    lados('OPERACIONES INTERNACIONALES', m => m.opsIntLlegada, m => m.opsIntSalida, ops),
+                    lados('OPERACIONES NACIONALES', m => m.opsNacLlegada, m => m.opsNacSalida, ops),
+                    { titulo: '', columnas: [{ ...ops, titulo: 'TOTAL', valor: opsDe }] }
+                ], m => opsDe(m) !== 0 || kilosDe(m) !== 0)}
+                ${tabla([
+                    lados('OPERACIONES', m => m.opsIntLlegada + m.opsNacLlegada, m => m.opsIntSalida + m.opsNacSalida, ops, 'TOTAL')
+                ], m => opsDe(m) !== 0 || kilosDe(m) !== 0)}
             </div>
             <p class="conci-rep-aclaracion"><strong>NOTA:</strong> No se consideran operaciones mixtas.</p>`;
 
