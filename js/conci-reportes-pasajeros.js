@@ -345,11 +345,16 @@
         const anioSub = anio;
         const mesSub = mes;
         const cierres = { anterior: diaAnterior(fechaIso), actual: fechaIso };
+        // Los acumulados parten del saldo oficial (js/conci-saldos-oficio.js):
+        // se calcula también la columna de su fecha para saber cuánto le falta
+        // a la base, y esa diferencia se aplica a las dos columnas del oficio.
+        const saldos = window.ConciSaldosOficio && window.ConciSaldosOficio.pasajeros ? window.ConciSaldosOficio : null;
+        if (saldos) cierres.saldo = saldos.fecha;
 
         // Subsecretaría: por columna, LLEGADA/SALIDA × NACIONAL/INTERNACIONAL
         // en cada alcance.
         const sub = {};
-        for (const clave of ['anterior', 'actual']) {
+        for (const clave of Object.keys(cierres)) {
             sub[clave] = {};
             for (const alcance of ['dia', 'mes', 'anio', 'historico']) {
                 sub[clave][alcance] = {
@@ -419,7 +424,7 @@
                 const columna = esInternacional(operacion) ? 'INTERNACIONAL' : 'NACIONAL';
                 // El libro cuenta AEROLINEA, no filas.
                 const opDelta = cuentaSiHay(columnas.aerolinea ? fila[columnas.aerolinea] : '') ? signo : 0;
-                for (const clave of ['anterior', 'actual']) {
+                for (const clave of Object.keys(cierres)) {
                     const corte = cierres[clave];
                     if (cierre > corte) continue;
                     const suma = alcance => {
@@ -512,12 +517,42 @@
             }
         }
 
+        if (saldos) aplicarSaldos(sub, cierres, saldos);
+
         return {
             sub, cierres, anioSub, mesSub,
             porAerolinea, porDia, anioPlantillas,
             anio, mes, fechaIso, descartadosCarga, invalidos, totalFilas: filas.length,
             actualizacionIso: datos.hasta || fechaIso
         };
+    }
+
+    /**
+     * Ajusta los acumulados al saldo oficial. Diferencia = oficio de la fecha
+     * del saldo − lo que la base da a esa fecha; se suma a cada columna en los
+     * alcances que comparte con el saldo (el mes si es el mismo mes, el año si
+     * es el mismo año, desde el inicio siempre). Va en el carril de LLEGADA:
+     * los acumulados sólo se muestran por nacional e internacional. Quita la
+     * columna auxiliar del saldo.
+     */
+    function aplicarSaldos(sub, cierres, saldos) {
+        for (const alcance of ['mes', 'anio', 'historico']) {
+            const oficial = saldos.pasajeros[alcance];
+            const base = totalesSub(sub.saldo[alcance]);
+            const dif = {
+                NACIONAL: { pax: oficial.pax.nacional - base.nacional.pax, ops: oficial.ops.nacional - base.nacional.ops },
+                INTERNACIONAL: { pax: oficial.pax.internacional - base.internacional.pax, ops: oficial.ops.internacional - base.internacional.ops }
+            };
+            for (const clave of ['anterior', 'actual']) {
+                if (!saldos.aplica(alcance, cierres[clave])) continue;
+                for (const lado of ['NACIONAL', 'INTERNACIONAL']) {
+                    sub[clave][alcance].LLEGADA[lado].pax += dif[lado].pax;
+                    sub[clave][alcance].LLEGADA[lado].ops += dif[lado].ops;
+                }
+            }
+        }
+        delete sub.saldo;
+        delete cierres.saldo;
     }
 
     /* ── render ─────────────────────────────────────────────────────────── */

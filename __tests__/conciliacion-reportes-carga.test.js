@@ -340,7 +340,9 @@ describe('Hoja 2 y la presentación, con el template', () => {
     window._conciRowIsCargo = () => true;
     api = cargar();
     datos = api.agregar({
-      filas: [manifiesto({ fecha: '2026-08-31', cierre: '2026-09-01', tipo: 'LLEGADA', int: 1709340, aerolinea: 'ESTAFETA' })],
+      // Cerrado el mismo día: los reportes por FECHA van con lo cerrado hasta
+      // la fecha pedida (lo cerrado después se lee, pero no entra).
+      filas: [manifiesto({ fecha: '2026-08-31', cierre: '2026-08-31', tipo: 'LLEGADA', int: 1709340, aerolinea: 'ESTAFETA' })],
       columnas: COLUMNAS
     }, '2026-08-31');
   });

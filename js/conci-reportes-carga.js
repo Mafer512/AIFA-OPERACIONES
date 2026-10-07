@@ -139,6 +139,20 @@
     const esInternacional = o => /INTERNACIONAL/.test(normaliza(o));
 
     const dosDigitos = n => String(n).padStart(2, '0');
+
+    /** AAAA-MM-DD de hoy, en la hora local. */
+    function hoyIso() {
+        const h = new Date();
+        return `${h.getFullYear()}-${dosDigitos(h.getMonth() + 1)}-${dosDigitos(h.getDate())}`;
+    }
+    /**
+     * Hasta qué cierre se leen los manifiestos: hoy, o la fecha pedida si es
+     * posterior. Los acumulados del oficio parten del saldo oficial y para
+     * llevarlo a la fecha pedida hace falta lo cerrado hasta esa fecha del
+     * saldo; los reportes por FECHA siguen con lo cerrado hasta la fecha
+     * pedida (agregar() lo filtra).
+     */
+    const corteDeLectura = fechaIso => (fechaIso > hoyIso() ? fechaIso : hoyIso());
     const diasDelMes = (a, m) => new Date(a, m, 0).getDate();
     /** AAAA-MM-DD del día anterior, cruzando mes y año. */
     function diaAnterior(iso) {
@@ -180,6 +194,10 @@
      * presentación; si no cargó, la lista de su diapositiva 8.
      */
     const MIXTAS = new Set(['AEROMEXICO', 'CONVIASA', 'MEXICANA', 'VIVA AEROBUS', 'VOLARIS']);
+    // En el oficio a la Subsecretaría las mixtas dejaron de contar como
+    // operación desde el cierre del 14/09/2026 (hasta el 12/09 sí contaban,
+    // según la hoja Subsecretaría del libro). Sus kilos cuentan siempre.
+    const OFICIO_SIN_MIXTAS_DESDE = '2026-09-14';
     function esMixta(nombre, iata) {
         const C = CAT();
         const entrada = C && typeof C.entradaDe === 'function' ? C.entradaDe(nombre, iata) : null;
@@ -358,12 +376,18 @@
         const anioSub = anio;
         const mesSub = mes;
         const cierres = { anterior: diaAnterior(fechaIso), actual: fechaIso };
+        // Los acumulados parten del saldo oficial (js/conci-saldos-oficio.js),
+        // como en el de pasajeros: la columna auxiliar de su fecha da cuánto
+        // le falta a la base.
+        const saldos = window.ConciSaldosOficio && window.ConciSaldosOficio.carga ? window.ConciSaldosOficio : null;
+        if (saldos) cierres.saldo = saldos.fecha;
 
         const sub = {};
-        for (const clave of ['anterior', 'actual']) {
+        for (const clave of Object.keys(cierres)) {
             sub[clave] = {};
             for (const alcance of ['dia', 'mes', 'anio', 'historico']) sub[clave][alcance] = cuadro();
         }
+        const kgPorCierre = new Map();                 // cierre → kilos del día
 
         const porAerolinea = new Map();               // Hoja 1 y Hoja 2
         const porMes = Array.from({ length: 12 }, () => ({
@@ -431,11 +455,26 @@
             intKg *= signo;
             const kg = nacKg + intKg;
 
+            const aerolinea = columnas.aerolineaReportada && fila[columnas.aerolineaReportada]
+                ? String(fila[columnas.aerolineaReportada]).trim().toUpperCase()
+                : nombreAerolinea(bruto);
+            const esFilaMixta = () => {
+                if (!mixtas.has(aerolinea)) mixtas.set(aerolinea, esMixta(aerolinea, iataDe(bruto)));
+                return mixtas.get(aerolinea);
+            };
+
             // ── Subsecretaría: por Cierre Subsecretaria ──
             const cierre = aIso(columnas.cierre ? fila[columnas.cierre] : '');
             if (cierre) {
                 const carril = llegada ? 'LLEGADA' : 'SALIDA';
-                for (const clave of ['anterior', 'actual']) {
+                const opsOficio = cierre >= OFICIO_SIN_MIXTAS_DESDE && opDelta && esFilaMixta() ? 0 : opDelta;
+                const delDiaKg = kgPorCierre.get(cierre) || { nac: 0, int: 0, opsNac: 0, opsInt: 0 };
+                delDiaKg.nac += nacKg;
+                delDiaKg.int += intKg;
+                if (esInternacional(operacion)) delDiaKg.opsInt += opsOficio;
+                else delDiaKg.opsNac += opsOficio;
+                kgPorCierre.set(cierre, delDiaKg);
+                for (const clave of Object.keys(cierres)) {
                     const corte = cierres[clave];
                     if (cierre > corte) continue;
                     const suma = alcance => {
@@ -444,8 +483,8 @@
                         c.INTERNACIONAL.kg += intKg;
                         // El libro cuenta AEROLINEA, y la operación cae del
                         // lado que diga TIPO DE OPERACIÓN, no de los kilos.
-                        if (esInternacional(operacion)) c.INTERNACIONAL.ops += opDelta;
-                        else c.NACIONAL.ops += opDelta;
+                        if (esInternacional(operacion)) c.INTERNACIONAL.ops += opsOficio;
+                        else c.NACIONAL.ops += opsOficio;
                     };
                     suma('historico');
                     if (cierre.slice(0, 4) === corte.slice(0, 4)) suma('anio');
@@ -468,6 +507,11 @@
             // que estos bloques ven exactamente lo que se reportó.
             if (esAjuste) continue;
 
+            // Se lee hasta hoy (los saldos del oficio lo necesitan), pero estos
+            // reportes van con lo cerrado hasta la fecha pedida: el concentrado
+            // de un mes aún sin validar no incluye lo cerrado después.
+            if (cierre && cierre > fechaIso) continue;
+
             // Como en el libro: entra lo cerrado y lo cargado del libro aunque
             // no traiga cierre (cierre_aerolinea_reportada). Una copia vieja sin
             // cierre de los mismos vuelos duplicaba días enteros.
@@ -478,9 +522,6 @@
             if (!fecha || fecha > fechaIso) continue;
 
             if (fecha.startsWith(prefijoAnio)) {
-                const aerolinea = columnas.aerolineaReportada && fila[columnas.aerolineaReportada]
-                    ? String(fila[columnas.aerolineaReportada]).trim().toUpperCase()
-                    : nombreAerolinea(bruto);
                 if (aerolinea) {
                     const acc = porAerolinea.get(aerolinea) || { kg: 0, ops: 0, iata: iataDe(bruto) };
                     acc.kg += kg;
@@ -503,8 +544,7 @@
                     }
                     // Operaciones del lado que diga TIPO DE OPERACIÓN, como la
                     // tabla dinámica del libro; las de aerolíneas mixtas no.
-                    if (!mixtas.has(aerolinea)) mixtas.set(aerolinea, esMixta(aerolinea, iataDe(bruto)));
-                    if (!mixtas.get(aerolinea)) {
+                    if (!esFilaMixta()) {
                         const lado = esInternacional(operacion) ? 'Int' : 'Nac';
                         casilla[`ops${lado}${llegada ? 'Llegada' : 'Salida'}`] += opDelta;
                     }
@@ -517,11 +557,105 @@
             }
         }
 
+        // Toneladas de cada alcance como las suma el oficio: el dato entero de
+        // cada día (nacional + internacional cuadrando con el total, renglón
+        // "REDONDEO") acumulado día por día, no el total redondeado una vez.
+        for (const clave of Object.keys(cierres)) {
+            const corte = cierres[clave];
+            for (const alcance of ['dia', 'mes', 'anio', 'historico']) {
+                sub[clave][alcance].enteras = { nacional: 0, internacional: 0, total: 0 };
+            }
+            for (const [dia, k] of kgPorCierre) {
+                if (dia > corte) continue;
+                const e = repartirEnteros(k.nac / 1000, k.int / 1000);
+                const suma = alcance => {
+                    const t = sub[clave][alcance].enteras;
+                    t.nacional += e.nacional;
+                    t.internacional += e.internacional;
+                    t.total += e.total;
+                };
+                suma('historico');
+                if (dia.slice(0, 4) === corte.slice(0, 4)) suma('anio');
+                if (dia.slice(0, 7) === corte.slice(0, 7)) suma('mes');
+                if (dia === corte) suma('dia');
+            }
+        }
+        if (saldos) aplicarEnviados(sub, cierres, kgPorCierre, (saldos.enviados && saldos.enviados.carga) || {});
+        if (saldos) aplicarSaldos(sub, cierres, saldos);
+
         return {
             sub, cierres, anioSub, mesSub,
             porAerolinea, porMes, anioActual, delDia,
             anio, mes, fechaIso, descartadosPax, invalidos, totalFilas: filas.length
         };
+    }
+
+    /**
+     * Días cuyo libro cambió después de enviar el oficio: el día y todo lo que
+     * lo acumula llevan el dato ENVIADO (toneladas y operaciones), no el que
+     * hoy da el libro. La diferencia de operaciones va en el carril de
+     * LLEGADA, como la del saldo.
+     */
+    function aplicarEnviados(sub, cierres, kgPorCierre, enviados) {
+        for (const [dia, enviado] of Object.entries(enviados)) {
+            const k = kgPorCierre.get(dia) || { nac: 0, int: 0, opsNac: 0, opsInt: 0 };
+            const calculado = repartirEnteros(k.nac / 1000, k.int / 1000);
+            const ton = {
+                nacional: enviado.ton.nacional - calculado.nacional,
+                internacional: enviado.ton.internacional - calculado.internacional
+            };
+            const ops = { NACIONAL: enviado.ops.nacional - k.opsNac, INTERNACIONAL: enviado.ops.internacional - k.opsInt };
+            for (const clave of Object.keys(cierres)) {
+                const corte = cierres[clave];
+                if (dia > corte) continue;
+                const ajusta = alcance => {
+                    const b = sub[clave][alcance];
+                    b.enteras.nacional += ton.nacional;
+                    b.enteras.internacional += ton.internacional;
+                    b.enteras.total = b.enteras.nacional + b.enteras.internacional;
+                    b.LLEGADA.NACIONAL.ops += ops.NACIONAL;
+                    b.LLEGADA.INTERNACIONAL.ops += ops.INTERNACIONAL;
+                };
+                ajusta('historico');
+                if (dia.slice(0, 4) === corte.slice(0, 4)) ajusta('anio');
+                if (dia.slice(0, 7) === corte.slice(0, 7)) ajusta('mes');
+                if (dia === corte) ajusta('dia');
+            }
+        }
+    }
+
+    /**
+     * Ajusta los acumulados al saldo oficial, como el de pasajeros: diferencia
+     * = oficio de la fecha del saldo − lo que la base da a esa fecha, aplicada
+     * a cada columna en los alcances que comparte con el saldo. Las toneladas
+     * se ajustan en enteras (las del oficio) y las operaciones en el carril de
+     * LLEGADA: los acumulados sólo se muestran por nacional e internacional.
+     */
+    function aplicarSaldos(sub, cierres, saldos) {
+        for (const alcance of ['mes', 'anio', 'historico']) {
+            const oficial = saldos.carga[alcance];
+            const base = sub.saldo[alcance];
+            const t = totales(base);
+            const ton = {
+                nacional: oficial.ton.nacional - base.enteras.nacional,
+                internacional: oficial.ton.internacional - base.enteras.internacional
+            };
+            const ops = {
+                NACIONAL: oficial.ops.nacional - t.nacional.ops,
+                INTERNACIONAL: oficial.ops.internacional - t.internacional.ops
+            };
+            for (const clave of ['anterior', 'actual']) {
+                if (!saldos.aplica(alcance, cierres[clave])) continue;
+                const b = sub[clave][alcance];
+                b.enteras.nacional += ton.nacional;
+                b.enteras.internacional += ton.internacional;
+                b.enteras.total = b.enteras.nacional + b.enteras.internacional;
+                b.LLEGADA.NACIONAL.ops += ops.NACIONAL;
+                b.LLEGADA.INTERNACIONAL.ops += ops.INTERNACIONAL;
+            }
+        }
+        delete sub.saldo;
+        delete cierres.saldo;
     }
 
     /* ── totales derivados ──────────────────────────────────────────────── */
@@ -551,7 +685,10 @@
         const t = totales(bloque);
         const nac = t.nacional.kg / 1000;
         const int = t.internacional.kg / 1000;
-        return { exactas: { nacional: nac, internacional: int, total: nac + int }, enteras: repartirEnteros(nac, int) };
+        // Las enteras del oficio: si agregar() ya las sumó día por día (y con
+        // el saldo oficial), ésas; si no, el total del bloque repartido.
+        const enteras = bloque.enteras ? { ...bloque.enteras } : repartirEnteros(nac, int);
+        return { exactas: { nacional: nac, internacional: int, total: nac + int }, enteras };
     }
 
     /** Filas de la Hoja 1: aerolínea, operaciones y toneladas de presentación.
@@ -1190,7 +1327,7 @@
             if (typeof window._ensureConciAirlineCatalog === 'function') {
                 try { await window._ensureConciAirlineCatalog(); } catch (_) {}
             }
-            const datos = await descargar(fechaIso, n => estado(`Leyendo manifiestos… ${entero(n)}`));
+            const datos = await descargar(corteDeLectura(fechaIso), n => estado(`Leyendo manifiestos… ${entero(n)}`));
             ultimo = agregar(datos, fechaIso);
             if (edicion) await edicion.cargar(fechaIso);
             pintar();
