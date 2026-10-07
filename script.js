@@ -19930,6 +19930,23 @@ function _conciDemoraMinutos(slotAsignadoRaw, slotCoordinadoRaw, opRaw, fallback
     return Number.isFinite(minutes) ? minutes : null;
 }
 
+// Filtro de DEMORA +- 15 MIN.: en vez de un renglón por cada minuto, cinco
+// categorías (y "-" cuando falta la hora o el slot), en este orden.
+const _CONCI_DEMORA_CATEGORIAS = ['0', 'Mayor a +15', 'Entre +1 y +15', 'Entre -1 y -15', 'Menor a -15', '-'];
+const _conciEsColumnaDemora15 = col => /demora\s*\+\s*-?\s*15\s*min/i.test(String(col || ''));
+function _conciCategoriaDemora(minutos) {
+    if (!Number.isFinite(minutos)) return '-';
+    if (minutos === 0) return '0';
+    if (minutos >= 16) return 'Mayor a +15';
+    if (minutos > 0) return 'Entre +1 y +15';
+    if (minutos <= -16) return 'Menor a -15';
+    return 'Entre -1 y -15';
+}
+function _conciCompararCategoriasDemora(a, b) {
+    const pos = v => { const i = _CONCI_DEMORA_CATEGORIAS.indexOf(v); return i < 0 ? _CONCI_DEMORA_CATEGORIAS.length : i; };
+    return pos(a) - pos(b);
+}
+
 // Alerta de 30 horas (js/conci-alerta-30h.js): horas transcurridas desde el
 // SLOT de referencia hasta "ahora", para un vuelo SIN manifiesto real
 // capturado. Reutiliza el mismo parseo (_conciParseDateTimeParts/
@@ -21940,10 +21957,8 @@ function _conciTextoVisibleDeDato(col, cols, routingCol, tipoCol) {
         return row => _conciPuntualidad(row[slotCol], row[opCol], anio, slotCoordCol ? row[slotCoordCol] : '') || '-';
     }
     if (col === busca(/demora\s*\+\s*-?\s*15\s*min/i) && opCol) {
-        return row => {
-            const v = _conciDemoraMinutos(slotCol ? row[slotCol] : '', slotCoordCol ? row[slotCoordCol] : '', row[opCol], anio);
-            return Number.isFinite(v) ? `${v > 0 ? '+' : ''}${v}` : '-';
-        };
+        return row => _conciCategoriaDemora(
+            _conciDemoraMinutos(slotCol ? row[slotCol] : '', slotCoordCol ? row[slotCoordCol] : '', row[opCol], anio));
     }
     if (col === busca(/hr\.?\s*m[aá]xima\s*de\s*entrega/i) && opCol) {
         return row => _conciHrMaximaEntrega(row[opCol], row, fechaCol, anio);
@@ -22507,7 +22522,7 @@ function _showConciExcelFilter(col, triggerEl) {
     });
     const values = [...grupos.values()]
         .map(formas => [...formas.entries()].sort((a, b) => b[1] - a[1])[0][0])
-        .sort(_conciCompararOpcionesFiltro);
+        .sort(_conciEsColumnaDemora15(col) ? _conciCompararCategoriasDemora : _conciCompararOpcionesFiltro);
 
     const esc2 = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
