@@ -99,6 +99,44 @@ describe('calculos en tiempo real de Conciliacion > Manifiestos', () => {
     expect(statusCell.querySelector('span').style.color).toBe('rgb(46, 125, 50)');
   });
 
+  test.each([
+    ['12/08/2026 10:00', 'EN TIEMPO'],   // 0 min
+    ['12/08/2026 10:01', 'DESPUÉS'],     // 1 min tarde
+    ['12/08/2026 10:15', 'DESPUÉS'],     // 15 min tarde
+    ['12/08/2026 10:16', 'DEMORA'],      // 16 min tarde
+    ['12/08/2026 09:59', 'ANTES'],       // 1 min temprano
+    ['12/08/2026 09:45', 'ANTES'],       // 15 min temprano
+    ['12/08/2026 09:44', 'ANTICIPADO'],  // 16 min temprano
+  ])('PUNTUALIDAD con slot asignado 10:00 y operación %s → %s', (operacion, esperado) => {
+    expect(calculationApi._conciPuntualidad('12/08/2026 10:00', operacion, 2026)).toBe(esperado);
+  });
+
+  test('PUNTUALIDAD usa el SLOT COORDINADO si está capturado; si no, el ASIGNADO', () => {
+    // Asignado 10:00, coordinado 11:00, operó 10:30: 30 min antes del coordinado.
+    expect(calculationApi._conciPuntualidad('12/08/2026 10:00', '12/08/2026 10:30', 2026, '12/08/2026 11:00')).toBe('ANTICIPADO');
+    expect(calculationApi._conciPuntualidad('12/08/2026 10:00', '12/08/2026 10:30', 2026, '')).toBe('DEMORA');
+    expect(calculationApi._conciPuntualidad('12/08/2026 10:00', '12/08/2026 10:30', 2026)).toBe('DEMORA');
+    expect(calculationApi._conciPuntualidad('12/08/2026 10:00', '12/08/2026 11:05', 2026, '12/08/2026 11:00')).toBe('DESPUÉS');
+  });
+
+  test('al capturar, PUNTUALIDAD se recalcula contra el SLOT COORDINADO', () => {
+    const row = document.createElement('tr');
+    document.body.appendChild(row);
+    addCell(row, 'SLOT ASIGNADO', '29/07/2026 00:45');
+    addCell(row, 'SLOT COORDINADO', '29/07/2026 02:00');
+    addCell(row, 'HR. DE OPERACION', '29/07/2026 01:30');
+    const statusCell = addCell(row, 'PUNTUALIDAD / CANCELACION', '-');
+
+    refreshRow(row);
+
+    expect(statusCell.textContent).toContain('ANTICIPADO');   // 30 min antes del coordinado
+  });
+
+  test('PUNTUALIDAD sin hora de operación o sin slot → "-"', () => {
+    expect(calculationApi._conciPuntualidad('', '12/08/2026 10:00', 2026)).toBe('-');
+    expect(calculationApi._conciPuntualidad('12/08/2026 10:00', '', 2026)).toBe('-');
+  });
+
   test('calcula demora con prioridad de SLOT COORDINADO y colorea por tolerancia', () => {
     expect(calculationApi._conciDemoraMinutos(
       '12/08/2026 10:00', '12/08/2026 10:20', '12/08/2026 10:40', 2026

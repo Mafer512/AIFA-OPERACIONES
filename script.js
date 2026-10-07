@@ -19899,10 +19899,15 @@ function _conciHrsCumplidas(opRaw, recRaw, fallbackYear) {
 // PUNTUALIDAD / CANCELACIÓN — reproduce la fórmula de Excel:
 // =SI.ERROR(SI((P-L)>=$A$1,"DEMORA",SI(L=P,"EN TIEMPO",SI(P>L,"DESPUÉS",
 //   SI((L-P)>=$A$1,"ANTICIPADO","ANTES")))),"-")
-// P = HR. DE OPERACIÓN, L = SLOT ASIGNADO, $A$1 = tolerancia de 15 min.
-const _CONCI_PUNTUALIDAD_TOLERANCIA_MS = 15 * 60 * 1000;
-function _conciPuntualidad(slotRaw, opRaw, fallbackYear) {
-    const slotDate = _conciPartsToDate(_conciParseDateTimeParts(slotRaw, fallbackYear));
+// P = HR. DE OPERACIÓN, L = slot de referencia, $A$1 = 16 min:
+//   0 min → EN TIEMPO · 1 a 15 min tarde → DESPUÉS · 16 o más tarde → DEMORA
+//   1 a 15 min temprano → ANTES · 16 o más temprano → ANTICIPADO
+// El slot de referencia es el SLOT COORDINADO si está capturado; si no, el
+// SLOT ASIGNADO (la misma prioridad que DEMORA +- 15 MIN.).
+const _CONCI_PUNTUALIDAD_TOLERANCIA_MS = 16 * 60 * 1000;
+function _conciPuntualidad(slotRaw, opRaw, fallbackYear, slotCoordinadoRaw) {
+    const referenciaRaw = String(slotCoordinadoRaw || '').trim() || slotRaw;
+    const slotDate = _conciPartsToDate(_conciParseDateTimeParts(referenciaRaw, fallbackYear));
     const opDate = _conciPartsToDate(_conciParseDateTimeParts(opRaw, fallbackYear));
     if (!slotDate || !opDate) return '-';
     const diff = opDate.getTime() - slotDate.getTime(); // (P - L)
@@ -21932,7 +21937,7 @@ function _conciTextoVisibleDeDato(col, cols, routingCol, tipoCol) {
         return row => String(_conciHrsCumplidas(row[opCol], row[recepcionCol], anio) ?? '-');
     }
     if (col === busca(/puntualidad|cancelaci/i) && slotCol && opCol) {
-        return row => _conciPuntualidad(row[slotCol], row[opCol], anio) || '-';
+        return row => _conciPuntualidad(row[slotCol], row[opCol], anio, slotCoordCol ? row[slotCoordCol] : '') || '-';
     }
     if (col === busca(/demora\s*\+\s*-?\s*15\s*min/i) && opCol) {
         return row => {
@@ -23121,7 +23126,7 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
                 return out;
             }
             case 'puntualidad': {
-                const estado = _conciPuntualidad(get(row, ['SLOT ASIGNADO']), get(row, ['HR. DE OPERACIÓN']), year);
+                const estado = _conciPuntualidad(get(row, ['SLOT ASIGNADO']), get(row, ['HR. DE OPERACIÓN']), year, get(row, ['SLOT COORDINADO']));
                 const styleMap = {
                     'EN TIEMPO':  { bg: 'FFE8F5E9', fg: 'FF2E7D32' },
                     'ANTES':      { bg: 'FFE8F5E9', fg: 'FF2E7D32' },
@@ -24992,7 +24997,8 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                 } else if (meta.isPuntualidad) {
                     const slotRaw = _slotAsignadoCol ? row[_slotAsignadoCol] : '';
                     const opRaw = _hrOperacionCol ? row[_hrOperacionCol] : '';
-                    const estado = _conciPuntualidad(slotRaw, opRaw, fallbackYear);
+                    const estado = _conciPuntualidad(slotRaw, opRaw, fallbackYear,
+                        _slotCoordinadoCol ? row[_slotCoordinadoCol] : '');
                     td.dataset.raw = estado;
                     if (estado && estado !== '-') {
                         const styleMap = {
@@ -26486,7 +26492,7 @@ function _conciRefreshCalculatedCellsForRow(tr, changedValues = {}) {
         _conciRenderHrsCumplidasCell(hoursCell, hours);
     }
     if (statusCell) {
-        const status = _conciPuntualidad(readCell(slotCell), operationRaw, _conciEditFallbackYear);
+        const status = _conciPuntualidad(readCell(slotCell), operationRaw, _conciEditFallbackYear, readCell(slotCoordinadoCell));
         _conciRenderPuntualidadCell(statusCell, status);
     }
     if (demora15Cell) {
