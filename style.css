@@ -18585,6 +18585,32 @@ body.dark-mode #table-conci-manifiestos thead tr.conci-filter-row .conci-col-fil
     text-transform: uppercase;
 }
 
+/* Conciliación Manifiestos mientras llega otra fecha (_conciMarcarTablaCargando):
+   lo que está en pantalla es de la consulta anterior. Se atenúa y no responde,
+   para que nadie lo tome por el resultado nuevo ni capture sobre él. El retraso
+   evita el parpadeo cuando la respuesta llega enseguida. */
+#conci-manifiestos-tabla-view.conci-cargando #conci-manifiestos-scroll,
+#conci-manifiestos-tabla-view.conci-cargando .conci-count-pill,
+#conci-manifiestos-tabla-view.conci-cargando #manifiestos-summary-strip,
+#conci-manifiestos-tabla-view.conci-cargando #conci-pill-capturados,
+#conci-manifiestos-tabla-view.conci-cargando #conci-pill-sin-capturar {
+    opacity: .35;
+    pointer-events: none;
+    transition: opacity .15s ease .12s;
+}
+
+/* Avisos dentro de la tabla de Conciliación ("No hay vuelos que coincidan…",
+   "No se encontraron registros…", error al cargar). La fila mide miles de px
+   de ancho y el texto centrado en ella quedaba fuera de la pantalla: se queda
+   pegado a la parte visible aunque la tabla se desplace en horizontal. */
+#table-conci-manifiestos .conci-aviso-tabla {
+    position: sticky;
+    left: 0;
+    width: min(100%, calc(100vw - 48px));
+    box-sizing: border-box;
+    text-align: center;
+}
+
 /* -- Daily flights tables (Arrivals / Departures) ------------------------ */
 body.dark-mode #table-daily-flights-arrivals thead tr:first-child th,
 body.dark-mode #table-daily-flights-departures thead tr:first-child th {

@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20261006-reporte-carga-nac">
+    <link rel="stylesheet" href="style.css?v=20261007-filtros-conciliacion">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -39427,7 +39427,7 @@ FF
     <!-- Capa única de totales (oficial hasta el corte, detalle después): ver el archivo -->
     <script src="js/totales-service.js?v=20261006-totales" defer></script>
     <script src="js/manifiestos-avisos.js?v=20261005-manifiestos-hechos" defer></script>
-    <script src="script.js?v=20261006-totales" defer></script>
+    <script src="script.js?v=20261007-filtros-conciliacion" defer></script>
     <!-- Campos de fecha en dd/mm/aaaa sin importar el idioma del navegador. -->
     <script src="js/fecha-ddmm.js?v=20260912-fecha-1" defer></script>
     <!-- Botón y menú de usuario del encabezado de inicio. -->
@@ -40930,16 +40930,9 @@ FF
             });
         }
 
-        // Wire Manifiestos date range pickers
-        ['filter-conci-fecha-desde', 'filter-conci-fecha-hasta'].forEach(function(id) {
-            var el = document.getElementById(id);
-            if (!el) return;
-            el.addEventListener('change', function () {
-                if (typeof loadConciliacionManifiestos === 'function') {
-                    loadConciliacionManifiestos({ forceRefresh: true });
-                }
-            });
-        });
+        // Las fechas de Manifiestos (filter-conci-fecha-desde/-hasta) ya las
+        // escucha script.js al iniciar; un segundo oyente aquí cargaba cada
+        // cambio de fecha dos veces.
     });
 })();
 </script>

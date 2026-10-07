@@ -18993,6 +18993,97 @@ function _conciSetRefreshLoading(isLoading) {
     if (!_conciEditMode) btnRefresh.disabled = false;
 }
 
+// "del 04/10/2026" o "del 01/10/2026 al 06/10/2026".
+function _conciEtiquetaVentana(ventana) {
+    if (!ventana) return '';
+    const ddmm = iso => String(iso).split('-').reverse().join('/');
+    return ventana.desde === ventana.hasta ? `del ${ddmm(ventana.desde)}` : `del ${ddmm(ventana.desde)} al ${ddmm(ventana.hasta)}`;
+}
+
+// Mientras llega la consulta pedida, las filas en pantalla son de la anterior:
+// la tabla y los contadores se atenúan y no responden (style.css,
+// .conci-cargando), el aviso dice qué se está cargando y el badge no
+// presenta el conteo anterior como si fuera el nuevo.
+function _conciMarcarTablaCargando(activo, ventana) {
+    const vista = document.getElementById('conci-manifiestos-tabla-view');
+    const tabla = document.getElementById('table-conci-manifiestos');
+    if (vista) vista.classList.toggle('conci-cargando', !!activo);
+    if (tabla) {
+        if (activo) tabla.setAttribute('aria-busy', 'true');
+        else tabla.removeAttribute('aria-busy');
+    }
+    if (!activo) return;
+    const texto = document.querySelector('#conci-manifiestos-loading p');
+    if (texto) texto.textContent = ventana ? `Cargando manifiestos ${_conciEtiquetaVentana(ventana)}…` : 'Cargando manifiestos…';
+    const badge = document.getElementById('badge-conci-manifiestos-count');
+    if (badge) { badge.textContent = 'Cargando…'; badge.style.display = ''; }
+}
+
+function _conciTerminarIndicadoresDeCarga() {
+    document.getElementById('conci-manifiestos-loading')?.classList.add('d-none');
+    _conciSetRefreshLoading(false);
+    _conciMarcarTablaCargando(false);
+}
+
+// Falló la carga. Si la tabla muestra esa misma consulta (un Actualizar que no
+// pudo traer lo nuevo) o tiene capturas sin guardar, se conserva y el badge
+// avisa que no está al día. Si muestra OTRA fecha, se retira con sus
+// contadores: dejarla junto al error la hacía pasar por la fecha pedida. La
+// fila de error es distinta del "No se encontraron registros" y trae Reintentar.
+function _conciMostrarErrorDeCarga(cacheKey, ventana) {
+    const badge = document.getElementById('badge-conci-manifiestos-count');
+    const mismaConsulta = _conciRenderedKey === cacheKey && (_conciManifestosAllData || []).length > 0;
+    if (mismaConsulta || (typeof _conciHasUnsavedCaptures === 'function' && _conciHasUnsavedCaptures())) {
+        if (badge && mismaConsulta) {
+            badge.textContent = `${_conciManifestosAllData.length} registros · Sin actualizar`;
+            badge.style.display = '';
+        }
+        return;
+    }
+    ++_conciRenderSeq; // detiene el pintado por lotes de la tabla anterior
+    _conciRenderedKey = '';
+    _conciManifestosAllData = [];
+    _conciSummaryLiveOverrides.clear();
+    _conciUpdateResumen([], _conciManifestosSummaryColumns);
+    _updateManifiestosSummaryStrip([], _conciManifestosSummaryColumns);
+    const tbody = document.querySelector('#table-conci-manifiestos tbody');
+    if (tbody) {
+        tbody.innerHTML = '';
+        const tr = document.createElement('tr');
+        tr.className = 'conci-load-error-row';
+        const td = document.createElement('td');
+        td.colSpan = 100;
+        td.className = 'text-center text-danger py-5';
+        const aviso = document.createElement('div');
+        aviso.className = 'conci-aviso-tabla';
+        const icono = document.createElement('i');
+        icono.className = 'fas fa-triangle-exclamation me-1';
+        aviso.appendChild(icono);
+        const cuando = _conciEtiquetaVentana(ventana);
+        aviso.appendChild(document.createTextNode(`No se pudieron cargar los manifiestos${cuando ? ' ' + cuando : ''}.`));
+        const reintentar = document.createElement('button');
+        reintentar.type = 'button';
+        reintentar.className = 'btn btn-sm btn-outline-danger ms-2';
+        reintentar.textContent = 'Reintentar';
+        reintentar.addEventListener('click', () => loadConciliacionManifiestos({ forceRefresh: true }));
+        aviso.appendChild(reintentar);
+        td.appendChild(aviso);
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+    }
+    if (badge) { badge.textContent = 'Error al cargar'; badge.style.display = ''; }
+}
+
+// Una fecha fin anterior a la de inicio no se aplica: el campo lo indica.
+function _conciMarcarFechaFinInvalida(invalida) {
+    const campo = document.querySelector('input[data-conci-fecha-para="filter-conci-fecha-hasta"]');
+    if (!campo) return;
+    campo.classList.toggle('is-invalid', !!invalida);
+    campo.title = invalida
+        ? 'La fecha fin es anterior a la de inicio: se muestra solo el día de inicio.'
+        : 'Fecha fin (dejar vacío para un solo día)';
+}
+
 // Catálogo de respaldo para destinos que a veces faltan en public.catalogo_aeropuertos
 // y en airports.csv. El código IATA sigue siendo la llave estable; el nombre solo
 // se usa para que Conciliación nunca deje una ruta legible como tres siglas.
@@ -20881,6 +20972,14 @@ async function loadConciliacionManifiestos(options = {}) {
     // dejar en pantalla un desglose de un día que ya no es el seleccionado.
     document.querySelectorAll('.conci-pendientes-dropdown').forEach(el => el.remove());
 
+    // Sin fecha de inicio la consulta sigue en el día de los selectores ocultos
+    // y el campo quedaba en blanco junto a una tabla de otro día: se repone el
+    // día que efectivamente se consulta.
+    if (desdeEl && !desdeEl.value && monthEl && dayEl && monthEl.value && dayEl.value) {
+        const yearSel = parseInt(yearEl && yearEl.value, 10) || new Date().getFullYear();
+        desdeEl.value = _conciIsoDateKey(yearSel, parseInt(monthEl.value, 10), parseInt(dayEl.value, 10));
+    }
+
     const requestSeq = ++_conciLoadRequestSeq;
 
     let year, month, day, dayEnd = null;
@@ -20923,6 +21022,9 @@ async function loadConciliacionManifiestos(options = {}) {
     // caché: sin ella, "16 de septiembre" y "del 16 de septiembre al 3 de
     // octubre" compartían clave y se pintaba lo del otro filtro.
     const ventana = _conciVentanaDelFiltro();
+    // Una fecha fin anterior a la de inicio no se aplica (se consulta solo el
+    // día de inicio); el campo lo dice en vez de aparentar un rango.
+    _conciMarcarFechaFinInvalida(!!(ventana && hastaEl && /^\d{4}-\d{2}-\d{2}$/.test(hastaEl.value) && hastaEl.value < ventana.desde));
     // Con una sola fecha en el filtro se anexan los manifiestos SIN CAPTURAR
     // del día previo (ver _conciEsPendienteDelDiaPrevio): la consulta abarca
     // ambos días y el filtro fino decide qué entra de cada uno.
@@ -20933,10 +21035,13 @@ async function loadConciliacionManifiestos(options = {}) {
     // When auto-detecting the latest date we skip the render-cache short-circuit
     // because we don’t know the effective key until we scan the raw data.
     if (!config.autoLatestDate) {
+        // Estos atajos pueden dejar atrás una carga lenta de otra fecha que
+        // seguía en curso (ya no es la vigente): sus indicadores se apagan aquí.
         if (!config.forceRefresh && _conciRenderedKey === cacheKey) {
             const table = document.getElementById('table-conci-manifiestos');
             const tbody = table ? table.querySelector('tbody') : null;
             if (tbody && tbody.childElementCount > 0) {
+                _conciTerminarIndicadoresDeCarga();
                 return;
             }
         }
@@ -20945,6 +21050,7 @@ async function loadConciliacionManifiestos(options = {}) {
         if (!config.forceRefresh && _conciRenderCache.has(cacheKey)) {
             const cached = _conciRenderCache.get(cacheKey);
             if (cached) {
+                _conciTerminarIndicadoresDeCarga();
                 if (badge) {
                     badge.textContent = `${cached.rows.length} registros · Caché`;
                     badge.style.display = '';
@@ -20963,6 +21069,9 @@ async function loadConciliacionManifiestos(options = {}) {
     _conciSetRefreshLoading(!cargaSilenciosa);
     if (loading && !cargaSilenciosa) { loading.classList.remove('d-none'); }
     if (errorEl) errorEl.classList.add('d-none');
+    // Mientras llega lo pedido, lo que está en pantalla es de la consulta
+    // anterior: se atenúa y no se puede tocar, para no tomarlo por el resultado.
+    if (!cargaSilenciosa) _conciMarcarTablaCargando(true, ventana);
 
     try {
         let client = window.supabaseClient;
@@ -20986,9 +21095,13 @@ async function loadConciliacionManifiestos(options = {}) {
             const latestManifest = await _conciFetchLatestManifestDate(client, year);
             if (requestSeq !== _conciLoadRequestSeq) return;
             const latestDbResult = await _conciFetchLatestVueloDateDb(client, year);
+            // Si en la espera se eligió otra fecha, esta respuesta ya no debe
+            // escribir el día detectado encima del que se eligió.
+            if (requestSeq !== _conciLoadRequestSeq) return;
             let latestVuelo = latestDbResult.latest;
             if (latestDbResult.error || !latestVuelo) {
                 const fallbackResult = await _concifetchAllRows(client, 'manifiestos_vuelos_editable', { batchSize: 5000 });
+                if (requestSeq !== _conciLoadRequestSeq) return;
                 if (fallbackResult.error) throw fallbackResult.error;
                 fallbackAllVuelos = fallbackResult.data || [];
                 latestVuelo = _conciLatestVueloDate(fallbackAllVuelos, year);
@@ -21012,8 +21125,11 @@ async function loadConciliacionManifiestos(options = {}) {
         // ── Step 2: fetch only the selected scheduled-date window ───────────────
         // Se amplía un día a cada lado para conservar vuelos que cruzan medianoche;
         // el filtro fino por hora real se mantiene más abajo sin cambios.
-        const flightStart = desdeEl?.value || (month && day ? _conciIsoDateKey(year, month, day) : '');
-        const flightEnd = hastaEl?.value || (month && dayEnd ? _conciIsoDateKey(year, month, dayEnd) : flightStart);
+        // Misma ventana que los manifiestos: con una fecha fin anterior a la de
+        // inicio se pedía un rango vacío y faltaban todos los vuelos del
+        // itinerario sin manifiesto.
+        const flightStart = ventana ? ventana.desde : (desdeEl?.value || (month && day ? _conciIsoDateKey(year, month, day) : ''));
+        const flightEnd = ventana ? ventana.hasta : (hastaEl?.value || (month && dayEnd ? _conciIsoDateKey(year, month, dayEnd) : flightStart));
         const flightCacheKey = `${flightStart || year}|${flightEnd || 'all'}`;
         const vuelosFresh = _conciVuelosCache
             && _conciVuelosCache.key === flightCacheKey
@@ -21183,8 +21299,14 @@ async function loadConciliacionManifiestos(options = {}) {
             errorEl.classList.remove('d-none');
         }
         console.error('loadConciliacionManifiestos error:', err);
+        // "No se pudo cargar" no es "sin resultados": si en pantalla quedó otra
+        // consulta, se retira en vez de presentarla como la pedida.
+        if (!cargaSilenciosa) _conciMostrarErrorDeCarga(cacheKey, ventana);
     } finally {
-        if (requestSeq === _conciLoadRequestSeq) _conciSetRefreshLoading(false);
+        if (requestSeq === _conciLoadRequestSeq) {
+            _conciSetRefreshLoading(false);
+            _conciMarcarTablaCargando(false);
+        }
     }
 }
 
@@ -21440,7 +21562,10 @@ function _conciComputeSinCapturarPorAerolinea() {
     const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
 
     const counts = new Map();
-    (_conciManifestosAllData || []).forEach(r => {
+    // Las mismas filas que cuenta el badge (_conciRefreshSummaryCardsLive): con
+    // lo capturado desde que se cargó el día y las filas agregadas a mano.
+    const filas = typeof _conciGetLiveSummaryRows === 'function' ? _conciGetLiveSummaryRows() : (_conciManifestosAllData || []);
+    filas.forEach(r => {
         if (recepcionCol && String(r?.[recepcionCol] ?? '').trim()) return; // ya capturado
         const code = airlineCol ? String(r[airlineCol] ?? '').trim() : '';
         counts.set(code, (counts.get(code) || 0) + 1);
@@ -21612,13 +21737,107 @@ let _conciSummaryLiveOverrides = new Map(); // row index -> { column: current va
 
 let _conciQuickFlightDebounce = null;
 
+// La tabla se pinta por lotes (ver _renderConciManifiestosTable) y el resto de
+// filas solo entra al DOM al acercarse al final con el scroll. Los filtros
+// trabajan sobre el DOM, así que el render vigente deja aquí cómo seguir
+// pintando lo que falta: sin esto, buscar un vuelo que aún no se pintaba
+// (los de la noche, al final del día) decía "No hay vuelos que coincidan".
+let _conciLazyRows = null; // { pendientes(), llenarVista(), pintarLote() }
+
+// ¿Hay algún filtro activo sobre la tabla (pills, texto por columna o Excel)?
+function _conciHasActiveTableFilter() {
+    return !!(_conciClassFilter || _conciDirFilter || _conciOvercapFilter || _conciCaptureFilter
+        || Object.values(_conciColFilters).some(v => v && v.trim())
+        || Object.keys(_conciExcelFilters).length > 0);
+}
+
 // Quita espacios, guiones y puntos para comparar "XN1107" contra "XN 1107".
 function _conciCompactText(value) {
     return String(value || '').replace(/[\s.\-_/]/g, '');
 }
 
+// Texto con el que comparan los filtros: sin acentos, en minúsculas y con los
+// espacios normalizados. Así "aeromexico" encuentra AEROMÉXICO, "jose" a José
+// Pérez y "queretaro" tanto "Querétaro" (capturado) como "Queretaro" (catálogo).
+function _conciTextoFiltrable(value) {
+    return String(value ?? '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/\u00a0/g, ' ')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+// Columnas cuyo valor es una categoría cerrada, con las etiquetas que muestra
+// la celda. Su filtro de texto no busca "contiene" (con eso "nacional" traía
+// también Internacional y "activa" las NO ACTIVA): busca el inicio de la
+// etiqueta y, si el texto no es el inicio de ninguna etiqueta conocida, el
+// inicio de cualquiera de sus palabras ("tiempo" → EN TIEMPO).
+const _CONCI_ETIQUETAS_CATEGORIA = [
+    [/^tipo de manifiesto$/, ['llegada', 'salida']],
+    [/^(tipo de operacion|tipo operacion|service type)$/, ['nacional', 'internacional']],
+    [/^(estatus|status) matricula$/, ['activa', 'no activa']],
+    [/^puntualidad/, ['en tiempo', 'antes', 'anticipado', 'despues', 'demora']],
+    [/^mes$/, ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto',
+        'septiembre', 'octubre', 'noviembre', 'diciembre']],
+];
+
+function _conciEtiquetasDeCategoria(col) {
+    const key = _conciNormalizedColumnName(col);
+    const entrada = _CONCI_ETIQUETAS_CATEGORIA.find(([re]) => re.test(key));
+    return entrada ? entrada[1] : null;
+}
+
+// Filtros activos, preparados una vez por pasada y no una vez por fila.
+function _conciPlanDeFiltros() {
+    const texto = [];
+    for (const [col, valor] of Object.entries(_conciColFilters)) {
+        const termino = _conciTextoFiltrable(valor);
+        if (!termino) continue;
+        const etiquetas = _conciEtiquetasDeCategoria(col);
+        texto.push({
+            col,
+            termino,
+            compacto: _conciCompactText(termino),
+            categoria: !!etiquetas,
+            soloInicio: !!etiquetas && etiquetas.some(e => e.startsWith(termino)),
+        });
+    }
+    const excel = [];
+    for (const [col, permitidos] of Object.entries(_conciExcelFilters)) {
+        if (!permitidos) continue;
+        excel.push({
+            permitidos: new Set([...permitidos].map(_conciTextoFiltrable)),
+            valorDe: _conciExcelFilterValueGetter(col),
+        });
+    }
+    return { texto, excel, columnas: new Set(texto.map(f => f.col)), buscaRecepcion: !!_conciCaptureFilter };
+}
+
+const _conciEsRecepcionPorColumna = new Map();
+const _CONCI_CELDA_RECEPCION = '\u0000recepcion';
+const _CONCI_SIN_CELDAS = new Map();
+
+// Las celdas de la fila que piden los filtros activos, en una sola pasada.
+function _conciCeldasParaFiltro(tr, plan) {
+    let faltan = plan.columnas.size + (plan.buscaRecepcion ? 1 : 0);
+    if (!faltan) return _CONCI_SIN_CELDAS;
+    const celdas = new Map();
+    for (const td of tr.children) {
+        const col = td.dataset ? td.dataset.col : undefined;
+        if (col === undefined) continue;
+        if (plan.columnas.has(col) && !celdas.has(col)) { celdas.set(col, td); faltan--; }
+        if (plan.buscaRecepcion && !celdas.has(_CONCI_CELDA_RECEPCION)) {
+            if (!_conciEsRecepcionPorColumna.has(col)) _conciEsRecepcionPorColumna.set(col, _conciIsReceptionColumn(col));
+            if (_conciEsRecepcionPorColumna.get(col)) { celdas.set(_CONCI_CELDA_RECEPCION, td); faltan--; }
+        }
+        if (faltan <= 0) break;
+    }
+    return celdas;
+}
+
 // Determina si una fila (tr) es visible bajo los filtros activos.
-function _conciRowPassesPillFilter(tr) {
+function _conciRowPassesPillFilter(tr, celdas) {
     if (_conciClassFilter) {
         const isCargo = tr.dataset.rowCargo === '1';
         if (_conciClassFilter === 'carga' && !isCargo) return false;
@@ -21631,8 +21850,9 @@ function _conciRowPassesPillFilter(tr) {
         if (tr.dataset.rowOvercap !== '1') return false;
     }
     if (_conciCaptureFilter) {
-        const recepcionCell = [...tr.querySelectorAll('td[data-col]')]
-            .find(td => _conciIsReceptionColumn(td.dataset.col));
+        const recepcionCell = celdas
+            ? celdas.get(_CONCI_CELDA_RECEPCION)
+            : [...tr.querySelectorAll('td[data-col]')].find(td => _conciIsReceptionColumn(td.dataset.col));
         const recepcion = _conciNormalizeEditableCellText(
             recepcionCell?.dataset.pendingRaw ?? recepcionCell?.dataset.raw ?? recepcionCell?.textContent ?? ''
         );
@@ -21642,13 +21862,23 @@ function _conciRowPassesPillFilter(tr) {
     return true;
 }
 
-// Valor con el que el filtro desplegable lista y compara una fila: el valor
-// guardado, salvo en TIPO DE OPERACIÓN. Ahí la celda muestra Nacional /
-// Internacional, pero las filas que vienen del itinerario guardan su Service
-// Type IATA ("J", "F", "H", "C"…), que se conserva porque _conciRowIsCargo lo
-// usa para separar carga de pasajeros. Para esa columna el filtro usa la misma
-// clasificación que pinta la celda (ver _renderConciManifiestosTable): el valor
-// guardado si ya es Nacional / Internacional y, si no, la que da la ruta.
+// Valor con el que el filtro desplegable lista y compara una fila. Se calcula
+// del dato, así sirve también para las filas que aún no se pintan, y es lo que
+// muestra la celda: la misma fecha llega guardada como "05/10", "05/10/2026" o
+// "2026-10-05" y la lista ofrecía las tres; elegir una dejaba fuera las otras.
+// Igual con "LLEGADA"/"Llegada", MES 10 (se ve "Octubre"), AERONAVE (código
+// contra modelo) y DESTINO / ORIGEN (ruta contra ciudad). La comparación,
+// además, no distingue acentos ni mayúsculas (ver _conciPlanDeFiltros).
+// Excepciones, por lo que significan:
+//  · TIPO DE OPERACIÓN: la clasificación Nacional / Internacional que pinta la
+//    celda. Las filas del itinerario guardan su Service Type IATA ("J", "F"…),
+//    que se conserva porque _conciRowIsCargo lo usa para separar carga de
+//    pasajeros. También la usa Exportar Excel.
+//  · AEROLINEA: el código guardado (la lista lo acompaña del nombre).
+//  · ESTATUS MATRÍCULA: el valor guardado ("NO IDENTIFICADA" se ve "NO ACTIVA").
+//  · # DE VUELO: el vuelo completo ("CX 096"); la celda solo muestra el número
+//    y dos aerolíneas pueden compartirlo.
+//  · CAPTURÓ: el nombre completo (la celda muestra las iniciales).
 function _conciExcelFilterValueGetter(col) {
     const cols = (Array.isArray(_conciManifestosSummaryColumns) && _conciManifestosSummaryColumns.length)
         ? _conciManifestosSummaryColumns
@@ -21657,66 +21887,204 @@ function _conciExcelFilterValueGetter(col) {
         const v = row[col];
         return (v === null || v === undefined) ? '' : String(v).trim();
     };
-    if (col !== cols.find(c => /tipo.*oper|service\s*type/i.test(c))) return stored;
     const routingCol = cols.find(c => /^routing$/i.test(c) || /origen|destino.*origen|routing/i.test(c)) || null;
     const tipoCol = cols.find(c => /tipo.*(manif)/i.test(c)) || null;
-    return row => _conciNormalizeOperationType(stored(row)) || _conciResolveOperationTypeFromRoute(
-        routingCol ? String(row[routingCol] || '') : '',
-        tipoCol ? String(row[tipoCol] || '') : ''
-    );
+    if (col === cols.find(c => /tipo.*oper|service\s*type/i.test(c))) {
+        return row => _conciNormalizeOperationType(stored(row)) || _conciResolveOperationTypeFromRoute(
+            routingCol ? String(row[routingCol] || '') : '',
+            tipoCol ? String(row[tipoCol] || '') : ''
+        );
+    }
+    if (/aerol[ií]nea|airline/i.test(col)) return stored;
+    if (/estatus.*matr[ií]cula|status.*matr[ií]cula/i.test(col)) return row => stored(row) || 'NO IDENTIFICADA';
+    if (/^#\s*de\s*vuelo$/i.test(String(col).trim())) return row => stored(row).replace(/\s+/g, ' ');
+    if (/^captur[oó]$/i.test(String(col).trim())) return stored;
+    return _conciTextoVisibleDeDato(col, cols, routingCol, tipoCol);
 }
 
-// Determina si una fila pasa todos los filtros de texto por columna activos.
-function _conciRowPassesColFilter(tr) {
-    // Filtros de texto (contiene)
-    const activeText = Object.entries(_conciColFilters).filter(([, v]) => v && v.trim());
-    for (const [col, term] of activeText) {
-        const lower = term.toLowerCase();
-        // Se compara también sin espacios/guiones/puntos para que "XN1107" o
-        // "xn-1107" encuentren el vuelo capturado como "XN 1107".
-        const compact = _conciCompactText(lower);
-        let matched = false;
-        for (const td of tr.querySelectorAll('td[data-col]')) {
-            if (td.dataset.col === col) {
-                // Algunas columnas (p.ej. AEROLINEA) guardan el código IATA en
-                // data-raw pero muestran el nombre resuelto en pantalla — sin
-                // esto, filtrar por "viva" no encontraba nada porque solo se
-                // comparaba contra "VB". Se revisa contra ambos.
-                const rawVal = (td.dataset.raw || '').toLowerCase();
-                const textVal = (td.textContent || '').toLowerCase();
-                matched = rawVal.includes(lower) || textVal.includes(lower)
-                    || (!!compact && (_conciCompactText(rawVal).includes(compact) || _conciCompactText(textVal).includes(compact)));
-                break;
-            }
-        }
-        if (!matched) return false;
+// Texto que pinta _renderConciManifiestosTable en la celda, calculado del dato
+// con las mismas funciones y las mismas reglas para detectar cada columna.
+function _conciTextoVisibleDeDato(col, cols, routingCol, tipoCol) {
+    const visibles = cols.filter(c => !['_fuente', '_isPax', '_validado_itinerario', '_validado_por_itinerario', 'id', 'Año', 'Mes', 'Día'].includes(c));
+    const busca = (re) => visibles.find(c => re.test(c)) || null;
+    const fechaCol = busca(/(^|\b)fecha(\b|$)/i);
+    const opCol = busca(/hr\.?\s*de\s*oper/i);
+    const recepcionCol = busca(/hr\.?\s*de\s*recep/i);
+    const slotCol = busca(/slot\s*asignad/i);
+    const slotCoordCol = busca(/slot\s*coordinad/i);
+    const anio = _conciEditFallbackYear || new Date().getFullYear();
+    const texto = (row, c) => (c && row[c] !== null && row[c] !== undefined) ? String(row[c]).trim() : '';
+    const generico = row => _conciFormatDisplayValue(col, row[col], row, fechaCol, anio);
+
+    if (col === busca(/^mes$/i)) {
+        return row => {
+            const n = parseInt(texto(row, col), 10);
+            return (Number.isFinite(n) && n >= 1 && n <= 12) ? capitalizeFirst(SPANISH_MONTH_NAMES[n - 1]) : texto(row, col);
+        };
     }
-    // Filtros desplegables (valor exacto contra datos originales)
-    for (const [col, allowed] of Object.entries(_conciExcelFilters)) {
-        if (!allowed) continue;
-        const rowIdx = parseInt(tr.dataset.rowIndex, 10);
-        const rowData = (Number.isFinite(rowIdx) && _conciManifestosAllData[rowIdx]) ? _conciManifestosAllData[rowIdx] : null;
-        const cellVal = rowData ? _conciExcelFilterValueGetter(col)(rowData) : '';
-        if (!allowed.has(cellVal)) return false;
+    if (col === tipoCol) return row => generico(row).toUpperCase(); // la celda va en mayúsculas (style.css)
+    if (col === busca(/^aeronave$/i)) return row => _conciAeronaveDisplay(texto(row, col)).text;
+    if (col === routingCol && (window._iataToCity || _conciAirportCatalogByIata.size > 0)) {
+        return row => _conciDestinoOrigenVisible(texto(row, col), texto(row, tipoCol));
+    }
+    if (col === busca(/^ruta$/i)) return row => (texto(row, col) || texto(row, routingCol)).toUpperCase();
+    if (col === busca(/hrs?\.?\s*cumplidas/i) && opCol && recepcionCol) {
+        return row => String(_conciHrsCumplidas(row[opCol], row[recepcionCol], anio) ?? '-');
+    }
+    if (col === busca(/puntualidad|cancelaci/i) && slotCol && opCol) {
+        return row => _conciPuntualidad(row[slotCol], row[opCol], anio) || '-';
+    }
+    if (col === busca(/demora\s*\+\s*-?\s*15\s*min/i) && opCol) {
+        return row => {
+            const v = _conciDemoraMinutos(slotCol ? row[slotCol] : '', slotCoordCol ? row[slotCoordCol] : '', row[opCol], anio);
+            return Number.isFinite(v) ? `${v > 0 ? '+' : ''}${v}` : '-';
+        };
+    }
+    if (col === busca(/hr\.?\s*m[aá]xima\s*de\s*entrega/i) && opCol) {
+        return row => _conciHrMaximaEntrega(row[opCol], row, fechaCol, anio);
+    }
+    if (col === busca(/factor.*ocupaci[oó]n/i) || /evidencia/i.test(col)) return row => texto(row, col);
+
+    // Totales que _conciRefreshCalculatedCellsForRow recalcula al pintar la fila.
+    const buscaNorm = (re) => visibles.find(c => re.test(_conciNormalizedColumnName(c))) || null;
+    const numero = (row, c) => {
+        const crudo = texto(row, c).replace(/,/g, '');
+        if (!crudo) return 0;
+        const n = Number(crudo.replace(/[^0-9.-]/g, ''));
+        return Number.isFinite(n) ? n : 0;
+    };
+    const comoTexto = (v) => String(Number.isInteger(v) ? v : Number(v.toFixed(2)));
+    const exentos = [/^diplomaticos$/, /^en\s+comision$/, /^infantes$/, /^transitos$/, /^conexiones$/, /^otros\s+exentos$/]
+        .map(buscaNorm).filter(Boolean);
+    const totalExentos = row => exentos.reduce((suma, c) => suma + numero(row, c), 0);
+    if (col === buscaNorm(/^total\s+exentos$/)) return row => comoTexto(totalExentos(row));
+    if (col === buscaNorm(/^pax\s+que\s+pagan\s+tua$/)) {
+        const paxCol = buscaNorm(/^total\s+pax$/);
+        return row => {
+            const pax = paxCol ? numero(row, paxCol) : 0;
+            return comoTexto(/lleg|arr/i.test(texto(row, tipoCol)) && pax > 0 ? 0 : pax - totalExentos(row));
+        };
+    }
+    const cargaNac = buscaNorm(/^kgs?\.?\s*de\s*carga\s+nacional$/);
+    const cargaInt = buscaNorm(/^kgs?\.?\s*de\s*carga\s+internacional$/);
+    if (col === buscaNorm(/^kgs?\.?\s*de\s*carga\s+total$/) && (cargaNac || cargaInt)) {
+        return row => ((cargaNac && texto(row, cargaNac) !== '') || (cargaInt && texto(row, cargaInt) !== '')
+            ? comoTexto((cargaNac ? numero(row, cargaNac) : 0) + (cargaInt ? numero(row, cargaInt) : 0))
+            : generico(row));
+    }
+    return generico;
+}
+
+// La fila de datos que corresponde a un renglón de la tabla, con lo que se ha
+// capturado en él desde que se cargó (sin esto el filtro desplegable comparaba
+// contra el valor de antes de la captura). Una fila nueva se lee de la pantalla.
+function _conciFilaParaFiltro(tr) {
+    const indice = String(tr.dataset.rowIndex ?? '');
+    if (/^\d+$/.test(indice) && _conciManifestosAllData[Number(indice)]) {
+        const cambios = _conciSummaryLiveOverrides.get(indice);
+        const fila = _conciManifestosAllData[Number(indice)];
+        return cambios ? { ...fila, ...cambios } : fila;
+    }
+    return typeof _conciReadLiveTableRow === 'function' ? _conciReadLiveTableRow(tr) : null;
+}
+
+// Determina si una fila pasa todos los filtros de texto y desplegables activos.
+function _conciRowPassesColFilter(tr, plan, celdas) {
+    const filtros = plan || _conciPlanDeFiltros();
+    const porColumna = celdas || _conciCeldasParaFiltro(tr, filtros);
+    for (const f of filtros.texto) {
+        const td = porColumna.get(f.col);
+        if (!td) return false;
+        // Lo que muestra la celda y, salvo en las categorías, lo guardado:
+        // AEROLINEA guarda "VB" y muestra VIVA AEROBUS; # DE VUELO guarda
+        // "CX 096" y muestra 096. Mientras se captura manda lo tecleado.
+        const visto = _conciTextoFiltrable(td.textContent);
+        let ok;
+        if (f.categoria) {
+            ok = f.soloInicio ? visto.startsWith(f.termino) : (' ' + visto).includes(' ' + f.termino);
+        } else {
+            const guardado = _conciTextoFiltrable(td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : td.dataset.raw);
+            // También sin espacios/guiones/puntos: "XN1107" o "xn-1107"
+            // encuentran el vuelo capturado como "XN 1107".
+            ok = guardado.includes(f.termino) || visto.includes(f.termino)
+                || (!!f.compacto && (_conciCompactText(guardado).includes(f.compacto) || _conciCompactText(visto).includes(f.compacto)));
+        }
+        if (!ok) return false;
+    }
+    if (filtros.excel.length) {
+        const fila = _conciFilaParaFiltro(tr);
+        for (const f of filtros.excel) {
+            if (!f.permitidos.has(_conciTextoFiltrable(fila ? f.valorDe(fila) : ''))) return false;
+        }
     }
     return true;
 }
 
-// Aplica los filtros a todas las filas ya renderizadas del tbody y muestra un aviso
-// si ninguna coincide.
-function _conciApplyPillFilter() {
+// Cuántas de las filas que pasan los filtros se muestran de inmediato: las que
+// caben hasta el fondo de lo que se ve (a 24 px por fila, menos que cualquier
+// renglón real) más un margen, y nunca menos de 600 —más que un día completo—.
+function _conciTopeFilasReveladas(table) {
+    const wrap = table && table.closest ? table.closest('.table-responsive') : null;
+    const hasta = wrap ? (wrap.scrollTop + wrap.clientHeight + 240) : 0;
+    return Math.max(600, Math.ceil(hasta / 24) + 100);
+}
+
+// Muestra, en orden, hasta `n` filas diferidas. Devuelve si había alguna.
+function _conciRevelarDiferidas(tbody, n) {
+    const filas = tbody ? tbody.querySelectorAll('tr[data-conci-diferida]') : [];
+    for (let i = 0; i < filas.length && i < n; i++) {
+        filas[i].removeAttribute('data-conci-diferida');
+        filas[i].style.display = '';
+    }
+    return filas.length > 0;
+}
+
+// Aplica los filtros a las filas ya pintadas del tbody (o solo a `filasNuevas`,
+// el lote que acaba de pintarse) y muestra un aviso si ninguna coincide.
+//
+// Volver visibles de golpe miles de filas ya pintadas —quitar un filtro en un
+// rango de varios días— costaba casi 2 s de maquetado. Pasado el tope de
+// _conciTopeFilasReveladas, las que siguen pasando el filtro quedan diferidas
+// (ocultas, con data-conci-diferida) y aparecen al desplazarse, antes que las
+// que aún no se pintan (ver _renderConciManifiestosTable). Con un solo día no
+// se llega al tope.
+function _conciApplyPillFilter(filasNuevas) {
     const table = document.getElementById('table-conci-manifiestos');
     if (!table) return;
     const tbody = table.querySelector('tbody');
     if (!tbody) return;
+    const plan = _conciPlanDeFiltros();
+    const soloNuevas = Array.isArray(filasNuevas);
+    const tope = soloNuevas ? Infinity : _conciTopeFilasReveladas(table);
+    // Un lote nuevo va después de las diferidas: si las hay, también espera.
+    let diferir = soloNuevas && !!tbody.querySelector('tr[data-conci-diferida]');
     let visible = 0;
-    tbody.querySelectorAll('tr[data-row-index]').forEach((tr) => {
-        const ok = _conciRowPassesPillFilter(tr) && _conciRowPassesColFilter(tr);
-        tr.style.display = ok ? '' : 'none';
-        if (ok) visible++;
+    (soloNuevas ? filasNuevas : tbody.querySelectorAll('tr[data-row-index]')).forEach((tr) => {
+        const celdas = _conciCeldasParaFiltro(tr, plan);
+        const ok = _conciRowPassesPillFilter(tr, celdas) && _conciRowPassesColFilter(tr, plan, celdas);
+        let mostrar = ok;
+        if (ok && (diferir || visible >= tope)) {
+            mostrar = false;
+            diferir = true;
+            tr.dataset.conciDiferida = '1';
+        } else if (tr.dataset.conciDiferida) {
+            delete tr.dataset.conciDiferida;
+        }
+        if (tr.style.display !== (mostrar ? '' : 'none')) tr.style.display = mostrar ? '' : 'none';
+        if (mostrar) visible++;
     });
+    // Con solo el lote nuevo, el aviso depende de si ya había alguna visible.
+    if (soloNuevas && !visible) {
+        for (const tr of tbody.querySelectorAll('tr[data-row-index]')) {
+            if (tr.style.display !== 'none') { visible = 1; break; }
+        }
+    }
     let emptyRow = tbody.querySelector('tr.conci-filter-empty');
-    const anyFilter = !!(_conciClassFilter || _conciDirFilter || _conciOvercapFilter || _conciCaptureFilter || Object.values(_conciColFilters).some(v => v && v.trim()) || Object.keys(_conciExcelFilters).length > 0);
+    const anyFilter = _conciHasActiveTableFilter();
+    // Con un filtro activo, las coincidencias pueden estar entre las filas que
+    // todavía no se pintan: se siguen pintando mientras la vista no se llene.
+    const pendientes = !!(anyFilter && _conciLazyRows && _conciLazyRows.pendientes());
+    if (pendientes) _conciLazyRows.llenarVista();
     if (anyFilter && visible === 0) {
         if (!emptyRow) {
             emptyRow = document.createElement('tr');
@@ -21724,10 +22092,18 @@ function _conciApplyPillFilter() {
             const td = document.createElement('td');
             td.colSpan = 100;
             td.className = 'text-center text-muted py-4';
-            td.textContent = 'No hay vuelos que coincidan con el filtro seleccionado.';
+            // El aviso se queda a la vista (style.css): centrado en las miles
+            // de px de ancho de la fila quedaba fuera de la pantalla.
+            const aviso = document.createElement('div');
+            aviso.className = 'conci-aviso-tabla';
+            td.appendChild(aviso);
             emptyRow.appendChild(td);
             tbody.appendChild(emptyRow);
         }
+        // "Sin coincidencias" solo cuando ya se revisaron todas las filas.
+        (emptyRow.querySelector('.conci-aviso-tabla') || emptyRow.firstChild).textContent = pendientes
+            ? 'Buscando en el resto de los vuelos…'
+            : 'No hay vuelos que coincidan con el filtro seleccionado.';
         emptyRow.style.display = '';
     } else if (emptyRow) {
         emptyRow.style.display = 'none';
@@ -21750,6 +22126,12 @@ function _conciFlightColumnKey() {
 function _conciFocusFirstCaptureCell() {
     if (typeof _conciCanCurrentUserEdit === 'function' && _conciCanCurrentUserEdit() && !_conciEditMode) {
         _conciEnterEditMode();
+    }
+
+    // Enter/↓ no espera al siguiente cuadro: si la coincidencia aún no está
+    // pintada, se pintan ya los lotes que falten hasta que aparezca.
+    while (_conciLazyRows && _conciLazyRows.pendientes() && !_conciVisibleBodyRows().length) {
+        _conciLazyRows.pintarLote();
     }
 
     const row = _conciVisibleBodyRows()[0];
@@ -22067,6 +22449,21 @@ function sortBySearchRelevance(values, query) {
     });
 }
 
+// Orden de las opciones del filtro desplegable: las fechas (dd/mm/aaaa [hh:mm])
+// por calendario —como texto "01/11" quedaba antes que "30/10"— y lo demás
+// alfabético con los números en su orden.
+function _conciClaveCronologica(texto) {
+    const m = String(texto).match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?$/);
+    return m ? `${m[3]}${m[2]}${m[1]}${m[4] || '00'}${m[5] || '00'}` : null;
+}
+
+function _conciCompararOpcionesFiltro(a, b) {
+    const ca = _conciClaveCronologica(a);
+    const cb = _conciClaveCronologica(b);
+    if (ca && cb) return ca < cb ? -1 : (ca > cb ? 1 : 0);
+    return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+}
+
 function _showConciExcelFilter(col, triggerEl) {
     document.querySelectorAll('.conci-excel-dropdown').forEach(el => el.remove());
 
@@ -22082,7 +22479,30 @@ function _showConciExcelFilter(col, triggerEl) {
         `width:260px;border-radius:6px;padding:10px;font-size:.84rem;`;
 
     const activeSet = _conciExcelFilters[col] || null;
-    const values = [...new Set((_conciManifestosAllData || []).map(_conciExcelFilterValueGetter(col)))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+    const activosNorm = activeSet ? new Set([...activeSet].map(_conciTextoFiltrable)) : null;
+    // Una opción por cada texto distinto que se ve en la columna, en todas las
+    // filas cargadas (pintadas o no) y con lo ya capturado: la misma fecha en
+    // dos formatos, o "LLEGADA" y "Llegada", son una sola opción —la forma más
+    // frecuente—, como en Excel.
+    const valorDe = _conciExcelFilterValueGetter(col);
+    const grupos = new Map();
+    const agregar = (fila) => {
+        if (!fila) return;
+        const v = valorDe(fila);
+        const k = _conciTextoFiltrable(v);
+        if (!grupos.has(k)) grupos.set(k, new Map());
+        grupos.get(k).set(v, (grupos.get(k).get(v) || 0) + 1);
+    };
+    (_conciManifestosAllData || []).forEach((fila, i) => {
+        const cambios = _conciSummaryLiveOverrides.get(String(i));
+        agregar(cambios ? { ...fila, ...cambios } : fila);
+    });
+    document.querySelectorAll('#table-conci-manifiestos tbody tr[data-row-index]').forEach(tr => {
+        if (!/^\d+$/.test(tr.dataset.rowIndex)) agregar(_conciFilaParaFiltro(tr)); // filas agregadas a mano
+    });
+    const values = [...grupos.values()]
+        .map(formas => [...formas.entries()].sort((a, b) => b[1] - a[1])[0][0])
+        .sort(_conciCompararOpcionesFiltro);
 
     const esc2 = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -22108,7 +22528,7 @@ function _showConciExcelFilter(col, triggerEl) {
         </div>
         <div style="max-height:200px;overflow-y:auto;border:1px solid #eee;border-radius:4px;padding:4px;margin-bottom:10px;background:#f8f9fa;" id="conci-ef-list">
             ${values.map((v, i) => {
-        const checked = !activeSet || activeSet.has(v);
+        const checked = !activosNorm || activosNorm.has(_conciTextoFiltrable(v));
         const label = v === '' ? '(Vac\u00edo)' : (_isAirlineFilterCol ? airlineLabelFor(v)
             : esc2(_isMatriculaStatusFilterCol ? _conciEstatusMatriculaEtiqueta(v) : v));
         const safeVal = esc2(v);
@@ -22119,8 +22539,9 @@ function _showConciExcelFilter(col, triggerEl) {
         // con el codigo y esas quedaban invisibles al usar "Seleccionar todo"
         // despues de buscar.
         const airlineSearchMeta = _isAirlineFilterCol ? _conciResolveAirlineMeta(v) : null;
-        const searchKey = ((airlineSearchMeta && airlineSearchMeta.name) ? `${v} ${airlineSearchMeta.name}`
-            : (_isMatriculaStatusFilterCol ? `${v} ${_conciEstatusMatriculaEtiqueta(v)}` : v)).toLowerCase();
+        // Sin acentos ni mayúsculas, como los filtros de la tabla.
+        const searchKey = _conciTextoFiltrable(v === '' ? 'vacío' : (airlineSearchMeta && airlineSearchMeta.name) ? `${v} ${airlineSearchMeta.name}`
+            : (_isMatriculaStatusFilterCol ? `${v} ${_conciEstatusMatriculaEtiqueta(v)}` : v));
         return `<div class="conci-ef-item d-flex align-items-center gap-2" style="padding:2px 4px;cursor:pointer;" data-value="${safeVal}" data-search="${esc2(searchKey)}">
                     <input class="form-check-input conci-ef-chk" type="checkbox" id="conci-ef-${i}" value="${safeVal}" ${checked ? 'checked' : ''}>
                     <label class="conci-ef-label flex-grow-1" data-value="${safeVal}" title="click: solo este valor" style="cursor:pointer;margin:0;">${label}</label>
@@ -22138,10 +22559,10 @@ function _showConciExcelFilter(col, triggerEl) {
     const listEl = menu.querySelector('#conci-ef-list');
 
     searchBox.addEventListener('input', () => {
-        const txt = searchBox.value.trim().toLowerCase();
+        const txt = _conciTextoFiltrable(searchBox.value);
         const items = [...listEl.querySelectorAll('.conci-ef-item')];
         items.forEach(item => {
-            const haystack = item.dataset.search || item.dataset.value.toLowerCase();
+            const haystack = item.dataset.search || _conciTextoFiltrable(item.dataset.value);
             item.style.display = haystack.includes(txt) ? '' : 'none';
         });
         // Reordena los elementos existentes (sin recrearlos) para que las
@@ -22179,7 +22600,15 @@ function _showConciExcelFilter(col, triggerEl) {
     });
     menu.querySelector('#conci-ef-cancel').addEventListener('click', () => menu.remove());
     menu.querySelector('#conci-ef-apply').addEventListener('click', () => {
-        const checked = [...listEl.querySelectorAll('.conci-ef-chk:checked')].map(c2 => c2.value);
+        // Con una búsqueda escrita, como en Excel, cuenta solo lo encontrado:
+        // antes "viva" + Aceptar dejaba marcadas también las opciones ocultas
+        // y el filtro no cambiaba nada.
+        const buscando = !!_conciTextoFiltrable(searchBox.value);
+        const checked = [...listEl.querySelectorAll('.conci-ef-item')]
+            .filter(item => !buscando || item.style.display !== 'none')
+            .map(item => item.querySelector('.conci-ef-chk'))
+            .filter(c2 => c2 && c2.checked)
+            .map(c2 => c2.value);
         if (checked.length >= values.length || checked.length === 0) {
             delete _conciExcelFilters[col];
         } else {
@@ -24172,7 +24601,9 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     ].filter(Boolean));
 
     if (!data.length) {
-        tbody.innerHTML = '<tr><td colspan="100%" class="text-center text-muted py-5">No se encontraron registros para los filtros seleccionados.</td></tr>';
+        // Invalida el pintado perezoso anterior: sus filas ya no son de este día.
+        ++_conciRenderSeq;
+        tbody.innerHTML = '<tr><td colspan="100%" class="text-center text-muted py-5"><div class="conci-aviso-tabla">No se encontraron registros para los filtros seleccionados.</div></td></tr>';
         _conciRefreshEditToolbar();
         return;
     }
@@ -24265,6 +24696,14 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                 const v = inp2.value;
                 if (v && v.trim()) { _conciColFilters[col] = v; }
                 else { delete _conciColFilters[col]; }
+                // El buscador de # de vuelo y el "Filtrar…" de esa columna son el
+                // mismo filtro: se ven igual y una búsqueda pendiente del buscador
+                // no debe pisar lo que se acaba de escribir aquí.
+                if (col === _conciFlightColumnKey()) {
+                    clearTimeout(_conciQuickFlightDebounce);
+                    const buscador = document.getElementById('conci-quick-flight');
+                    if (buscador) buscador.value = v;
+                }
             }
             clearTimeout(_conciColFilterDebounce);
             _conciColFilterDebounce = setTimeout(_conciApplyPillFilter, 200);
@@ -24427,9 +24866,18 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         return out;
     };
 
+    // Filas ya pintadas que _conciApplyPillFilter dejó diferidas: van antes que
+    // las que faltan por pintar.
+    const hayDiferidas = () => !!tbody.querySelector('tr[data-conci-diferida]');
+    const quedanFilas = () => idx < data.length || hayDiferidas();
+
     const appendBatch = () => {
         appendScheduled = false;
         if (renderSeq !== _conciRenderSeq) return;
+        if (_conciRevelarDiferidas(tbody, batchSize)) {
+            if (scrollWrap && scrollWrap.scrollHeight <= (scrollWrap.clientHeight + 80)) scheduleAppend();
+            return;
+        }
 
         const frag = document.createDocumentFragment();
         const end = Math.min(idx + batchSize, data.length);
@@ -24518,15 +24966,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                     td.textContent = _conciAeronaveDisplay(rawStr).text;
                     _conciMarcarAeronave(td, rawStr);
                 } else if (meta.isRouting) {
-                    const tipo = _tipoCol ? String(row[_tipoCol] || '') : '';
-                    const isArr = /lleg|arr/i.test(tipo);
-                    const parts = rawStr.toUpperCase().split(/[-\/]+/);
-                    const code = (parts.length >= 2)
-                        ? (isArr ? parts[0] : parts[parts.length - 1])
-                        : (parts[0] || '');
-                    const catalogCity = code ? _conciAirportStoredValue(_conciAirportCatalogByIata.get(code)) : '';
-                    const city = _conciCiudadBonita(catalogCity || (code ? iataToCity(code) : rawStr));
-                    const shown = city || rawStr;
+                    const shown = _conciDestinoOrigenVisible(rawStr, _tipoCol ? String(row[_tipoCol] || '') : '', iataToCity);
                     td.textContent = shown;
                     td.dataset.routeRaw = rawStr;
                     td.dataset.raw = shown;
@@ -24652,6 +25092,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
 
             frag.appendChild(tr);
         }
+        const filasDelLote = [...frag.children]; // para filtrar solo este lote (abajo)
 
         // Fondo azul grisáceo en las celdas con dato; el observador cubre los cambios después.
         frag.querySelectorAll('td[data-col]').forEach(_conciMarcarCeldaConDato);
@@ -24665,14 +25106,13 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         // conectados tengan abiertas ahora mismo (carga inicial y scroll perezoso).
         _conciApplyRemotePresenceHighlights();
 
-        // Re-aplica todos los filtros activos (pill + columna) a las filas recién agregadas.
-        if (_conciClassFilter || _conciDirFilter || _conciOvercapFilter || _conciCaptureFilter || Object.values(_conciColFilters).some(v => v && v.trim())) _conciApplyPillFilter();
+        // Aplica los filtros activos (pill + columna + Excel) a las filas recién
+        // agregadas; las anteriores ya están filtradas.
+        if (_conciHasActiveTableFilter()) _conciApplyPillFilter(filasDelLote);
 
         if (idx >= data.length) {
-            if (scrollWrap && scrollWrap._conciLazyHandler) {
-                scrollWrap.removeEventListener('scroll', scrollWrap._conciLazyHandler);
-                delete scrollWrap._conciLazyHandler;
-            }
+            // El oyente del scroll se queda: si después un filtro deja filas
+            // diferidas, es el que las muestra (onLazyScroll).
             _conciRefreshEditToolbar();
             return;
         }
@@ -24684,16 +25124,31 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     };
 
     const scheduleAppend = () => {
-        if (appendScheduled || renderSeq !== _conciRenderSeq || idx >= data.length) return;
+        if (appendScheduled || renderSeq !== _conciRenderSeq || !quedanFilas()) return;
         appendScheduled = true;
         window.requestAnimationFrame(appendBatch);
     };
 
+    // Lo usan los filtros (_conciApplyPillFilter) y el salto con Enter del
+    // buscador de vuelo para llegar a las filas que aún no se pintan.
+    // Con un filtro activo, un lote puede no dejar ninguna fila visible: la
+    // altura no cambia, ya no hay scroll posible y la carga se quedaba ahí.
+    // Por eso se sigue pintando mientras lo visible no pase del fondo de la
+    // vista (el mismo margen que usa onLazyScroll).
+    _conciLazyRows = {
+        pendientes: () => renderSeq === _conciRenderSeq && quedanFilas(),
+        llenarVista: () => {
+            if (!scrollWrap || (scrollWrap.scrollTop + scrollWrap.clientHeight) >= (scrollWrap.scrollHeight - 240)) scheduleAppend();
+        },
+        pintarLote: () => {
+            if (renderSeq === _conciRenderSeq && quedanFilas()) appendBatch();
+        },
+    };
+
     const onLazyScroll = () => {
         if (renderSeq !== _conciRenderSeq || !scrollWrap) return;
-        if (idx >= data.length) return;
         const nearBottom = (scrollWrap.scrollTop + scrollWrap.clientHeight) >= (scrollWrap.scrollHeight - 240);
-        if (nearBottom) scheduleAppend();
+        if (nearBottom && quedanFilas()) scheduleAppend();
     };
 
     if (scrollWrap) {
@@ -25194,24 +25649,37 @@ function _conciInitCamposFecha(raiz) {
         // asignador interceptado, pero si dispara "change".
         iso.addEventListener('change', sincronizar);
 
-        // Mientras se teclea solo se da forma; no se toca el valor real hasta
-        // que la fecha este completa, para no recargar la tabla a media captura.
-        mask.addEventListener('input', () => {
-            const cursorAlFinal = mask.selectionStart === mask.value.length;
-            mask.value = _conciFormatDateMask(mask.value);
-            if (cursorAlFinal) {
-                try { mask.setSelectionRange(mask.value.length, mask.value.length); } catch (_) { /* sin soporte */ }
-            }
-            if (_conciMaskedDateToIso(mask.value)) _conciAplicarFechaMask(mask, iso);
-        });
-
         // Al salir del campo se completa el anio ("11/08/26" -> "11/08/2026") y
         // se confirma. Una fecha incompleta se descarta: es mejor un campo vacio
         // que un filtro apuntando a un dia que nadie quiso.
+        let pausa = null;
         const confirmar = () => {
+            clearTimeout(pausa);
             mask.value = _conciExpandDateMaskYear(mask.value);
             _conciAplicarFechaMask(mask, iso);
         };
+
+        // Mientras se teclea solo se da forma; no se toca el valor real hasta
+        // que la fecha este completa, para no recargar la tabla a media captura.
+        // El siglo NO se completa al teclear: con el "20" de "2026" el campo ya
+        // decia 2020, la fecha quedaba completa y se cargaba ese anio (el "26"
+        // ya no cabia). Con el anio de 4 digitos se aplica al terminarlo; con 2
+        // ("051026") se aplica tras una pausa por si sigue el resto del anio, o
+        // en cuanto se confirma con Enter o al salir del campo.
+        mask.addEventListener('input', () => {
+            clearTimeout(pausa);
+            const cursorAlFinal = mask.selectionStart === mask.value.length;
+            const digitos = String(mask.value || '').replace(/\D/g, '').slice(0, 8);
+            mask.value = digitos.length > 4
+                ? `${digitos.slice(0, 2)}/${digitos.slice(2, 4)}/${digitos.slice(4)}`
+                : _conciFormatDateMask(digitos);
+            if (cursorAlFinal) {
+                try { mask.setSelectionRange(mask.value.length, mask.value.length); } catch (_) { /* sin soporte */ }
+            }
+            if (!_conciMaskedDateToIso(mask.value)) return;
+            if (digitos.length === 8) _conciAplicarFechaMask(mask, iso);
+            else pausa = setTimeout(confirmar, 900);
+        });
         mask.addEventListener('blur', confirmar);
         mask.addEventListener('keydown', (ev) => {
             if (ev.key === 'Enter') { ev.preventDefault(); confirmar(); }
@@ -25963,7 +26431,16 @@ function _conciRefreshManifestDateOrderValidation(tr, changedValues = {}) {
 function _conciRefreshCalculatedCellsForRow(tr, changedValues = {}) {
     if (!tr) return;
     const cells = Array.from(tr.querySelectorAll('td[data-col]'));
-    const findCell = pattern => cells.find(td => pattern.test(_conciNormalizedColumnName(td.dataset.col)));
+    // Los nombres de columna son siempre los mismos: normalizarlos en cada
+    // búsqueda de cada fila era ~1/6 del tiempo de pintar la tabla.
+    const normalizados = _conciRefreshCalculatedCellsForRow._columnas
+        || (_conciRefreshCalculatedCellsForRow._columnas = new Map());
+    const normal = (col) => {
+        let valor = normalizados.get(col);
+        if (valor === undefined) { valor = _conciNormalizedColumnName(col); normalizados.set(col, valor); }
+        return valor;
+    };
+    const findCell = pattern => cells.find(td => pattern.test(normal(td.dataset.col)));
     const readCell = (td) => {
         if (!td) return '';
         const col = td.dataset.col;
@@ -26391,6 +26868,20 @@ function _conciCiudadBonita(texto) {
 
 function _conciAirportStoredValue(airport) {
     return _conciCiudadBonita(String(airport?.ciudad || airport?.nombre || airport?.iata || '').trim());
+}
+
+// Lo que muestra DESTINO / ORIGEN: la ciudad del extremo de la ruta que no es
+// AIFA (el origen en una llegada, el destino en una salida). La usan la celda
+// y el filtro desplegable de la columna, así no pueden diferir.
+function _conciDestinoOrigenVisible(rawStr, tipo, iataToCity = (c => (window._iataToCity ? window._iataToCity(c) : c))) {
+    const isArr = /lleg|arr/i.test(String(tipo || ''));
+    const parts = String(rawStr ?? '').toUpperCase().split(/[-\/]+/);
+    const code = (parts.length >= 2)
+        ? (isArr ? parts[0] : parts[parts.length - 1])
+        : (parts[0] || '');
+    const catalogCity = code ? _conciAirportStoredValue(_conciAirportCatalogByIata.get(code)) : '';
+    const city = _conciCiudadBonita(catalogCity || (code ? iataToCity(code) : rawStr));
+    return city || rawStr;
 }
 
 function _conciAirportOptionLabel(airport) {
