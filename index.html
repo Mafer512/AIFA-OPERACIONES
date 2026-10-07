@@ -22985,7 +22985,7 @@ FF
                                                 <i class="fas fa-chart-line me-2 text-info"></i>Estadística
                                             </button>
                                         </li>
-                                        <li class="nav-item" role="presentation">
+                                        <li class="nav-item d-none" role="presentation"><!-- sólo super admin: js/conci-oficial-vs-detalle.js -->
                                             <button class="nav-link fw-semibold" id="tab-conci-oficial-detalle" data-bs-toggle="tab" data-bs-target="#pane-conci-oficial-detalle" type="button" role="tab">
                                                 <i class="fas fa-scale-balanced me-2 text-warning"></i>Oficial vs Detalle
                                             </button>
@@ -23820,7 +23820,7 @@ FF
 
                                     <!--  Tab: Estadística  -->
                                     <!--  Tab: Oficial vs Detalle (js/conci-oficial-vs-detalle.js)  -->
-                                    <div class="tab-pane fade p-4" id="pane-conci-oficial-detalle" role="tabpanel">
+                                    <div class="tab-pane fade p-4 d-none" id="pane-conci-oficial-detalle" role="tabpanel">
                                         <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                                             <h6 class="mb-0 me-auto"><i class="fas fa-scale-balanced me-2 text-warning"></i>Cifra oficial contra detalle de manifiestos, por mes</h6>
                                             <label class="small text-muted d-flex align-items-center gap-1" for="conci-ovd-anio">Año
@@ -40829,7 +40829,7 @@ FF
 <script src="js/estadistica-motor.js?v=20261006-totales" defer></script>
 <script src="js/estadistica-panel.js?v=20261006-totales" defer></script>
 <!-- Conciliación: Oficial vs Detalle por mes -->
-<script src="js/conci-oficial-vs-detalle.js?v=20261006-totales" defer></script>
+<script src="js/conci-oficial-vs-detalle.js?v=20261006-solo-superadmin" defer></script>
 <script src="js/estadistica-clasificacion.js?v=20260908-v1" defer></script>
 
 <!-- ═══ Aviación General · FBO (GAG · Servicios Conexos) ═══

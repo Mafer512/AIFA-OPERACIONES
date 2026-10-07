@@ -32,3 +32,52 @@ test('sólo meses completos hasta el corte, con diferencia absoluta y porcentaje
   const ene = filas.find((f) => f.clave === '2026-01' && f.categoria === 'Comercial');
   expect(ene.ops).toEqual({ abs: null, pct: null });
 });
+
+describe('sólo el super admin ve la pestaña', () => {
+  const { aplicarVisibilidad, esSuperAdmin, cargar } = require('../js/conci-oficial-vs-detalle.js');
+  const html = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
+
+  function montar(activa) {
+    document.body.innerHTML = `
+      <ul id="conciliacion-tabs">
+        <li><button id="tab-conci-itinerario" class="nav-link${activa ? '' : ' active'}"></button></li>
+        <li class="d-none"><button id="tab-conci-oficial-detalle" class="nav-link${activa ? ' active' : ''}"></button></li>
+      </ul>
+      <div id="pane-conci-itinerario" class="tab-pane${activa ? '' : ' active show'}"></div>
+      <div id="pane-conci-oficial-detalle" class="tab-pane d-none${activa ? ' active show' : ''}"></div>`;
+  }
+  const li = () => document.getElementById('tab-conci-oficial-detalle').closest('li');
+  afterEach(() => { sessionStorage.clear(); delete window.TotalesService; });
+
+  test('en index.html la pestaña y su panel nacen ocultos', () => {
+    expect(html).toMatch(/<li class="nav-item d-none"[^>]*>(<!--[^>]*-->)?\s*<button[^>]*id="tab-conci-oficial-detalle"/);
+    expect(html).toContain('<div class="tab-pane fade p-4 d-none" id="pane-conci-oficial-detalle"');
+  });
+
+  test.each(['superadmin', 'Super Admin', 'SUPER_ADMIN'])('rol "%s": la ve', (rol) => {
+    montar(false);
+    sessionStorage.setItem('user_role', rol);
+    expect(esSuperAdmin()).toBe(true);
+    expect(aplicarVisibilidad()).toBe(true);
+    expect(li().classList.contains('d-none')).toBe(false);
+    expect(document.getElementById('pane-conci-oficial-detalle').classList.contains('d-none')).toBe(false);
+  });
+
+  test.each(['admin', 'editor', 'capturista', 'viewer', 'lector', ''])('rol "%s": no la ve ni consulta', async (rol) => {
+    montar(false);
+    if (rol) sessionStorage.setItem('user_role', rol);
+    expect(aplicarVisibilidad()).toBe(false);
+    expect(li().classList.contains('d-none')).toBe(true);
+    window.TotalesService = { getCorteOficial: jest.fn() };
+    await cargar();
+    expect(window.TotalesService.getCorteOficial).not.toHaveBeenCalled();
+  });
+
+  test('si estaba abierta y entra otro rol, regresa al Itinerario', () => {
+    montar(true);
+    sessionStorage.setItem('user_role', 'admin');
+    aplicarVisibilidad();
+    expect(document.getElementById('tab-conci-itinerario').classList.contains('active')).toBe(true);
+    expect(document.getElementById('pane-conci-oficial-detalle').classList.contains('active')).toBe(false);
+  });
+});

@@ -95,7 +95,43 @@
             : '<tr><td colspan="11" class="text-center text-muted">Sin meses oficiales en este año.</td></tr>';
     }
 
+    /* ── Sólo para super admin ─────────────────────────────────────────────
+       La pestaña nace oculta en index.html y sólo se muestra a quien tiene el
+       rol super admin; los demás roles no ven ni el botón ni consultan nada.
+       El rol llega escrito de varias formas ("superadmin", "Super Admin",
+       "SUPER_ADMIN"): se compara sin espacios ni guiones. */
+    function rolActual() {
+        try {
+            if (typeof root._conciCurrentUserRole === 'function') return root._conciCurrentUserRole();
+        } catch (_) { /* sin la tabla de Conciliación, la sesión */ }
+        try { return root.sessionStorage?.getItem('user_role') || root.dataManager?.userRole || ''; } catch (_) { return ''; }
+    }
+    const esSuperAdmin = () => String(rolActual() || '').toLowerCase().replace(/[^a-z]/g, '') === 'superadmin';
+
+    function aplicarVisibilidad() {
+        if (typeof document === 'undefined') return false;
+        const tab = document.getElementById('tab-conci-oficial-detalle');
+        if (!tab) return false;
+        const ve = esSuperAdmin();
+        (tab.closest('li') || tab).classList.toggle('d-none', !ve);
+        document.getElementById('pane-conci-oficial-detalle')?.classList.toggle('d-none', !ve);
+        // Si quedó abierta (otra sesión en la misma pestaña), vuelve al Itinerario.
+        if (!ve && tab.classList.contains('active')) {
+            const inicio = document.getElementById('tab-conci-itinerario');
+            const Tab = root.bootstrap && root.bootstrap.Tab;
+            if (inicio && Tab && typeof Tab.getOrCreateInstance === 'function') Tab.getOrCreateInstance(inicio).show();
+            else {
+                tab.classList.remove('active');
+                document.getElementById('pane-conci-oficial-detalle')?.classList.remove('active', 'show');
+                inicio?.classList.add('active');
+                document.getElementById('pane-conci-itinerario')?.classList.add('active', 'show');
+            }
+        }
+        return ve;
+    }
+
     async function cargar(anioPedido) {
+        if (!esSuperAdmin()) return;
         const servicio = root.TotalesService;
         const estado = document.getElementById('conci-ovd-estado');
         const tabla = document.getElementById('conci-ovd-tabla');
@@ -127,6 +163,11 @@
         const tab = document.getElementById('tab-conci-oficial-detalle');
         if (!tab || tab._ovdListo) return;
         tab._ovdListo = true;
+        // El rol se confirma al iniciar sesión (admin-mode-changed) y puede
+        // cambiar si otra persona entra en la misma ventana.
+        aplicarVisibilidad();
+        root.addEventListener?.('admin-mode-changed', aplicarVisibilidad);
+        document.getElementById('conciliacion-tabs')?.addEventListener('show.bs.tab', aplicarVisibilidad);
         tab.addEventListener('shown.bs.tab', () => cargar());
         document.getElementById('conci-ovd-anio')?.addEventListener('change', (ev) => cargar(ev.target.value));
         document.getElementById('conci-ovd-actualizar')?.addEventListener('click', () => {
@@ -136,7 +177,7 @@
         if (tab.classList.contains('active')) cargar();
     }
 
-    const api = { construirFilas, cargar };
+    const api = { construirFilas, cargar, esSuperAdmin, aplicarVisibilidad };
     root.ConciOficialVsDetalle = api;
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     if (typeof document !== 'undefined') {
