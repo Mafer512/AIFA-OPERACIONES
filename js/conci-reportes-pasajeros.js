@@ -149,6 +149,26 @@
 
     const dosDigitos = n => String(n).padStart(2, '0');
 
+    /** AAAA-MM-DD de hoy, en la hora local. */
+    function hoyIso() {
+        const h = new Date();
+        return `${h.getFullYear()}-${dosDigitos(h.getMonth() + 1)}-${dosDigitos(h.getDate())}`;
+    }
+
+    /**
+     * Hasta qué cierre se leen los manifiestos: hoy, o la fecha pedida si es
+     * posterior. Las Plantillas van por FECHA y, como la Numeralia del libro,
+     * cuentan lo cerrado hasta el día en que se generan: los vuelos del 29 y
+     * 30 se cierran el 1 o el 2 del mes siguiente y la Numeralia de ese mes
+     * los trae. El oficio de Subsecretaría no cambia: agregar() sólo le suma
+     * lo cerrado hasta la fecha pedida.
+     */
+    const corteDeLectura = fechaIso => (fechaIso > hoyIso() ? fechaIso : hoyIso());
+
+    /** La "Fecha de actualización" de las Plantillas: hasta dónde se leyó. */
+    const fechaActualizacion = datos => (datos.actualizacionIso && datos.actualizacionIso > datos.fechaIso
+        ? datos.actualizacionIso : datos.fechaIso);
+
     /** AAAA-MM-DD del día anterior, cruzando mes y año. */
     function diaAnterior(iso) {
         const [a, m, d] = iso.split('-').map(Number);
@@ -495,7 +515,8 @@
         return {
             sub, cierres, anioSub, mesSub,
             porAerolinea, porDia, anioPlantillas,
-            anio, mes, fechaIso, descartadosCarga, invalidos, totalFilas: filas.length
+            anio, mes, fechaIso, descartadosCarga, invalidos, totalFilas: filas.length,
+            actualizacionIso: datos.hasta || fechaIso
         };
     }
 
@@ -745,7 +766,7 @@
             ${tablaAerolineas(porAerolinea.mes, bloque2)}`;
         return hoja(
             `NUMERALIA AEROPORTUARIA ${MESES[mes - 1]} ${anio}`,
-            `Fecha de actualización: <strong><u>${fechaLarga(fechaIso)}</u></strong>`,
+            `Fecha de actualización: <strong><u>${fechaLarga(fechaActualizacion(datos))}</u></strong>`,
             cuerpo,
             false,
             { nota: bloque2 + 4 + entradasVisibles(porAerolinea.mes).length }
@@ -832,7 +853,7 @@
 
         return hoja(
             `NUMERALIA AEROPORTUARIA ${MESES[mes - 1]} ${anio}`,
-            `Fecha de actualización: <strong><u>${fechaLarga(fechaIso)}</u></strong>`,
+            `Fecha de actualización: <strong><u>${fechaLarga(fechaActualizacion(datos))}</u></strong>`,
             cuerpo,
             true,
             { nota: 12 + D }
@@ -896,7 +917,7 @@
             if (typeof window._ensureConciAirlineCatalog === 'function') {
                 try { await window._ensureConciAirlineCatalog(); } catch (_) {}
             }
-            const datos = await descargar(fechaIso, n => estado(`Leyendo manifiestos… ${numero(n)}`));
+            const datos = await descargar(corteDeLectura(fechaIso), n => estado(`Leyendo manifiestos… ${numero(n)}`));
             ultimo = agregar(datos, fechaIso);
             if (edicion) await edicion.cargar(fechaIso);
             pintar();
@@ -959,7 +980,7 @@
         const mesTitulo = MESES[datos.mes - 1].charAt(0) + MESES[datos.mes - 1].slice(1).toLowerCase();
         return [
             [`NUMERALIA AEROPORTUARIA ${MESES[datos.mes - 1]} ${datos.anio}`],
-            [`Fecha de actualización: ${fechaLarga(datos.fechaIso)}`],
+            [`Fecha de actualización: ${fechaLarga(fechaActualizacion(datos))}`],
             [],
             ...bloque(datos.porAerolinea.dia, `Del día ${fechaLarga(datos.fechaIso)}`),
             ...bloque(datos.porAerolinea.mes, `Cifras acumuladas: ${mesTitulo}`),
@@ -989,7 +1010,7 @@
 
         return [
             [`NUMERALIA AEROPORTUARIA ${MESES[mes - 1]} ${anio}`],
-            [`Fecha de actualización: ${fechaLarga(fechaIso)}`],
+            [`Fecha de actualización: ${fechaLarga(fechaActualizacion(datos))}`],
             [],
             ['PASAJEROS', '', '', '', '', 'OPERACIONES'],
             ['FECHA', 'LLEGADA', 'SALIDA', 'TOTAL', '', 'FECHA', 'LLEGADA', 'SALIDA', 'TOTAL'],

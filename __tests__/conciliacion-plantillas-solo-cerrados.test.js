@@ -109,3 +109,72 @@ describe('Plantilla 2 por FECHA, sólo con lo cerrado', () => {
     expect(carga.slice(i, i + 2500)).toMatch(/if \(esAjuste\) continue;[\s\S]*?if \(!cierre && !delLibro\) continue;[\s\S]*?const fecha = aIso/);
   });
 });
+
+describe('Plantillas: cuentan lo cerrado hasta el día en que se generan, como la Numeralia', () => {
+  // Caso real: septiembre generado el 06/10. Los vuelos del 30/09 se cerraron
+  // el 01/10; la Numeralia del libro (actualización 06/10) los trae y la
+  // Plantilla 2 al 30/09 salía corta. El oficio del 30/09 no debe cambiar.
+  const filasBase = [
+    manifiesto({ cierre: '30/09/2026', fecha: '30/09/2026', tipo: 'LLEGADA', pax: 100, delLibro: true }),
+    manifiesto({ cierre: '01/10/2026', fecha: '30/09/2026', tipo: 'LLEGADA', pax: 70, delLibro: true }),
+    manifiesto({ cierre: '07/10/2026', fecha: '30/09/2026', tipo: 'SALIDA', pax: 55, delLibro: true }),
+  ].map((f, i) => ({ ...f, _uid: 'M' + String(i).padStart(6, '0'), _signo: 1 }));
+
+  let llamadas;
+  beforeEach(() => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 6, 12, 0, 0), doNotFake: ['nextTick', 'setImmediate', 'setTimeout', 'setInterval', 'queueMicrotask'] });
+    llamadas = [];
+    // Como la RPC: sólo lo cerrado hasta p_hasta.
+    window.supabaseClient = {
+      rpc: async (nombre, args) => {
+        llamadas.push(args);
+        const iso = t => t.split('/').reverse().join('-');
+        return { data: filasBase.filter(f => iso(f['CIERRE SUBSECRETARIA']) <= args.p_hasta && f._uid > (args.p_despues || '')), error: null };
+      },
+    };
+    document.body.innerHTML = `
+      <input type="date" id="conci-rep-pax-fecha" value="2026-09-30">
+      <button id="btn-conci-rep-pax-generar"></button>
+      <button data-conci-rep-pax="subsecretaria" class="active"></button>
+      <button data-conci-rep-pax="plantilla2"></button>
+      <div id="conci-rep-pax-estado"></div><div id="conci-rep-pax-error" class="d-none"></div>
+      <div id="conci-rep-pax-salida"></div>`;
+    const registrar = document.addEventListener.bind(document);
+    const arranques = [];
+    const espia = jest.spyOn(document, 'addEventListener').mockImplementation((tipo, fn, o) => {
+      if (tipo === 'DOMContentLoaded') arranques.push(fn); else registrar(tipo, fn, o);
+    });
+    new Function(leer('js/conci-reportes-pasajeros.js'))();
+    espia.mockRestore();
+    arranques.forEach(fn => fn());
+  });
+  afterEach(() => { jest.useRealTimers(); delete window.supabaseClient; });
+
+  test('el reporte del 30/09 generado el 06/10 lee hasta el 06/10: la Plantilla 2 trae lo cerrado el 01/10', async () => {
+    const api = window.conciReportesPasajeros;
+    await api.generar();
+    expect(llamadas[0].p_hasta).toBe('2026-10-06');
+    // Lo que leyó (hasta el 06/10), agregado al 30/09.
+    const leido = filasBase.filter(f => f['CIERRE SUBSECRETARIA'] !== '07/10/2026');
+    const datos = api.agregar({ filas: leido, columnas: COLUMNAS, hasta: '2026-10-06' }, '2026-09-30');
+    // Plantilla 2: 100 + 70 (lo cerrado el 07/10 aún no existe hoy).
+    expect(datos.porDia[29].pax.llegada).toBe(170);
+    expect(datos.porDia[29].ops.llegada).toBe(2);
+    // El oficio del 30/09 sigue con lo cerrado hasta el 30/09.
+    expect(datos.sub.actual.dia.LLEGADA.NACIONAL.pax).toBe(100);
+    expect(datos.sub.actual.mes.LLEGADA.NACIONAL.ops).toBe(1);
+    // La Plantilla dice hasta cuándo se actualizó, en el Excel y en pantalla.
+    expect(api.filasPlantilla2(datos)[1][0]).toBe('Fecha de actualización: 06/10/2026');
+    document.querySelector('[data-conci-rep-pax="plantilla2"]').click();
+    const pantalla = document.getElementById('conci-rep-pax-salida').textContent.replace(/\s+/g, ' ');
+    expect(pantalla).toContain('Fecha de actualización: 06/10/2026');
+    expect(pantalla).toContain('TOTAL 170 0 170');   // pasajeros
+    expect(pantalla).toContain('TOTAL 2 0 2');       // operaciones
+  });
+
+  test('un reporte de hoy o de una fecha futura lee hasta esa misma fecha', async () => {
+    document.getElementById('conci-rep-pax-fecha').value = '2026-10-06';
+    await window.conciReportesPasajeros.generar();
+    expect(llamadas[0].p_hasta).toBe('2026-10-06');
+  });
+});
