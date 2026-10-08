@@ -4142,6 +4142,10 @@ async function bindSupabaseAuthSessionBridge() {
                 // del usuario activo, evitando que la sesión quede confundida.
                 const prevEmail = sessionStorage.getItem(SESSION_USER);
                 if (prevEmail && session.user?.email && prevEmail !== session.user.email) {
+                    window._ndwCurrentManifestDays = {};
+                    window._ndwSummaryRefresh = null;
+                    window._ndwEntryRefresh = null;
+                    window.TotalesService?.invalidar?.();
                     try {
                         sessionStorage.removeItem('user_role');
                         sessionStorage.removeItem('user_allowed_sections');
@@ -4149,9 +4153,24 @@ async function bindSupabaseAuthSessionBridge() {
                     } catch (_) {}
                 }
                 cacheSupabaseSession(session);
+                if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+                    // Si el inicio consultó antes de recuperar la sesión,
+                    // reintentar al quedar autenticado, fuera del callback de auth.
+                    setTimeout(() => {
+                        const days = window._ndwCurrentManifestDays || {};
+                        Object.keys(days).forEach((date) => {
+                            if (days[date].status === 'error') delete days[date];
+                        });
+                        window.renderNavdeckWeeklyBanner?.();
+                    }, 0);
+                }
                 return;
             }
             if (event === 'SIGNED_OUT') {
+                window._ndwCurrentManifestDays = {};
+                window._ndwSummaryRefresh = null;
+                window._ndwEntryRefresh = null;
+                window.TotalesService?.invalidar?.();
                 try {
                     sessionStorage.removeItem(SESSION_TOKEN);
                     sessionStorage.removeItem(SESSION_REFRESH_TOKEN);
@@ -11381,7 +11400,7 @@ function ndwFormatValue(value, metric) {
 }
 
 /* ── NDW shared view state ── */
-let NDW_VIEW_STATE = { mode: 'weekly', year: null, monthIdx: null, monthTouched: false, weekStart: null };
+let NDW_VIEW_STATE = { mode: 'current', date: null, year: null, monthIdx: null, monthTouched: false, weekStart: null };
 
 function ndwGetAvailableYears() {
     // Los años salen de los totales unificados; mientras llegan, del catálogo
@@ -11586,27 +11605,132 @@ function ndwAvisosPeriodoHtml(desde, hasta) {
     ).join('');
 }
 
-async function ndwLoadCurrentManifestDay(dateKey, force = false) {
-    const cache = window._ndwCurrentManifestDays ||= {};
-    if (cache[dateKey]?.status === 'loading' || (!force && cache[dateKey])) return;
-    cache[dateKey] = { status: 'loading' };
+// Fecha del aeropuerto, incluso si el dispositivo usa otra zona horaria.
+function ndwPreviousDay(now = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(now);
+    const part = (type) => Number(parts.find((p) => p.type === type).value);
+    const day = new Date(Date.UTC(part('year'), part('month') - 1, part('day') - 1));
+    return day.toISOString().slice(0, 10);
+}
+
+const NDW_DAY_TTL = 5 * 60 * 1000;
+
+function ndwDayStorageKey(dateKey) {
+    // No compartir cifras guardadas entre usuarios; sessionStorage conserva
+    // las consultas al recargar esta pestaña y se elimina al cerrarla.
+    const user = sessionStorage.getItem('currentUser');
+    return user ? `aifa.inicio-dia.v1:${user}:${dateKey}` : null;
+}
+
+function ndwReadSavedDay(dateKey) {
     try {
-        const client = window.supabaseClient || (window.ensureSupabaseClient && await window.ensureSupabaseClient());
-        if (!client) throw new Error('No hay conexión con manifiestos');
-        if (!window.TotalesService) throw new Error('No se cargó js/totales-service.js');
-        // Trae lo capturado en Conciliación en los últimos minutos (freno de 2
-        // minutos en el servidor). Si el RPC no existe, se sigue con lo que haya.
-        const { error: refreshError } = await client.rpc('refrescar_informe_estadistico', { p_forzar: false });
-        if (refreshError && !['PGRST202', '42883'].includes(refreshError.code)) throw refreshError;
-        const porFecha = await window.TotalesService.getDetalleDiario(dateKey, dateKey, { forzar: force });
+        const key = ndwDayStorageKey(dateKey);
+        const saved = key && JSON.parse(sessionStorage.getItem(key));
+        if (!saved || !Number.isFinite(saved.loadedAt) || Date.now() - saved.loadedAt >= NDW_DAY_TTL || saved.loadedAt > Date.now()) return null;
+        if (!NDW_CARD_DEFS.every(({ cat, metric }) => Number.isFinite(saved.totals?.[cat]?.[metric]))) return null;
+        return { status: 'ready', totals: saved.totals,
+            count: saved.totals.comercial.operaciones + saved.totals.carga.operaciones, loadedAt: saved.loadedAt };
+    } catch (_) { return null; }
+}
+
+function ndwSaveDay(dateKey, entry) {
+    try {
+        const key = ndwDayStorageKey(dateKey);
+        if (key) sessionStorage.setItem(key, JSON.stringify({ totals: entry.totals, count: entry.count, loadedAt: entry.loadedAt }));
+    } catch (_) { /* El almacenamiento puede estar lleno o deshabilitado. */ }
+}
+
+// Refresco compartido: primero se muestran los resúmenes disponibles. El
+// mantenimiento de los últimos 60 días nunca bloquea la primera consulta.
+function ndwRefreshManifestSummary(force) {
+    const previous = window._ndwSummaryRefresh;
+    if (previous?.pending) {
+        // La entrada autenticada requiere un refresco real, aunque hubiera
+        // empezado antes una comprobación que admite datos de hace 2 minutos.
+        if (force && !previous.force) return previous.promise.then(() => ndwRefreshManifestSummary(true));
+        return previous.promise;
+    }
+    if (previous && !force && Date.now() - previous.at < 120000) return Promise.resolve(false);
+    const entry = { at: Date.now(), pending: true, force: !!force };
+    // Se ejecuta en segundo plano: conservar la respuesta aunque tarde más
+    // de 15 segundos para actualizar las tarjetas al terminar el servidor.
+    entry.promise = (async () => {
+        const client = window.supabaseClient || await window.ensureSupabaseClient?.();
+        if (!client) return false;
+        const { error } = await client.rpc('refrescar_informe_estadistico', { p_forzar: !!force });
+        return !error;
+    })().catch(() => false).finally(() => { entry.pending = false; });
+    window._ndwSummaryRefresh = entry;
+    return entry.promise;
+}
+
+// Una vez por entrada de usuario; showMainApp también cubre la sesión
+// restaurada al abrir la aplicación. No bloquea el acceso al menú.
+function ndwRefreshOnEntry(user) {
+    if (!user) return Promise.resolve();
+    if (window._ndwEntryRefresh?.user === user) return window._ndwEntryRefresh.promise;
+    const entry = { user };
+    window._ndwEntryRefresh = entry;
+    entry.promise = (async () => {
+        const updated = await ndwRefreshManifestSummary(true);
+        if (window._ndwEntryRefresh !== entry) return;
+        const dateKey = document.querySelector('#navdeck-weekly-banner [data-ndw-date]')?.value || ndwPreviousDay();
+        const selected = window._ndwCurrentManifestDays?.[dateKey];
+        if (!updated) {
+            if (selected) selected.refreshError = true;
+            renderNavdeckWeeklyBanner();
+            return;
+        }
+        window.TotalesService?.invalidar?.();
+        window._ndwTotales = null;
+        window._ndwDetalle = {};
+        // Invalidar lecturas anteriores en vuelo y consultar la fecha visible
+        // con los resúmenes recién actualizados, sin repetir el refresco.
+        window._ndwCurrentManifestDays = selected?.totals
+            ? { [dateKey]: { ...selected, status: 'ready', refreshing: false } } : {};
+        await ndwLoadCurrentManifestDay(dateKey, true, false);
+    })().catch((error) => console.warn('[Inicio] No se pudo actualizar al ingresar:', error));
+    return entry.promise;
+}
+
+async function ndwLoadCurrentManifestDay(dateKey, force = false, refreshSummary = true) {
+    const cache = window._ndwCurrentManifestDays ||= {};
+    const existing = cache[dateKey];
+    if (existing?.refreshing || existing?.status === 'loading') return;
+    if (!force && existing?.status === 'ready' && Date.now() - existing.loadedAt < NDW_DAY_TTL) return;
+    const saved = existing?.totals ? existing : ndwReadSavedDay(dateKey);
+    const entry = cache[dateKey] = saved
+        ? { ...saved, refreshing: true, refreshError: false }
+        : { status: 'loading', refreshing: true };
+    const read = async (refresh) => {
+        const porFecha = await window.TotalesService.getDetalleDiario(dateKey, dateKey, { forzar: refresh });
+        if (window._ndwCurrentManifestDays !== cache || cache[dateKey] !== entry) return;
         const totals = porFecha.get(dateKey) || ndwDiaVacio();
-        const count = totals.comercial.operaciones + totals.carga.operaciones;
-        cache[dateKey] = { status: 'ready', totals, count };
+        Object.assign(entry, { status: 'ready', totals,
+            count: totals.comercial.operaciones + totals.carga.operaciones, loadedAt: Date.now() });
+        ndwSaveDay(dateKey, entry);
+    };
+    try {
+        if (!window.TotalesService) throw new Error('No se cargó js/totales-service.js');
+        await read(force || !!saved || existing?.status === 'error');
     } catch (error) {
-        cache[dateKey] = { status: 'error' };
+        Object.assign(entry, { status: entry.totals ? 'ready' : 'error', refreshError: true });
         console.warn('[Inicio Actual] No se pudieron consultar los manifiestos:', error);
     }
+    entry.refreshing = false;
     renderNavdeckWeeklyBanner();
+    if (entry.refreshError || !refreshSummary) return;
+    // La respuesta llega después de pintar. Una búsqueda posterior conserva
+    // su fecha: cada resultado sólo actualiza su propia entrada de caché.
+    ndwRefreshManifestSummary(force).then(async (updated) => {
+        if (!updated || window._ndwCurrentManifestDays !== cache || cache[dateKey] !== entry || entry.refreshing) return;
+        entry.refreshing = true;
+        try { await read(true); }
+        catch (_) { entry.refreshError = true; }
+        finally { entry.refreshing = false; renderNavdeckWeeklyBanner(); }
+    });
 }
 
 function renderNavdeckWeeklyBanner() {
@@ -11645,10 +11769,13 @@ function renderNavdeckWeeklyBanner() {
 
         /* ── selected date and loaded weeks (shared across all modes) ── */
         const _now = new Date();
-        const currentDateKey = NDW_VIEW_STATE.date || `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+        const currentDateKey = NDW_VIEW_STATE.date || ndwPreviousDay();
         const currentDate = parseIsoDay(currentDateKey);
+        const cachedDay = window._ndwCurrentManifestDays?.[currentDateKey];
+        if (mode === 'current' && (!cachedDay || (cachedDay.status === 'ready' && !cachedDay.refreshError && Date.now() - cachedDay.loadedAt >= NDW_DAY_TTL))) {
+            ndwLoadCurrentManifestDay(currentDateKey);
+        }
         const currentManifest = window._ndwCurrentManifestDays?.[currentDateKey];
-        if (mode === 'current' && !currentManifest) ndwLoadCurrentManifestDay(currentDateKey);
         // Mes, Año e Histórico: totales de la capa unificada (oficial + Conciliación).
         if (['monthly', 'annual', 'historic'].includes(mode) && !window._ndwTotales) ndwLoadTotales();
         const totalesInicio = window._ndwTotales;
@@ -11671,15 +11798,17 @@ function renderNavdeckWeeklyBanner() {
         let heroIcon, heroKicker, heroTitle, periodPickerHtml = '';
 
         if (mode === 'current') {
-            /* Actual: manifiestos de la fecha seleccionada, hoy por defecto. */
+            /* Actual: manifiestos de la fecha seleccionada, ayer por defecto. */
             heroIcon   = 'fas fa-bolt';
             heroKicker = 'Cifras del día';
             heroTitle = `${_capitalizar(_DOW_ES[currentDate.getDay()])} ${currentDate.getDate()} de ${_MONTH_NAMES_ES[currentDate.getMonth()]} de ${currentDate.getFullYear()}`;
             periodPickerHtml = `
                 <div class="ndw-current-picker"><label>Fecha de manifiestos <input type="date" data-ndw-date value="${currentDateKey}"></label>
                 <button type="button" data-ndw-refresh>Actualizar cifras</button></div>
-                <p class="ndw-tap-hint" aria-live="polite">${currentManifest?.status === 'ready'
-                    ? (currentManifest.count ? 'Manifiestos de la fecha (su cierre de Subsecretaría o, sin cierre, la fecha del vuelo) · Cifras preliminares' : 'Sin manifiestos para esta fecha')
+                <p class="ndw-tap-hint" aria-live="polite">${currentManifest?.refreshError && currentManifest?.totals
+                    ? 'Últimas cifras consultadas · No se pudo actualizar. Intenta actualizar.'
+                    : currentManifest?.status === 'ready'
+                    ? (currentManifest.count ? 'Manifiestos de la fecha · Cifras preliminares' : 'Sin manifiestos para esta fecha')
                     : currentManifest?.status === 'error' ? 'No fue posible consultar los manifiestos. Intenta actualizar.' : 'Consultando manifiestos…'}</p>
                 <p class="ndw-tap-hint">${escapeHTML(NDW_DETALLE_AYUDA)}</p>`;
         } else if (mode === 'weekly') {
@@ -11876,7 +12005,7 @@ function renderNavdeckWeeklyBanner() {
                     renderNavdeckWeeklyBanner();
                     return;
                 }
-                /* Regresa la vista abierta a su periodo actual: hoy, la semana del
+                /* Regresa la vista abierta a su periodo actual: ayer, la semana del
                    último día capturado, el mes y el año en curso. */
                 if (ev.target.closest('[data-ndw-reset]')) {
                     NDW_VIEW_STATE.date = null;
@@ -12357,7 +12486,7 @@ function openNavdeckAnnualDetail(idx) {
 
 window.renderNavdeckWeeklyBanner = renderNavdeckWeeklyBanner;
 
-// Render inicial + reintentos hasta que los datos semanales estén disponibles
+// Pintar el día anterior al estar listo el DOM, sin esperar el detalle anual.
 (function initNavdeckWeeklyBanner() {
     let tries = 0;
     const tick = () => {
@@ -12367,9 +12496,9 @@ window.renderNavdeckWeeklyBanner = renderNavdeckWeeklyBanner;
         if (!filled && tries < 30) setTimeout(tick, 600);
     };
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => setTimeout(tick, 400));
+        document.addEventListener('DOMContentLoaded', tick);
     } else {
-        setTimeout(tick, 400);
+        tick();
     }
 })();
 
@@ -12974,6 +13103,7 @@ function showMainApp() {
             await rejectOperacionesAccess();
             return;
         }
+        ndwRefreshOnEntry(sessionStorage.getItem(SESSION_USER));
         checkForAppUpdates().catch(() => { });
         const mainWasHidden = main ? main.classList.contains('hidden') : false;
         if (login) login.classList.add('hidden');

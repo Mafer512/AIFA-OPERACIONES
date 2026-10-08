@@ -204,7 +204,7 @@ describe('el banner de inicio', () => {
   // totales: totales mensuales de la capa unificada (Mes, Año, Histórico).
   const sinMes = () => ({ value: 0, hasData: false, lastDate: null });
   const LEYENDA = 'Cifras oficiales hasta agosto 2026 · posteriores: conciliación de manifiestos';
-  function montarBanner({ anual = 0, detalleReal = false, mensual = sinMes, detalle: detalleAnios, totales } = {}) {
+  function montarBanner({ modo = 'weekly', anual = 0, detalleReal = false, mensual = sinMes, detalle: detalleAnios, totales } = {}) {
     window._ndwCurrentManifestDays = {
       '2026-09-15': { status: 'ready', count: 3, totals: {
         comercial: { operaciones: 2, pasajeros: 240 }, carga: { operaciones: 1, toneladas: 3.5 }
@@ -258,6 +258,7 @@ describe('el banner de inicio', () => {
       ${extraer('const NDW_CARD_DEFS = [', '];\n')}
       ${extraer('function ndwFormatValue(', '\n}\n')}
       ${extraer('let NDW_VIEW_STATE = ', ';\n')}
+      ${modo ? `NDW_VIEW_STATE.mode = '${modo}';` : ''}
       ${script.slice(script.indexOf('/* ── Semana del banner'), script.indexOf('async function ndwLoadCurrentManifestDay('))}
       ${extraer('function renderNavdeckWeeklyBanner(', '\n}\n')}
       ${extraer('function ndwHeroImgPorHora(', '\n}\n')}
@@ -438,7 +439,7 @@ describe('el banner de inicio', () => {
       fecha.dispatchEvent(new Event('change', { bubbles: true }));
       expect(titulo()).toBe('Sábado 12 de septiembre de 2026');
       regresar().click();
-      expect(titulo()).toBe('Martes 15 de septiembre de 2026');
+      expect(titulo()).toBe('Lunes 14 de septiembre de 2026');
     } finally {
       jest.useRealTimers();
     }
@@ -528,12 +529,13 @@ describe('el banner de inicio', () => {
     expect(banner.querySelector('.ndw-card-value').classList.contains('ndw-card-value--largo')).toBe(false);
   });
 
-  test('Actual muestra los manifiestos de hoy y permite elegir otro día sin reutilizar cifras anteriores', () => {
+  test('el inicio abre en Día con ayer y permite elegir otra fecha sin reutilizar cifras anteriores', () => {
     jest.useFakeTimers();
-    jest.setSystemTime(new Date('2026-09-15T12:00:00'));
+    jest.setSystemTime(new Date('2026-09-16T12:00:00-06:00'));
     try {
-    const { banner, detalle } = montarBanner();
-    banner.querySelector('[data-ndw-mode="current"]').click();
+    const { banner, detalle } = montarBanner({ modo: null });
+    expect(banner.querySelector('[data-ndw-mode="current"]').getAttribute('aria-pressed')).toBe('true');
+    expect(banner.querySelector('[data-ndw-date]').value).toBe('2026-09-15');
     expect(banner.querySelector('.ndw-hero-kicker').textContent).toBe('Cifras del día');
     expect(banner.querySelector('.ndw-hero-title').textContent).toBe('Martes 15 de septiembre de 2026');
     const valores = [...banner.querySelectorAll('.ndw-card-value')].map((v) => v.textContent);
