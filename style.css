@@ -25624,3 +25624,77 @@ body.navdeck-mode.dark-mode .ndw-card-tag {
 .ndw-current-picker input { background: #fff; color: #172b4d; color-scheme: light; max-width: 100%; }
 .ndw-current-picker button { background: #0d6efd; color: #fff; font-weight: 600; }
 .ndw-current-picker button:focus-visible, .ndw-current-picker input:focus-visible { outline: 3px solid #fbbf24; outline-offset: 3px; }
+
+/* Conciliación › Manifiestos: conteo discreto de filas mostradas, abajo a la
+   derecha de la tabla (script.js: _conciActualizarConteoFilas). */
+.conci-conteo-filas {
+   flex: 0 0 auto;
+   text-align: right;
+   font-size: .72rem;
+   line-height: 1.2;
+   color: #000;
+   padding: 3px 10px 2px;
+   font-variant-numeric: tabular-nums;
+}
+.conci-conteo-filas:empty { display: none; }
+.conci-conteo-filas-avion {
+   font-size: .62rem;
+   margin-right: 5px;
+}
+body.dark-mode .conci-conteo-filas { color: #9aa7b8; }
+
+/* Conciliación › Manifiestos: botones "Ordenar" del cuadro de filtro de cada
+   columna, pequeños y en gris para no saturar el cuadro. */
+.conci-ef-orden .conci-ef-ordenar {
+   font-size: .7rem;
+   padding: 2px 6px;
+   line-height: 1.3;
+   color: #6c757d;
+   background: #f8f9fa;
+   border: 1px solid #e1e4e8;
+}
+.conci-ef-orden .conci-ef-ordenar:hover {
+   color: #495057;
+   background: #eef0f3;
+}
+.conci-ef-orden .conci-ef-ordenar.conci-ef-ordenar-activo {
+   color: #343a40;
+   background: #e2e6ea;
+   border-color: #adb5bd;
+   font-weight: 600;
+}
+.conci-ef-orden .conci-ef-ordenar i { font-size: .65rem; }
+
+/* Conciliación › Manifiestos: pie de la tabla, abajo a la derecha: conteo de
+   vuelos. El botón "Inicio de fila" (Ctrl + Inicio) va en el pie pero flota
+   sobre la tabla, abajo a la derecha, justo arriba de la barra horizontal
+   (15 px, .thick-scrollbar) y a la izquierda de la vertical. */
+.conci-pie-tabla {
+   position: relative;
+   flex: 0 0 auto;
+   display: flex;
+   justify-content: flex-end;
+   align-items: center;
+   gap: 10px;
+   padding: 3px 10px 2px;
+}
+.conci-pie-tabla .conci-conteo-filas { padding: 0; }
+.conci-btn-inicio-fila {
+   position: absolute;
+   right: 25px;
+   bottom: calc(100% + 15px + 6px);
+   z-index: 6;
+   box-shadow: 0 1px 4px rgba(15, 23, 42, .18);
+   font-size: .7rem;
+   line-height: 1.3;
+   padding: 1px 8px;
+   color: #1e3a5f;
+   background: #eef3fb;
+   border: 1px solid #c7d6ee;
+   border-radius: 999px;
+   cursor: pointer;
+}
+.conci-btn-inicio-fila:hover { background: #dfe9f8; border-color: #9fb8e0; }
+.conci-btn-inicio-fila:focus-visible { outline: 2px solid #0d6efd; outline-offset: 1px; }
+.conci-btn-inicio-fila i { font-size: .62rem; margin-right: 3px; }
+body.dark-mode .conci-btn-inicio-fila { color: #dbe6f5; background: #23324a; border-color: #3a5174; }
