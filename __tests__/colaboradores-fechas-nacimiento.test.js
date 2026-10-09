@@ -39,7 +39,7 @@ describe('correccion masiva de fechas de nacimiento', () => {
         expect(html).toContain("onomastico:      find('^fecha\\\\s+de\\\\s+nacimiento$'");
         expect(html).toContain("fillField('cf-onomastico', colabFormatBirthDateDisplay(rawOnom))");
         expect(html).toContain("'ce-onomastico':'onomastico'");
-        expect(html).toContain("'onomastico':'Onomástico'");
+        expect(html).toContain("'onomastico':'F. Nacimiento'");
     });
 
     test('presenta fechas uniformes y los faltantes como Sin información', () => {

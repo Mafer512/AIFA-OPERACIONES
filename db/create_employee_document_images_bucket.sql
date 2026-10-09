@@ -1,6 +1,6 @@
 -- ============================================================
 -- BUCKET PRIVADO: employee-document-images
--- INE frente/reverso y TIA/Credencial de colaboradores.
+-- INE frente/reverso, TIA/Credencial y licencia de manejo de colaboradores.
 -- Ejecutar en Supabase > SQL Editor.
 -- ============================================================
 
@@ -50,7 +50,7 @@ CREATE POLICY "employee_document_images_select"
   USING (
     bucket_id = 'employee-document-images'
     AND public.is_colab_editor()
-    AND name ~ '^[A-Za-z0-9_-]{1,64}/(ine_front|ine_back|credential)-[A-Za-z0-9_-]+\.(jpg|png)$'
+    AND name ~ '^[A-Za-z0-9_-]{1,64}/(ine_front|ine_back|credential|license)-[A-Za-z0-9_-]+\.(jpg|png)$'
   );
 
 CREATE POLICY "employee_document_images_insert"
@@ -58,7 +58,7 @@ CREATE POLICY "employee_document_images_insert"
   WITH CHECK (
     bucket_id = 'employee-document-images'
     AND public.is_colab_editor()
-    AND name ~ '^[A-Za-z0-9_-]{1,64}/(ine_front|ine_back|credential)-[A-Za-z0-9_-]+\.(jpg|png)$'
+    AND name ~ '^[A-Za-z0-9_-]{1,64}/(ine_front|ine_back|credential|license)-[A-Za-z0-9_-]+\.(jpg|png)$'
   );
 
 CREATE POLICY "employee_document_images_update"
@@ -66,12 +66,12 @@ CREATE POLICY "employee_document_images_update"
   USING (
     bucket_id = 'employee-document-images'
     AND public.is_colab_editor()
-    AND name ~ '^[A-Za-z0-9_-]{1,64}/(ine_front|ine_back|credential)-[A-Za-z0-9_-]+\.(jpg|png)$'
+    AND name ~ '^[A-Za-z0-9_-]{1,64}/(ine_front|ine_back|credential|license)-[A-Za-z0-9_-]+\.(jpg|png)$'
   )
   WITH CHECK (
     bucket_id = 'employee-document-images'
     AND public.is_colab_editor()
-    AND name ~ '^[A-Za-z0-9_-]{1,64}/(ine_front|ine_back|credential)-[A-Za-z0-9_-]+\.(jpg|png)$'
+    AND name ~ '^[A-Za-z0-9_-]{1,64}/(ine_front|ine_back|credential|license)-[A-Za-z0-9_-]+\.(jpg|png)$'
   );
 
 CREATE POLICY "employee_document_images_delete"
@@ -79,7 +79,7 @@ CREATE POLICY "employee_document_images_delete"
   USING (
     bucket_id = 'employee-document-images'
     AND public.is_colab_editor()
-    AND name ~ '^[A-Za-z0-9_-]{1,64}/(ine_front|ine_back|credential)-[A-Za-z0-9_-]+\.(jpg|png)$'
+    AND name ~ '^[A-Za-z0-9_-]{1,64}/(ine_front|ine_back|credential|license)-[A-Za-z0-9_-]+\.(jpg|png)$'
   );
 
 COMMIT;

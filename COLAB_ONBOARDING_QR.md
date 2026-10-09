@@ -72,7 +72,7 @@ enlace y su fecha de expiración (30 días).
 Son obligatorios para generar el QR, y en el formulario de alta llevan un icono
 de código QR junto a su etiqueta:
 
-- **Generales**: No. Empleado, Nombre completo, Puesto
+- **Generales**: No. Empleado, Nombre completo, Puesto, Fecha de ingreso
 - **Clasificación**: Nivel, Plaza
 - **Organización**: Dirección, Subdirección, Gerencia, Coordinación
 
@@ -121,17 +121,60 @@ Excel original, con puntos, espacios y acentos— sino que los detectan por
 patrones, igual que hace el directorio en `index.html`.
 
 Se actualiza lo que el colaborador captura: profesión, grado académico, matrícula,
-cédula, turno, militar/civil, comisionado, CURP, RFC, NSS, domicilio, estado
-civil, dependientes, tipo de sangre, alergias, celular, extensión, correos,
-fecha de ingreso, fecha de nacimiento, licencias y vigencias, contactos de
-emergencia, CV, INE frente, INE reverso y TIA, más
-`onboarding_actualizado_en` y `onboarding_estado`.
+cédula, militar/civil, CURP, RFC, NSS, domicilio, estado civil, hijos, tipo de
+sangre, alergias, rúbrica, celular, correo personal, fecha de nacimiento,
+licencias y vigencias, contactos de emergencia, CV, INE frente, INE reverso y
+TIA, más `onboarding_actualizado_en` y `onboarding_estado`.
+
+- **Domicilio**: se pide por partes (calle, número, colonia y código postal) y se
+  guarda en la misma columna con un formato fijo que se puede volver a partir:
+  `Av. Reforma No. 123, Col. Centro, C.P. 55600`. Para finalizar hacen falta las
+  cuatro partes. Un domicilio viejo capturado en una sola línea aparece en
+  "Calle" con un aviso para que lo separen.
+- **Rúbrica**: se llena sola con las iniciales del nombre (una por palabra, sin
+  acentos ni partículas como "de la"). Se puede cambiar; abajo dice si es
+  automática o manual y ofrece volver a la automática. Igual en el alta y la
+  edición de `index.html`.
+
+## Identificaciones y documentos
+
+- Cada foto va junto a sus datos: **INE** (vigencia como año + frente y reverso,
+  obligatorios), **licencia de manejo** (¿tiene? Sí/No; si sí: tipo, vigencia o
+  "Permanente" y foto opcional) y **TIA / credencial** (vigencia y foto, cuando se
+  la entreguen). Lo hace [js/documento-foto.js](js/documento-foto.js).
+- Las fotos se pueden **tomar con la cámara** del celular o subir de la galería.
+  Al recibirlas se revisa si salieron oscuras, con reflejo, borrosas o muy chicas,
+  y se avisa sin bloquear.
+- El **CV sólo se acepta en PDF** de hasta 5 MB; se revisa la firma del archivo,
+  no sólo la extensión.
+- "Licencia de Manejo" es un sí/no. Tipo y vigencia se piden sólo a quien dice que
+  sí; la vigencia de la TIA ya no es obligatoria. La foto de la licencia va a la
+  columna existente "Fotografia de licencia".
+- Para que el área también suba la foto de la licencia desde la edición, corre de
+  nuevo [db/create_employee_document_images_bucket.sql](db/create_employee_document_images_bucket.sql)
+  (agrega el tipo `license` a las reglas del almacenamiento).
+
+## Datos que sólo captura el área
+
+RyR (fecha desde la que la tiene), turno, comisionado, fecha de ingreso,
+documento de ingreso, extensión y correo institucional **no aparecen en el
+portal**. En el alta llevan un candado morado.
+
+- La **fecha de ingreso** es obligatoria para generar el QR (va en el modal de
+  faltantes, como DD/MM/AAAA válida).
+- Al generar el QR viajan en `metadata -> 'admin'`. `get_colab_onboarding` no
+  devuelve ni esos campos ni la metadata.
+- `save_colab_onboarding` ignora lo que llegue del portal para esas claves
+  (`admin_keys`) y sólo los escribe desde la metadata cuando el expediente
+  todavía no los tiene: lo que corrija después el área no se pisa.
+
+Si `agenda_2026` no tiene columna de RyR o de turno, el script las crea.
 
 Los nueve campos bloqueados también se escriben en cada guardado, pero con el
 valor que resolvió el servidor, no con el que mandó el portal.
 
-Los campos cuya columna no existe en la tabla (hoy `turno`, `ryr` y `grado`) se
-omiten sin romper el guardado, y tampoco se exigen para finalizar.
+Los campos cuya columna no existe en la tabla se omiten sin romper el guardado,
+y tampoco se exigen para finalizar.
 
 ## Estado de completitud
 

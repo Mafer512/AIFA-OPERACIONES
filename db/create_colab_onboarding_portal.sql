@@ -11,6 +11,26 @@ ALTER TABLE public.agenda_2026
   ADD COLUMN IF NOT EXISTS onboarding_actualizado_en timestamptz,
   ADD COLUMN IF NOT EXISTS onboarding_estado TEXT DEFAULT 'pendiente';
 
+-- RyR (fecha desde la que la tiene) y turno los captura el area de personal.
+-- Las funciones encuentran las columnas por patron; si la tabla no trae ninguna
+-- que case, lo capturado se perdia sin aviso. Se crean solo si no hay ya una.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'agenda_2026' AND column_name ~* 'ryr'
+  ) THEN
+    ALTER TABLE public.agenda_2026 ADD COLUMN "RyR" TEXT;
+    COMMENT ON COLUMN public.agenda_2026."RyR" IS 'Fecha desde la que tiene RyR (DD/MM/AAAA)';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'agenda_2026' AND column_name ~* '^turno$'
+  ) THEN
+    ALTER TABLE public.agenda_2026 ADD COLUMN "Turno" TEXT;
+  END IF;
+END $$;
+
 COMMENT ON COLUMN public.agenda_2026.foto_ine IS 'Data URL o URL publica del INE frente';
 COMMENT ON COLUMN public.agenda_2026.foto_ine_rev IS 'Data URL o URL publica del INE reverso';
 COMMENT ON COLUMN public.agenda_2026.foto_cred IS 'Data URL o URL publica de TIA/credencial';
@@ -207,6 +227,7 @@ DECLARE
   col_turno text;
   col_ryr text;
   col_grado text;
+  col_sit_mil text;
   col_matricula text;
   col_cedula text;
   col_comisionado text;
@@ -247,6 +268,7 @@ DECLARE
   col_f_ine text;
   col_f_ine_rev text;
   col_f_tia text;
+  col_f_lic text;
   row_json jsonb;
   v_nombre text;
   v_puesto text;
@@ -277,7 +299,8 @@ BEGIN
   col_plaza      := public._agenda_col_by_patterns(ARRAY['^plaza$']);
   col_turno      := public._agenda_col_by_patterns(ARRAY['^turno$']);
   col_ryr        := public._agenda_col_by_patterns(ARRAY['ryr']);
-  col_grado      := public._agenda_col_by_patterns(ARRAY['^grado$']);
+  col_grado      := public._agenda_col_by_patterns(ARRAY['^grado$', 'grado.*militar']);
+  col_sit_mil    := public._agenda_col_by_patterns(ARRAY['activo.*retirado', 'situaci[oó]n.*militar']);
   col_matricula  := public._agenda_col_by_patterns(ARRAY['matr[íi]cula', 'matricula']);
   col_cedula     := public._agenda_col_by_patterns(ARRAY['c[eé]dula']);
   col_comisionado:= public._agenda_col_by_patterns(ARRAY['^personal\s+comisionado$', 'comision']);
@@ -318,6 +341,8 @@ BEGIN
   col_f_ine      := public._agenda_col_by_patterns(ARRAY['foto.*ine', 'ine.*frente']);
   col_f_ine_rev  := public._agenda_col_by_patterns(ARRAY['ine.*rev', 'rev.*ine', 'ine.*reverso']);
   col_f_tia      := public._agenda_col_by_patterns(ARRAY['foto.*cred', 'cred.*foto', 'fotograf[ií]a.*tia', 'foto.*tia']);
+  -- La columna ya existe en agenda_2026: "Fotografia de licencia".
+  col_f_lic      := public._agenda_col_by_patterns(ARRAY['fotograf[ií]a.*lic', 'foto.*lic']);
 
   IF col_num IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'error', 'No se detecto columna de numero de empleado en agenda_2026');
@@ -355,7 +380,9 @@ BEGIN
       'coordinacion', COALESCE(v_coordinacion, '')
     ),
     'locked_fields', jsonb_build_array('num_empleado', 'nombre', 'puesto', 'nivel', 'plaza', 'direccion', 'subdireccion', 'gerencia', 'coordinacion'),
-    'metadata', lnk.metadata,
+    -- Ni la metadata del link ni los datos del area (RyR, turno, comisionado,
+    -- fecha y doc. de ingreso, extension, correo institucional) salen al portal:
+    -- son del area de personal y el colaborador no los ve.
     'data', jsonb_build_object(
       'nombre', COALESCE(v_nombre, ''),
       'puesto', COALESCE(v_puesto, ''),
@@ -363,12 +390,10 @@ BEGIN
       'militar', COALESCE(row_json ->> col_militar, ''),
       'nivel', COALESCE(v_nivel, ''),
       'plaza', COALESCE(v_plaza, ''),
-      'turno', COALESCE(row_json ->> col_turno, ''),
-      'ryr', COALESCE(row_json ->> col_ryr, ''),
       'grado', COALESCE(row_json ->> col_grado, ''),
+      'situacion_militar', COALESCE(row_json ->> col_sit_mil, ''),
       'matricula', COALESCE(row_json ->> col_matricula, ''),
       'cedula', COALESCE(row_json ->> col_cedula, ''),
-      'comisionado', COALESCE(row_json ->> col_comisionado, ''),
       'direccion', COALESCE(v_direccion, ''),
       'subdireccion', COALESCE(v_subdireccion, ''),
       'gerencia', COALESCE(v_gerencia, ''),
@@ -380,10 +405,7 @@ BEGIN
       'vig_ine', COALESCE(row_json ->> col_vig_ine, ''),
       'curp', COALESCE(row_json ->> col_curp, ''),
       'celular', COALESCE(row_json ->> col_cel, ''),
-      'extension', COALESCE(row_json ->> col_extension, ''),
-      'correo', COALESCE(row_json ->> col_correo, ''),
       'correo_personal', COALESCE(row_json ->> col_correo_pers, ''),
-      'fecha_ingreso', COALESCE(row_json ->> col_fecha_ing, ''),
       'onomastico', COALESCE(row_json ->> col_onom, ''),
       'cv_url', COALESCE(row_json ->> col_cv_url, ''),
       'grado_academico', COALESCE(row_json ->> col_grado_acad, ''),
@@ -396,7 +418,6 @@ BEGIN
       'alerg_med', COALESCE(row_json ->> col_alerg_med, ''),
       'alerg_ali', COALESCE(row_json ->> col_alerg_ali, ''),
       'rubrica', COALESCE(row_json ->> col_rubrica, ''),
-      'doc_ingreso', COALESCE(row_json ->> col_doc_ingreso, ''),
       'c1_nombre', COALESCE(row_json ->> col_c1_nombre, ''),
       'c1_parentesco', COALESCE(row_json ->> col_c1_parentesco, ''),
       'c1_tel', COALESCE(row_json ->> col_c1_tel, ''),
@@ -405,7 +426,8 @@ BEGIN
       'c2_tel', COALESCE(row_json ->> col_c2_tel, ''),
       'foto_ine', COALESCE(row_json ->> col_f_ine, ''),
       'foto_ine_rev', COALESCE(row_json ->> col_f_ine_rev, ''),
-      'foto_cred', COALESCE(row_json ->> col_f_tia, '')
+      'foto_cred', COALESCE(row_json ->> col_f_tia, ''),
+      'foto_licencia', COALESCE(row_json ->> col_f_lic, '')
     )
   );
 END;
@@ -437,6 +459,7 @@ DECLARE
   col_turno text;
   col_ryr text;
   col_grado text;
+  col_sit_mil text;
   col_matricula text;
   col_cedula text;
   col_comisionado text;
@@ -477,6 +500,7 @@ DECLARE
   col_f_ine text;
   col_f_ine_rev text;
   col_f_tia text;
+  col_f_lic text;
   col_ob_upt text;
   col_ob_sta text;
 
@@ -490,6 +514,11 @@ DECLARE
   locked_val text;
   locked_resolved jsonb := '{}'::jsonb;
   locked_missing text[] := ARRAY[]::text[];
+  -- Los captura el area de personal en el alta; el portal ya no los muestra.
+  admin_keys text[] := ARRAY['fecha_ingreso', 'ryr', 'turno', 'comisionado', 'doc_ingreso', 'extension', 'correo'];
+  admin_key text;
+  admin_col text;
+  admin_val text;
   kv record;
   set_sql text := '';
   cols_sql text := '';
@@ -497,10 +526,14 @@ DECLARE
   -- Los campos de locked_keys no se validan aqui: los resuelve el servidor y su
   -- ausencia se reporta aparte, porque el colaborador no puede corregirlos.
   required_keys text[] := ARRAY[
-    'profesion', 'grado_academico', 'matricula', 'cedula', 'ryr', 'turno', 'militar', 'comisionado',
-    'curp', 'celular', 'extension', 'correo_personal', 'fecha_ingreso', 'onomastico',
+    -- La matrícula es la militar y el grado también: se piden aparte, sólo a
+    -- quien es militar. La cédula profesional no la tiene todo el personal.
+    'profesion', 'grado_academico', 'militar',
+    'curp', 'celular', 'correo_personal', 'onomastico',
     'cv_url', 'sangre', 'domicilio', 'rfc', 'nss',
-    'estado_civil', 'dependientes', 'alerg_med', 'alerg_ali', 'licencia', 'licencia_tipo', 'vig_licencia', 'vig_credencial', 'vig_ine', 'rubrica', 'doc_ingreso',
+    -- Tipo y vigencia de la licencia se piden aparte, sólo a quien sí tiene; la
+    -- vigencia de la TIA no, porque la credencial se entrega después del alta.
+    'estado_civil', 'dependientes', 'alerg_med', 'alerg_ali', 'licencia', 'vig_ine', 'rubrica',
     'c1_nombre', 'c1_parentesco', 'c1_tel', 'c2_nombre', 'c2_parentesco', 'c2_tel',
     -- De los documentos solo se exigen el CV y las dos caras de la INE. La foto
     -- de la TIA (foto_cred) queda fuera a proposito: la credencial se entrega
@@ -534,7 +567,8 @@ BEGIN
   col_plaza        := public._agenda_col_by_patterns(ARRAY['^plaza$']);
   col_turno        := public._agenda_col_by_patterns(ARRAY['^turno$']);
   col_ryr          := public._agenda_col_by_patterns(ARRAY['ryr']);
-  col_grado        := public._agenda_col_by_patterns(ARRAY['^grado$']);
+  col_grado        := public._agenda_col_by_patterns(ARRAY['^grado$', 'grado.*militar']);
+  col_sit_mil      := public._agenda_col_by_patterns(ARRAY['activo.*retirado', 'situaci[oó]n.*militar']);
   col_matricula    := public._agenda_col_by_patterns(ARRAY['matr[íi]cula', 'matricula']);
   col_cedula       := public._agenda_col_by_patterns(ARRAY['c[eé]dula']);
   col_comisionado  := public._agenda_col_by_patterns(ARRAY['^personal\s+comisionado$', 'comision']);
@@ -575,6 +609,7 @@ BEGIN
   col_f_ine        := public._agenda_col_by_patterns(ARRAY['foto.*ine', 'ine.*frente']);
   col_f_ine_rev    := public._agenda_col_by_patterns(ARRAY['ine.*rev', 'rev.*ine', 'ine.*reverso']);
   col_f_tia        := public._agenda_col_by_patterns(ARRAY['foto.*cred', 'cred.*foto', 'fotograf[ií]a.*tia', 'foto.*tia']);
+  col_f_lic        := public._agenda_col_by_patterns(ARRAY['fotograf[ií]a.*lic', 'foto.*lic']);
   col_ob_upt       := public._agenda_col_by_patterns(ARRAY['onboarding_actualizado_en']);
   col_ob_sta       := public._agenda_col_by_patterns(ARRAY['onboarding_estado']);
 
@@ -686,6 +721,22 @@ BEGIN
       END IF;
     END LOOP;
 
+    IF lower(btrim(COALESCE(p_payload ->> 'militar', ''))) ~ '^mil'
+       AND col_grado IS NOT NULL AND btrim(COALESCE(p_payload ->> 'grado', '')) = '' THEN
+      missing_fields := array_append(missing_fields, 'grado');
+    END IF;
+
+    -- "Licencia de Manejo" es un sí/no. Antes se exigían tipo y vigencia a todos,
+    -- y quien no maneja no podía cerrar su registro.
+    IF lower(btrim(COALESCE(p_payload ->> 'licencia', ''))) ~ '^s' THEN
+      IF col_licencia_tipo IS NOT NULL AND btrim(COALESCE(p_payload ->> 'licencia_tipo', '')) = '' THEN
+        missing_fields := array_append(missing_fields, 'licencia_tipo');
+      END IF;
+      IF col_vig_licencia IS NOT NULL AND btrim(COALESCE(p_payload ->> 'vig_licencia', '')) = '' THEN
+        missing_fields := array_append(missing_fields, 'vig_licencia');
+      END IF;
+    END IF;
+
     IF array_length(missing_fields, 1) IS NOT NULL THEN
       RETURN jsonb_build_object(
         'ok', false,
@@ -695,22 +746,51 @@ BEGIN
     END IF;
   END IF;
 
+  -- Datos del area (admin_keys). Lo que mande el portal para estas claves se
+  -- ignora. Si el expediente ya los tiene no se tocan; si todavia no existe o
+  -- los trae vacios, se toman de lo que capturo el area al generar el QR
+  -- (metadata -> 'admin').
+  FOR i IN 1..COALESCE(array_length(admin_keys, 1), 0) LOOP
+    admin_key := admin_keys[i];
+    admin_col := CASE admin_key
+      WHEN 'fecha_ingreso' THEN col_fecha_ing
+      WHEN 'ryr' THEN col_ryr
+      WHEN 'turno' THEN col_turno
+      WHEN 'comisionado' THEN col_comisionado
+      WHEN 'doc_ingreso' THEN col_doc_ingreso
+      WHEN 'extension' THEN col_extension
+      WHEN 'correo' THEN col_correo
+      ELSE NULL
+    END;
+
+    IF admin_col IS NULL THEN
+      CONTINUE;
+    END IF;
+
+    EXECUTE format('SELECT nullif(btrim(%I::text), '''') FROM public.agenda_2026 WHERE %I = $1 LIMIT 1', admin_col, col_num)
+      INTO admin_val
+      USING lnk.num_empleado;
+
+    IF admin_val IS NULL THEN
+      admin_val := nullif(btrim(COALESCE(lnk.metadata -> 'admin' ->> admin_key, '')), '');
+      IF admin_val IS NOT NULL THEN
+        db_payload := db_payload || jsonb_build_object(admin_col, admin_val);
+      END IF;
+    END IF;
+  END LOOP;
+
   db_payload := db_payload || jsonb_build_object(col_num, lnk.num_empleado);
 
   IF p_payload ? 'profesion'       AND col_profesion IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_profesion,   nullif(btrim(p_payload->>'profesion'), '')); END IF;
   IF p_payload ? 'grado_academico' AND col_grado_acad IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_grado_acad,   nullif(btrim(p_payload->>'grado_academico'), '')); END IF;
+  IF p_payload ? 'grado'           AND col_grado IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_grado,       nullif(btrim(p_payload->>'grado'), '')); END IF;
+  IF p_payload ? 'situacion_militar' AND col_sit_mil IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_sit_mil,   nullif(btrim(p_payload->>'situacion_militar'), '')); END IF;
   IF p_payload ? 'matricula'       AND col_matricula IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_matricula,   nullif(btrim(p_payload->>'matricula'), '')); END IF;
   IF p_payload ? 'cedula'          AND col_cedula IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_cedula,      nullif(btrim(p_payload->>'cedula'), '')); END IF;
-  IF p_payload ? 'ryr'             AND col_ryr IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_ryr,         nullif(btrim(p_payload->>'ryr'), '')); END IF;
-  IF p_payload ? 'turno'           AND col_turno IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_turno,       nullif(btrim(p_payload->>'turno'), '')); END IF;
   IF p_payload ? 'militar'         AND col_militar IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_militar,     nullif(btrim(p_payload->>'militar'), '')); END IF;
-  IF p_payload ? 'comisionado'     AND col_comisionado IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_comisionado, nullif(btrim(p_payload->>'comisionado'), '')); END IF;
   IF p_payload ? 'curp'            AND col_curp IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_curp,         nullif(btrim(p_payload->>'curp'), '')); END IF;
   IF p_payload ? 'celular'         AND col_cel IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_cel,          nullif(btrim(p_payload->>'celular'), '')); END IF;
-  IF p_payload ? 'extension'       AND col_extension IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_extension,    nullif(btrim(p_payload->>'extension'), '')); END IF;
-  IF p_payload ? 'correo'          AND col_correo IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_correo,       nullif(btrim(p_payload->>'correo'), '')); END IF;
   IF p_payload ? 'correo_personal' AND col_correo_pers IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_correo_pers, nullif(btrim(p_payload->>'correo_personal'), '')); END IF;
-  IF p_payload ? 'fecha_ingreso'   AND col_fecha_ing IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_fecha_ing,   nullif(btrim(p_payload->>'fecha_ingreso'), '')); END IF;
   IF p_payload ? 'onomastico'      AND col_onom IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_onom,         nullif(btrim(p_payload->>'onomastico'), '')); END IF;
   IF p_payload ? 'cv_url'          AND col_cv_url IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_cv_url,       nullif(btrim(p_payload->>'cv_url'), '')); END IF;
   IF p_payload ? 'sangre'          AND col_sangre IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_sangre,       nullif(btrim(p_payload->>'sangre'), '')); END IF;
@@ -727,7 +807,6 @@ BEGIN
   IF p_payload ? 'vig_credencial'  AND col_vig_credencial IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_vig_credencial, nullif(btrim(p_payload->>'vig_credencial'), '')); END IF;
   IF p_payload ? 'vig_ine'         AND col_vig_ine IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_vig_ine,       nullif(btrim(p_payload->>'vig_ine'), '')); END IF;
   IF p_payload ? 'rubrica'         AND col_rubrica IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_rubrica,     nullif(btrim(p_payload->>'rubrica'), '')); END IF;
-  IF p_payload ? 'doc_ingreso'     AND col_doc_ingreso IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_doc_ingreso, nullif(btrim(p_payload->>'doc_ingreso'), '')); END IF;
   IF p_payload ? 'c1_nombre'       AND col_c1_nombre IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_c1_nombre,    nullif(btrim(p_payload->>'c1_nombre'), '')); END IF;
   IF p_payload ? 'c1_parentesco'   AND col_c1_parentesco IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_c1_parentesco, nullif(btrim(p_payload->>'c1_parentesco'), '')); END IF;
   IF p_payload ? 'c1_tel'          AND col_c1_tel IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_c1_tel,       nullif(btrim(p_payload->>'c1_tel'), '')); END IF;
@@ -737,6 +816,7 @@ BEGIN
   IF p_payload ? 'foto_ine'        AND col_f_ine IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_f_ine,        nullif(p_payload->>'foto_ine', '')); END IF;
   IF p_payload ? 'foto_ine_rev'    AND col_f_ine_rev IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_f_ine_rev,    nullif(p_payload->>'foto_ine_rev', '')); END IF;
   IF p_payload ? 'foto_cred'       AND col_f_tia IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_f_tia,        nullif(p_payload->>'foto_cred', '')); END IF;
+  IF p_payload ? 'foto_licencia'   AND col_f_lic IS NOT NULL THEN db_payload := db_payload || jsonb_build_object(col_f_lic,        nullif(p_payload->>'foto_licencia', '')); END IF;
 
   IF col_ob_upt IS NOT NULL THEN
     db_payload := db_payload || jsonb_build_object(col_ob_upt, to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SSOF'));
