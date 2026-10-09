@@ -149,6 +149,26 @@
 
     const dosDigitos = n => String(n).padStart(2, '0');
 
+    /** AAAA-MM-DD de hoy, en la hora local. */
+    function hoyIso() {
+        const h = new Date();
+        return `${h.getFullYear()}-${dosDigitos(h.getMonth() + 1)}-${dosDigitos(h.getDate())}`;
+    }
+
+    /**
+     * Hasta qué cierre se leen los manifiestos: hoy, o la fecha pedida si es
+     * posterior. Las Plantillas van por FECHA y, como la Numeralia del libro,
+     * cuentan lo cerrado hasta el día en que se generan: los vuelos del 29 y
+     * 30 se cierran el 1 o el 2 del mes siguiente y la Numeralia de ese mes
+     * los trae. El oficio de Subsecretaría no cambia: agregar() sólo le suma
+     * lo cerrado hasta la fecha pedida.
+     */
+    const corteDeLectura = fechaIso => (fechaIso > hoyIso() ? fechaIso : hoyIso());
+
+    /** La "Fecha de actualización" de las Plantillas: hasta dónde se leyó. */
+    const fechaActualizacion = datos => (datos.actualizacionIso && datos.actualizacionIso > datos.fechaIso
+        ? datos.actualizacionIso : datos.fechaIso);
+
     /** AAAA-MM-DD del día anterior, cruzando mes y año. */
     function diaAnterior(iso) {
         const [a, m, d] = iso.split('-').map(Number);
@@ -325,11 +345,16 @@
         const anioSub = anio;
         const mesSub = mes;
         const cierres = { anterior: diaAnterior(fechaIso), actual: fechaIso };
+        // Los acumulados parten del saldo oficial (js/conci-saldos-oficio.js):
+        // se calcula también la columna de su fecha para saber cuánto le falta
+        // a la base, y esa diferencia se aplica a las dos columnas del oficio.
+        const saldos = window.ConciSaldosOficio && window.ConciSaldosOficio.pasajeros ? window.ConciSaldosOficio : null;
+        if (saldos) cierres.saldo = saldos.fecha;
 
         // Subsecretaría: por columna, LLEGADA/SALIDA × NACIONAL/INTERNACIONAL
         // en cada alcance.
         const sub = {};
-        for (const clave of ['anterior', 'actual']) {
+        for (const clave of Object.keys(cierres)) {
             sub[clave] = {};
             for (const alcance of ['dia', 'mes', 'anio', 'historico']) {
                 sub[clave][alcance] = {
@@ -399,7 +424,7 @@
                 const columna = esInternacional(operacion) ? 'INTERNACIONAL' : 'NACIONAL';
                 // El libro cuenta AEROLINEA, no filas.
                 const opDelta = cuentaSiHay(columnas.aerolinea ? fila[columnas.aerolinea] : '') ? signo : 0;
-                for (const clave of ['anterior', 'actual']) {
+                for (const clave of Object.keys(cierres)) {
                     const corte = cierres[clave];
                     if (cierre > corte) continue;
                     const suma = alcance => {
@@ -432,12 +457,29 @@
             // expediente operativo; simplemente no reescribe un informe.
             if (esAjuste) continue;
 
+            // Como en el libro: a las Plantillas entra lo cerrado (CIERRE
+            // SUBSECRETARIA) y lo cargado del libro aunque no traiga cierre
+            // (cierre_aerolinea_reportada: p. ej. vuelos del 31/08 que el libro
+            // de agosto cuenta en su Plantilla pero en ningún oficio). Una copia
+            // vieja sin cierre o una captura a medias no entra: duplicaba días
+            // enteros de la Plantilla 2.
+            const delLibro = columnas.aerolineaReportada && String(fila[columnas.aerolineaReportada] ?? '').trim();
+            if (!cierre && !delLibro) continue;
+
             const fecha = aIso(columnas.fecha ? fila[columnas.fecha] : '');
             if (!fecha || fecha > fechaIso) continue;
 
+            // "EDICIÓN POSTERIOR": renglón añadido para cuadrar las Plantillas
+            // con la Numeralia oficial cuando el libro no trae el detalle. No
+            // es un vuelo: si su TOTAL PAX es negativo, RESTA una operación
+            // (el oficial tiene uno menos ese día). Va sin cierre, así que
+            // nunca entra a un oficio.
+            const edicionPosterior = normaliza(delLibro || '') === 'EDICION POSTERIOR';
+            const opsFila = edicionPosterior && pax < 0 ? -signo : signo;
+
             if (fecha.startsWith(prefijoAnio)) {
                 anioPlantillas.pax += pax;
-                anioPlantillas.ops += cuentaSiHay(tipo) ? signo : 0;
+                anioPlantillas.ops += cuentaSiHay(tipo) ? opsFila : 0;
             }
 
             if (fecha === fechaIso || fecha.startsWith(prefijoMes)) {
@@ -452,7 +494,7 @@
                         acc.pax += pax;
                         // El libro cuenta TIPO DE OPERACIÓN en el bloque del día
                         // y AEROLINEA en el acumulado; aquí ambos existen.
-                        acc.ops += (alcance === 'dia' ? cuentaSiHay(operacion) : true) ? signo : 0;
+                        acc.ops += (alcance === 'dia' ? cuentaSiHay(operacion) : true) ? opsFila : 0;
                         // El código capturado se guarda para el tooltip, igual
                         // que hace la celda de aerolínea en la tabla.
                         if (bruto && bruto.toUpperCase() !== aerolinea) acc.codigos.add(bruto.toUpperCase());
@@ -469,17 +511,48 @@
                 if (casilla) {
                     const carril = llegada ? 'llegada' : 'salida';
                     casilla.pax[carril] += pax;
-                    casilla.ops[carril] += cuentaSiHay(tipo) ? signo : 0;
+                    casilla.ops[carril] += cuentaSiHay(tipo) ? opsFila : 0;
                     casilla.hayDatos = true;
                 }
             }
         }
 
+        if (saldos) aplicarSaldos(sub, cierres, saldos);
+
         return {
             sub, cierres, anioSub, mesSub,
             porAerolinea, porDia, anioPlantillas,
-            anio, mes, fechaIso, descartadosCarga, invalidos, totalFilas: filas.length
+            anio, mes, fechaIso, descartadosCarga, invalidos, totalFilas: filas.length,
+            actualizacionIso: datos.hasta || fechaIso
         };
+    }
+
+    /**
+     * Ajusta los acumulados al saldo oficial. Diferencia = oficio de la fecha
+     * del saldo − lo que la base da a esa fecha; se suma a cada columna en los
+     * alcances que comparte con el saldo (el mes si es el mismo mes, el año si
+     * es el mismo año, desde el inicio siempre). Va en el carril de LLEGADA:
+     * los acumulados sólo se muestran por nacional e internacional. Quita la
+     * columna auxiliar del saldo.
+     */
+    function aplicarSaldos(sub, cierres, saldos) {
+        for (const alcance of ['mes', 'anio', 'historico']) {
+            const oficial = saldos.pasajeros[alcance];
+            const base = totalesSub(sub.saldo[alcance]);
+            const dif = {
+                NACIONAL: { pax: oficial.pax.nacional - base.nacional.pax, ops: oficial.ops.nacional - base.nacional.ops },
+                INTERNACIONAL: { pax: oficial.pax.internacional - base.internacional.pax, ops: oficial.ops.internacional - base.internacional.ops }
+            };
+            for (const clave of ['anterior', 'actual']) {
+                if (!saldos.aplica(alcance, cierres[clave])) continue;
+                for (const lado of ['NACIONAL', 'INTERNACIONAL']) {
+                    sub[clave][alcance].LLEGADA[lado].pax += dif[lado].pax;
+                    sub[clave][alcance].LLEGADA[lado].ops += dif[lado].ops;
+                }
+            }
+        }
+        delete sub.saldo;
+        delete cierres.saldo;
     }
 
     /* ── render ─────────────────────────────────────────────────────────── */
@@ -655,10 +728,23 @@
      * Se usa en los tres sitios que dibujan o cuentan esos renglones (pantalla,
      * Excel y el cálculo de los offsets data-xl), para que no puedan divergir.
      */
+    // Renglones que suman al TOTAL pero no se muestran ni se descargan:
+    // "EDICIÓN POSTERIOR" son los ajustes para cuadrar con la Numeralia
+    // oficial cuando el libro no trae el detalle (no son una aerolínea).
+    const OCULTAS_PLANTILLA1 = new Set(['EDICION POSTERIOR']);
+
     function entradasVisibles(mapa) {
         return [...mapa.entries()]
-            .filter(([, v]) => v.pax !== 0 || v.ops !== 0)
+            .filter(([a, v]) => (v.pax !== 0 || v.ops !== 0) && !OCULTAS_PLANTILLA1.has(normaliza(a)))
             .sort((a, b) => a[0].localeCompare(b[0], 'es'));
+    }
+
+    /** TOTAL de un bloque: todas las aerolíneas, también las que no se muestran. */
+    function totalesPlantilla1(mapa) {
+        let pax = 0;
+        let ops = 0;
+        for (const v of mapa.values()) { pax += v.pax; ops += v.ops; }
+        return { pax, ops };
     }
 
     /**
@@ -668,8 +754,7 @@
     function tablaAerolineas(mapa, inicio) {
         const xl = (r, c) => (inicio === undefined ? '' : ` data-xl="${r},${c}"`);
         const filas = entradasVisibles(mapa);
-        const totalPax = filas.reduce((a, [, v]) => a + v.pax, 0);
-        const totalOps = filas.reduce((a, [, v]) => a + v.ops, 0);
+        const { pax: totalPax, ops: totalOps } = totalesPlantilla1(mapa);
         const cuerpo = filas.length
             ? filas.map(([aerolinea, v], i) => {
                 const c = colorAerolinea(aerolinea);
@@ -716,7 +801,7 @@
             ${tablaAerolineas(porAerolinea.mes, bloque2)}`;
         return hoja(
             `NUMERALIA AEROPORTUARIA ${MESES[mes - 1]} ${anio}`,
-            `Fecha de actualización: <strong><u>${fechaLarga(fechaIso)}</u></strong>`,
+            `Fecha de actualización: <strong><u>${fechaLarga(fechaActualizacion(datos))}</u></strong>`,
             cuerpo,
             false,
             { nota: bloque2 + 4 + entradasVisibles(porAerolinea.mes).length }
@@ -803,7 +888,7 @@
 
         return hoja(
             `NUMERALIA AEROPORTUARIA ${MESES[mes - 1]} ${anio}`,
-            `Fecha de actualización: <strong><u>${fechaLarga(fechaIso)}</u></strong>`,
+            `Fecha de actualización: <strong><u>${fechaLarga(fechaActualizacion(datos))}</u></strong>`,
             cuerpo,
             true,
             { nota: 12 + D }
@@ -867,7 +952,7 @@
             if (typeof window._ensureConciAirlineCatalog === 'function') {
                 try { await window._ensureConciAirlineCatalog(); } catch (_) {}
             }
-            const datos = await descargar(fechaIso, n => estado(`Leyendo manifiestos… ${numero(n)}`));
+            const datos = await descargar(corteDeLectura(fechaIso), n => estado(`Leyendo manifiestos… ${numero(n)}`));
             ultimo = agregar(datos, fechaIso);
             if (edicion) await edicion.cargar(fechaIso);
             pintar();
@@ -918,20 +1003,19 @@
     function filasPlantilla1(datos) {
         const bloque = (mapa, encabezado) => {
             const filas = entradasVisibles(mapa);
+            const total = totalesPlantilla1(mapa);
             return [
                 [encabezado],
                 ['AEROLÍNEA', 'PAX TRANSPORTADOS', 'NÚMERO DE OPERACIONES'],
                 ...filas.map(([a, v]) => [a, v.pax, v.ops]),
-                ['TOTAL',
-                    filas.reduce((s, [, v]) => s + v.pax, 0),
-                    filas.reduce((s, [, v]) => s + v.ops, 0)],
+                ['TOTAL', total.pax, total.ops],
                 []
             ];
         };
         const mesTitulo = MESES[datos.mes - 1].charAt(0) + MESES[datos.mes - 1].slice(1).toLowerCase();
         return [
             [`NUMERALIA AEROPORTUARIA ${MESES[datos.mes - 1]} ${datos.anio}`],
-            [`Fecha de actualización: ${fechaLarga(datos.fechaIso)}`],
+            [`Fecha de actualización: ${fechaLarga(fechaActualizacion(datos))}`],
             [],
             ...bloque(datos.porAerolinea.dia, `Del día ${fechaLarga(datos.fechaIso)}`),
             ...bloque(datos.porAerolinea.mes, `Cifras acumuladas: ${mesTitulo}`),
@@ -961,7 +1045,7 @@
 
         return [
             [`NUMERALIA AEROPORTUARIA ${MESES[mes - 1]} ${anio}`],
-            [`Fecha de actualización: ${fechaLarga(fechaIso)}`],
+            [`Fecha de actualización: ${fechaLarga(fechaActualizacion(datos))}`],
             [],
             ['PASAJEROS', '', '', '', '', 'OPERACIONES'],
             ['FECHA', 'LLEGADA', 'SALIDA', 'TOTAL', '', 'FECHA', 'LLEGADA', 'SALIDA', 'TOTAL'],

@@ -659,7 +659,9 @@ describe('No inventar operaciones: los agregadores respetan el signo', () => {
     // En carga, el lado (NACIONAL/INTERNACIONAL) sale de TIPO DE OPERACIÓN de
     // ESA contribución; como el "antes" y el "después" pueden diferir, −1 cae
     // en un bucket y +1 en el otro.
-    expect(carga).toMatch(/if \(esInternacional\(operacion\)\) c\.INTERNACIONAL\.ops \+= opDelta;\s*\n\s*else c\.NACIONAL\.ops \+= opDelta;/);
+    // (opsOficio es opDelta, o 0 para una mixta desde el oficio del 14/09/2026.)
+    expect(carga).toMatch(/const opsOficio = cierre >= OFICIO_SIN_MIXTAS_DESDE && opDelta && esFilaMixta\(\) \? 0 : opDelta;/);
+    expect(carga).toMatch(/if \(esInternacional\(operacion\)\) c\.INTERNACIONAL\.ops \+= opsOficio;\s*\n\s*else c\.NACIONAL\.ops \+= opsOficio;/);
     // En pasajeros, la columna NACIONAL/INTERNACIONAL se resuelve por fila.
     expect(pasajeros).toMatch(/const columna = esInternacional\(operacion\) \? 'INTERNACIONAL' : 'NACIONAL';/);
   });

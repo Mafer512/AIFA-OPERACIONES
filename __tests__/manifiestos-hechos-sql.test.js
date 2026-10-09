@@ -302,7 +302,7 @@ describe('el frontend ya no lee las fuentes viejas para el inicio', () => {
   test('el día del inicio sale del detalle de la capa (totales_detalle_por_dia)', () => {
     const cargador = script.slice(script.indexOf('async function ndwLoadCurrentManifestDay('),
       script.indexOf('function renderNavdeckWeeklyBanner('));
-    expect(cargador).toContain('window.TotalesService.getDetalleDiario(dateKey, dateKey, { forzar: force })');
+    expect(cargador).toContain('window.TotalesService.getDetalleDiario(dateKey, dateKey, { forzar: refresh })');
     expect(cargador).not.toContain('v_informe_manifiestos_normalizado');
   });
 

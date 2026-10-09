@@ -85,7 +85,7 @@ const COLUMNAS_REALES = [
   'Nombre de la Licenciatura y/o Maestria', 'No. Cédula Profesional',
   'Correo Personal', 'Correo Institucional', 'Extensión',
   'Vigencia de la TIA', 'Fotografía de la TIA',
-  'Licencia de Manejo', 'Tipo de licencia', 'Licencia Vigencia',
+  'Licencia de Manejo', 'Tipo de licencia', 'Licencia Vigencia', 'Fotografia de licencia',
   'Cumpleaños', 'Doc. Para ingreso',
   // las que crea db/create_colab_onboarding_portal.sql
   'foto_ine', 'foto_ine_rev', 'foto_cred', 'cv_url', 'grado_academico', 'sangre',
@@ -235,13 +235,17 @@ describe('el payload que sale del portal', () => {
   /** El portal real, con su formulario y sus funciones, corriendo en jsdom. */
   function montarPortal() {
     document.body.innerHTML = bloque('<form id="onboarding-form"', '</form>');
-    const contexto = { document };
+    const contexto = { document, window: { ColaboradoresCampos: require('../js/colaboradores-campos') } };
     vm.createContext(contexto);
     vm.runInContext(
       [
         bloque('const FIELD_SPECS = [', '\n      ];'),
         bloque('let currentData = {', '\n      };'),
+        bloque('function respuestaLicencia(v)', '\n      }'),
         bloque('function $(id)', '}'),
+        bloque('const DOM_PARTES = {', '};'),
+        bloque('function leerDomicilio()', '\n      }'),
+        bloque('function sincronizarDomicilio()', '\n      }'),
         bloque('function collectPayload()', '\n      }'),
       ].join('\n'),
       contexto
@@ -251,12 +255,22 @@ describe('el payload que sale del portal', () => {
 
   test('lleva los datos que sí captura el colaborador', () => {
     const ctx = montarPortal();
-    document.getElementById('f-turno').value = 'Matutino';
+    document.getElementById('f-profesion').value = 'Ing. Industrial';
     document.getElementById('f-curp').value = 'gxpa900101hdfxxx01';
 
     const payload = ctx.collectPayload();
-    expect(payload.turno).toBe('Matutino');
+    expect(payload.profesion).toBe('Ing. Industrial');
     expect(payload.curp).toBe('GXPA900101HDFXXX01');
+  });
+
+  test('arma el domicilio con calle, número, colonia y código postal', () => {
+    const ctx = montarPortal();
+    document.getElementById('f-dom-calle').value = 'Av. Reforma';
+    document.getElementById('f-dom-numero').value = '123 Int. 4';
+    document.getElementById('f-dom-colonia').value = 'Centro';
+    document.getElementById('f-dom-cp').value = '55600';
+
+    expect(ctx.collectPayload().domicilio).toBe('Av. Reforma No. 123 Int. 4, Col. Centro, C.P. 55600');
   });
 
   test('no lleva ninguno de los campos fijos', () => {
@@ -336,7 +350,7 @@ describe('lo que ve quien abre el QR', () => {
     const ctx = montarPortalConFijos();
     ctx.pintarCamposFijos(LOCKED_DEL_BACKEND);
 
-    for (const id of ['f-curp', 'f-domicilio', 'f-turno', 'f-celular', 'f-comisionado']) {
+    for (const id of ['f-curp', 'f-dom-calle', 'f-dom-cp', 'f-celular', 'f-rubrica']) {
       expect(document.getElementById(id).readOnly).toBe(false);
     }
   });
@@ -373,11 +387,11 @@ describe('los documentos que se exigen para finalizar', () => {
   });
 
   test('el portal tampoco la pide para el guardado final', () => {
-    const chequeo = portal.match(/if \(finalMode && \(([^)]*)\)\)/);
+    const chequeo = portal.match(/if \(finalMode && \((!tieneCv[^\n]*)\) \{/);
     expect(chequeo).not.toBeNull();
-    expect(chequeo[1]).toContain('payload.cv_url');
-    expect(chequeo[1]).toContain('payload.foto_ine');
-    expect(chequeo[1]).toContain('payload.foto_ine_rev');
+    expect(chequeo[1]).toContain('tieneCv(payload.cv_url)');
+    expect(chequeo[1]).toContain('tieneImagen(payload.foto_ine)');
+    expect(chequeo[1]).toContain('tieneImagen(payload.foto_ine_rev)');
     expect(chequeo[1]).not.toContain('foto_cred');
   });
 
@@ -387,6 +401,8 @@ describe('los documentos que se exigen para finalizar', () => {
     vm.createContext(ctx);
     vm.runInContext([
       bloque('let currentData = {', '\n      };'),
+      bloque('function tieneImagen(v)', '}'),
+      bloque('function tieneCv(v)', '}'),
       bloque('function $(id)', '}'),
       bloque('function setStatus(id, text, cls)', '\n      }'),
       bloque('function refreshDocsState()', '\n      }'),
@@ -409,5 +425,115 @@ describe('los documentos que se exigen para finalizar', () => {
     // Sin TIA: ya está listo, y se le dice que puede subirla después.
     expect(estado().className).toContain('ok');
     expect(estado().textContent).toMatch(/TIA/);
+  });
+});
+
+/**
+ * RyR, turno, comisionado, fecha y doc. de ingreso, extensión y correo
+ * institucional son del área de personal: el colaborador no los ve ni los
+ * puede escribir. Igual que con los campos fijos, esconder el input no basta:
+ * el RPC no los devuelve y el guardado ignora lo que llegue para ellos.
+ */
+describe('los datos que sólo ve el área', () => {
+  const SOLO_AREA = ['ryr', 'turno', 'comisionado', 'fecha_ingreso', 'doc_ingreso', 'extension', 'correo'];
+
+  test('el portal no los pinta ni los manda', () => {
+    const specs = portal.match(/const FIELD_SPECS = \[([\s\S]*?)\n {6}\];/);
+    for (const clave of SOLO_AREA) {
+      expect(specs[1]).not.toMatch(new RegExp("'" + clave + "'"));
+    }
+    for (const id of ['f-ryr', 'f-turno', 'f-comisionado', 'f-fecha-ingreso', 'f-doc-ingreso', 'f-extension', 'f-correo"']) {
+      expect(portal).not.toContain('id="' + id.replace('"', '') + '"');
+    }
+  });
+
+  test('get_colab_onboarding no los devuelve, ni la metadata del link', () => {
+    const { begin } = funcion('get_colab_onboarding');
+    const data = begin.slice(begin.indexOf("'data', jsonb_build_object("));
+    for (const clave of SOLO_AREA) {
+      expect(data).not.toContain("'" + clave + "',");
+    }
+    expect(begin).not.toMatch(/'metadata',\s*lnk\.metadata/);
+  });
+
+  test('save_colab_onboarding no los lee del payload ni los exige', () => {
+    const { declare, begin } = funcion('save_colab_onboarding');
+    for (const clave of SOLO_AREA) {
+      expect(begin).not.toMatch(new RegExp("p_payload\\s*(\\?|->>)\\s*'" + clave + "'"));
+    }
+    const req = declare.match(/required_keys text\[\] := ARRAY\[([\s\S]*?)\n {2}\];/);
+    const claves = [...req[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+    for (const clave of SOLO_AREA) expect(claves).not.toContain(clave);
+  });
+
+  test('save_colab_onboarding los toma de lo que capturó el área, sin pisar el expediente', () => {
+    const { declare, begin } = funcion('save_colab_onboarding');
+    const arr = declare.match(/admin_keys text\[\] := ARRAY\[(.*?)\];/);
+    expect([...arr[1].matchAll(/'([^']+)'/g)].map(m => m[1]).sort()).toEqual([...SOLO_AREA].sort());
+    expect(begin).toMatch(/lnk\.metadata -> 'admin' ->> admin_key/);
+    // Sólo cuando el expediente no lo trae: lo que corrigió el área después manda.
+    expect(begin).toMatch(/IF admin_val IS NULL THEN\s+admin_val := nullif/);
+  });
+});
+
+/**
+ * "Licencia de Manejo" es un sí/no (la planilla trae SI, Si, No y 0). Se pedían
+ * tipo y vigencia a todos, así que quien no maneja no podía cerrar su registro,
+ * y una vigencia "Permanente" no cabía en el campo de fecha.
+ */
+describe('la licencia de manejo', () => {
+  function montar() {
+    document.body.innerHTML = bloque('<form id="onboarding-form"', '</form>');
+    const ctx = { document, window: { ColaboradoresCampos: require('../js/colaboradores-campos') } };
+    vm.createContext(ctx);
+    vm.runInContext([
+      bloque('const FIELD_SPECS = [', '\n      ];'),
+      bloque('let currentData = {', '\n      };'),
+      bloque('function respuestaLicencia(v)', '\n      }'),
+      bloque('function $(id)', '}'),
+      bloque('const DOM_PARTES = {', '};'),
+      bloque('function leerDomicilio()', '\n      }'),
+      bloque('function sincronizarDomicilio()', '\n      }'),
+      bloque('function collectPayload()', '\n      }'),
+    ].join('\n'), ctx);
+    return ctx;
+  }
+
+  test('quien no tiene licencia no manda tipo, vigencia ni foto', () => {
+    const ctx = montar();
+    document.getElementById('f-licencia').value = 'No';
+    document.getElementById('f-licencia-tipo').value = 'A';
+    const p = ctx.collectPayload();
+    expect(p.licencia).toBe('No');
+    expect(p.licencia_tipo).toBe('');
+    expect(p.vig_licencia).toBe('');
+    expect(p.foto_licencia).toBe('');
+  });
+
+  test('una licencia permanente se guarda como "Permanente"', () => {
+    const ctx = montar();
+    document.getElementById('f-licencia').value = 'Sí';
+    document.getElementById('f-licencia-tipo').value = 'a';
+    document.getElementById('f-vig-licencia-perm').checked = true;
+    const p = ctx.collectPayload();
+    expect(p.vig_licencia).toBe('Permanente');
+    expect(p.licencia_tipo).toBe('A');
+  });
+
+  test('el backend sólo pide tipo y vigencia a quien dice que sí tiene', () => {
+    const { declare, begin } = funcion('save_colab_onboarding');
+    const req = declare.match(/required_keys text\[\] := ARRAY\[([\s\S]*?)\n {2}\];/);
+    const claves = [...req[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+    expect(claves).toContain('licencia');
+    expect(claves).not.toContain('licencia_tipo');
+    expect(claves).not.toContain('vig_licencia');
+    expect(claves).not.toContain('vig_credencial');
+    expect(begin).toMatch(/p_payload ->> 'licencia', ''\)\)\) ~ '\^s'/);
+  });
+
+  test('la foto de la licencia va a "Fotografia de licencia"', () => {
+    for (const nombre of FUNCIONES_DEL_PORTAL) {
+      expect(resolver(patronesDe(nombre).get('col_f_lic'))).toBe('Fotografia de licencia');
+    }
   });
 });

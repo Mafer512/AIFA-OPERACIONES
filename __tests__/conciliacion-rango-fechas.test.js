@@ -36,6 +36,7 @@ const api = new Function('document', [
   trozo('function _conciIsoDesplazado('),
   trozo('function _conciIsoDentroDeVentana('),
   trozo('function _conciVueloEnVentana('),
+  trozo('function _conciColumnaFechaDelFiltro('),
   trozo('function _conciRowMatchesWindow('),
   'return { _conciVentanaDelFiltro, _conciIsoDesplazado, _conciVueloEnVentana, _conciRowMatchesWindow };',
 ].join('\n'))(document);
@@ -92,9 +93,15 @@ describe('las filas del rango', () => {
     expect(api._conciRowMatchesWindow(fila('15/09/2026'), COLUMNAS, 2026, VENTANA)).toBe(false);
   });
 
-  test('cuenta el día de operación, no sólo el programado', () => {
-    const cruzaMedianoche = { FECHA: '15/09/2026', 'HR. DE OPERACIÓN': '16/09/2026 00:20' };
-    expect(api._conciRowMatchesWindow(cruzaMedianoche, COLUMNAS, 2026, VENTANA)).toBe(true);
+  test('sólo cuenta la columna FECHA, no la hora de operación ni el slot', () => {
+    const cruzaMedianoche = { FECHA: '15/09/2026', 'HR. DE OPERACIÓN': '16/09/2026 00:20', 'SLOT ASIGNADO': '16/09/2026 00:05' };
+    expect(api._conciRowMatchesWindow(cruzaMedianoche, COLUMNAS, 2026, VENTANA)).toBe(false);
+    // Del 01 al 03: una fila con FECHA 04 no entra aunque opere el 03.
+    const delCuatro = { FECHA: '04/09/2026', 'HR. DE OPERACIÓN': '03/09/2026 23:50' };
+    expect(api._conciRowMatchesWindow(delCuatro, COLUMNAS, 2026, { desde: '2026-09-01', hasta: '2026-09-03' })).toBe(false);
+    // Y una con FECHA dentro entra aunque su operación caiga fuera.
+    const delTres = { FECHA: '03/09/2026', 'HR. DE OPERACIÓN': '04/09/2026 00:30' };
+    expect(api._conciRowMatchesWindow(delTres, COLUMNAS, 2026, { desde: '2026-09-01', hasta: '2026-09-03' })).toBe(true);
   });
 
   test('una fila sin ninguna fecha legible se conserva, no se pierde', () => {

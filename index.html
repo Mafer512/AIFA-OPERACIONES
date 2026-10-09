@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20261001-falta-recepcion">
+    <link rel="stylesheet" href="style.css?v=20261007-inicio-fila-flotante">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20260203">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -1990,6 +1990,13 @@ FF
                                         <div class="si-body si-body--ger"><span class="si-coming">Próximamente</span></div>
                                     </div>
                                 </div>
+
+                                <!-- Seguimiento (al final de Operación): sólo para las cuentas de
+                                     public.seguimiento_acceso. Nace oculto; js/seguimiento.js lo
+                                     muestra a quien tiene acceso. -->
+                                <a class="menu-item si-link si-link--l1" href="#" data-section="seguimiento" id="menu-seguimiento" style="display:none;" aria-hidden="true">
+                                    <i class="fas fa-list-check si-ico"></i><span class="si-txt">Seguimiento</span>
+                                </a>
 
                             </div>
                         </div>
@@ -9502,6 +9509,9 @@ FF
                         }
 
                         /* ---- PLAZAS VACANTES ---- */
+                        /* Sin fondo propio el encabezado quedaba blanco y el título y la ✕
+                           (blancos) no se veían: no había cómo cerrar la tarjeta. */
+                        #colabVacantesModal .modal-header { background: linear-gradient(135deg, #9a4413, #d0782a); }
                         .vacp-toolbar {
                             display: flex; gap: .5rem; align-items: center; flex-wrap: wrap;
                             padding: .6rem .9rem; border-bottom: 1px solid #e8eef8; background: #f8fafc;
@@ -9658,6 +9668,98 @@ FF
                         }
                         #colabNuevoModal .modal-footer { background: #fff; border-top: 1px solid #e9eef6; padding: .75rem 1.1rem; }
                         .cn-req-obl { color: #d92d20; font-weight: 800; }
+
+                        /* Selector de modo: captura completa o QR. */
+                        #colabNuevoModal .cn-modo {
+                            display: grid; grid-template-columns: 1fr 1fr; gap: .6rem;
+                            padding: .8rem 1rem .2rem; background: #fff;
+                        }
+                        #colabNuevoModal .cn-modo-op {
+                            display: flex; align-items: center; gap: .7rem; text-align: left;
+                            padding: .6rem .85rem; border-radius: 12px; cursor: pointer;
+                            border: 1.5px solid #e1e8f2; background: #f8fafc; color: #4b5f7a;
+                            transition: border-color .15s, background .15s, box-shadow .15s;
+                        }
+                        #colabNuevoModal .cn-modo-op > i {
+                            flex: 0 0 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+                            background: #eef2f7; color: #64748b; font-size: .95rem;
+                        }
+                        #colabNuevoModal .cn-modo-op b { display: block; font-size: .86rem; color: #1e293b; }
+                        #colabNuevoModal .cn-modo-op small { display: block; font-size: .72rem; line-height: 1.3; }
+                        #colabNuevoModal .cn-modo-op:hover { border-color: #b7dcc5; }
+                        #colabNuevoModal .cn-modo-op.active { border-color: #24a35a; background: #eefaf2; box-shadow: 0 0 0 3px rgba(36,163,90,.12); }
+                        #colabNuevoModal .cn-modo-op.active > i { background: #24a35a; color: #fff; }
+                        #colabNuevoModal .cn-modo-op[data-modo="qr"].active { border-color: #00838f; background: #ecf8f9; box-shadow: 0 0 0 3px rgba(0,131,143,.12); }
+                        #colabNuevoModal .cn-modo-op[data-modo="qr"].active > i { background: #00838f; }
+                        @media (max-width: 575.98px) { #colabNuevoModal .cn-modo { grid-template-columns: 1fr; } }
+
+                        /* Pasos numerados con cuántos datos lleva cada uno. El número y el
+                           conteo salen del CSS para que el texto de la pestaña siga siendo
+                           sólo su nombre (colabSeccionDeTab lo lee). */
+                        /* Pasos y avance se quedan a la vista mientras se baja por el formulario. */
+                        #colabNuevoModal .cn-cabeza { position: sticky; top: 0; z-index: 5; background: #f4f7fc; padding-bottom: .1rem; }
+                        #colabNuevoModal .cn-pasos { counter-reset: cnpaso; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+                        #colabNuevoModal .cn-pasos .nav-item { counter-increment: cnpaso; }
+                        #colabNuevoModal .cn-pasos .nav-link { white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: .3rem; padding: .55rem .4rem; }
+                        #colabNuevoModal .cn-pasos .nav-link > i { display: none; }
+                        #colabNuevoModal .cn-pasos .nav-link::before {
+                            content: counter(cnpaso); flex: 0 0 20px; height: 20px; border-radius: 50%;
+                            display: inline-grid; place-items: center; font-size: .7rem; font-weight: 800;
+                            background: #e2e8f0; color: #475569;
+                        }
+                        #colabNuevoModal .cn-pasos .nav-link.active::before { background: #24a35a; color: #fff; }
+                        #colabNuevoModal .cn-pasos .nav-link.cn-paso-lleno::before { content: '\2713'; background: #d1fae5; color: #047857; }
+                        #colabNuevoModal .cn-pasos .nav-link.active.cn-paso-lleno::before { background: #24a35a; color: #fff; }
+                        #colabNuevoModal .cn-pasos .nav-link[data-cuenta]::after {
+                            content: attr(data-cuenta); font-size: .66rem; font-weight: 700; color: #94a3b8;
+                            background: #f1f5f9; border-radius: 999px; padding: 0 .4rem;
+                        }
+                        #colabNuevoModal .cn-pasos .nav-item.cn-oculto { display: none; }
+
+                        /* Avance general. */
+                        #colabNuevoModal .cn-avance { display: flex; align-items: center; gap: .7rem; padding: .55rem 1rem 0; }
+                        #colabNuevoModal .cn-avance-barra { flex: 1; height: 6px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+                        #colabNuevoModal .cn-avance-barra span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#24a35a,#4ade80); transition: width .25s; }
+                        #colabNuevoModal .cn-avance-txt { font-size: .74rem; font-weight: 700; color: #64748b; white-space: nowrap; }
+
+                        /* Leyendas y distintivos según el modo. */
+                        #colabNuevoModal:not(.cn-modo-qr) .cn-legend-qr,
+                        #colabNuevoModal:not(.cn-modo-qr) .cn-req-qr,
+                        #colabNuevoModal:not(.cn-modo-qr) .cn-solo-area,
+                        #colabNuevoModal:not(.cn-modo-qr) #btn-colab-nuevo-onboarding,
+                        #colabNuevoModal.cn-modo-qr .cn-legend-completo,
+                        #colabNuevoModal.cn-modo-qr .cn-solo-completo { display: none !important; }
+
+                        /* Casilla con explicación. */
+                        #colabNuevoModal .cn-check {
+                            display: flex; align-items: flex-start; gap: .6rem; width: 100%; cursor: pointer; margin: 0;
+                            padding: .55rem .75rem; border: 1px solid #d9e2ee; border-radius: 9px; background: #fbfdff;
+                        }
+                        #colabNuevoModal .cn-check .form-check-input { margin-top: .15rem; flex: 0 0 auto; }
+                        #colabNuevoModal .cn-check b { display: block; font-size: .8rem; color: #1e293b; }
+                        #colabNuevoModal .cn-check small { display: block; font-size: .7rem; color: #64748b; line-height: 1.3; }
+
+                        /* Tarjetas para elegir archivo. */
+                        #colabNuevoModal .cn-archivo {
+                            display: flex; align-items: center; gap: .75rem; width: 100%; margin: 0; cursor: pointer;
+                            padding: .65rem .75rem; border: 1.5px dashed #c9d6e6; border-radius: 12px; background: #fbfdff;
+                            transition: border-color .15s, background .15s;
+                        }
+                        #colabNuevoModal .cn-archivo:hover { border-color: #24a35a; background: #f3fbf6; }
+                        #colabNuevoModal .cn-archivo.cn-archivo-ok { border-style: solid; border-color: #86d4a5; background: #f0fbf4; }
+                        #colabNuevoModal .cn-archivo.cn-archivo-mal { border-style: solid; border-color: #f5a3a3; background: #fff5f5; }
+                        #colabNuevoModal .cn-archivo-vista {
+                            flex: 0 0 52px; height: 52px; border-radius: 10px; overflow: hidden;
+                            display: grid; place-items: center; background: #eef2f7; color: #94a3b8; font-size: 1.3rem;
+                        }
+                        #colabNuevoModal .cn-archivo-vista img { width: 100%; height: 100%; object-fit: cover; }
+                        #colabNuevoModal .cn-archivo-ok .cn-archivo-vista { color: #16a34a; }
+                        #colabNuevoModal .cn-archivo-txt { min-width: 0; }
+                        #colabNuevoModal .cn-archivo-txt b { display: block; font-size: .82rem; color: #1e293b; }
+                        #colabNuevoModal .cn-archivo-txt small { display: block; font-size: .72rem; color: #64748b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                        #colabNuevoModal .cn-archivo-mal .cn-archivo-txt small { color: #b42318; white-space: normal; }
+                        #colabNuevoModal .cn-nav-btn { font-size: .85rem; font-weight: 600; }
+                        #colabNuevoModal .cn-sin-columna { display: none !important; }
                         /* Aviso de que ese numero ya pertenece a alguien del directorio. */
                         #colabNuevoModal .cn-num-aviso {
                             margin-top: .3rem; padding: .35rem .55rem; border-radius: 8px;
@@ -9678,6 +9780,13 @@ FF
                             display: inline-flex; align-items: center; gap: 3px; vertical-align: middle; cursor: help;
                             font-size: .6rem; font-weight: 800; letter-spacing: .04em; color: #0b57c9;
                             background: #e8f0fe; border: 1px solid #cfe0f6; border-radius: 999px; padding: 0 6px; margin-left: 3px;
+                        }
+
+                        /* Lo captura sólo el área: el portal del QR ya no se lo muestra al colaborador. */
+                        .cn-solo-area {
+                            display: inline-flex; align-items: center; vertical-align: middle; cursor: help;
+                            font-size: .62rem; color: #7c3aed; background: #f3edff; border: 1px solid #e2d6fb;
+                            border-radius: 999px; padding: 1px 6px; margin-left: 3px;
                         }
 
                         /* Se abre encima del alta. Sin backdrop propio —lo dibuja el
@@ -10561,7 +10670,7 @@ FF
                                             <tr>
                                                 <th>Fecha de Ingreso</th>
                                                 <td id="cf-fecha-ingreso">—</td>
-                                                <th>Onomástico</th>
+                                                <th>Fecha de nacimiento</th>
                                                 <td id="cf-onomastico">—</td>
                                                 <th>No. Celular</th>
                                                 <td id="cf-celular">—</td>
@@ -10586,7 +10695,7 @@ FF
                                                 <td id="cf-plaza">—</td>
                                                 <th style="width:10%">Turno</th>
                                                 <td id="cf-turno">—</td>
-                                                <th style="width:8%">RyR</th>
+                                                <th style="width:8%">RyR desde</th>
                                                 <td id="cf-ryr">—</td>
                                             </tr>
                                             <tr>
@@ -10619,6 +10728,13 @@ FF
                                             <div class="colab-doc-photo-frame">
                                                 <img id="colab-foto-ine-rev" src="" alt="INE reverso" style="display:none" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                                                 <i class="fas fa-id-card colab-doc-empty" aria-hidden="true"></i>
+                                            </div>
+                                        </div>
+                                        <div class="colab-doc-photo">
+                                            <label>Licencia de manejo</label>
+                                            <div class="colab-doc-photo-frame">
+                                                <img id="colab-foto-lic" src="" alt="Licencia de manejo" style="display:none" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                                                <i class="fas fa-car colab-doc-empty" aria-hidden="true"></i>
                                             </div>
                                         </div>
                                         <div class="colab-doc-photo">
@@ -10663,20 +10779,33 @@ FF
                                         <tbody>
                                             <tr>
                                                 <th style="width:18%">Personal Comisionado</th>
-                                                <td id="cf-comisionado">—</td>
-                                                <th>Dirección</th>
-                                                <td id="cf-direccion">—</td>
-                                                <th>Subdirección</th>
-                                                <td id="cf-subdireccion">—</td>
+                                                <td colspan="4" id="cf-comisionado">—</td>
                                             </tr>
                                             <tr>
+                                                <th></th>
+                                                <th>Dirección</th>
+                                                <th>Subdirección</th>
                                                 <th>Gerencia</th>
-                                                <td id="cf-gerencia">—</td>
                                                 <th>Coordinación</th>
-                                                <td colspan="3" id="cf-coordinacion">—</td>
+                                            </tr>
+                                            <tr>
+                                                <th>Orgánica</th>
+                                                <td id="cf-direccion">—</td>
+                                                <td id="cf-subdireccion">—</td>
+                                                <td id="cf-gerencia">—</td>
+                                                <td id="cf-coordinacion">—</td>
+                                            </tr>
+                                            <tr>
+                                                <th>Comisionado</th>
+                                                <td id="cf-direccion-com">—</td>
+                                                <td id="cf-subdireccion-com">—</td>
+                                                <td id="cf-gerencia-com">—</td>
+                                                <td id="cf-coordinacion-com">—</td>
                                             </tr>
                                         </tbody>
                                     </table>
+                                    <!-- Oficios de comisión, con su documento (js/colab-expediente.js) -->
+                                    <div id="cf-comision-docs"></div>
 
                                     <!-- -- BLOQUE 5: AMONESTACIONES Y COMENTARIOS -- -->
                                     <div class="colab-section-title mt-2"><i class="fas fa-exclamation-triangle me-1" aria-hidden="true"></i> Amonestaciones</div>
@@ -10684,6 +10813,10 @@ FF
 
                                     <div class="colab-section-title mt-2"><i class="fas fa-comment-alt me-1" aria-hidden="true"></i> Comentarios</div>
                                     <div id="cf-comentarios-list"></div>
+
+                                    <!-- -- BLOQUE 5b: EXPEDIENTE LABORAL (js/colab-expediente.js) -- -->
+                                    <div class="colab-section-title mt-2"><i class="fas fa-folder-tree me-1" aria-hidden="true"></i> Expediente laboral</div>
+                                    <div id="cf-expediente"></div>
 
                                     <!-- -- BLOQUE 6: EMERGENCIAS -- -->
                                     <div class="colab-emergency-panel">
@@ -10735,7 +10868,7 @@ FF
                                             <tr>
                                                 <th style="width:14%">Estado Civil</th>
                                                 <td id="cf-estado-civil">—</td>
-                                                <th>Dependientes (hijos)</th>
+                                                <th>Hijos</th>
                                                 <td id="cf-dependientes">—</td>
                                                 <th>Rúbrica</th>
                                                 <td id="cf-rubrica">—</td>
@@ -10929,15 +11062,16 @@ FF
                                             <div class="ce-sheet">
                                                 <div class="row g-3">
                                                     <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Nombre</label><input type="text" class="form-control form-control-sm" id="ce-nombre" data-field="nombre"></div>
-                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Puesto</label><input type="text" class="form-control form-control-sm" id="ce-puesto" data-field="puesto"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="ce-puesto">Puesto</label><input type="text" class="form-control form-control-sm" id="ce-puesto" data-field="puesto"></div>
                                                     <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Fecha de Ingreso</label><input type="text" class="form-control form-control-sm" id="ce-fecha-ingreso" data-field="fecha_ingreso" placeholder="DD/MM/YYYY"></div>
-                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Fecha Nacimiento / Onomástico</label><input type="text" class="form-control form-control-sm" id="ce-onomastico" data-field="onomastico" placeholder="DD/MM/YYYY"></div>
+                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small" for="ce-onomastico">Fecha de nacimiento</label><input type="text" class="form-control form-control-sm" id="ce-onomastico" data-field="onomastico" placeholder="DD/MM/AAAA"></div>
                                                     <div class="col-12 col-md-4"><label class="form-label fw-semibold small">No. Celular</label><input type="text" class="form-control form-control-sm" id="ce-celular" data-field="celular"></div>
                                                     <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Ext.</label><input type="text" class="form-control form-control-sm" id="ce-extension" data-field="extension"></div>
                                                     <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Correo Institucional</label><input type="email" class="form-control form-control-sm" id="ce-correo" data-field="correo"></div>
                                                     <div class="col-12 col-md-5"><label class="form-label fw-semibold small">Correo Personal <span class="badge bg-primary" style="font-size:.65rem;vertical-align:middle">Cumpleaños</span></label><input type="email" class="form-control form-control-sm" id="ce-correo-personal" data-field="Correo Personal" placeholder="nombre@gmail.com"></div>
-                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Profesión</label><input type="text" class="form-control form-control-sm" id="ce-profesion" data-field="profesion"></div>
-                                                    <div class="col-12 col-md-2"><label class="form-label fw-semibold small">Militar / Civil</label><input type="text" class="form-control form-control-sm" id="ce-militar" data-field="militar"></div>
+                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small" for="ce-grado-academico">Grado académico</label><input type="text" class="form-control form-control-sm" id="ce-grado-academico" data-field="grado_academico"></div>
+                                                    <div class="col-12 col-md-8"><label class="form-label fw-semibold small" for="ce-profesion">Profesión</label><input type="text" class="form-control form-control-sm" id="ce-profesion" data-field="profesion"></div>
+                                                    <div class="col-12 col-md-2"><label class="form-label fw-semibold small" for="ce-militar">Militar / Civil</label><input type="text" class="form-control form-control-sm" id="ce-militar" data-field="militar"></div>
                                                     <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Sexo</label><select class="form-select form-select-sm" id="ce-sexo" data-field="sexo"><option value="">-- Seleccionar --</option><option>Femenino</option><option>Masculino</option></select></div>
                                                     <div class="col-12"><div class="ce-legend"><span><i class="fas fa-circle-info me-1"></i>Las amonestaciones y sus PDFs se editan en la pestaña <strong>Amonest.</strong></span><span>Los comentarios, en <strong>Coment.</strong></span></div></div>
                                                 </div>
@@ -10951,10 +11085,10 @@ FF
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Nivel</label><input type="text" class="form-control form-control-sm" id="ce-nivel" data-field="nivel"></div>
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Plaza</label><input type="text" class="form-control form-control-sm" id="ce-plaza" data-field="plaza"></div>
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Turno</label><input type="text" class="form-control form-control-sm" id="ce-turno" data-field="turno"></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">RyR</label><input type="text" class="form-control form-control-sm" id="ce-ryr" data-field="ryr"></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Grado</label><input type="text" class="form-control form-control-sm" id="ce-grado" data-field="grado"></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Matrícula</label><input type="text" class="form-control form-control-sm" id="ce-matricula" data-field="matricula"></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Grado Académico</label><input type="text" class="form-control form-control-sm" id="ce-grado-academico" data-field="grado_academico"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="ce-ryr">RyR · desde</label><input type="text" class="form-control form-control-sm" id="ce-ryr" data-field="ryr" placeholder="DD/MM/AAAA" title="Fecha desde la que tiene RyR"></div>
+                                                    <div class="col-6 col-md-3 cc-solo-militar"><label class="form-label fw-semibold small" for="ce-grado">Grado militar</label><input type="text" class="form-control form-control-sm" id="ce-grado" data-field="grado"></div>
+                                                    <div class="col-6 col-md-3 cc-solo-militar"><label class="form-label fw-semibold small" for="ce-situacion-militar">Situación militar</label><input type="text" class="form-control form-control-sm" id="ce-situacion-militar" data-field="situacion_militar"></div>
+                                                    <div class="col-6 col-md-3 cc-solo-militar"><label class="form-label fw-semibold small" for="ce-matricula">Matrícula militar</label><input type="text" class="form-control form-control-sm" id="ce-matricula" data-field="matricula" style="text-transform:uppercase"></div>
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Cédula Profesional</label><input type="text" class="form-control form-control-sm" id="ce-cedula" data-field="cedula"></div>
                                                 </div>
                                             </div>
@@ -10964,11 +11098,20 @@ FF
                                         <div class="tab-pane fade" id="cedit-org" role="tabpanel">
                                             <div class="ce-sheet">
                                                 <div class="row g-3">
-                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Personal Comisionado</label><input type="text" class="form-control form-control-sm" id="ce-comisionado" data-field="comisionado"></div>
-                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Dirección</label><input type="text" class="form-control form-control-sm" id="ce-direccion" data-field="direccion"></div>
-                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Subdireccion</label><input type="text" class="form-control form-control-sm" id="ce-subdireccion" data-field="subdireccion"></div>
-                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Gerencia</label><input type="text" class="form-control form-control-sm" id="ce-gerencia" data-field="gerencia"></div>
-                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Coordinación</label><input type="text" class="form-control form-control-sm" id="ce-coordinacion" data-field="coordinacion"></div>
+                                                    <div class="col-12"><h6 class="ce-group-title"><i class="fas fa-sitemap"></i>Adscripción orgánica · conforme planilla</h6></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="ce-direccion">Dirección orgánica</label><input type="text" class="form-control form-control-sm" id="ce-direccion" data-field="direccion"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="ce-subdireccion">Subdirección orgánica</label><input type="text" class="form-control form-control-sm" id="ce-subdireccion" data-field="subdireccion"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="ce-gerencia">Gerencia orgánica</label><input type="text" class="form-control form-control-sm" id="ce-gerencia" data-field="gerencia"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="ce-coordinacion">Coordinación orgánica</label><input type="text" class="form-control form-control-sm" id="ce-coordinacion" data-field="coordinacion"></div>
+                                                    <div class="col-12 mt-4"><h6 class="ce-group-title"><i class="fas fa-location-dot"></i>Adscripción real · dónde trabaja</h6></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="ce-comisionado">Personal Comisionado</label><input type="text" class="form-control form-control-sm" id="ce-comisionado" data-field="comisionado"></div>
+                                                    <div class="col-12 col-md-6 d-flex align-items-end"><div class="small text-muted" id="ce-com-nota" aria-live="polite"></div></div>
+                                                    <div class="col-12" id="ce-com-destinos"><div class="row g-3">
+                                                        <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="ce-direccion-com">Dirección comisionado</label><input type="text" class="form-control form-control-sm" id="ce-direccion-com"></div>
+                                                        <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="ce-subdireccion-com">Subdirección comisionado</label><input type="text" class="form-control form-control-sm" id="ce-subdireccion-com"></div>
+                                                        <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="ce-gerencia-com">Gerencia comisionado</label><input type="text" class="form-control form-control-sm" id="ce-gerencia-com"></div>
+                                                        <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="ce-coordinacion-com">Coordinación comisionado</label><input type="text" class="form-control form-control-sm" id="ce-coordinacion-com"></div>
+                                                    </div></div>
                                                 </div>
                                             </div>
                                         </div>
@@ -11012,6 +11155,21 @@ FF
                                                             </div>
                                                             <div id="ce-doc-ine-back-status" class="cedit-doc-upload-status small mt-1" role="status" aria-live="polite"></div>
                                                         </div>
+                                                        <div class="cedit-doc-upload-card" data-document-kind="license">
+                                                            <div class="cedit-doc-upload-title">Licencia de manejo</div>
+                                                            <div class="cedit-doc-upload-preview">
+                                                                <img id="ce-doc-license-preview" src="" alt="Vista previa de la licencia de manejo" hidden>
+                                                                <i id="ce-doc-license-placeholder" class="fas fa-car cedit-doc-upload-placeholder" aria-hidden="true"></i>
+                                                            </div>
+                                                            <div class="cedit-doc-upload-actions">
+                                                                <label class="btn btn-outline-primary btn-sm mb-0">
+                                                                    <i class="fas fa-upload me-1"></i>Seleccionar
+                                                                    <input type="file" id="ce-doc-license" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden onchange="colabDocumentImageSelected('license',this)">
+                                                                </label>
+                                                                <button type="button" id="ce-doc-license-remove" class="btn btn-outline-danger btn-sm d-none" onclick="colabDocumentImageRemove('license')"><i class="fas fa-trash me-1"></i>Eliminar</button>
+                                                            </div>
+                                                            <div id="ce-doc-license-status" class="cedit-doc-upload-status small mt-1" role="status" aria-live="polite"></div>
+                                                        </div>
                                                         <div class="cedit-doc-upload-card" data-document-kind="credential">
                                                             <div class="cedit-doc-upload-title">TIA / Credencial AIFA</div>
                                                             <div class="cedit-doc-upload-preview">
@@ -11030,17 +11188,17 @@ FF
                                                     </div>
                                                 </div>
                                                 <div class="col-12"><hr class="my-0"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Licencia</label><input type="text" class="form-control form-control-sm" id="ce-licencia" data-field="licencia"></div>
+                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="ce-licencia">Licencia de manejo</label><input type="text" class="form-control form-control-sm" id="ce-licencia" data-field="licencia"></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Tipo Licencia</label><input type="text" class="form-control form-control-sm" id="ce-licencia-tipo" data-field="licencia_tipo"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia Licencia</label><input type="text" class="form-control form-control-sm" id="ce-vig-licencia" data-field="vig_licencia"></div>
+                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="ce-vig-licencia">Vigencia Licencia</label><input type="text" class="form-control form-control-sm" id="ce-vig-licencia" data-field="vig_licencia" placeholder="AAAA-MM-DD o Permanente"></div>
                                                 <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia Credencial</label><input type="text" class="form-control form-control-sm" id="ce-vig-credencial" data-field="vig_credencial"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia INE</label><input type="text" class="form-control form-control-sm" id="ce-vig-ine" data-field="vig_ine"></div>
-                                                <div class="col-12 col-md-9"><label class="form-label fw-semibold small">Domicilio</label><input type="text" class="form-control form-control-sm" id="ce-domicilio" data-field="domicilio"></div>
+                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="ce-vig-ine">Vigencia INE (año)</label><input type="text" class="form-control form-control-sm" id="ce-vig-ine" data-field="vig_ine" inputmode="numeric" placeholder="Ej. 2031"></div>
+                                                <div class="col-12 col-md-9"><label class="form-label fw-semibold small" for="ce-domicilio">Domicilio</label><input type="text" class="form-control form-control-sm" id="ce-domicilio" data-field="domicilio" placeholder="Calle No. número, Col. colonia, C.P. 00000"></div>
                                                 <div class="col-6"><label class="form-label fw-semibold small">RFC</label><input type="text" class="form-control form-control-sm" id="ce-rfc" data-field="rfc" style="text-transform:uppercase"></div>
                                                 <div class="col-6"><label class="form-label fw-semibold small">CURP</label><input type="text" class="form-control form-control-sm" id="ce-curp" data-field="curp" style="text-transform:uppercase"></div>
-                                                <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Estado Civil</label><select class="form-select form-select-sm" id="ce-estado-civil" data-field="estado_civil"><option value="">-- Seleccionar --</option><option>Soltero(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viudo(a)</option><option>Unión libre</option></select></div>
-                                                <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Dependientes</label><input type="number" min="0" class="form-control form-control-sm" id="ce-dependientes" data-field="dependientes"></div>
-                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Rúbrica</label><input type="text" class="form-control form-control-sm" id="ce-rubrica" data-field="rubrica"></div>
+                                                <div class="col-12 col-md-4"><label class="form-label fw-semibold small" for="ce-estado-civil">Estado Civil</label><input type="text" class="form-control form-control-sm" id="ce-estado-civil" data-field="estado_civil"></div>
+                                                <div class="col-6 col-md-2"><label class="form-label fw-semibold small" for="ce-dependientes">Hijos</label><input type="number" min="0" class="form-control form-control-sm" id="ce-dependientes" data-field="dependientes"></div>
+                                                <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="ce-rubrica">Rúbrica</label><input type="text" class="form-control form-control-sm" id="ce-rubrica" data-field="rubrica"></div>
                                                 <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Doc. Ingreso</label><input type="text" class="form-control form-control-sm" id="ce-doc-ingreso" data-field="doc_ingreso"></div>
                                             </div>
                                         </div>
@@ -11522,36 +11680,61 @@ FF
                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                                 </div>
                                 <div class="modal-body p-0">
-                                    <ul class="nav nav-tabs nav-fill px-3 pt-2 bg-white border-bottom" id="colabNuevoTabs" role="tablist">
+                                    <!-- ¿Quién llena el expediente? Con captura completa se piden todas las
+                                         columnas de la Tabla Completa; con QR, sólo lo que el colaborador
+                                         no puede capturar desde el portal. -->
+                                    <div class="cn-modo" id="cn-modo" role="radiogroup" aria-label="Cómo se da de alta">
+                                        <button type="button" class="cn-modo-op active" data-modo="completo" role="radio" aria-checked="true" onclick="colabNuevoModo('completo')">
+                                            <i class="fas fa-keyboard"></i>
+                                            <span><b>Captura completa</b><small>Tú llenas todos los datos del colaborador</small></span>
+                                        </button>
+                                        <button type="button" class="cn-modo-op" data-modo="qr" role="radio" aria-checked="false" onclick="colabNuevoModo('qr')">
+                                            <i class="fas fa-qrcode"></i>
+                                            <span><b>Con QR de onboarding</b><small>Tú pones puesto y adscripción; el colaborador llena lo demás</small></span>
+                                        </button>
+                                    </div>
+                                    <div class="cn-cabeza">
+                                    <ul class="nav nav-tabs nav-fill px-3 pt-2 bg-white border-bottom cn-pasos" id="colabNuevoTabs" role="tablist">
                                         <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#cnuevo-gen" type="button"><i class="fas fa-id-card me-1"></i>Generales</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-clas" type="button"><i class="fas fa-layer-group me-1"></i>Clasificación</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-org" type="button"><i class="fas fa-sitemap me-1"></i>Organización</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-docs" type="button"><i class="fas fa-folder-open me-1"></i>Documentos</button></li>
                                         <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-emerg" type="button"><i class="fas fa-kit-medical me-1"></i>Emergencias</button></li>
+                                        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-arch" type="button"><i class="fas fa-camera me-1"></i>Archivos</button></li>
+                                        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#cnuevo-notas" type="button"><i class="fas fa-comment-alt me-1"></i>Notas</button></li>
                                     </ul>
+                                    <div class="cn-avance" id="cn-avance" aria-live="polite">
+                                        <div class="cn-avance-barra"><span id="cn-avance-fill" style="width:0%"></span></div>
+                                        <span class="cn-avance-txt" id="cn-avance-txt">0 de 0 datos</span>
+                                    </div>
+                                    </div><!-- /cn-cabeza -->
                                     <div class="cn-dup-alert d-none" id="cn-dup-alert" role="alert"></div>
                                     <div class="tab-content p-3" id="colabNuevoContent">
 
                                         <!-- TAB: Generales -->
                                         <div class="tab-pane fade show active" id="cnuevo-gen" role="tabpanel">
-                                            <div class="cn-legend mb-3">
-                                                <span><b class="cn-req-obl">*</b> Obligatorio para registrar</span>
-                                                <span><span class="cn-req-qr"><i class="fas fa-qrcode"></i>QR</span> Hace falta además para generar el QR: el colaborador ya no captura ese dato desde el portal.</span>
+                                            <div class="cn-legend cn-legend-completo mb-3">
+                                                <span><b class="cn-req-obl">*</b> Sólo el No. Empleado y el nombre son obligatorios. Lo demás puedes dejarlo vacío y completarlo después desde <b>Editar</b>.</span>
+                                            </div>
+                                            <div class="cn-legend cn-legend-qr mb-3">
+                                                <span><span class="cn-req-qr"><i class="fas fa-qrcode"></i>QR</span> Hace falta para generar el QR: el colaborador ya no captura ese dato desde el portal.</span>
+                                                <span><span class="cn-solo-area" title="Lo captura el área de personal: el colaborador no lo ve en el portal del QR"><i class="fas fa-user-lock"></i></span> Sólo lo captura el área: el colaborador no lo ve en el portal.</span>
                                             </div>
                                             <div class="cn-sheet">
                                                 <div class="row g-3">
                                                     <div class="col-12 col-md-3"><label class="form-label fw-semibold small">No. Empleado <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="cn-num" placeholder="Ej: 1234" required><div class="cn-num-aviso d-none" id="cn-num-aviso"></div></div>
                                                     <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Nombre completo <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="cn-nombre" placeholder="Apellido Apellido Nombre" required></div>
-                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Profesión</label><input type="text" class="form-control form-control-sm" id="cn-profesion" placeholder="Ing. Industrial…"></div>
-                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Puesto <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-puesto" placeholder="Analista de Operaciones…"></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Sexo</label><select class="form-select form-select-sm" id="cn-sexo"><option value="">-- Seleccionar --</option><option>Femenino</option><option>Masculino</option></select></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Militar / Civil</label><input type="text" class="form-control form-control-sm" id="cn-militar" placeholder="Civil"></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Turno</label><input type="text" class="form-control form-control-sm" id="cn-turno" placeholder="Matutino"></div>
-                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Fecha de Ingreso</label><input type="text" class="form-control form-control-sm" id="cn-fecha-ingreso" placeholder="DD/MM/YYYY"></div>
-                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Fecha Nacimiento / Onomástico</label><input type="text" class="form-control form-control-sm" id="cn-onomastico" placeholder="DD/MM/YYYY"></div>
-                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small">No. Celular</label><input type="text" class="form-control form-control-sm" id="cn-celular" placeholder="55 xxxx xxxx"></div>
-                                                    <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Ext.</label><input type="text" class="form-control form-control-sm" id="cn-extension"></div>
-                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Correo Institucional</label><input type="email" class="form-control form-control-sm" id="cn-correo" placeholder="nombre@aifa.com.mx"></div>
+                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Sexo</label><select class="form-select form-select-sm" id="cn-sexo"><option value="">— Seleccionar —</option><option>Femenino</option><option>Masculino</option></select></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="cn-puesto">Puesto <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-puesto"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="cn-turno">Turno <span class="cn-solo-area" title="Lo captura el área de personal: el colaborador no lo ve en el portal del QR"><i class="fas fa-user-lock"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-turno" placeholder="Matutino"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="cn-militar">Militar / Civil</label><input type="text" class="form-control form-control-sm" id="cn-militar"></div>
+                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small" for="cn-grado-academico">Grado académico</label><input type="text" class="form-control form-control-sm" id="cn-grado-academico"></div>
+                                                    <div class="col-12 col-md-8"><label class="form-label fw-semibold small" for="cn-profesion">Profesión</label><input type="text" class="form-control form-control-sm" id="cn-profesion"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="cn-fecha-ingreso">Fecha de Ingreso <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador ya no la captura"><i class="fas fa-qrcode"></i>QR</span> <span class="cn-solo-area" title="Lo captura el área de personal: el colaborador no lo ve en el portal del QR"><i class="fas fa-user-lock"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-fecha-ingreso" placeholder="DD/MM/AAAA"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="cn-onomastico">Fecha de nacimiento</label><input type="text" class="form-control form-control-sm" id="cn-onomastico" placeholder="DD/MM/AAAA"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">No. Celular</label><input type="text" class="form-control form-control-sm" id="cn-celular" placeholder="55 xxxx xxxx"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="cn-extension">Ext. <span class="cn-solo-area" title="Lo captura el área de personal: el colaborador no lo ve en el portal del QR"><i class="fas fa-user-lock"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-extension"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="cn-correo">Correo Institucional <span class="cn-solo-area" title="Lo captura el área de personal: el colaborador no lo ve en el portal del QR"><i class="fas fa-user-lock"></i></span></label><input type="email" class="form-control form-control-sm" id="cn-correo" placeholder="nombre@aifa.com.mx"></div>
                                                     <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Correo Personal <span class="badge bg-primary" style="font-size:.65rem;vertical-align:middle">Cumpleaños</span></label><input type="email" class="form-control form-control-sm" id="cn-correo-personal" placeholder="nombre@gmail.com"></div>
                                                 </div>
                                             </div>
@@ -11563,11 +11746,19 @@ FF
                                                 <div class="row g-3">
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Nivel <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-nivel"></div>
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Plaza <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-plaza"></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">RyR</label><input type="text" class="form-control form-control-sm" id="cn-ryr"></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Grado</label><input type="text" class="form-control form-control-sm" id="cn-grado"></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Matrícula</label><input type="text" class="form-control form-control-sm" id="cn-matricula"></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Grado Académico</label><input type="text" class="form-control form-control-sm" id="cn-grado-academico"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="cn-ryr">RyR · desde <span class="cn-solo-area" title="Lo captura el área de personal: el colaborador no lo ve en el portal del QR"><i class="fas fa-user-lock"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-ryr" placeholder="DD/MM/AAAA" title="Fecha desde la que tiene RyR"></div>
+                                                    <div class="col-6 col-md-3 cc-solo-militar"><label class="form-label fw-semibold small" for="cn-grado">Grado militar</label><input type="text" class="form-control form-control-sm" id="cn-grado"></div>
+                                                    <div class="col-6 col-md-3 cc-solo-militar"><label class="form-label fw-semibold small" for="cn-situacion-militar">Situación militar</label><input type="text" class="form-control form-control-sm" id="cn-situacion-militar"></div>
+                                                    <div class="col-6 col-md-3 cc-solo-militar"><label class="form-label fw-semibold small" for="cn-matricula">Matrícula militar</label><input type="text" class="form-control form-control-sm" id="cn-matricula" style="text-transform:uppercase"></div>
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Cédula Profesional</label><input type="text" class="form-control form-control-sm" id="cn-cedula"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="cn-sueldo">Sueldo bruto</label><input type="text" class="form-control form-control-sm" id="cn-sueldo" inputmode="decimal" placeholder="Ej. 25,000.00"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="cn-estatus">Estatus</label><select class="form-select form-select-sm" id="cn-estatus"><option value="Activo">Activo</option><option value="Baja">Baja</option></select></div>
+                                                    <div class="col-12 col-md-6 d-flex align-items-end">
+                                                        <label class="cn-check" for="cn-pertenece">
+                                                            <input type="checkbox" class="form-check-input" id="cn-pertenece" checked>
+                                                            <span><b>Cuenta en la Dirección de Operación</b><small>Quítala si sólo está adscrito pero no integra el área: así no cuenta en el Resumen.</small></span>
+                                                        </label>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -11576,11 +11767,20 @@ FF
                                         <div class="tab-pane fade" id="cnuevo-org" role="tabpanel">
                                             <div class="cn-sheet">
                                                 <div class="row g-3">
-                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Personal Comisionado</label><input type="text" class="form-control form-control-sm" id="cn-comisionado"></div>
-                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Dirección <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-direccion"></div>
-                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Subdireccion <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-subdireccion"></div>
-                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Gerencia <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-gerencia"></div>
-                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Coordinación <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-coordinacion"></div>
+                                                    <div class="col-12"><h6 class="cn-group-title"><i class="fas fa-sitemap"></i>Adscripción orgánica · conforme planilla</h6></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="cn-direccion">Dirección orgánica <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding: el colaborador no puede capturarlo"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-direccion"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="cn-subdireccion">Subdirección orgánica <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding, salvo que el área elegida no tenga subdirección"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-subdireccion"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="cn-gerencia">Gerencia orgánica <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding, salvo que el área elegida no tenga gerencia"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-gerencia"></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="cn-coordinacion">Coordinación orgánica <span class="cn-req-qr" title="Obligatorio para generar el QR de onboarding, salvo que la gerencia elegida no tenga coordinaciones"><i class="fas fa-qrcode"></i>QR</span></label><input type="text" class="form-control form-control-sm" id="cn-coordinacion"></div>
+                                                    <div class="col-12 mt-4"><h6 class="cn-group-title"><i class="fas fa-location-dot"></i>Adscripción real · dónde trabaja</h6></div>
+                                                    <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="cn-comisionado">Personal Comisionado <span class="cn-solo-area" title="Lo captura el área de personal: el colaborador no lo ve en el portal del QR"><i class="fas fa-user-lock"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-comisionado"></div>
+                                                    <div class="col-12 col-md-6 d-flex align-items-end"><div class="small text-muted" id="cn-com-nota" aria-live="polite"></div></div>
+                                                    <div class="col-12" id="cn-com-destinos"><div class="row g-3">
+                                                        <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="cn-direccion-com">Dirección comisionado</label><input type="text" class="form-control form-control-sm" id="cn-direccion-com"></div>
+                                                        <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="cn-subdireccion-com">Subdirección comisionado</label><input type="text" class="form-control form-control-sm" id="cn-subdireccion-com"></div>
+                                                        <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="cn-gerencia-com">Gerencia comisionado</label><input type="text" class="form-control form-control-sm" id="cn-gerencia-com"></div>
+                                                        <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="cn-coordinacion-com">Coordinación comisionado</label><input type="text" class="form-control form-control-sm" id="cn-coordinacion-com"></div>
+                                                    </div></div>
                                                 </div>
                                             </div>
                                         </div>
@@ -11591,16 +11791,16 @@ FF
                                                 <div class="row g-3">
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">RFC</label><input type="text" class="form-control form-control-sm" id="cn-rfc" style="text-transform:uppercase" placeholder="AAAA000000AAA"></div>
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">CURP</label><input type="text" class="form-control form-control-sm" id="cn-curp" style="text-transform:uppercase"></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Licencia</label><input type="text" class="form-control form-control-sm" id="cn-licencia"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="cn-licencia">Licencia de manejo</label><input type="text" class="form-control form-control-sm" id="cn-licencia"></div>
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Tipo Licencia</label><input type="text" class="form-control form-control-sm" id="cn-licencia-tipo"></div>
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia Licencia</label><input type="text" class="form-control form-control-sm" id="cn-vig-licencia"></div>
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia Credencial</label><input type="text" class="form-control form-control-sm" id="cn-vig-credencial"></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Vigencia INE</label><input type="text" class="form-control form-control-sm" id="cn-vig-ine"></div>
-                                                    <div class="col-12"><label class="form-label fw-semibold small">Domicilio</label><input type="text" class="form-control form-control-sm" id="cn-domicilio"></div>
-                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Estado Civil</label><select class="form-select form-select-sm" id="cn-estado-civil"><option value="">-- Seleccionar --</option><option>Soltero(a)</option><option>Casado(a)</option><option>Divorciado(a)</option><option>Viudo(a)</option><option>Unión libre</option></select></div>
-                                                    <div class="col-6 col-md-2"><label class="form-label fw-semibold small">Dependientes</label><input type="number" min="0" class="form-control form-control-sm" id="cn-dependientes"></div>
-                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Rúbrica</label><input type="text" class="form-control form-control-sm" id="cn-rubrica"></div>
-                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small">Doc. Ingreso</label><input type="text" class="form-control form-control-sm" id="cn-doc-ingreso"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="cn-vig-ine">Vigencia INE (año)</label><input type="text" class="form-control form-control-sm" id="cn-vig-ine" inputmode="numeric" placeholder="Ej. 2031"></div>
+                                                    <div class="col-12"><label class="form-label fw-semibold small" for="cn-domicilio">Domicilio</label><input type="text" class="form-control form-control-sm" id="cn-domicilio" placeholder="Calle No. número, Col. colonia, C.P. 00000"></div>
+                                                    <div class="col-12 col-md-4"><label class="form-label fw-semibold small" for="cn-estado-civil">Estado Civil</label><input type="text" class="form-control form-control-sm" id="cn-estado-civil"></div>
+                                                    <div class="col-6 col-md-2"><label class="form-label fw-semibold small" for="cn-dependientes">Hijos</label><input type="number" min="0" class="form-control form-control-sm" id="cn-dependientes"></div>
+                                                    <div class="col-6 col-md-3"><label class="form-label fw-semibold small" for="cn-rubrica">Rúbrica</label><input type="text" class="form-control form-control-sm" id="cn-rubrica"></div>
+                                                    <div class="col-12 col-md-3"><label class="form-label fw-semibold small" for="cn-doc-ingreso">Doc. Ingreso <span class="cn-solo-area" title="Lo captura el área de personal: el colaborador no lo ve en el portal del QR"><i class="fas fa-user-lock"></i></span></label><input type="text" class="form-control form-control-sm" id="cn-doc-ingreso"></div>
                                                 </div>
                                             </div>
                                         </div>
@@ -11622,6 +11822,61 @@ FF
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Alergia Medicamento</label><input type="text" class="form-control form-control-sm" id="cn-alerg-med"></div>
                                                     <div class="col-6 col-md-3"><label class="form-label fw-semibold small">Alergia Alimento</label><input type="text" class="form-control form-control-sm" id="cn-alerg-ali"></div>
                                                     <div class="col-6 col-md-4"><label class="form-label fw-semibold small">NSS</label><input type="text" class="form-control form-control-sm" id="cn-nss"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- TAB: Fotos y archivos. Se suben al registrar, ya con el número de empleado. -->
+                                        <div class="tab-pane fade" id="cnuevo-arch" role="tabpanel">
+                                            <div class="cn-sheet">
+                                                <div class="row g-3">
+                                                    <div class="col-12"><div class="small text-muted">Elige cada archivo desde la computadora. Se suben al pulsar <b>Registrar Colaborador</b>.</div></div>
+                                                    <div class="col-12 col-sm-6 col-lg-4"><label class="cn-archivo" for="cn-arch-foto" data-tipo="foto">
+                                                        <span class="cn-archivo-vista"><i class="fas fa-user"></i><img alt="" hidden></span>
+                                                        <span class="cn-archivo-txt"><b>Fotografía</b><small data-estado>JPG, PNG o WEBP · máx. 5 MB</small></span>
+                                                        <input type="file" id="cn-arch-foto" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>
+                                                    </label></div>
+                                                    <div class="col-12 col-sm-6 col-lg-4"><label class="cn-archivo" for="cn-arch-cv" data-tipo="cv">
+                                                        <span class="cn-archivo-vista"><i class="fas fa-file-pdf"></i></span>
+                                                        <span class="cn-archivo-txt"><b>CV</b><small data-estado>PDF · máx. 10 MB</small></span>
+                                                        <input type="file" id="cn-arch-cv" accept="application/pdf" hidden>
+                                                    </label></div>
+                                                    <div class="col-12 col-sm-6 col-lg-4"><label class="cn-archivo" for="cn-arch-ine-front" data-tipo="ine_front">
+                                                        <span class="cn-archivo-vista"><i class="fas fa-id-card"></i><img alt="" hidden></span>
+                                                        <span class="cn-archivo-txt"><b>INE frente</b><small data-estado>Imagen del documento</small></span>
+                                                        <input type="file" id="cn-arch-ine-front" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>
+                                                    </label></div>
+                                                    <div class="col-12 col-sm-6 col-lg-4"><label class="cn-archivo" for="cn-arch-ine-back" data-tipo="ine_back">
+                                                        <span class="cn-archivo-vista"><i class="fas fa-id-card"></i><img alt="" hidden></span>
+                                                        <span class="cn-archivo-txt"><b>INE reverso</b><small data-estado>Imagen del documento</small></span>
+                                                        <input type="file" id="cn-arch-ine-back" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>
+                                                    </label></div>
+                                                    <div class="col-12 col-sm-6 col-lg-4"><label class="cn-archivo" for="cn-arch-credential" data-tipo="credential">
+                                                        <span class="cn-archivo-vista"><i class="fas fa-address-card"></i><img alt="" hidden></span>
+                                                        <span class="cn-archivo-txt"><b>TIA / Credencial AIFA</b><small data-estado>Imagen del documento</small></span>
+                                                        <input type="file" id="cn-arch-credential" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>
+                                                    </label></div>
+                                                    <div class="col-12 col-sm-6 col-lg-4"><label class="cn-archivo" for="cn-arch-license" data-tipo="license">
+                                                        <span class="cn-archivo-vista"><i class="fas fa-car"></i><img alt="" hidden></span>
+                                                        <span class="cn-archivo-txt"><b>Licencia de manejo</b><small data-estado>Imagen del documento</small></span>
+                                                        <input type="file" id="cn-arch-license" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" hidden>
+                                                    </label></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- TAB: Notas y otros -->
+                                        <div class="tab-pane fade" id="cnuevo-notas" role="tabpanel">
+                                            <div class="cn-sheet">
+                                                <div class="row g-3">
+                                                    <div class="col-12 col-lg-6"><label class="form-label fw-semibold small" for="cn-comentarios">Comentarios <span class="text-muted fw-normal">(uno por línea)</span></label><textarea class="form-control form-control-sm" id="cn-comentarios" rows="4" placeholder="1- Comisión laboral AIFA-DO-… 12 Sep. 2025"></textarea></div>
+                                                    <div class="col-12 col-lg-6"><label class="form-label fw-semibold small" for="cn-amonestaciones">Amonestaciones <span class="text-muted fw-normal">(una por línea)</span></label><textarea class="form-control form-control-sm" id="cn-amonestaciones" rows="4" placeholder="1- Amonestación AIFA-DO-… 15 Mar. 2025"></textarea></div>
+                                                    <!-- Columnas de la tabla que no tienen un campo propio arriba: se pintan
+                                                         solas al abrir el alta, para que no quede ninguna sin pedir. -->
+                                                    <div class="col-12 d-none" id="cn-extras-wrap">
+                                                        <h6 class="cn-group-title mt-2 mb-2"><i class="fas fa-table"></i>Otros datos de la tabla</h6>
+                                                        <div class="row g-3" id="cn-extras"></div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -11676,6 +11931,10 @@ FF
                                     </div>
                                 </div>
                                 <div class="modal-footer justify-content-between flex-wrap gap-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button type="button" class="btn btn-light border cn-nav-btn" id="cn-paso-ant" onclick="colabNuevoPaso(-1)"><i class="fas fa-arrow-left me-1"></i>Anterior</button>
+                                        <button type="button" class="btn btn-outline-success cn-nav-btn" id="cn-paso-sig" onclick="colabNuevoPaso(1)">Siguiente<i class="fas fa-arrow-right ms-1"></i></button>
+                                    </div>
                                     <small class="text-danger fw-semibold" id="colab-nuevo-error" style="display:none"></small>
                                     <div class="d-flex flex-wrap gap-2 ms-auto">
                                         <button type="button" class="btn btn-light border" data-bs-dismiss="modal">Cancelar</button>
@@ -12089,8 +12348,12 @@ FF
 
                     <!-- -- JAVASCRIPT DE LA SECCIÓN -- -->
                     <script src="js/colaboradores-directory-policy.js?v=20260924a"></script>
+                    <script src="js/combo-bonito.js?v=20261003d"></script>
+                    <script src="js/colaboradores-catalogos.js?v=20261003d"></script>
+                    <script src="js/colaboradores-campos.js?v=20261003g"></script>
                     <script src="js/employee-photo-upload.js?v=20260804"></script>
-                    <script src="js/employee-document-upload.js?v=20260804"></script>
+                    <script src="js/employee-document-upload.js?v=20261003a"></script>
+                    <script src="js/colab-expediente.js?v=20261003a"></script>
                     <!-- Visor de fotos e identificaciones: previa al pasar el mouse,
                          pantalla completa con acercamiento y descarga -->
                     <script src="js/colab-visor-imagenes.js?v=20260828" defer></script>
@@ -12138,12 +12401,17 @@ FF
                                 plaza:           find('^plaza$'),
                                 turno:           find('^turno$'),
                                 ryr:             find('ryr'),
-                                grado:           find('^grado$'),
+                                // La columna real es "Grado Militar": con sólo '^grado$' no se
+                                // encontraba y el grado capturado se descartaba al guardar.
+                                grado:           find('^grado$', 'grado.*militar'),
+                                situacion_militar: find('activo.*retirado', 'situaci[oó]n.*militar'),
                                 matricula:       find('matr[íi]cula', 'matricula'),
                                 grado_academico: find('grado.*acad', 'acad'),
                                 estatus:         find('^estatus$', '^status$', 'estado.*labor', 'estatus.*labor'),
                                 cedula:          find('c[eé]dula'),
-                                licencia:        find('^licencia$'),
+                                // La columna real es "Licencia de Manejo": con sólo '^licencia$'
+                                // nunca se encontraba y lo capturado se descartaba al guardar.
+                                licencia:        find('^licencia$', 'licencia.*manejo'),
                                 licencia_tipo:   find('tipo.*lic', '^tipo$'),
                                 vig_licencia:    find('vig.*lic', 'licencia.*vig'),
                                 vig_credencial:  find('vig.*cred', 'cred.*vig'),
@@ -12182,6 +12450,7 @@ FF
                                 foto_ine:        find('foto.*ine', 'ine.*frente'),
                                 foto_ine_rev:    find('ine.*rev', 'rev.*ine', 'ine.*reverso'),
                                 foto_cred:       find('foto.*cred', 'cred.*foto'),
+                                foto_licencia:   find('fotograf[ií]a.*lic', 'foto.*lic'),
                                 cv_url:          find('^cv$', 'cv_url', 'curriculum', 'curr[ií]culum', 'cv.*url', 'url.*cv'),
                                 sexo:            find('^sexo$', 'g[eé]nero', '^sex$'),
                                 sueldo:          find('sueldo.*bruto', '^sueldo$', 'sueldo', 'percepci'),
@@ -12903,7 +13172,8 @@ FF
                             fillField('cf-plaza',           gc(c, 'plaza'));
                             fillField('cf-turno',           gc(c, 'turno'));
                             fillField('cf-ryr',             gc(c, 'ryr'));
-                            fillField('cf-grado',           gc(c, 'grado'));
+                            // Grado militar y, si está capturada, su situación (en activo / retirado).
+                            fillField('cf-grado', [val(gc(c, 'grado')), val(gc(c, 'situacion_militar'))].filter(Boolean).join(' · '));
                             fillField('cf-matricula',       gc(c, 'matricula'));
                             fillField('cf-grado-academico', gc(c, 'grado_academico'));
                             fillField('cf-cedula',          gc(c, 'cedula'));
@@ -12912,6 +13182,7 @@ FF
                             loadDocPhoto('colab-foto-ine',     val(gc(c, 'foto_ine')),     'ine_front');
                             loadDocPhoto('colab-foto-ine-rev', val(gc(c, 'foto_ine_rev')), 'ine_back');
                             loadDocPhoto('colab-foto-cred',    val(gc(c, 'foto_cred')),     'credential');
+                            loadDocPhoto('colab-foto-lic',     val(gc(c, 'foto_licencia')), 'license');
 
                             fillField('cf-licencia',       gc(c, 'licencia'));
                             fillField('cf-licencia-tipo',  gc(c, 'licencia_tipo'));
@@ -12923,15 +13194,30 @@ FF
                             fillField('cf-curp',           gc(c, 'curp'));
 
                             // Sección 4: Organización
-                            fillField('cf-comisionado',  gc(c, 'comisionado'));
-                            fillField('cf-direccion',    gc(c, 'direccion'));
-                            fillField('cf-subdireccion', gc(c, 'subdireccion'));
-                            fillField('cf-gerencia',     gc(c, 'gerencia'));
-                            fillField('cf-coordinacion', gc(c, 'coordinacion'));
+                            // La planilla guarda "Personal Comisionado" como 1 / 0, y "----"
+                            // cuando un nivel no aplica: en la ficha se leen como Sí / No y guion.
+                            (() => {
+                                const cat = window.ColaboradoresCatalogos;
+                                const raw = gc(c, 'comisionado');
+                                const flag = cat ? cat.normalizarComisionado(raw) : '';
+                                fillField('cf-comisionado', flag === '1' ? 'Sí' : flag === '0' ? 'No' : raw);
+                                const area = v => (cat && cat.esVacio(v) ? null : v);
+                                ['direccion', 'subdireccion', 'gerencia', 'coordinacion'].forEach(k => {
+                                    fillField('cf-' + k, area(gc(c, k)));
+                                    fillField('cf-' + k + '-com', area(gc(c, k + '_comisionado')));
+                                });
+                            })();
 
                             // Sección 5: Amonestaciones y comentarios
                             renderAmonestaciones(c);
                             renderComentarios(c);
+                            // Incapacidades, reconocimientos, retardos, designaciones y oficios de comisión.
+                            window.ColabExpediente?.render({
+                                num: val(gc(c, 'num')),
+                                canEdit: colabCanEdit(),
+                                comisionDestino: ['coordinacion_comisionado', 'gerencia_comisionado', 'subdireccion_comisionado', 'direccion_comisionado']
+                                    .map(k => val(gc(c, k))).find(v => v && !/^(0|-+)$/.test(v)) || ''
+                            });
 
                             // Sección 6: Emergencias
                             buildContacts(c);
@@ -14249,25 +14535,27 @@ FF
                         /* -- Etiquetas legibles por campo semántico -- */
                         const COLAB_FIELD_LABELS = {
                             nombre:'Nombre', puesto:'Puesto', fecha_ingreso:'Fecha de Ingreso',
-                            onomastico:'Fecha Nacimiento', celular:'No. Celular', extension:'Extensión',
+                            onomastico:'Fecha de nacimiento', celular:'No. Celular', extension:'Extensión',
                             correo:'Correo', profesion:'Profesión', militar:'Militar/Civil',
-                            nivel:'Nivel', plaza:'Plaza', turno:'Turno', ryr:'RyR',
-                            grado:'Grado', matricula:'Matrícula', grado_academico:'Grado Académico',
+                            nivel:'Nivel', plaza:'Plaza', turno:'Turno', ryr:'RyR desde',
+                            grado:'Grado militar', situacion_militar:'Situación militar', matricula:'Matrícula militar', grado_academico:'Grado Académico',
                             cedula:'Cédula Profesional', licencia:'Licencia', licencia_tipo:'Tipo Licencia',
                             vig_licencia:'Vigencia Licencia', vig_credencial:'Vigencia Credencial',
                             vig_ine:'Vigencia INE', domicilio:'Domicilio', rfc:'RFC', curp:'CURP',
-                            comisionado:'Comisionado', direccion:'Dirección', subdireccion:'Subdireccion',
-                            gerencia:'Gerencia', coordinacion:'Coordinacion',
+                            comisionado:'Comisionado', direccion:'Dirección orgánica', subdireccion:'Subdirección orgánica',
+                            gerencia:'Gerencia orgánica', coordinacion:'Coordinación orgánica',
+                            direccion_comisionado:'Dirección comisionado', subdireccion_comisionado:'Subdirección comisionado',
+                            gerencia_comisionado:'Gerencia comisionado', coordinacion_comisionado:'Coordinación comisionado',
                             amonestaciones:'Amonestaciones', comentarios:'Comentarios',
                             c1_nombre:'Contacto 1 — Nombre', c1_parentesco:'Contacto 1 — Parentesco',
                             c1_tel:'Contacto 1 — Tel.', c2_nombre:'Contacto 2 — Nombre',
                             c2_parentesco:'Contacto 2 — Parentesco', c2_tel:'Contacto 2 — Tel.',
                             sangre:'Tipo de Sangre', alerg_med:'Alergia Medicamento',
                             alerg_ali:'Alergia Alimento', nss:'NSS',
-                            estado_civil:'Estado Civil', dependientes:'Dependientes',
+                            estado_civil:'Estado Civil', dependientes:'Hijos',
                             rubrica:'Rúbrica', doc_ingreso:'Doc. Ingreso',
                             foto:'Foto de perfil', foto_ine:'INE frente', foto_ine_rev:'INE reverso',
-                            foto_cred:'TIA / Credencial AIFA', cv_url:'Currículum Vitae (CV)',
+                            foto_cred:'TIA / Credencial AIFA', foto_licencia:'Licencia de manejo (foto)', cv_url:'Currículum Vitae (CV)',
                             estatus:'Estatus', sexo:'Sexo',
                         };
 
@@ -14278,9 +14566,11 @@ FF
                             'ce-correo':'correo','ce-correo-personal':'correo_personal','ce-profesion':'profesion','ce-militar':'militar','ce-sexo':'sexo',
                             'ce-amonestaciones':'amonestaciones','ce-comentarios':'comentarios',
                             'ce-nivel':'nivel','ce-plaza':'plaza','ce-turno':'turno','ce-ryr':'ryr',
-                            'ce-grado':'grado','ce-matricula':'matricula','ce-grado-academico':'grado_academico',
+                            'ce-grado':'grado','ce-situacion-militar':'situacion_militar','ce-matricula':'matricula','ce-grado-academico':'grado_academico',
                             'ce-cedula':'cedula','ce-comisionado':'comisionado','ce-direccion':'direccion',
                             'ce-subdireccion':'subdireccion','ce-gerencia':'gerencia','ce-coordinacion':'coordinacion',
+                            'ce-direccion-com':'direccion_comisionado','ce-subdireccion-com':'subdireccion_comisionado',
+                            'ce-gerencia-com':'gerencia_comisionado','ce-coordinacion-com':'coordinacion_comisionado',
                             'ce-licencia':'licencia','ce-licencia-tipo':'licencia_tipo','ce-vig-licencia':'vig_licencia',
                             'ce-vig-credencial':'vig_credencial','ce-vig-ine':'vig_ine','ce-domicilio':'domicilio',
                             'ce-rfc':'rfc','ce-curp':'curp','ce-estado-civil':'estado_civil',
@@ -14290,6 +14580,77 @@ FF
                             'ce-sangre':'sangre','ce-alerg-med':'alerg_med','ce-alerg-ali':'alerg_ali','ce-nss':'nss',
                             'ce-estatus':'estatus','ce-fecha-baja':'fecha_baja','ce-motivo-baja':'motivo_baja',
                         };
+
+                        /* Combos de catálogo para Puesto y adscripción (js/colaboradores-catalogos.js).
+                           La orgánica usa el catálogo conforme planilla; la real, el de cómo opera
+                           hoy el área, porque hay mucha gente comisionada fuera de su plaza. */
+                        const COLAB_ORG_NIVELES = ['direccion', 'subdireccion', 'gerencia', 'coordinacion'];
+
+                        function colabPintarComision(prefijo) {
+                            const cat = window.ColaboradoresCatalogos;
+                            const destinos = document.getElementById(prefijo + '-com-destinos');
+                            const nota = document.getElementById(prefijo + '-com-nota');
+                            if (!cat || !destinos || !nota) return;
+                            const flag = cat.normalizarComisionado(document.getElementById(prefijo + '-comisionado')?.value);
+                            const hayDestino = COLAB_ORG_NIVELES.some(k =>
+                                !cat.esVacio(document.getElementById(prefijo + '-' + k + '-com')?.value));
+                            destinos.classList.toggle('d-none', flag !== '1' && !hayDestino);
+                            nota.classList.toggle('text-danger', flag !== '1' && hayDestino);
+                            nota.textContent = flag === '1'
+                                ? 'Captura el área donde trabaja realmente.'
+                                : hayDestino
+                                    ? 'Tiene un área de comisión capturada, pero no está marcado como comisionado.'
+                                    : flag === '0' ? 'Sin comisión: trabaja en su adscripción orgánica.' : '';
+                        }
+
+                        function colabCatalogosConectar() {
+                            const cat = window.ColaboradoresCatalogos;
+                            if (!cat) return;
+                            ['ce', 'cn'].forEach(p => {
+                                const ids = sufijo => COLAB_ORG_NIVELES.reduce((o, k) => { o[k] = p + '-' + k + sufijo; return o; }, {});
+                                cat.conectarPuesto({ id: p + '-puesto', nivelId: p + '-nivel' });
+                                cat.conectarOrg({ catalogo: 'organica', ids: ids('') });
+                                cat.conectarOrg({ catalogo: 'real', ids: ids('-com'), onChange: () => colabPintarComision(p) });
+                                cat.conectarComisionado({ id: p + '-comisionado', onChange: () => colabPintarComision(p) });
+                                cat.conectarEstudios({ gradoId: p + '-grado-academico', profesionId: p + '-profesion' });
+                            });
+                            cat.sincronizar();
+                            colabCamposConectar();
+                        }
+
+                        /* Rúbrica automática con las iniciales del nombre (se puede cambiar a
+                           mano y la nota dice cuál es), Militar / Civil y Estado civil como combo, y las fechas
+                           DD/MM/AAAA con máscara y calendario (js/colaboradores-campos.js). */
+                        /* Grado, situación y matrícula son datos militares: con "Civil" se
+                           ocultan. Sin respuesta se dejan ver, para no esconder lo capturado. */
+                        function colabPintarSoloMilitar(p) {
+                            const v = String(document.getElementById(p + '-militar')?.value || '').trim();
+                            const civil = window.ColaboradoresCampos?.normalizarMilitar(v) === 'Civil';
+                            ['-grado', '-situacion-militar', '-matricula'].forEach(s => {
+                                document.getElementById(p + s)?.closest('.cc-solo-militar')?.classList.toggle('d-none', civil);
+                            });
+                        }
+
+                        function colabCamposConectar() {
+                            const campos = window.ColaboradoresCampos;
+                            if (!campos) return;
+                            ['ce', 'cn'].forEach(p => {
+                                campos.conectarRubrica({ id: p + '-rubrica', nombreId: p + '-nombre' });
+                                campos.conectarMilitar({ id: p + '-militar' });
+                                campos.conectarGradoMilitar({ id: p + '-grado' });
+                                campos.conectarSituacionMilitar({ id: p + '-situacion-militar' });
+                                colabPintarSoloMilitar(p);
+                                const mil = document.getElementById(p + '-militar');
+                                if (mil && !mil.dataset.soloMilitarWired) {
+                                    mil.dataset.soloMilitarWired = '1';
+                                    mil.addEventListener('input', () => colabPintarSoloMilitar(p));
+                                }
+                                campos.conectarEstadoCivil({ id: p + '-estado-civil' });
+                                campos.conectarLicencia({ id: p + '-licencia' });
+                                ['-ryr', '-fecha-ingreso', '-onomastico'].forEach(s => campos.conectarFecha({ id: p + s }));
+                            });
+                            campos.sincronizar();
+                        }
 
                         const COLAB_DOCUMENT_IMAGE_UI = Object.freeze({
                             ine_front: Object.freeze({
@@ -14306,6 +14667,11 @@ FF
                                 field: 'foto_cred', inputId: 'ce-doc-credential', previewId: 'ce-doc-credential-preview',
                                 placeholderId: 'ce-doc-credential-placeholder', removeId: 'ce-doc-credential-remove',
                                 statusId: 'ce-doc-credential-status', label: 'TIA / Credencial AIFA'
+                            }),
+                            license: Object.freeze({
+                                field: 'foto_licencia', inputId: 'ce-doc-license', previewId: 'ce-doc-license-preview',
+                                placeholderId: 'ce-doc-license-placeholder', removeId: 'ce-doc-license-remove',
+                                statusId: 'ce-doc-license-status', label: 'Licencia de manejo'
                             })
                         });
                         let colabDocumentImageState = {};
@@ -14358,7 +14724,9 @@ FF
                             colabDocumentImageState = {};
 
                             for (const [kind, config] of Object.entries(COLAB_DOCUMENT_IMAGE_UI)) {
-                                const previousValue = String(gc(c, config.field) || '').trim();
+                                const guardado = String(gc(c, config.field) || '').trim();
+                                // El registro de origen marcaba con "0", "P" o "Pendiente": no es una foto.
+                                const previousValue = /^(data:image\/|https?:\/\/|storage:\/\/)/i.test(guardado) ? guardado : '';
                                 colabDocumentImageState[kind] = { previousValue, file: null, remove: false, objectUrl: null };
                                 const input = document.getElementById(config.inputId);
                                 const removeBtn = document.getElementById(config.removeId);
@@ -14635,11 +15003,37 @@ FF
                             { clave: 'coordinacion', input: 'cn-coordinacion', label: 'Coordinación',    tab: '#cnuevo-org'  }
                         ];
 
+                        /* -- Datos que captura sólo el área: el portal ya no se los muestra al
+                           colaborador. Viajan en la metadata del QR (clave 'admin') y
+                           save_colab_onboarding los escribe si el expediente no los tiene.
+                           La fecha de ingreso, además, se exige antes de generar el QR. -- */
+                        const COLAB_ONBOARDING_ADMIN = [
+                            { clave: 'fecha_ingreso', input: 'cn-fecha-ingreso', label: 'Fecha de ingreso', tab: '#cnuevo-gen', requerido: true, placeholder: 'DD/MM/AAAA' },
+                            { clave: 'ryr',           input: 'cn-ryr' },
+                            { clave: 'turno',         input: 'cn-turno' },
+                            { clave: 'comisionado',   input: 'cn-comisionado' },
+                            { clave: 'doc_ingreso',   input: 'cn-doc-ingreso' },
+                            { clave: 'extension',     input: 'cn-extension' },
+                            { clave: 'correo',        input: 'cn-correo' }
+                        ];
+
                         // El numero de empleado va aparte en el RPC, pero para el alta es
                         // un campo mas de los que hay que tener antes de generar el QR.
                         const COLAB_ONBOARDING_REQUERIDOS = [
                             { clave: 'num_empleado', input: 'cn-num', label: 'No. Empleado', tab: '#cnuevo-gen' }
-                        ].concat(COLAB_ONBOARDING_FIJOS);
+                        ].concat(COLAB_ONBOARDING_FIJOS, COLAB_ONBOARDING_ADMIN.filter(c => c.requerido));
+
+                        /* ¿El QR debe exigir este campo? Los de adscripción, sólo si el área
+                           elegida tiene ese nivel en el catálogo orgánico: Gerencia de Carga
+                           no tiene coordinaciones y Auditoría no tiene subdirección, y pedirlos
+                           obligaba a escribir "----". Sin catálogo cargado, todos como antes. */
+                        function colabNivelOrgRequerido(clave, leer) {
+                            const cat = window.ColaboradoresCatalogos;
+                            if (!cat || !cat.NIVELES.includes(clave)) return true;
+                            const valores = {};
+                            cat.NIVELES.forEach(k => { valores[k] = String(leer('cn-' + k) || ''); });
+                            return cat.nivelRequerido('organica', clave, valores);
+                        }
 
                         /* -- Nombre de la pestaña donde vive un campo, leido de la pestaña misma -- */
                         function colabSeccionDeTab(tabSelector) {
@@ -14671,7 +15065,8 @@ FF
                                             esc(campo.label) + ' <span class="text-danger">*</span>' +
                                         '</label>' +
                                         '<input type="text" class="form-control form-control-sm" id="cf-' + esc(campo.input) + '" ' +
-                                            'data-destino="' + esc(campo.input) + '" autocomplete="off">' +
+                                            'data-destino="' + esc(campo.input) + '" autocomplete="off"' +
+                                            (campo.placeholder ? ' placeholder="' + esc(campo.placeholder) + '"' : '') + '>' +
                                     '</div>';
                                 }).join('');
                                 return '<div class="colab-faltantes-grupo">' +
@@ -14679,6 +15074,26 @@ FF
                                     '<div class="row g-3">' + campos + '</div>' +
                                 '</div>';
                             }).join('');
+
+                            // La fecha de ingreso, con la misma máscara DD/MM/AAAA del alta.
+                            if (document.getElementById('cf-cn-fecha-ingreso')) {
+                                window.ColaboradoresCampos?.conectarFecha({ id: 'cf-cn-fecha-ingreso' });
+                            }
+
+                            // Puesto y adscripción, con los mismos combos del alta. Lo que no
+                            // falta se lee del alta para que la cascada filtre bien.
+                            const cat = window.ColaboradoresCatalogos;
+                            if (!cat) return;
+                            const enModal = id => Boolean(document.getElementById('cf-' + id));
+                            if (enModal('cn-puesto')) {
+                                cat.conectarPuesto({ id: 'cf-cn-puesto', nivelId: enModal('cn-nivel') ? 'cf-cn-nivel' : 'cn-nivel' });
+                            }
+                            const niveles = cat.NIVELES.filter(k => enModal('cn-' + k));
+                            if (niveles.length) {
+                                const ids = {};
+                                cat.NIVELES.forEach(k => { ids[k] = (enModal('cn-' + k) ? 'cf-' : '') + 'cn-' + k; });
+                                cat.conectarOrg({ catalogo: 'organica', niveles, ids });
+                            }
                         }
 
                         function colabAbrirFaltantesOnboarding(faltan) {
@@ -14689,7 +15104,7 @@ FF
                             const el = document.getElementById('colabOnboardingFaltantesModal');
                             if (!el || typeof bootstrap === 'undefined') return;
                             el.addEventListener('shown.bs.modal', function() {
-                                el.querySelector('input[data-destino]')?.focus();
+                                el.querySelector('#colab-faltantes-body select, #colab-faltantes-body input[data-destino]:not(.d-none)')?.focus();
                             }, { once: true });
                             el.addEventListener('hidden.bs.modal', function() {
                                 // Bootstrap quita modal-open al cerrar el de arriba y deja
@@ -14706,14 +15121,25 @@ FF
                             const errEl = document.getElementById('colab-faltantes-error');
                             const inputs = body ? Array.from(body.querySelectorAll('input[data-destino]')) : [];
 
-                            const vacios = inputs.filter(i => !i.value.trim());
-                            inputs.forEach(i => i.classList.toggle('is-invalid', !i.value.trim()));
-                            if (vacios.length) {
+                            // Lo que el combo esconde se marca en el combo, que es lo que se ve.
+                            const visible = i => document.getElementById(i.id + '-sel') || i;
+                            const leer = id => (document.getElementById('cf-' + id) || document.getElementById(id))?.value;
+                            const vacios = inputs.filter(i => !i.value.trim()
+                                && colabNivelOrgRequerido(i.dataset.destino.replace(/^cn-/, ''), leer));
+                            // La fecha de ingreso, además, tiene que ser una fecha de verdad.
+                            const campos = window.ColaboradoresCampos;
+                            const fechasMalas = inputs.filter(i => i.dataset.destino === 'cn-fecha-ingreso'
+                                && i.value.trim() && campos && !campos.fechaValida(i.value.trim()));
+                            const malos = vacios.concat(fechasMalas);
+                            inputs.forEach(i => visible(i).classList.toggle('is-invalid', malos.includes(i)));
+                            if (malos.length) {
                                 if (errEl) {
-                                    errEl.textContent = 'Todos son obligatorios para generar el QR.';
+                                    errEl.textContent = vacios.length
+                                        ? 'Todos son obligatorios para generar el QR.'
+                                        : 'La fecha de ingreso va como DD/MM/AAAA.';
                                     errEl.style.display = '';
                                 }
-                                vacios[0].focus();
+                                visible(malos[0]).focus();
                                 return;
                             }
                             if (errEl) errEl.style.display = 'none';
@@ -14723,6 +15149,7 @@ FF
                                 const destino = document.getElementById(i.dataset.destino);
                                 if (destino) destino.value = i.value.trim();
                             });
+                            window.ColaboradoresCatalogos?.sincronizar();
 
                             const el = document.getElementById('colabOnboardingFaltantesModal');
                             if (el && typeof bootstrap !== 'undefined') bootstrap.Modal.getInstance(el)?.hide();
@@ -14755,8 +15182,11 @@ FF
 
                             try {
                                 // Van todos porque el registro puede no existir todavía en agenda_2026:
-                                // el portal los lee de aquí para mostrárselos bloqueados.
-                                const metadata = fijos;
+                                // el portal los lee de aquí para mostrárselos bloqueados. Los del
+                                // área van aparte, en 'admin': el portal no los recibe, sólo el
+                                // guardado los escribe en el expediente.
+                                const admin = datosBase?.admin || {};
+                                const metadata = Object.keys(admin).length ? Object.assign({}, fijos, { admin }) : fijos;
                                 const { data, error } = await sb.rpc('create_colab_onboarding_link', {
                                     p_num_empleado: numEmpl,
                                     p_days_valid: 30,
@@ -14789,11 +15219,22 @@ FF
                             if (!colabRequireEdit()) return;
 
                             const fijos = {};
+                            const admin = {};
                             const faltan = [];
                             COLAB_ONBOARDING_REQUERIDOS.forEach(function(campo) {
                                 const valor = (document.getElementById(campo.input)?.value || '').trim();
-                                if (!valor) { faltan.push(campo); return; }
-                                if (campo.clave !== 'num_empleado') fijos[campo.clave] = valor;
+                                if (!valor) {
+                                    // Un nivel que el área elegida no tiene (Gerencia de Carga no
+                                    // tiene coordinaciones) no se pide: no hay nada que capturar.
+                                    if (!colabNivelOrgRequerido(campo.clave, id => document.getElementById(id)?.value)) return;
+                                    faltan.push(campo);
+                                    return;
+                                }
+                                if (COLAB_ONBOARDING_FIJOS.includes(campo)) fijos[campo.clave] = valor;
+                            });
+                            COLAB_ONBOARDING_ADMIN.forEach(function(campo) {
+                                const valor = (document.getElementById(campo.input)?.value || '').trim();
+                                if (valor) admin[campo.clave] = valor;
                             });
 
                             if (faltan.length) {
@@ -14806,7 +15247,8 @@ FF
 
                             await colabGenerarOnboardingQrDesdeDatos({
                                 numEmpl: (document.getElementById('cn-num')?.value || '').trim(),
-                                fijos
+                                fijos,
+                                admin
                             });
                         };
 
@@ -15316,6 +15758,7 @@ FF
                                             ? colabFechaISO(gc(c, colKey))
                                             : String(gc(c, colKey) ?? '').trim();
                             });
+                            colabCatalogosConectar();
 
                             const selEstatus = document.getElementById('ce-estatus');
                             if (selEstatus && !selEstatus.dataset.colorWired) {
@@ -15855,11 +16298,13 @@ FF
                             'cn-celular':'celular','cn-extension':'extension','cn-correo':'correo','cn-correo-personal':'correo_personal',
                             'cn-profesion':'profesion','cn-militar':'militar',
                             'cn-nivel':'nivel','cn-plaza':'plaza','cn-turno':'turno','cn-ryr':'ryr',
-                            'cn-grado':'grado','cn-matricula':'matricula',
+                            'cn-grado':'grado','cn-situacion-militar':'situacion_militar','cn-matricula':'matricula',
                             'cn-grado-academico':'grado_academico','cn-cedula':'cedula',
                             'cn-comisionado':'comisionado','cn-direccion':'direccion',
                             'cn-subdireccion':'subdireccion','cn-gerencia':'gerencia',
                             'cn-coordinacion':'coordinacion',
+                            'cn-direccion-com':'direccion_comisionado','cn-subdireccion-com':'subdireccion_comisionado',
+                            'cn-gerencia-com':'gerencia_comisionado','cn-coordinacion-com':'coordinacion_comisionado',
                             'cn-licencia':'licencia','cn-licencia-tipo':'licencia_tipo',
                             'cn-vig-licencia':'vig_licencia','cn-vig-credencial':'vig_credencial',
                             'cn-vig-ine':'vig_ine','cn-domicilio':'domicilio',
@@ -15871,6 +16316,8 @@ FF
                             'cn-c2-parentesco':'c2_parentesco','cn-c2-tel':'c2_tel',
                             'cn-sexo':'sexo','cn-sangre':'sangre','cn-alerg-med':'alerg_med',
                             'cn-alerg-ali':'alerg_ali','cn-nss':'nss',
+                            'cn-sueldo':'sueldo','cn-estatus':'estatus',
+                            'cn-comentarios':'comentarios','cn-amonestaciones':'amonestaciones',
                         };
 
                         /* Control de contratos le agrega un sufijo al numero cuando alguien
@@ -15949,6 +16396,16 @@ FF
                                 const el = document.getElementById(id);
                                 if (el) el.value = '';
                             });
+                            // Como en la planilla: 0 = no comisionado, hasta que se diga otra cosa.
+                            const cnComisionado = document.getElementById('cn-comisionado');
+                            if (cnComisionado) cnComisionado.value = '0';
+                            const cnEstatus = document.getElementById('cn-estatus');
+                            if (cnEstatus) cnEstatus.value = 'Activo';
+                            const cnPertenece = document.getElementById('cn-pertenece');
+                            if (cnPertenece) cnPertenece.checked = true;
+                            colabNuevoLimpiarArchivos();
+                            colabCatalogosConectar();
+                            colabNuevoPreparar();
                             window.colabCerrarOnboardingPanel?.();
                             // Limpiar errores
                             const errEl = document.getElementById('colab-nuevo-error');
@@ -15966,11 +16423,13 @@ FF
                                 });
                             }
                             colabAvisarMismaPersona();
-                            // Ir al primer tab
+                            // Cada alta arranca en captura completa y en el primer paso.
+                            colabNuevoModo('completo');
                             const firstTab = document.querySelector('#colabNuevoTabs .nav-link');
                             if (firstTab && typeof bootstrap !== 'undefined') {
                                 bootstrap.Tab.getOrCreateInstance(firstTab).show();
                             }
+                            colabNuevoPintarNav();
                             new bootstrap.Modal(document.getElementById('colabNuevoModal')).show();
                         };
 
@@ -16025,14 +16484,31 @@ FF
                                     const realCol = colabCols?.[colKey];
                                     if (!realCol) return;
                                     const el = document.getElementById(formId);
-                                    const v  = (el?.value || '').trim();
+                                    let v  = (el?.value || '').trim();
+                                    // La fecha de nacimiento se guarda igual que al editar.
+                                    if (v && colKey === 'onomastico') {
+                                        const iso = colabNormalizeBirthDateStorage(v);
+                                        if (iso && iso !== 'Sin información') v = iso;
+                                    }
+                                    if (v && colKey === 'estatus') v = colabNormalizarEstatus(v);
                                     if (v) payload[realCol] = v;
                                 });
                                 const estatusCol = colabCols?.estatus;
                                 if (estatusCol && !payload[estatusCol]) payload[estatusCol] = 'Activo';
+                                // La palomita de pertenencia, si la tabla ya tiene la columna.
+                                const perteneceCol = colabCols?.pertenece_direccion;
+                                const perteneceEl = document.getElementById('cn-pertenece');
+                                if (perteneceCol && perteneceEl) payload[perteneceCol] = perteneceEl.checked;
+                                // Las columnas sin campo propio ("Otros datos de la tabla").
+                                Object.assign(payload, colabNuevoLeerExtras());
 
                                 const { error } = await sb.from('agenda_2026').insert([payload]);
                                 if (error) throw error;
+
+                                // Fotos y archivos: necesitan el número de empleado ya registrado.
+                                // Si alguno falla, el alta queda hecha y se avisa cuál subir
+                                // después desde Editar.
+                                const archivosFallidos = await colabNuevoSubirArchivos(sb, numVal, payload);
 
                                 // Registrar en historial global (Historia)
                                 window.logHistory?.('CREAR', 'Colaboradores', numVal, {
@@ -16058,10 +16534,15 @@ FF
 
                                 // Toast de éxito (si Bootstrap toast no está, usar alert)
                                 if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+                                    const escToast = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                    const toastMsg = archivosFallidos.length
+                                        ? '<i class="fas fa-triangle-exclamation me-2"></i>Colaborador registrado, pero no se pudo subir: '
+                                            + escToast(archivosFallidos.join(', ')) + '. Súbelo desde Editar.'
+                                        : '<i class="fas fa-check-circle me-2"></i>Colaborador registrado con éxito.';
                                     const toastHtml = `<div class="position-fixed bottom-0 end-0 p-3" style="z-index:999999">
-                                        <div class="toast align-items-center text-white bg-success border-0 show" role="alert">
+                                        <div class="toast align-items-center ${archivosFallidos.length ? 'bg-warning text-dark' : 'text-white bg-success'} border-0 show" role="alert">
                                             <div class="d-flex">
-                                                <div class="toast-body"><i class="fas fa-check-circle me-2"></i>Colaborador registrado con éxito.</div>
+                                                <div class="toast-body">${toastMsg}</div>
                                                 <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Cerrar"></button>
                                             </div>
                                         </div>
@@ -16069,7 +16550,7 @@ FF
                                     const toastWrap = document.createElement('div');
                                     toastWrap.innerHTML = toastHtml;
                                     document.body.appendChild(toastWrap);
-                                    setTimeout(() => toastWrap.remove(), 4000);
+                                    setTimeout(() => toastWrap.remove(), archivosFallidos.length ? 10000 : 4000);
                                 }
 
                             } catch (err) {
@@ -16079,6 +16560,354 @@ FF
                                 if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-save me-1"></i>Registrar Colaborador'; }
                             }
                         };
+
+                        /* -------------------------------------------
+                           ALTA GUIADA: MODO, PASOS Y AVANCE
+
+                           Con "Captura completa" el alta pide todas las columnas de la
+                           Tabla Completa. Con "QR" se queda sólo con lo que el colaborador
+                           no puede capturar desde el portal (lo bloqueado y lo del área);
+                           el resto lo llena él.
+                        ------------------------------------------- */
+
+                        let colabNuevoModoActual = 'completo';
+
+                        /** Los campos que el área sí llena cuando el alta va por QR. */
+                        function colabNuevoIdsModoQr() {
+                            const ids = new Set(COLAB_ONBOARDING_REQUERIDOS.concat(COLAB_ONBOARDING_ADMIN).map(c => c.input));
+                            COLAB_ORG_NIVELES.forEach(k => ids.add('cn-' + k + '-com'));
+                            return ids;
+                        }
+
+                        /** Inputs, combos y archivos del alta que guardan un dato. */
+                        function colabNuevoCamposDe(pane) {
+                            return Array.from(pane.querySelectorAll('input[id^="cn-"], select[id^="cn-"], textarea[id^="cn-"]'))
+                                .filter(el => COLAB_NUEVO_FIELD_MAP[el.id] || /^cn-(extra|arch)-/.test(el.id));
+                        }
+
+                        /** Marca lo que se esconde en modo QR: la columna completa del campo. */
+                        function colabNuevoMarcarCampos() {
+                            const enQr = colabNuevoIdsModoQr();
+                            document.querySelectorAll('#colabNuevoContent .tab-pane').forEach(pane => {
+                                colabNuevoCamposDe(pane).forEach(el => {
+                                    const col = el.closest('[class*="col-"]');
+                                    if (!col) return;
+                                    col.classList.toggle('cn-solo-completo', !enQr.has(el.id));
+                                    // Un dato sin columna en agenda_2026 no se guardaría: no se pide.
+                                    // Los del QR se quedan siempre, porque viajan en el enlace.
+                                    const clave = COLAB_NUEVO_FIELD_MAP[el.id];
+                                    col.classList.toggle('cn-sin-columna',
+                                        Boolean(clave && colabCols && !colabCols[clave] && !enQr.has(el.id)));
+                                });
+                            });
+                            const pert = document.getElementById('cn-pertenece')?.closest('[class*="col-"]');
+                            if (pert) {
+                                pert.classList.add('cn-solo-completo');
+                                pert.classList.toggle('cn-sin-columna', Boolean(colabCols && !colabCols.pertenece_direccion));
+                            }
+                        }
+
+                        /* Se mira la columna del campo y no el campo: los catálogos esconden
+                           el input y ponen un combo en su lugar, dentro de la misma columna. */
+                        function colabNuevoVisible(el) {
+                            const col = el.closest('[class*="col-"]') || el;
+                            if (col.closest('.d-none, .cn-sin-columna')) return false;
+                            return colabNuevoModoActual !== 'qr' || !col.classList.contains('cn-solo-completo');
+                        }
+
+                        function colabNuevoLleno(el) {
+                            if (el.type === 'file') return Boolean(el.files && el.files.length);
+                            return String(el.value || '').trim() !== '';
+                        }
+
+                        /** Pinta cuántos datos lleva cada paso y el avance general. */
+                        function colabNuevoContar() {
+                            let total = 0, llenos = 0;
+                            document.querySelectorAll('#colabNuevoTabs .nav-link').forEach(btn => {
+                                const pane = document.querySelector(btn.dataset.bsTarget);
+                                if (!pane) return;
+                                // Estatus siempre trae valor: contarlo inflaría el avance.
+                                const campos = colabNuevoCamposDe(pane).filter(el => el.id !== 'cn-estatus' && colabNuevoVisible(el));
+                                const n = campos.filter(colabNuevoLleno).length;
+                                const oculto = btn.closest('.nav-item')?.classList.contains('cn-oculto');
+                                if (!oculto) { total += campos.length; llenos += n; }
+                                if (campos.length) btn.dataset.cuenta = n + '/' + campos.length;
+                                else delete btn.dataset.cuenta;
+                                btn.classList.toggle('cn-paso-lleno', campos.length > 0 && n === campos.length);
+                            });
+                            const fill = document.getElementById('cn-avance-fill');
+                            const txt = document.getElementById('cn-avance-txt');
+                            if (fill) fill.style.width = (total ? Math.round(llenos * 100 / total) : 0) + '%';
+                            if (txt) txt.textContent = llenos + ' de ' + total + ' datos';
+                        }
+
+                        let _cnContarPendiente = false;
+                        function colabNuevoContarPronto() {
+                            if (_cnContarPendiente) return;
+                            _cnContarPendiente = true;
+                            setTimeout(() => { _cnContarPendiente = false; colabNuevoContar(); }, 60);
+                        }
+
+                        /** Pestañas visibles en el modo actual, en orden. */
+                        function colabNuevoPasosVisibles() {
+                            return Array.from(document.querySelectorAll('#colabNuevoTabs .nav-item'))
+                                .filter(li => !li.classList.contains('cn-oculto'))
+                                .map(li => li.querySelector('.nav-link'));
+                        }
+
+                        /** Anterior / Siguiente según el paso en que se está. */
+                        function colabNuevoPintarNav() {
+                            const pasos = colabNuevoPasosVisibles();
+                            const i = pasos.findIndex(b => b.classList.contains('active'));
+                            const ant = document.getElementById('cn-paso-ant');
+                            const sig = document.getElementById('cn-paso-sig');
+                            if (ant) ant.disabled = i <= 0;
+                            if (sig) sig.classList.toggle('d-none', i >= pasos.length - 1);
+                        }
+
+                        window.colabNuevoPaso = function(dir) {
+                            const pasos = colabNuevoPasosVisibles();
+                            const i = pasos.findIndex(b => b.classList.contains('active'));
+                            const destino = pasos[Math.min(Math.max(i + dir, 0), pasos.length - 1)];
+                            if (destino && typeof bootstrap !== 'undefined') bootstrap.Tab.getOrCreateInstance(destino).show();
+                        };
+
+                        window.colabNuevoModo = function(modo) {
+                            colabNuevoModoActual = modo === 'qr' ? 'qr' : 'completo';
+                            const modal = document.getElementById('colabNuevoModal');
+                            if (!modal) return;
+                            modal.classList.toggle('cn-modo-qr', colabNuevoModoActual === 'qr');
+                            modal.querySelectorAll('.cn-modo-op').forEach(b => {
+                                const activo = b.dataset.modo === colabNuevoModoActual;
+                                b.classList.toggle('active', activo);
+                                b.setAttribute('aria-checked', activo ? 'true' : 'false');
+                            });
+                            colabNuevoMarcarCampos();
+                            // En QR se esconden los pasos que se quedan sin nada que capturar.
+                            document.querySelectorAll('#colabNuevoTabs .nav-link').forEach(btn => {
+                                const pane = document.querySelector(btn.dataset.bsTarget);
+                                const vacio = colabNuevoModoActual === 'qr' && pane
+                                    && !colabNuevoCamposDe(pane).some(el => !el.closest('.cn-solo-completo'));
+                                btn.closest('.nav-item')?.classList.toggle('cn-oculto', Boolean(vacio));
+                            });
+                            const activo = document.querySelector('#colabNuevoTabs .nav-link.active');
+                            if (activo && activo.closest('.nav-item')?.classList.contains('cn-oculto')) {
+                                const primero = colabNuevoPasosVisibles()[0];
+                                if (primero && typeof bootstrap !== 'undefined') bootstrap.Tab.getOrCreateInstance(primero).show();
+                            }
+                            colabNuevoPintarNav();
+                            colabNuevoContar();
+                        };
+
+                        /* -- Columnas de la tabla que no tienen campo propio en el alta --
+                           La Tabla Completa enseña todas las columnas de agenda_2026. Las que
+                           el alta no conoce (las que se agreguen después, por ejemplo) se
+                           piden aquí, para que no quede ninguna sin capturar. */
+                        const CN_EXTRAS_FUERA = /onboarding|cursos_programados|conducta|foto|fotograf|imagen|^cv$|_url$|^(id|created_at|updated_at)$/i;
+
+                        function colabNuevoColumnasCubiertas() {
+                            const claves = Object.values(COLAB_NUEVO_FIELD_MAP).concat([
+                                'estatus', 'pertenece_direccion', 'fecha_baja', 'motivo_baja', 'edad_raw',
+                                'foto', 'foto_ine', 'foto_ine_rev', 'foto_cred', 'foto_licencia', 'cv_url'
+                            ]);
+                            return new Set(claves.map(k => colabCols?.[k]).filter(Boolean));
+                        }
+
+                        function colabNuevoPintarExtras() {
+                            const wrap = document.getElementById('cn-extras-wrap');
+                            const cont = document.getElementById('cn-extras');
+                            if (!wrap || !cont) return;
+                            const filas = colabCache || [];
+                            const cols = filas.length ? Object.keys(filas[0]) : [];
+                            const cubiertas = colabNuevoColumnasCubiertas();
+                            const canonCubiertas = new Set([...cubiertas].map(ctblCanonCol));
+                            const extras = cols.filter(col => !cubiertas.has(col)
+                                && !canonCubiertas.has(ctblCanonCol(col))
+                                && !CTBL_HIDDEN_COLS.has(col)
+                                && !CN_EXTRAS_FUERA.test(col)
+                                && !filas.some(r => r[col] !== null && typeof r[col] === 'object'));
+                            const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+                            cont.innerHTML = extras.map((col, i) => {
+                                const valores = filas.map(r => r[col]).filter(v => v !== null && v !== undefined && v !== '');
+                                const tipo = valores.length && valores.every(v => typeof v === 'boolean') ? 'bool'
+                                    : valores.length && valores.every(v => typeof v === 'number') ? 'num' : 'txt';
+                                const id = 'cn-extra-' + i;
+                                const label = '<label class="form-label fw-semibold small" for="' + id + '">' + esc(ctblLabelCol(col)) + '</label>';
+                                const campo = tipo === 'bool'
+                                    ? '<select class="form-select form-select-sm" id="' + id + '" data-col="' + esc(col) + '" data-tipo="bool">'
+                                        + '<option value="">— Sin dato —</option><option value="true">Sí</option><option value="false">No</option></select>'
+                                    : '<input type="' + (tipo === 'num' ? 'number' : 'text') + '" class="form-control form-control-sm" id="' + id
+                                        + '" data-col="' + esc(col) + '" data-tipo="' + tipo + '">';
+                                return '<div class="col-12 col-md-6 col-lg-4">' + label + campo + '</div>';
+                            }).join('');
+                            wrap.classList.toggle('d-none', !extras.length);
+                        }
+
+                        function colabNuevoLeerExtras() {
+                            const datos = {};
+                            document.querySelectorAll('#cn-extras [data-col]').forEach(el => {
+                                const v = String(el.value || '').trim();
+                                if (!v) return;
+                                if (el.dataset.tipo === 'bool') datos[el.dataset.col] = v === 'true';
+                                else if (el.dataset.tipo === 'num' && Number.isFinite(Number(v))) datos[el.dataset.col] = Number(v);
+                                else datos[el.dataset.col] = v;
+                            });
+                            return datos;
+                        }
+
+                        /* -- Fotos y archivos del alta -- */
+                        const CN_ARCHIVOS = [
+                            { input: 'cn-arch-foto',       tipo: 'foto',       label: 'Fotografía' },
+                            { input: 'cn-arch-cv',         tipo: 'cv',         label: 'CV' },
+                            { input: 'cn-arch-ine-front',  tipo: 'ine_front',  label: 'INE frente' },
+                            { input: 'cn-arch-ine-back',   tipo: 'ine_back',   label: 'INE reverso' },
+                            { input: 'cn-arch-credential', tipo: 'credential', label: 'TIA / Credencial AIFA' },
+                            { input: 'cn-arch-license',    tipo: 'license',    label: 'Licencia de manejo' },
+                        ];
+                        const CN_ARCHIVO_AYUDA = {
+                            foto: 'JPG, PNG o WEBP · máx. 5 MB', cv: 'PDF · máx. 10 MB'
+                        };
+
+                        function colabNuevoPintarArchivo(conf, estado, texto, file) {
+                            const input = document.getElementById(conf.input);
+                            const tarjeta = input?.closest('.cn-archivo');
+                            if (!tarjeta) return;
+                            tarjeta.classList.toggle('cn-archivo-ok', estado === 'ok');
+                            tarjeta.classList.toggle('cn-archivo-mal', estado === 'mal');
+                            const small = tarjeta.querySelector('[data-estado]');
+                            if (small) small.textContent = texto || CN_ARCHIVO_AYUDA[conf.tipo] || 'Imagen del documento';
+                            const img = tarjeta.querySelector('img');
+                            if (img) {
+                                if (img.dataset.url) { try { URL.revokeObjectURL(img.dataset.url); } catch (_) {} delete img.dataset.url; }
+                                if (file && estado === 'ok' && window.URL?.createObjectURL) {
+                                    img.dataset.url = URL.createObjectURL(file);
+                                    img.src = img.dataset.url;
+                                    img.hidden = false;
+                                } else {
+                                    img.removeAttribute('src');
+                                    img.hidden = true;
+                                }
+                            }
+                        }
+
+                        async function colabNuevoValidarArchivo(conf, file) {
+                            if (conf.tipo === 'cv') {
+                                if (file.type && file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) throw new Error('El CV tiene que ser PDF.');
+                                if (file.size > 10 * 1024 * 1024) throw new Error('El CV no puede superar 10 MB.');
+                                return;
+                            }
+                            const modulo = conf.tipo === 'foto' ? window.employeePhotoUpload : window.employeeDocumentUpload;
+                            if (modulo?.validate) await modulo.validate(file);
+                        }
+
+                        function colabNuevoConectarArchivos() {
+                            CN_ARCHIVOS.forEach(conf => {
+                                const input = document.getElementById(conf.input);
+                                if (!input || input.dataset.cnWired) return;
+                                input.dataset.cnWired = '1';
+                                input.addEventListener('change', async () => {
+                                    const file = input.files && input.files[0];
+                                    if (!file) { colabNuevoPintarArchivo(conf, '', ''); colabNuevoContarPronto(); return; }
+                                    colabNuevoPintarArchivo(conf, '', 'Revisando ' + file.name + '…');
+                                    try {
+                                        await colabNuevoValidarArchivo(conf, file);
+                                        colabNuevoPintarArchivo(conf, 'ok', file.name, file);
+                                    } catch (err) {
+                                        input.value = '';
+                                        const msg = (conf.tipo === 'foto' ? window.employeePhotoUpload : window.employeeDocumentUpload)
+                                            ?.mapError?.(err, conf.tipo)?.userMessage;
+                                        colabNuevoPintarArchivo(conf, 'mal', msg || err?.message || 'Archivo no válido.');
+                                    }
+                                    colabNuevoContarPronto();
+                                });
+                            });
+                        }
+
+                        function colabNuevoLimpiarArchivos() {
+                            CN_ARCHIVOS.forEach(conf => {
+                                const input = document.getElementById(conf.input);
+                                if (input) input.value = '';
+                                colabNuevoPintarArchivo(conf, '', '');
+                            });
+                        }
+
+                        /** Sube lo elegido y lo asocia al registro recién creado.
+                            Devuelve los nombres de lo que no se pudo subir. */
+                        async function colabNuevoSubirArchivos(sb, numEmpl, payload) {
+                            const elegidos = CN_ARCHIVOS
+                                .map(conf => ({ conf, file: document.getElementById(conf.input)?.files?.[0] }))
+                                .filter(x => x.file);
+                            if (!elegidos.length) return [];
+
+                            const fallidos = [];
+                            const update = {};
+                            for (const { conf, file } of elegidos) {
+                                try {
+                                    if (conf.tipo === 'foto') {
+                                        if (!window.employeePhotoUpload) throw new Error('módulo de fotografías no disponible');
+                                        const r = await window.employeePhotoUpload.upload({ client: sb, file, employeeNumber: numEmpl });
+                                        if (colabCols?.foto) update[colabCols.foto] = r.publicUrl;
+                                    } else if (conf.tipo === 'cv') {
+                                        const cvPath = `${numEmpl}.pdf`;
+                                        const { error } = await sb.storage.from('employee-cvs').upload(cvPath, file, { upsert: true, contentType: 'application/pdf' });
+                                        if (error) throw error;
+                                        if (colabCols?.cv_url) update[colabCols.cv_url] = EMPLOYEE_CVDOCS_BASE + cvPath;
+                                    } else {
+                                        if (!window.employeeDocumentUpload) throw new Error('módulo de documentos no disponible');
+                                        const col = colabCols?.[COLAB_DOCUMENT_IMAGE_UI[conf.tipo].field];
+                                        if (!col) throw new Error('la tabla no tiene columna para ' + conf.label);
+                                        const r = await window.employeeDocumentUpload.upload({ client: sb, file, employeeNumber: numEmpl, kind: conf.tipo });
+                                        update[col] = r.storageReference;
+                                    }
+                                } catch (err) {
+                                    console.error('[Colaboradores] No se pudo subir ' + conf.label + ' del alta:', err);
+                                    fallidos.push(conf.label);
+                                }
+                            }
+
+                            if (Object.keys(update).length) {
+                                const numCol = colabCols?.num;
+                                const safeNumCol = /[\s.]/.test(numCol) ? `"${numCol}"` : numCol;
+                                const { error } = await sb.from('agenda_2026').update(update).eq(safeNumCol, numEmpl);
+                                if (error) {
+                                    console.error('[Colaboradores] No se pudieron asociar los archivos del alta:', error);
+                                    CN_ARCHIVOS.forEach(conf => {
+                                        if (elegidos.some(x => x.conf === conf) && !fallidos.includes(conf.label)) fallidos.push(conf.label);
+                                    });
+                                } else {
+                                    Object.assign(payload, update);
+                                }
+                            }
+                            return fallidos;
+                        }
+
+                        /** Se llama cada vez que se abre el alta. */
+                        function colabNuevoPreparar() {
+                            colabNuevoConectarArchivos();
+                            const pintar = () => { colabNuevoPintarExtras(); colabNuevoModo(colabNuevoModoActual); };
+                            if (colabCache && colabCols) pintar();
+                            else colabCargarTodos().then(pintar).catch(() => {});
+
+                            const modal = document.getElementById('colabNuevoModal');
+                            if (modal && !modal.dataset.cnGuiaWired) {
+                                modal.dataset.cnGuiaWired = '1';
+                                ['input', 'change'].forEach(ev => modal.addEventListener(ev, colabNuevoContarPronto, true));
+                                // Los combos de catálogo escriben el valor sin evento en algunos casos.
+                                modal.addEventListener('click', colabNuevoContarPronto, true);
+                                document.getElementById('colabNuevoTabs')?.addEventListener('shown.bs.tab', () => {
+                                    colabNuevoPintarNav();
+                                    const body = modal.querySelector('.modal-body');
+                                    if (body) body.scrollTop = 0;
+                                    // El primer campo del paso, listo para escribir.
+                                    const pane = document.querySelector('#colabNuevoContent .tab-pane.active');
+                                    const primero = pane && Array.from(pane.querySelectorAll('input, select, textarea, button'))
+                                        .find(el => el.offsetParent && !el.disabled && el.tabIndex >= 0
+                                            && !/^(file|checkbox|hidden)$/.test(el.type) && !el.closest('.cn-archivo'));
+                                    primero?.focus({ preventScroll: true });
+                                });
+                            }
+                        }
 
                         /* ===========================================================
                            PLAZAS VACANTES
@@ -16333,9 +17162,9 @@ FF
                             'grado_academico':'Grado Académico','Grado Académico':'Grado Académico',
                             'estatus':'Estatus','Estatus':'Estatus','grado':'Grado Militar',
                             'matricula':'Matrícula','cedula':'Cédula',
-                            'militar':'Mil./Civil','comisionado':'Comisionado','ryr':'R y R',
-                            'onomastico':'Onomástico','estado_civil':'Edo. Civil',
-                            'dependientes':'Dependientes','nss':'NSS','sangre':'Sangre','Tipo de sangre':'Sangre',
+                            'militar':'Mil./Civil','comisionado':'Comisionado','ryr':'RyR desde',
+                            'onomastico':'F. Nacimiento','estado_civil':'Edo. Civil',
+                            'dependientes':'Hijos','nss':'NSS','sangre':'Sangre','Tipo de sangre':'Sangre',
                             'domicilio':'Domicilio','rfc':'RFC','curp':'CURP',
                             'licencia':'Licencia','licencia_tipo':'Tipo Lic.',
                             'vig_licencia':'Vig. Lic.','vig_credencial':'Vig. Cred.',
@@ -17380,7 +18209,8 @@ FF
                                 vacLoadForColab(numEmpl),
                                 loadDocPhoto('colab-foto-ine', val(gc(c, 'foto_ine')), 'ine_front'),
                                 loadDocPhoto('colab-foto-ine-rev', val(gc(c, 'foto_ine_rev')), 'ine_back'),
-                                loadDocPhoto('colab-foto-cred', val(gc(c, 'foto_cred')), 'credential')
+                                loadDocPhoto('colab-foto-cred', val(gc(c, 'foto_cred')), 'credential'),
+                                loadDocPhoto('colab-foto-lic', val(gc(c, 'foto_licencia')), 'license')
                             ];
                             const results = await Promise.allSettled(tasks);
                             const failed = results.filter(result => result.status === 'rejected');
@@ -22985,7 +23815,7 @@ FF
                                                 <i class="fas fa-chart-line me-2 text-info"></i>Estadística
                                             </button>
                                         </li>
-                                        <li class="nav-item" role="presentation">
+                                        <li class="nav-item d-none" role="presentation"><!-- sólo super admin: js/conci-oficial-vs-detalle.js -->
                                             <button class="nav-link fw-semibold" id="tab-conci-oficial-detalle" data-bs-toggle="tab" data-bs-target="#pane-conci-oficial-detalle" type="button" role="tab">
                                                 <i class="fas fa-scale-balanced me-2 text-warning"></i>Oficial vs Detalle
                                             </button>
@@ -23813,6 +24643,14 @@ FF
                                                             <tbody></tbody>
                                                         </table>
                                                     </div>
+                                                    <!-- Pie de la tabla: inicio de fila (Ctrl+Inicio) y conteo de vuelos mostrados (script.js) -->
+                                                    <div class="conci-pie-tabla">
+                                                        <button type="button" id="btn-conci-inicio-fila" class="conci-btn-inicio-fila"
+                                                            title="Regresar al inicio de la fila (Ctrl + Inicio)" aria-label="Regresar al inicio de la fila">
+                                                            <i class="fas fa-angles-left" aria-hidden="true"></i> Inicio de fila
+                                                        </button>
+                                                        <div id="conci-conteo-filas" class="conci-conteo-filas" aria-live="polite"></div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -23820,7 +24658,7 @@ FF
 
                                     <!--  Tab: Estadística  -->
                                     <!--  Tab: Oficial vs Detalle (js/conci-oficial-vs-detalle.js)  -->
-                                    <div class="tab-pane fade p-4" id="pane-conci-oficial-detalle" role="tabpanel">
+                                    <div class="tab-pane fade p-4 d-none" id="pane-conci-oficial-detalle" role="tabpanel">
                                         <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                                             <h6 class="mb-0 me-auto"><i class="fas fa-scale-balanced me-2 text-warning"></i>Cifra oficial contra detalle de manifiestos, por mes</h6>
                                             <label class="small text-muted d-flex align-items-center gap-1" for="conci-ovd-anio">Año
@@ -39234,6 +40072,10 @@ FF
     <script src="js/combustibles/combustibles.js?v=1"></script>
     <script src="js/vehiculos.js?v=2"></script>
     <script src="js/muebles-bienes.js?v=4"></script>
+    <!-- Seguimiento · Dirección de Operación (sólo cuentas con acceso; db/create_seguimiento.sql) -->
+    <link rel="stylesheet" href="seguimiento.css?v=5">
+    <script src="js/seguimiento-core.js?v=3"></script>
+    <script src="js/seguimiento.js?v=5"></script>
     <script src="js/email-analisis.js"></script>
     <script src="js/agenda.js?v=8"></script>
     <script src="js/agenda-assistant.js?v=1"></script>
@@ -39425,9 +40267,9 @@ FF
     <script src="js/conci-export-total.js?v=20260925-recepcion" defer></script>
     <!-- Avisos por periodo de los manifiestos (tabla manifiestos_avisos_periodo, migración 058) -->
     <!-- Capa única de totales (oficial hasta el corte, detalle después): ver el archivo -->
-    <script src="js/totales-service.js?v=20261006-totales" defer></script>
+    <script src="js/totales-service.js?v=20261007-inicio-rapido" defer></script>
     <script src="js/manifiestos-avisos.js?v=20261005-manifiestos-hechos" defer></script>
-    <script src="script.js?v=20261006-totales" defer></script>
+    <script src="script.js?v=20261007-actualizacion-al-ingresar-v2" defer></script>
     <!-- Campos de fecha en dd/mm/aaaa sin importar el idioma del navegador. -->
     <script src="js/fecha-ddmm.js?v=20260912-fecha-1" defer></script>
     <!-- Botón y menú de usuario del encabezado de inicio. -->
@@ -40813,12 +41655,14 @@ FF
 <!-- Reportes de Conciliación (Carga / Pasajeros) -->
 <script src="js/conci-reportes.js?v=20260911-v1" defer></script>
 <script src="js/conci-reportes-edicion.js?v=20260911-v1" defer></script>
-<script src="js/conci-reportes-pasajeros.js?v=20261005-cursor" defer></script>
+<!-- Saldos oficiales de los oficios (acumulados del mes, año e histórico) -->
+<script src="js/conci-saldos-oficio.js?v=20261007-variacion-2025" defer></script>
+<script src="js/conci-reportes-pasajeros.js?v=20261007-saldos-oficio" defer></script>
 <script src="js/conci-carga-catalogo.js?v=20260910-v1" defer></script>
 <script src="js/conci-presentacion-carga.js?v=20260911-v1" defer></script>
-<script src="js/conci-reportes-carga.js?v=20261005-cursor" defer></script>
+<script src="js/conci-reportes-carga.js?v=20261007-saldos-oficio" defer></script>
 <!-- Mensaje para WhatsApp o Webex: usa las cifras de los dos reportes de arriba. -->
-<script src="js/conci-mensaje-envio.js?v=20261005-solo-cierre" defer></script>
+<script src="js/conci-mensaje-envio.js?v=20261007-variacion-2025" defer></script>
 <!-- Importar Excel: botón btn-conci-importar-excel de la barra de Conciliación. -->
 <script src="js/conci-importar-excel.js?v=20260930-boton" defer></script>
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
@@ -40829,7 +41673,7 @@ FF
 <script src="js/estadistica-motor.js?v=20261006-totales" defer></script>
 <script src="js/estadistica-panel.js?v=20261006-totales" defer></script>
 <!-- Conciliación: Oficial vs Detalle por mes -->
-<script src="js/conci-oficial-vs-detalle.js?v=20261006-totales" defer></script>
+<script src="js/conci-oficial-vs-detalle.js?v=20261006-solo-superadmin" defer></script>
 <script src="js/estadistica-clasificacion.js?v=20260908-v1" defer></script>
 
 <!-- ═══ Aviación General · FBO (GAG · Servicios Conexos) ═══
@@ -40929,16 +41773,9 @@ FF
             });
         }
 
-        // Wire Manifiestos date range pickers
-        ['filter-conci-fecha-desde', 'filter-conci-fecha-hasta'].forEach(function(id) {
-            var el = document.getElementById(id);
-            if (!el) return;
-            el.addEventListener('change', function () {
-                if (typeof loadConciliacionManifiestos === 'function') {
-                    loadConciliacionManifiestos({ forceRefresh: true });
-                }
-            });
-        });
+        // Las fechas de Manifiestos (filter-conci-fecha-desde/-hasta) ya las
+        // escucha script.js al iniciar; un segundo oyente aquí cargaba cada
+        // cambio de fecha dos veces.
     });
 })();
 </script>

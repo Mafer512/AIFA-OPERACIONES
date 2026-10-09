@@ -164,6 +164,24 @@ describe('formas de las tablas viejas', () => {
 });
 
 describe('caché', () => {
+  test('una consulta colgada vence, se cancela y se puede reintentar sin una promesa atrapada en caché', async () => {
+    jest.useFakeTimers();
+    try {
+      let signal;
+      const query = { range: () => query, abortSignal: (s) => { signal = s; return new Promise(() => {}); } };
+      const cliente = { rpc: jest.fn(() => query) };
+      const service = Totales.crear({ cliente: () => cliente });
+      const consulta = service.getDetalleDiario('2026-10-06', '2026-10-06');
+      const resultado = expect(consulta).rejects.toThrow('tardó demasiado');
+      await jest.advanceTimersByTimeAsync(15000);
+      await resultado;
+      expect(signal.aborted).toBe(true);
+      cliente.rpc.mockImplementation(() => ({ range: async () => ({ data: [], error: null }) }));
+      expect(await service.getDetalleDiario('2026-10-06', '2026-10-06')).toEqual(new Map());
+      expect(cliente.rpc).toHaveBeenCalledTimes(2);
+    } finally { jest.useRealTimers(); }
+  });
+
   function clienteContado(cortes) {
     const conteo = { oficial: 0, corte: 0 };
     const respuesta = (r) => { const p = Promise.resolve(r); p.range = () => Promise.resolve(r); return p; };

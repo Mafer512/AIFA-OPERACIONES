@@ -24,6 +24,7 @@
     'use strict';
 
     const TTL_MS = 5 * 60 * 1000;
+    const DETALLE_TIMEOUT_MS = 15000;
     const AVISO_DETALLE = 'Cifras de detalle operativo; pueden diferir de la cifra oficial';
     const CATEGORIAS = Object.freeze(['comercial', 'carga', 'general']);
     const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto',
@@ -219,26 +220,39 @@
             const d = iso(desde);
             const h = iso(hasta || desde);
             if (opciones && opciones.forzar) cache.delete(`detalle:${d}:${h}`);
-            return cacheado(`detalle:${d}:${h}`, async () => {
-                const c = await cliente();
-                const mapa = new Map();
-                for (let offset = 0; ; offset += 1000) {
-                    const { data, error } = await c.rpc('totales_detalle_por_dia', { p_desde: d, p_hasta: h })
-                        .range(offset, offset + 999);
-                    if (error) throw error;
-                    (data || []).forEach((r) => {
-                        const fecha = iso(r.fecha);
-                        const cat = String(r.categoria || '').toLowerCase();
-                        if (!fecha || !CATEGORIAS.includes(cat)) return;
-                        if (!mapa.has(fecha)) mapa.set(fecha, vacio());
-                        const dia = mapa.get(fecha)[cat];
-                        dia.operaciones += Number(r.operaciones) || 0;
-                        if (cat === 'carga') dia.toneladas += Number(r.toneladas) || 0;
-                        else dia.pasajeros += Number(r.pasajeros) || 0;
-                    });
-                    if (!data || data.length < 1000) break;
-                }
-                return mapa;
+            return cacheado(`detalle:${d}:${h}`, () => {
+                const controller = new AbortController();
+                let timer;
+                const timeout = new Promise((_, reject) => {
+                    timer = setTimeout(() => {
+                        reject(new Error('La consulta de cifras tardó demasiado. Intenta actualizar.'));
+                        controller.abort();
+                    }, d === h ? DETALLE_TIMEOUT_MS : 60000);
+                });
+                const consulta = (async () => {
+                    const c = await cliente();
+                    if (controller.signal.aborted) throw new Error('Consulta cancelada');
+                    const mapa = new Map();
+                    for (let offset = 0; ; offset += 1000) {
+                        const query = c.rpc('totales_detalle_por_dia', { p_desde: d, p_hasta: h })
+                            .range(offset, offset + 999);
+                        const { data, error } = await (query.abortSignal ? query.abortSignal(controller.signal) : query);
+                        if (error) throw error;
+                        (data || []).forEach((r) => {
+                            const fecha = iso(r.fecha);
+                            const cat = String(r.categoria || '').toLowerCase();
+                            if (!fecha || !CATEGORIAS.includes(cat)) return;
+                            if (!mapa.has(fecha)) mapa.set(fecha, vacio());
+                            const dia = mapa.get(fecha)[cat];
+                            dia.operaciones += Number(r.operaciones) || 0;
+                            if (cat === 'carga') dia.toneladas += Number(r.toneladas) || 0;
+                            else dia.pasajeros += Number(r.pasajeros) || 0;
+                        });
+                        if (!data || data.length < 1000) break;
+                    }
+                    return mapa;
+                })();
+                return Promise.race([consulta, timeout]).finally(() => clearTimeout(timer));
             });
         }
 
