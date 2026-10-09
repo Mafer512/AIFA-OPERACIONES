@@ -1991,6 +1991,13 @@ FF
                                     </div>
                                 </div>
 
+                                <!-- Seguimiento (al final de Operación): sólo para las cuentas de
+                                     public.seguimiento_acceso. Nace oculto; js/seguimiento.js lo
+                                     muestra a quien tiene acceso. -->
+                                <a class="menu-item si-link si-link--l1" href="#" data-section="seguimiento" id="menu-seguimiento" style="display:none;" aria-hidden="true">
+                                    <i class="fas fa-list-check si-ico"></i><span class="si-txt">Seguimiento</span>
+                                </a>
+
                             </div>
                         </div>
                     </div>
@@ -40065,6 +40072,10 @@ FF
     <script src="js/combustibles/combustibles.js?v=1"></script>
     <script src="js/vehiculos.js?v=2"></script>
     <script src="js/muebles-bienes.js?v=4"></script>
+    <!-- Seguimiento · Dirección de Operación (sólo cuentas con acceso; db/create_seguimiento.sql) -->
+    <link rel="stylesheet" href="seguimiento.css?v=5">
+    <script src="js/seguimiento-core.js?v=3"></script>
+    <script src="js/seguimiento.js?v=5"></script>
     <script src="js/email-analisis.js"></script>
     <script src="js/agenda.js?v=8"></script>
     <script src="js/agenda-assistant.js?v=1"></script>
