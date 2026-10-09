@@ -12,6 +12,51 @@ Entra por el acceso directo del menú principal, **junto a Conciliación**.
 
 ---
 
+## 0. Fuente actual: `operaciones_fbo` + histórico (migraciones 064, 2026-10-09)
+
+Desde 064 el módulo es **estadístico** y Resumen, Movimientos e Importación ya no leen
+`aviacion_general_operaciones` directamente. Leen la vista `v_fbo_movimientos`:
+
+| Fuente | Qué aporta | Fecha de cada movimiento |
+|---|---|---|
+| `operaciones_fbo` (una fila = una operación, folio `registro`) | Desde 2026-01-01: llegada si hay `fecha_aterrizaje`, salida si hay `fecha_salida_posicion` | La suya: una operación que cruza de mes cuenta la llegada en un mes y la salida en otro |
+| `aviacion_general_operaciones` ACTIVO, sólo lectura | 2022–2025 (`registro` = `HIST-<id>`, sin operación) | La misma con la que ya contaba el módulo (regla de 051), así 2022–2025 no cambian |
+
+`movimiento_id` no choca entre fuentes (FBO `id*2` / `id*2+1`, histórico `-id`) y la columna
+`fuente` lo dice. El KPI **Operaciones** cuenta sólo FBO; si el periodo toca años anteriores a
+2026, la pantalla avisa «Operaciones disponibles desde 2026».
+
+| Objeto (064a/064b) | Para qué |
+|---|---|
+| `fbo_movimientos_filtrados(jsonb)` | Única definición de los filtros. La lista se pide con `count: 'exact'` + `range()` |
+| `fbo_resumen(jsonb)` | KPIs (movimientos, llegadas/salidas, pasajeros con adultos/infantes, NAC/INT, operaciones, operadores y matrículas distintos) y tops |
+| `fbo_movimientos_por_mes(jsonb)` | Llegadas, salidas y pasajeros por mes |
+| `fbo_opciones()` | Desplegables de los filtros |
+| `fbo_previa_importacion(jsonb)` / `fbo_importar_operaciones(jsonb)` | Vista previa e importación atómica del Layout |
+
+Ninguna cifra se calcula descargando filas: PostgREST corta en 1000 y la tabla ya pasa de eso.
+`064c_fbo_validacion.sql` (sólo lectura) lo comprueba contra la base real, compara 2022–2025
+con lo que mostraba el módulo y saca el cuadro antes/después.
+
+**Importación** (`layout-fbo.js`, puro y probado con `docs/fbo/Lay-out.xlsx`): hoja `Global` (o la
+primera con los encabezados), encabezado detectado por «Registro» + «Matrícula», mapeo de
+`docs/fbo/carga_layout_fbo_operaciones_fbo.sql` sin columnas de cobranza. Las operaciones con
+el mismo `registro` se reemplazan; una operación guardada con **otro** registro y la misma
+matrícula + fecha de aterrizaje (p. ej. `BASE2026-0855` ↔ `AG-2026-000004`) se reemplaza si es
+la única coincidencia y bloquea la fila si hay varias. Bloques de 500, cada uno una transacción.
+
+**Validación y Auditoría** siguen en la fuente anterior (lo dicen en pantalla). **Captura** está
+oculta: escribía en la fuente anterior y lo capturado no aparecería en el Resumen.
+
+**Estadística → FBO, Informe/Resumen Estadístico e Inicio** siguen leyendo
+`aviacion_general_resumen`: para 2026 pueden dar cifras distintas a este módulo hasta que se
+migren aparte.
+
+Lo que sigue (secciones 1 a 10) describe la fuente anterior y sigue vigente para Validación,
+Auditoría, Captura y los módulos que aún la usan.
+
+---
+
 ## 1. Fuente de datos
 
 ```
@@ -553,7 +598,12 @@ Todas aplicadas, en orden:
 - **050** — 2024 se cuenta por fecha real, no por rotación, dentro de `aviacion_general_resumen`.
   *Aplicada. Verificado en vivo: 2024 da 1,372/1,398/2,770; 2022 sigue en 458.*
 
-Todas siguen la misma mecánica, por si en el futuro se agrega una nueva:
+- **064a** — `v_fbo_movimientos` y funciones de consulta `fbo_*`. Selecciona todo y Run.
+- **064b** — vista previa e importación del Layout. Selecciona todo y Run.
+- **064c** — validación de sólo lectura (no escribe nada).
+- **064_reversa_fbo** — quita sólo los objetos 064; nunca datos.
+
+Hasta la 052, todas siguen la misma mecánica:
 
 1. Correr el archivo completo tal cual. Termina en `ROLLBACK`.
 2. Leer el bloque `VERIFICACIÓN` (cuenta índices, funciones y filas, o —en 049— usa

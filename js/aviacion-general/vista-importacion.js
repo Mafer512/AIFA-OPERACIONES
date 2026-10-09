@@ -1,49 +1,53 @@
 /* Pantalla "Importación" del módulo de Aviación General / FBO.
  *
- * Sube el histórico del Excel original a la base. Es la vía por la que entran
- * los registros que hoy tiene el archivo y la tabla todavía no.
+ * Sube el Layout del sistema FBO (la misma estructura que docs/fbo/Lay-out.xlsx,
+ * sin importar el nombre del archivo) a public.operaciones_fbo.
  *
- * EL PRINCIPIO QUE ORDENA ESTA PANTALLA: NADA SE SUBE A CIEGAS
+ * NADA SE SUBE A CIEGAS
  *
- *   Una importación que "salió bien" y dejó 40 renglones fuera sin decirlo es
- *   una bomba de tiempo: el faltante se descubre meses después, cuadrando
- *   cifras contra un oficio, y para entonces ya nadie sabe qué archivo se
- *   subió. Por eso el flujo son cuatro pasos y ninguno se puede saltar:
- *
- *     1. Leer      — se abre el archivo en el navegador, sin mandar nada.
- *     2. Mapear    — se enseña qué columna del Excel cayó en qué campo, cuáles
- *                    no se reconocieron y cuáles se ignoran a propósito.
- *     3. Ensayar   — se manda a la base en modo simulación: valida y detecta
- *                    duplicados SIN escribir una sola fila.
- *     4. Confirmar — hasta aquí no se ha insertado nada.
- *
- *   Al final se puede descargar el detalle de lo rechazado, con su número de
- *   fila del Excel, para corregir el archivo y volver a subirlo.
- *
- * El archivo NUNCA sale del navegador: se lee con SheetJS del lado del cliente
- * y a la base sólo viajan las filas ya normalizadas.
+ *   1. Archivo     — se lee en el navegador con SheetJS; el archivo no sale de
+ *                    aquí. La lectura y el mapeo son de layout-fbo.js (puro,
+ *                    probado con el propio Lay-out.xlsx).
+ *   2. Validación  — por fila: errores que la bloquean y advertencias que no.
+ *                    Se puede descargar en CSV.
+ *   3. Vista previa — cuántas son nuevas, cuántas ya existen (por registro) y
+ *                    cuáles reemplazan una operación guardada con otro registro
+ *                    (misma matrícula + fecha de aterrizaje; si coinciden
+ *                    varias, la fila se bloquea por ambigua).
+ *   4. Confirmar   — fbo_importar_operaciones (064b), en bloques de 500; cada
+ *                    bloque es una transacción: reemplaza y nunca duplica.
  */
 (function (root) {
     'use strict';
 
     const AG = root.AviacionGeneral;
     if (!AG) { console.error('[Aviación General] vista-importacion: falta panel.js'); return; }
+    const Layout = root.AviacionGeneralLayoutFbo;
+    if (!Layout) { console.error('[Aviación General] vista-importacion: falta layout-fbo.js'); return; }
 
     const { Core, Datos, esc, aviso, vacio } = AG;
 
-    const PREVIA = 25;   // renglones que se muestran en la vista previa
+    const PREVIA = 25;        // filas transformadas que se muestran
+    const MAX_INCIDENCIAS = 300;
+    const EXTENSIONES = /\.(xlsx|xls)$/i;
+
+    /**
+     * @typedef {Object} FilaPreparada
+     * @property {import('./layout-fbo').FilaLayout} fila
+     * @property {'NUEVA'|'REEMPLAZA'|'BLOQUEADA'} estado
+     * @property {string|null} reemplazaRegistro  Operación guardada con otro registro que sustituye.
+     * @property {boolean}     existe             Su mismo registro ya está guardado.
+     */
 
     const estado = {
-        libro: null,
         nombreArchivo: '',
-        hoja: '',
-        encabezados: [],
-        deteccion: null,
-        preparadas: [],   // { movimiento, errores, avisos, filaExcel }
-        validas: [],
-        invalidas: [],
-        ensayo: null,
-        importando: false
+        resultado: null,
+        /** @type {FilaPreparada[]} */
+        preparadas: [],
+        incidencias: [],
+        previaError: null,
+        importando: false,
+        importado: false
     };
 
     function plantilla() {
@@ -53,26 +57,25 @@
                 <div class="ag-card">
                     <h6>1 · Archivo</h6>
                     <div class="ag-dropzone" id="ag-imp-zona" tabindex="0" role="button"
-                         aria-label="Seleccionar archivo de Excel">
+                         aria-label="Seleccionar el Layout de Excel">
                         <i class="fas fa-file-excel"></i>
-                        <div class="fw-bold mt-2">Arrastra el Excel aquí</div>
-                        <div class="small text-muted">o haz clic para buscarlo · .xlsx, .xls, .csv</div>
+                        <div class="fw-bold mt-2">Arrastra el Layout aquí</div>
+                        <div class="small text-muted">o haz clic para buscarlo · .xlsx o .xls</div>
                     </div>
-                    <input type="file" id="ag-imp-archivo" accept=".xlsx,.xls,.csv" hidden>
-
-                    <div id="ag-imp-hojas" class="mt-3 d-none">
-                        <label class="form-label small fw-bold" for="ag-imp-hoja">Hoja</label>
-                        <select class="form-select form-select-sm" id="ag-imp-hoja"></select>
-                    </div>
-
+                    <input type="file" id="ag-imp-archivo" accept=".xlsx,.xls" hidden>
                     <div id="ag-imp-info" class="mt-3"></div>
                 </div>
             </div>
 
             <div class="col-12 col-lg-7">
                 <div class="ag-card">
-                    <h6>2 · Columnas reconocidas</h6>
-                    <div id="ag-imp-mapeo">${vacio('Elige un archivo para empezar', 'fa-file-circle-question')}</div>
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                        <h6 class="mb-0">2 · Validación</h6>
+                        <button class="btn btn-sm btn-outline-secondary d-none" id="ag-imp-csv">
+                            <i class="fas fa-file-csv me-1"></i>Descargar reporte CSV
+                        </button>
+                    </div>
+                    <div id="ag-imp-validacion">${vacio('Elige un archivo para empezar', 'fa-file-circle-question')}</div>
                 </div>
             </div>
 
@@ -80,9 +83,11 @@
                 <div class="ag-card">
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
                         <h6 class="mb-0">3 · Vista previa</h6>
-                        <div class="d-flex gap-2" id="ag-imp-acciones-previa"></div>
+                        <button class="btn btn-sm btn-info text-white fw-semibold" id="ag-imp-confirmar" disabled>
+                            <i class="fas fa-cloud-arrow-up me-1"></i>Confirmar importación
+                        </button>
                     </div>
-                    <div id="ag-imp-resumen-previa"></div>
+                    <div id="ag-imp-resumen-previa">${vacio('Sin filas que previsualizar', 'fa-table')}</div>
                     <div class="ag-tabla-wrap mt-2 d-none" id="ag-imp-previa-wrap">
                         <table class="table table-sm ag-tabla mb-0">
                             <thead id="ag-imp-previa-head"></thead>
@@ -104,337 +109,366 @@
         </div>`;
     }
 
-    // ── Paso 1: leer el archivo ─────────────────────────────────────────────
+    const $id = (id) => document.getElementById(id);
+
+    // ── 1 · Leer el archivo ─────────────────────────────────────────────────
 
     async function leerArchivo(archivo) {
+        if (estado.importando) return;
         if (typeof root.XLSX === 'undefined') {
             aviso('No se pudo cargar la librería de Excel. Revisa tu conexión.', 'error');
             return;
         }
-        const info = document.getElementById('ag-imp-info');
+        const info = $id('ag-imp-info');
+        if (!EXTENSIONES.test(archivo.name || '')) {
+            info.innerHTML = `<div class="alert alert-danger py-2 small mb-0">Formato no válido: elige un archivo .xlsx o .xls.</div>`;
+            return;
+        }
         info.innerHTML = '<div class="small text-muted"><span class="spinner-border spinner-border-sm me-1"></span>Leyendo el archivo…</div>';
+        reiniciar();
 
         try {
             const buffer = await archivo.arrayBuffer();
-            // cellDates: las fechas llegan como Date en vez de número de serie,
-            // que es una fuente clásica de "todo se importó con fecha de 1900".
-            estado.libro = root.XLSX.read(buffer, { cellDates: true, cellNF: false, cellText: false });
+            // Sin cellDates: las fechas llegan como número de serie de Excel y
+            // layout-fbo.js las convierte sin pasar por Date ni por UTC.
+            const libro = root.XLSX.read(buffer, { type: 'array', cellDates: false });
             estado.nombreArchivo = archivo.name;
-
-            const selector = document.getElementById('ag-imp-hoja');
-            selector.innerHTML = estado.libro.SheetNames
-                .map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
-            document.getElementById('ag-imp-hojas').classList.toggle('d-none', estado.libro.SheetNames.length <= 1);
-
-            info.innerHTML = `
-                <div class="small">
-                    <div class="fw-bold text-truncate" title="${esc(archivo.name)}">
-                        <i class="fas fa-file-excel text-success me-1"></i>${esc(archivo.name)}
-                    </div>
-                    <div class="text-muted">${(archivo.size / 1024).toFixed(0)} KB ·
-                        ${estado.libro.SheetNames.length} hoja(s)</div>
-                </div>`;
-
-            procesarHoja(estado.libro.SheetNames[0]);
+            estado.resultado = Layout.parsearLayout(Layout.hojasDesdeLibro(libro, root.XLSX));
         } catch (error) {
-            console.error('[Aviación General] lectura de Excel', error);
+            console.error('[Aviación General] lectura del Layout', error);
             info.innerHTML = `<div class="alert alert-danger py-2 small mb-0">No se pudo leer el archivo: ${esc(error.message)}</div>`;
-        }
-    }
-
-    // ── Paso 2: mapear columnas y normalizar ────────────────────────────────
-
-    function procesarHoja(nombreHoja) {
-        estado.hoja = nombreHoja;
-        const hoja = estado.libro.Sheets[nombreHoja];
-
-        // defval:'' evita que las celdas vacías desaparezcan del objeto, lo que
-        // desalinearía el mapeo. raw:false deja que SheetJS aplique el formato
-        // de la celda, que es lo que hace legibles las horas.
-        const filas = root.XLSX.utils.sheet_to_json(hoja, { defval: '', raw: false, cellDates: true });
-        estado.encabezados = filas.length ? Object.keys(filas[0]) : [];
-        estado.deteccion = Core.detectarColumnas(estado.encabezados);
-
-        pintarMapeo();
-
-        if (estado.deteccion.faltantes.length) {
-            estado.preparadas = [];
-            pintarPrevia();
             return;
         }
 
-        // La fila del Excel = índice + 2 (una por el encabezado, una porque
-        // Excel cuenta desde 1). Ese número es el que le sirve a quien va a ir
-        // a corregir el archivo.
-        estado.preparadas = filas.map((cruda, i) => {
-            const r = Core.normalizarFilaExcel(cruda, { mapa: estado.deteccion.mapa, filaOrigen: i + 2 });
-            r.filaExcel = i + 2;
-            return r;
-        });
-
-        estado.validas = estado.preparadas.filter((r) => !r.errores.length);
-        estado.invalidas = estado.preparadas.filter((r) => r.errores.length);
-        estado.ensayo = null;
-
+        pintarInfo(archivo);
+        if (estado.resultado.error) {
+            pintarValidacion();
+            pintarPrevia();
+            return;
+        }
+        await prepararContraBase();
+        pintarValidacion();
         pintarPrevia();
     }
 
-    function pintarMapeo() {
-        const caja = document.getElementById('ag-imp-mapeo');
-        const d = estado.deteccion;
-        if (!d) { caja.innerHTML = vacio('Elige un archivo para empezar', 'fa-file-circle-question'); return; }
-
-        const etiquetas = {
-            folio_rotacion: 'Folio de rotación (No.)', fecha_operacion: 'Fecha',
-            tipo_operacion: 'Tipo de operación', ambito_operacion: 'Ámbito (nacional)',
-            operador: 'Operador', matricula: 'Matrícula', tipo_aeronave: 'Tipo de aeronave',
-            aeropuerto_origen_destino: 'Origen / destino', hora_programada: 'Hora programada',
-            hora_real: 'Hora real', adultos: 'Adultos', infantes: 'Infantes',
-            pax_od: 'Pax O.D.', estado: 'Estado', pais: 'País', observaciones: 'Observaciones'
-        };
-
-        const reconocidas = d.reconocidas.map((campo) => `
-            <div class="ag-map-fila">
-                <span class="text-success"><i class="fas fa-check me-1"></i>${esc(etiquetas[campo] || campo)}</span>
-                <span class="text-muted font-monospace">${esc(d.mapa[campo])}</span>
-            </div>`).join('');
-
-        const faltantes = d.faltantes.length ? `
-            <div class="alert alert-danger py-2 small mt-2 mb-0">
-                <div class="fw-bold"><i class="fas fa-circle-exclamation me-1"></i>Faltan columnas obligatorias</div>
-                <div>${d.faltantes.map((c) => esc(etiquetas[c] || c)).join(', ')}</div>
-                <div class="mt-1">Sin ellas no se puede importar: revisa que la hoja elegida sea la correcta
-                    y que los encabezados estén en la primera fila.</div>
-            </div>` : '';
-
-        const ignoradas = d.ignoradas.length ? `
-            <div class="small text-muted mt-2">
-                <i class="fas fa-eye-slash me-1"></i>Se ignoran a propósito:
-                ${d.ignoradas.map((c) => `<span class="ag-chip-filtro">${esc(c.titulo)}</span>`).join(' ')}
-                <div style="font-size:.7rem">PAX A.G. la calcula la base: capturarla provocaría un error.</div>
-            </div>` : '';
-
-        const desconocidas = d.desconocidas.length ? `
-            <div class="small text-warning-emphasis mt-2">
-                <i class="fas fa-circle-question me-1"></i>No se reconocieron (no se importan):
-                ${d.desconocidas.map((c) => `<span class="ag-chip-filtro">${esc(c.titulo)}</span>`).join(' ')}
-            </div>` : '';
-
-        caja.innerHTML = `<div class="ag-mapeo">${reconocidas || '<div class="small text-muted">Ninguna columna reconocida.</div>'}</div>
-                          ${faltantes}${ignoradas}${desconocidas}`;
+    function reiniciar() {
+        estado.resultado = null;
+        estado.preparadas = [];
+        estado.incidencias = [];
+        estado.previaError = null;
+        estado.importado = false;
+        const resultado = $id('ag-imp-resultado');
+        if (resultado) resultado.innerHTML = vacio('Todavía no se ha subido nada', 'fa-cloud-arrow-up');
     }
 
-    // ── Paso 3: vista previa ────────────────────────────────────────────────
+    function pintarInfo(archivo) {
+        const r = estado.resultado;
+        const faltantes = r.columnasFaltantes.length ? `
+            <div class="alert alert-warning py-2 small mt-2 mb-0">
+                <div class="fw-bold">Columnas que no vienen en el archivo (se leen vacías):</div>
+                <div>${r.columnasFaltantes.map(esc).join(', ')}</div>
+            </div>` : '';
+        $id('ag-imp-info').innerHTML = r.error
+            ? `<div class="alert alert-danger py-2 small mb-0">${esc(r.error)}</div>`
+            : `<div class="small">
+                   <div class="fw-bold text-truncate" title="${esc(archivo.name)}">
+                       <i class="fas fa-file-excel text-success me-1"></i>${esc(archivo.name)}
+                   </div>
+                   <div class="text-muted">${(archivo.size / 1024).toFixed(0)} KB · hoja <strong>${esc(r.hoja)}</strong> ·
+                       encabezados en la fila ${esc(r.filaEncabezado)} · ${Core.numero(r.filas.length)} filas</div>
+               </div>${faltantes}`;
+    }
+
+    // ── 3 · Contra lo que ya está guardado ──────────────────────────────────
+
+    async function prepararContraBase() {
+        const filas = estado.resultado.filas;
+        const validas = filas.filter((f) => !f.errores.length);
+        estado.incidencias = Layout.incidencias(filas);
+
+        /** @type {Map<string, {existe: boolean, reemplazaRegistro: string|null, error: string|null}>} */
+        let clasif = new Map();
+        try {
+            const previa = await Datos.previaImportacion(validas.map((f) => ({
+                registro: f.registro,
+                matricula: f.operacion.matricula,
+                fecha_aterrizaje: f.operacion.fecha_aterrizaje
+            })));
+            clasif = new Map(Layout.clasificarContraBase(validas.map((f) => f.registro), previa)
+                .map((c) => [c.registro, c]));
+        } catch (error) {
+            console.error('[Aviación General] vista previa', error);
+            estado.previaError = error.message || String(error);
+        }
+
+        estado.preparadas = filas.map((fila) => {
+            if (fila.errores.length) return { fila, estado: 'BLOQUEADA', reemplazaRegistro: null, existe: false };
+            const c = clasif.get(fila.registro) || { existe: false, reemplazaRegistro: null, error: null };
+            if (c.error) {
+                estado.incidencias.push({
+                    filaExcel: fila.filaExcel, registro: fila.registro, tipo: 'ERROR',
+                    campo: 'Matrícula / Aterrizaje', motivo: c.error
+                });
+                return { fila, estado: 'BLOQUEADA', reemplazaRegistro: null, existe: c.existe };
+            }
+            if (c.reemplazaRegistro) {
+                estado.incidencias.push({
+                    filaExcel: fila.filaExcel, registro: fila.registro, tipo: 'ADVERTENCIA',
+                    campo: 'Matrícula / Aterrizaje',
+                    motivo: `Reemplaza la operación guardada ${c.reemplazaRegistro} (misma matrícula y fecha de aterrizaje)`
+                });
+            }
+            return {
+                fila,
+                estado: c.existe || c.reemplazaRegistro ? 'REEMPLAZA' : 'NUEVA',
+                reemplazaRegistro: c.reemplazaRegistro,
+                existe: c.existe
+            };
+        });
+    }
+
+    const importables = () => estado.preparadas.filter((p) => p.estado !== 'BLOQUEADA');
+
+    // ── 2 · Reporte de validación ───────────────────────────────────────────
+
+    function pintarValidacion() {
+        const caja = $id('ag-imp-validacion');
+        const boton = $id('ag-imp-csv');
+        const r = estado.resultado;
+        if (!r || r.error) {
+            caja.innerHTML = vacio(r && r.error ? 'El archivo no tiene la estructura del Layout' : 'Elige un archivo para empezar',
+                'fa-file-circle-question');
+            boton.classList.add('d-none');
+            return;
+        }
+
+        const errores = estado.incidencias.filter((i) => i.tipo === 'ERROR');
+        const advertencias = estado.incidencias.filter((i) => i.tipo === 'ADVERTENCIA');
+        const bloqueadas = estado.preparadas.filter((p) => p.estado === 'BLOQUEADA').length;
+        boton.classList.toggle('d-none', !estado.incidencias.length);
+
+        const ordenadas = estado.incidencias.slice()
+            .sort((a, b) => a.filaExcel - b.filaExcel || (a.tipo === b.tipo ? 0 : a.tipo === 'ERROR' ? -1 : 1));
+
+        caja.innerHTML = `
+            <div class="d-flex flex-wrap gap-3 small mb-2">
+                <span class="text-danger"><strong>${Core.numero(errores.length)}</strong> errores
+                    (${Core.numero(bloqueadas)} filas bloqueadas)</span>
+                <span class="text-warning-emphasis"><strong>${Core.numero(advertencias.length)}</strong> advertencias</span>
+            </div>
+            ${ordenadas.length ? `
+                <div class="ag-tabla-wrap" style="max-height:260px">
+                    <table class="table table-sm ag-tabla mb-0">
+                        <thead><tr><th class="ag-num">Fila</th><th>Registro</th><th>Tipo</th><th>Campo</th><th>Motivo</th></tr></thead>
+                        <tbody>${ordenadas.slice(0, MAX_INCIDENCIAS).map((i) => `
+                            <tr class="${i.tipo === 'ERROR' ? 'table-danger' : ''}">
+                                <td class="ag-num">${esc(i.filaExcel)}</td>
+                                <td class="ag-mono">${esc(i.registro || '—')}</td>
+                                <td>${i.tipo === 'ERROR'
+                                    ? '<span class="ag-badge ag-badge--obs">Error</span>'
+                                    : '<span class="ag-badge ag-badge--pend">Advertencia</span>'}</td>
+                                <td>${esc(i.campo)}</td>
+                                <td>${esc(i.motivo)}</td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                ${ordenadas.length > MAX_INCIDENCIAS
+                    ? `<div class="small text-muted mt-1">Se muestran ${MAX_INCIDENCIAS} de ${Core.numero(ordenadas.length)}; el CSV las trae todas.</div>`
+                    : ''}`
+                : '<div class="small text-success"><i class="fas fa-check me-1"></i>Sin errores ni advertencias.</div>'}`;
+    }
+
+    function descargarCsv() {
+        if (!estado.incidencias.length) return;
+        // BOM para que Excel abra el CSV en UTF-8 y respete los acentos.
+        const blob = new Blob(['\uFEFF' + Layout.reporteCsv(estado.incidencias)], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `validacion_${estado.nombreArchivo.replace(/\.[^.]+$/, '')}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    // ── 3 · Vista previa ────────────────────────────────────────────────────
+
+    function instante(fecha, hora) {
+        if (!fecha) return '—';
+        return `${Core.fechaLarga(fecha)}${hora ? ` ${Core.horaCorta(hora)}` : ''}`;
+    }
+
+    function insigniaEstado(p) {
+        if (p.estado === 'BLOQUEADA') {
+            return '<span class="ag-badge ag-badge--obs"><i class="fas fa-xmark me-1"></i>Bloqueada</span>';
+        }
+        if (p.estado === 'REEMPLAZA') {
+            const que = p.reemplazaRegistro ? `Reemplaza ${p.reemplazaRegistro}` : 'Reemplaza (ya existe)';
+            return `<span class="ag-badge ag-badge--pend" title="${esc(que)}"><i class="fas fa-rotate me-1"></i>${esc(que)}</span>`;
+        }
+        return '<span class="ag-badge ag-badge--val"><i class="fas fa-plus me-1"></i>Nueva</span>';
+    }
 
     function pintarPrevia() {
-        const resumen = document.getElementById('ag-imp-resumen-previa');
-        const wrap = document.getElementById('ag-imp-previa-wrap');
-        const acciones = document.getElementById('ag-imp-acciones-previa');
+        const resumen = $id('ag-imp-resumen-previa');
+        const wrap = $id('ag-imp-previa-wrap');
+        const boton = $id('ag-imp-confirmar');
 
         if (!estado.preparadas.length) {
             resumen.innerHTML = vacio('Sin filas que previsualizar', 'fa-table');
             wrap.classList.add('d-none');
-            acciones.innerHTML = '';
+            boton.disabled = true;
             return;
         }
 
-        const conAvisos = estado.preparadas.filter((r) => r.avisos.length).length;
+        const total = estado.preparadas.length;
+        const nuevas = estado.preparadas.filter((p) => p.estado === 'NUEVA').length;
+        const existentes = estado.preparadas.filter((p) => p.estado === 'REEMPLAZA' && p.existe).length;
+        const porCoincidencia = estado.preparadas.filter((p) => p.reemplazaRegistro).length;
+        const bloqueadas = estado.preparadas.filter((p) => p.estado === 'BLOQUEADA').length;
+        const listas = importables().length;
 
         resumen.innerHTML = `
             <div class="d-flex flex-wrap gap-3 small">
-                <span><strong>${Core.numero(estado.preparadas.length)}</strong> filas leídas</span>
-                <span class="text-success"><strong>${Core.numero(estado.validas.length)}</strong> listas</span>
-                <span class="text-danger"><strong>${Core.numero(estado.invalidas.length)}</strong> con errores</span>
-                ${conAvisos ? `<span class="text-warning-emphasis"><strong>${Core.numero(conAvisos)}</strong> con avisos</span>` : ''}
+                <span><strong>${Core.numero(total)}</strong> filas</span>
+                <span class="text-success"><strong>${Core.numero(nuevas)}</strong> nuevas</span>
+                <span class="text-warning-emphasis"><strong>${Core.numero(existentes)}</strong> ya existen (se reemplazan)</span>
+                <span class="text-warning-emphasis"><strong>${Core.numero(porCoincidencia)}</strong>
+                    reemplazan una operación guardada con otro registro</span>
+                <span class="text-danger"><strong>${Core.numero(bloqueadas)}</strong> bloqueadas</span>
             </div>
-            ${estado.invalidas.length ? `
-                <div class="alert alert-warning py-2 small mt-2 mb-0">
-                    Las filas con errores <strong>no se importan</strong>. Puedes descargar el detalle,
-                    corregir el archivo y volver a subirlo: lo que ya haya entrado no se duplica.
+            ${estado.previaError ? `
+                <div class="alert alert-danger py-2 small mt-2 mb-0">
+                    <div class="fw-bold">No se pudo comparar contra lo ya guardado</div>
+                    <div>${esc(estado.previaError)}</div>
+                    <div class="mt-1">Sin esa comparación no se importa: podría duplicar operaciones.</div>
+                </div>` : ''}
+            ${estado.importado ? `
+                <div class="alert alert-info py-2 small mt-2 mb-0">
+                    Este archivo ya se importó. Vuelve a cargarlo para revisar y reimportar.
                 </div>` : ''}`;
 
-        acciones.innerHTML = `
-            ${estado.invalidas.length ? `
-                <button class="btn btn-sm btn-outline-danger" id="ag-imp-descargar-errores">
-                    <i class="fas fa-file-arrow-down me-1"></i>Errores (${estado.invalidas.length})
-                </button>` : ''}
-            <button class="btn btn-sm btn-outline-info" id="ag-imp-ensayar" ${estado.validas.length ? '' : 'disabled'}>
-                <i class="fas fa-flask me-1"></i>Ensayar sin guardar
-            </button>
-            <button class="btn btn-sm btn-info text-white fw-semibold" id="ag-imp-confirmar"
-                    ${estado.validas.length && AG.puedeCapturar() ? '' : 'disabled'}>
-                <i class="fas fa-cloud-arrow-up me-1"></i>Importar ${Core.numero(estado.validas.length)}
-            </button>`;
+        boton.disabled = !listas || !!estado.previaError || estado.importado || estado.importando || !AG.puedeCapturar();
+        boton.innerHTML = `<i class="fas fa-cloud-arrow-up me-1"></i>Confirmar importación (${Core.numero(listas)})`;
 
-        document.getElementById('ag-imp-ensayar')?.addEventListener('click', () => subir(true));
-        document.getElementById('ag-imp-confirmar')?.addEventListener('click', () => subir(false));
-        document.getElementById('ag-imp-descargar-errores')?.addEventListener('click', descargarErrores);
+        const columnas = ['Fila', 'Registro', 'Matrícula', 'Operador', 'Prestador', 'Aeronave', 'Ala',
+                          'Origen', 'Llegada', 'Ámb.', 'Pax', 'Destino', 'Salida', 'Ámb.', 'Pax',
+                          'Perm. (min)', 'MTOW', 'Estado'];
+        $id('ag-imp-previa-head').innerHTML = `<tr>${columnas.map((c) => `<th>${esc(c)}</th>`).join('')}</tr>`;
 
-        const columnas = ['Fila', 'No.', 'Fecha', 'Mov.', 'Ámbito', 'Operador', 'Matrícula',
-                          'Aeronave', 'O/D', 'Prog.', 'Real', 'Ad.', 'Inf.', 'Pax', 'Estado'];
-        document.getElementById('ag-imp-previa-head').innerHTML =
-            `<tr>${columnas.map((c) => `<th>${esc(c)}</th>`).join('')}</tr>`;
-
-        // Primero lo que falla: si hay algo que revisar, es lo que hay que ver.
-        const orden = [...estado.invalidas, ...estado.validas].slice(0, PREVIA);
-        document.getElementById('ag-imp-previa-body').innerHTML = orden.map((r) => {
-            const m = r.movimiento;
-            const malo = r.errores.length > 0;
-            const detalle = malo
-                ? `<span class="ag-badge ag-badge--obs" title="${esc(r.errores.map((e) => e.mensaje).join(' · '))}">
-                     <i class="fas fa-xmark me-1"></i>${esc(r.errores[0].mensaje)}</span>`
-                : r.avisos.length
-                    ? `<span class="ag-badge ag-badge--pend" title="${esc(r.avisos.join(' · '))}">
-                         <i class="fas fa-triangle-exclamation me-1"></i>Aviso</span>`
-                    : '<span class="ag-badge ag-badge--val"><i class="fas fa-check me-1"></i>Lista</span>';
-
-            return `<tr class="${malo ? 'table-danger' : ''}">
-                <td class="ag-num text-muted">${r.filaExcel}</td>
-                <td class="ag-num">${esc(m.folio_rotacion ?? '—')}</td>
-                <td>${esc(m.fecha_operacion || '—')}</td>
-                <td>${esc(m.tipo_operacion || '—')}</td>
-                <td>${esc(m.ambito_operacion || '—')}</td>
-                <td class="text-truncate" style="max-width:180px" title="${esc(m.operador)}">${esc(m.operador || '—')}</td>
-                <td class="ag-mono">${esc(m.matricula || '—')}</td>
-                <td>${esc(m.tipo_aeronave || '—')}</td>
-                <td class="ag-mono">${esc(m.aeropuerto_origen_destino || '—')}</td>
-                <td class="ag-num">${esc(Core.horaCorta(m.hora_programada))}</td>
-                <td class="ag-num">${esc(Core.horaCorta(m.hora_real))}</td>
-                <td class="ag-num">${esc(m.adultos)}</td>
-                <td class="ag-num">${esc(m.infantes)}</td>
-                <td class="ag-num fw-bold">${Core.paxTotal(m)}</td>
-                <td>${detalle}</td>
+        $id('ag-imp-previa-body').innerHTML = estado.preparadas.slice(0, PREVIA).map((p) => {
+            const o = p.fila.operacion;
+            return `<tr class="${p.estado === 'BLOQUEADA' ? 'table-danger' : ''}">
+                <td class="ag-num text-muted">${esc(p.fila.filaExcel)}</td>
+                <td class="ag-mono">${esc(o.registro || '—')}</td>
+                <td class="ag-mono">${esc(o.matricula || '—')}</td>
+                <td class="text-truncate" style="max-width:180px" title="${esc(o.operador || '')}">${esc(o.operador || '—')}</td>
+                <td>${esc(o.vuelo_operado_por || '—')}</td>
+                <td>${esc(o.tipo_aeronave || '—')}</td>
+                <td>${esc(o.tipo_ala || '—')}</td>
+                <td class="ag-mono">${esc(o.origen || '—')}</td>
+                <td class="text-nowrap">${esc(instante(o.fecha_aterrizaje, o.hora_aterrizaje))}</td>
+                <td>${esc(o.nac_int_llegada || '—')}</td>
+                <td class="ag-num">${esc(o.pax_llegada_totales)}</td>
+                <td class="ag-mono">${esc(o.destino || '—')}</td>
+                <td class="text-nowrap">${esc(instante(o.fecha_salida_posicion, o.hora_salida_posicion))}</td>
+                <td>${esc(o.nac_int_salida || '—')}</td>
+                <td class="ag-num">${esc(o.pax_salida_totales)}</td>
+                <td class="ag-num">${esc(o.tiempo_permanencia_min ?? '—')}</td>
+                <td class="ag-num">${esc(o.mtow ?? '—')}</td>
+                <td>${insigniaEstado(p)}</td>
             </tr>`;
-        }).join('');
+        }).join('') + (total > PREVIA
+            ? `<tr><td colspan="${columnas.length}" class="text-center text-muted small py-2">
+                   … y ${Core.numero(total - PREVIA)} filas más
+               </td></tr>`
+            : '');
 
         wrap.classList.remove('d-none');
-
-        if (estado.preparadas.length > PREVIA) {
-            document.getElementById('ag-imp-previa-body').insertAdjacentHTML('beforeend',
-                `<tr><td colspan="${columnas.length}" class="text-center text-muted small py-2">
-                    … y ${Core.numero(estado.preparadas.length - PREVIA)} filas más
-                 </td></tr>`);
-        }
     }
 
-    // ── Pasos 3 y 4: ensayo e importación real ──────────────────────────────
+    // ── 4 · Importar ────────────────────────────────────────────────────────
 
-    async function subir(esEnsayo) {
-        if (estado.importando) return;
-        if (!estado.validas.length) return;
-        if (!esEnsayo && !AG.puedeCapturar()) {
-            aviso('No tienes permiso para importar en este módulo.', 'warning');
-            return;
-        }
+    async function importar() {
+        if (estado.importando || estado.importado || estado.previaError) return;
+        if (!AG.puedeCapturar()) { aviso('No tienes permiso para importar en este módulo.', 'warning'); return; }
+        const lista = importables();
+        if (!lista.length) return;
 
-        // Una importación real es difícil de deshacer registro por registro:
-        // se pregunta una vez, con el número exacto delante.
-        if (!esEnsayo) {
-            const ok = root.confirm(
-                `Se van a insertar ${estado.validas.length} movimientos desde "${estado.nombreArchivo}".\n\n` +
-                'Los que ya existan se omiten automáticamente. ¿Continuar?'
-            );
-            if (!ok) return;
-        }
+        const bloqueadas = estado.preparadas.length - lista.length;
+        const ok = root.confirm(
+            `Se van a guardar ${lista.length} operaciones de "${estado.nombreArchivo}".\n\n` +
+            'Las que ya existen (mismo registro) y las que reemplazan una operación guardada con otro ' +
+            'registro se sustituyen; las nuevas se insertan.' +
+            (bloqueadas ? `\n${bloqueadas} fila(s) bloqueada(s) NO se importan.` : '') +
+            '\n\n¿Continuar?'
+        );
+        if (!ok) return;
 
         estado.importando = true;
-        const barra = document.getElementById('ag-imp-progreso');
+        pintarPrevia();
+        const barra = $id('ag-imp-progreso');
         const relleno = barra.querySelector('.progress-bar');
         barra.classList.remove('d-none');
         relleno.style.width = '0%';
-
-        const caja = document.getElementById('ag-imp-resultado');
+        const caja = $id('ag-imp-resultado');
         caja.innerHTML = `<div class="small text-muted">
-            <span class="spinner-border spinner-border-sm me-1"></span>
-            ${esEnsayo ? 'Ensayando contra la base…' : 'Importando…'}</div>`;
+            <span class="spinner-border spinner-border-sm me-1"></span>Importando…</div>`;
 
         try {
-            const resultado = await Datos.importar({
-                filas: estado.validas.map((r) => r.movimiento),
-                archivo: estado.nombreArchivo,
-                hoja: estado.hoja,
-                simulacion: esEnsayo,
+            const r = await Datos.importarOperaciones({
+                filas: lista.map((p) => Layout.aPayload(p.fila.operacion, p.reemplazaRegistro)),
                 onProgreso: ({ acumulado }) => {
-                    relleno.style.width = `${Math.round((acumulado / estado.validas.length) * 100)}%`;
+                    relleno.style.width = `${Math.round((acumulado / lista.length) * 100)}%`;
                 }
             });
-
-            if (esEnsayo) estado.ensayo = resultado;
-            pintarResultado(resultado, esEnsayo);
-
-            if (!esEnsayo) {
-                aviso(`Importación terminada: ${resultado.insertadas} nuevos, ${resultado.duplicadas} ya existían.`, 'success');
-                AG.emit('datos:cambiaron');
-                AG.invalidar();
-                AG.recargarOpciones();
-            }
+            estado.importado = true;
+            pintarResultado(r, bloqueadas, null);
+            aviso(`Importación terminada: ${r.insertados} nuevas, ${r.reemplazados + r.reemplazados_por_coincidencia} reemplazadas.`, 'success');
         } catch (error) {
             console.error('[Aviación General] importación', error);
-            caja.innerHTML = `<div class="alert alert-danger py-2 small mb-0">
-                <div class="fw-bold">No se pudo completar la importación</div>
-                <div>${esc(error.message)}</div>
-                <div class="mt-1">Cada tanda es transaccional: la que falló no dejó filas a medias.
-                    Corrige la causa y vuelve a intentarlo; lo que ya entró no se duplicará.</div>
-            </div>`;
+            pintarResultado(error.parcial || null, bloqueadas, error);
+            if (error.parcial && error.parcial.bloquesGuardados) estado.importado = true;
         } finally {
             estado.importando = false;
             setTimeout(() => barra.classList.add('d-none'), 900);
+            pintarPrevia();
+            // Resumen y Movimientos quedan viejos: se recargan al abrirlos.
+            AG.emit('datos:cambiaron');
+            AG.invalidar();
+            AG.recargarOpciones();
         }
     }
 
-    function pintarResultado(r, esEnsayo) {
-        const caja = document.getElementById('ag-imp-resultado');
-        const detalle = [...(r.detalle_duplicadas || []), ...(r.detalle_rechazadas || [])];
+    function pintarResultado(r, bloqueadas, error) {
+        const caja = $id('ag-imp-resultado');
+        const cifras = r ? `
+            <div class="d-flex flex-wrap gap-3 small mt-1">
+                <span class="text-success"><strong>${Core.numero(r.insertados)}</strong> insertadas</span>
+                <span class="text-warning-emphasis"><strong>${Core.numero(r.reemplazados)}</strong> reemplazadas (mismo registro)</span>
+                <span class="text-warning-emphasis"><strong>${Core.numero(r.reemplazados_por_coincidencia)}</strong>
+                    reemplazadas (otro registro, misma matrícula y fecha)</span>
+                <span class="text-danger"><strong>${Core.numero(bloqueadas)}</strong> omitidas por error</span>
+            </div>` : '';
 
+        if (error) {
+            caja.innerHTML = `<div class="alert alert-danger py-2 small mb-0">
+                <div class="fw-bold">No se pudo completar la importación</div>
+                <div>${esc(error.message)}</div>
+                ${r && r.bloquesGuardados
+                    ? `<div class="mt-1">Se guardaron completos ${r.bloquesGuardados} de ${r.bloques} bloques; el bloque que falló no dejó nada a medias.
+                           Al volver a importar el archivo, lo ya guardado se reemplaza: no se duplica.</div>${cifras}`
+                    : '<div class="mt-1">No se guardó nada. Corrige la causa y vuelve a intentarlo.</div>'}
+            </div>`;
+            return;
+        }
         caja.innerHTML = `
-            <div class="alert ${esEnsayo ? 'alert-info' : 'alert-success'} py-2 mb-2">
-                <div class="fw-bold">
-                    <i class="fas ${esEnsayo ? 'fa-flask' : 'fa-circle-check'} me-1"></i>
-                    ${esEnsayo ? 'Ensayo (no se guardó nada)' : 'Importación completada'}
-                </div>
-                <div class="d-flex flex-wrap gap-3 small mt-1">
-                    <span><strong>${Core.numero(r.recibidas)}</strong> enviadas</span>
-                    <span class="text-success"><strong>${Core.numero(r.insertadas)}</strong>
-                        ${esEnsayo ? 'entrarían' : 'insertadas'}</span>
-                    <span class="text-warning-emphasis"><strong>${Core.numero(r.duplicadas)}</strong> ya existían</span>
-                    <span class="text-danger"><strong>${Core.numero(r.rechazadas)}</strong> rechazadas por la base</span>
-                </div>
-            </div>
-            ${detalle.length ? `
-                <div class="ag-tabla-wrap" style="max-height:240px">
-                    <table class="table table-sm ag-tabla mb-0">
-                        <thead><tr><th>Fila del Excel</th><th>Motivo</th></tr></thead>
-                        <tbody>${detalle.slice(0, 200).map((d) => `
-                            <tr><td class="ag-num">${esc(d.fila_origen ?? d.indice)}</td>
-                                <td>${esc(d.motivo)}</td></tr>`).join('')}
-                        </tbody>
-                    </table>
-                </div>` : ''}
-            ${esEnsayo && r.insertadas ? `
-                <div class="small text-muted mt-2">
-                    El ensayo se ve bien. Usa <strong>Importar</strong> para guardar de verdad.
-                </div>` : ''}`;
-    }
-
-    /** Excel con las filas que no pasaron, para corregir el archivo de origen. */
-    function descargarErrores() {
-        if (typeof root.XLSX === 'undefined' || !estado.invalidas.length) return;
-        const filas = estado.invalidas.map((r) => ({
-            'Fila del Excel': r.filaExcel,
-            'Motivos': r.errores.map((e) => e.mensaje).join(' · '),
-            'No.': r.movimiento.folio_rotacion,
-            'FECHA': r.movimiento.fecha_operacion,
-            'TIPO DE OPERACIÓN': r.movimiento.tipo_operacion,
-            'NACIONAL': r.movimiento.ambito_operacion,
-            'NOMBRE DEL OPERADOR': r.movimiento.operador,
-            'MATRÍCULA': r.movimiento.matricula,
-            'TIPO DE AERONAVE': r.movimiento.tipo_aeronave,
-            'DESTINO / ORIGEN': r.movimiento.aeropuerto_origen_destino
-        }));
-        const hoja = root.XLSX.utils.json_to_sheet(filas);
-        const libro = root.XLSX.utils.book_new();
-        root.XLSX.utils.book_append_sheet(libro, hoja, 'Filas con errores');
-        root.XLSX.writeFile(libro, `errores_${estado.nombreArchivo.replace(/\.[^.]+$/, '')}.xlsx`);
+            <div class="alert alert-success py-2 mb-0">
+                <div class="fw-bold"><i class="fas fa-circle-check me-1"></i>Importación completada</div>
+                ${cifras}
+            </div>`;
     }
 
     AG.registrarVista({
@@ -466,11 +500,16 @@
             });
             entrada.addEventListener('change', (e) => {
                 const archivo = e.target.files?.[0];
+                // Se limpia para que volver a elegir el MISMO archivo dispare change.
+                e.target.value = '';
                 if (archivo) leerArchivo(archivo);
             });
-            panel.querySelector('#ag-imp-hoja').addEventListener('change', (e) => procesarHoja(e.target.value));
+            panel.querySelector('#ag-imp-csv').addEventListener('click', descargarCsv);
+            panel.querySelector('#ag-imp-confirmar').addEventListener('click', importar);
         },
 
         async refrescar() { /* no depende de los filtros del módulo */ }
     });
+
+    root.AviacionGeneralImportacion = { get estado() { return estado; } };
 })(typeof window !== 'undefined' ? window : globalThis);

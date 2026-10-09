@@ -60,6 +60,13 @@
 
     function plantilla() {
         return `
+        <div class="alert alert-secondary py-2 small d-flex align-items-start gap-2 mb-3">
+            <i class="fas fa-database mt-1"></i>
+            <div>
+                <strong>Fuente: histórico anterior</strong> (<code>aviacion_general_operaciones_auditoria</code>).
+                Los cambios en <code>operaciones_fbo</code> entran por Importación y no se registran aquí.
+            </div>
+        </div>
         <div class="row g-3">
             <div class="col-12 col-lg-5">
                 <div class="ag-card">
