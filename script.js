@@ -11495,6 +11495,32 @@ function ndwWeeksOfMonth(year, monthIdx) {
     return tramos;
 }
 
+/* Días cuya carga lleva ajuste contra el cierre oficial (carga_diaria_oficial,
+   ver carga-carga2026/generar-carga-diaria-oficial.js). Sólo el superadmin ve
+   la marca: un punto naranja sin texto ni tooltip. */
+function ndwVeAjustesCarga() {
+    try { return sessionStorage.getItem('user_role') === 'superadmin'; } catch (_) { return false; }
+}
+
+async function ndwLoadAjustesCarga() {
+    if (window._ndwAjustesCarga || !ndwVeAjustesCarga()) return;
+    window._ndwAjustesCarga = new Set();
+    try {
+        const client = window.supabaseClient || await window.ensureSupabaseClient?.();
+        if (!client) return;
+        const { data, error } = await client.rpc('carga_dias_con_ajuste');
+        if (error) throw error;
+        window._ndwAjustesCarga = new Set((data || []).map((r) => String(r?.fecha ?? r).slice(0, 10)));
+        if (window._ndwAjustesCarga.size) renderNavdeckWeeklyBanner();
+    } catch (_) { /* Sin la función en la base no hay marca. */ }
+}
+
+function ndwMarcaAjusteCarga(fechas) {
+    const ajustes = window._ndwAjustesCarga;
+    return ajustes?.size && ndwVeAjustesCarga() && fechas.some((f) => ajustes.has(f))
+        ? '<span class="ndw-marca-ajuste" aria-hidden="true"></span>' : '';
+}
+
 function ndwDayHasData(day) {
     return [day?.comercial?.operaciones, day?.comercial?.pasajeros,
             day?.general?.operaciones, day?.general?.pasajeros,
@@ -11945,16 +11971,22 @@ function renderNavdeckWeeklyBanner() {
             return availableYears.reduce((acc, y) => acc + ndwGetAnnualVal(def.cat, def.metric, y), 0);
         };
 
+        // Día y Semana: marca de ajuste en las tarjetas de carga (sólo superadmin).
+        const fechasDetalle = mode === 'current' ? [currentDateKey]
+            : mode === 'weekly' && semana.estado === 'ready' ? semana.dias.map((d) => d.fecha) : [];
+        if (fechasDetalle.length) ndwLoadAjustesCarga();
+
         const cardsHtml = NDW_CARD_DEFS.map((def, idx) => {
             const total = getCardVal(def);
             const valor = total === null ? '—' : ndwFormatValue(total, def.metric);
+            const marca = def.cat === 'carga' && total !== null ? ndwMarcaAjusteCarga(fechasDetalle) : '';
             // Cifras de 9 caracteres o más (millones del histórico) van un
             // punto más chicas para no salirse de la tarjeta.
             return `
             <button type="button" class="ndw-card ndw-card--${def.cat}" data-ndw-idx="${idx}"
                     style="--ndw-accent:${def.accent};--ndw-img:url('${def.img}');background-image:url('${def.img}');background-position:${def.bgPos || 'center center'};"
                     aria-label="${escapeHTML(def.titulo)} — ${escapeHTML(cardPeriodo)}">
-                <span class="ndw-card-overlay" aria-hidden="true"></span>
+                <span class="ndw-card-overlay" aria-hidden="true"></span>${marca}
                 <span class="ndw-card-icon"><i class="${def.icon}" aria-hidden="true"></i></span>
                 <span class="ndw-card-body">
                     <span class="ndw-card-tag">${escapeHTML(def.titulo)}</span>
@@ -12186,6 +12218,7 @@ function ndwDetailTilesHtml(det) {
         const cifra = p.valor === null ? '—' : ndwFormatValue(p.valor, def.metric);
         return `
         <button type="button" class="${clases}" data-ndw-tile="${i}" aria-pressed="${i === foco}" aria-label="${escapeHTML(p.largo)}: ${p.valor === null ? 'sin dato' : cifra}">
+            ${def.cat === 'carga' && p.fecha ? ndwMarcaAjusteCarga([p.fecha]) : ''}
             <span class="ndw-tile-lbl">${escapeHTML(p.corto)}${p.pico ? ' <i class="fas fa-crown" aria-hidden="true"></i>' : ''}${p.enCurso ? ' <i class="fas fa-clock-rotate-left" aria-hidden="true"></i>' : ''}</span>
             <span class="ndw-tile-val">${cifra}</span>
             ${ndwDetailDeltaHtml(pct, '')}
@@ -12325,7 +12358,8 @@ function openNavdeckWeeklyDetail(idx) {
             largo: fecha
                 ? `${DIAS_L[fecha.getDay()]} ${fecha.getDate()} de ${MESES[fecha.getMonth()]} de ${fecha.getFullYear()}`
                 : (d.labelFull || d.label || d.fecha || ''),
-            valor: getWeeklyValue(d, def.cat, def.metric)
+            valor: getWeeklyValue(d, def.cat, def.metric),
+            fecha: d.fecha || null
         };
     });
     const stats = ndwDetailStats(periodos);
@@ -20679,7 +20713,7 @@ function _conciVueloToRow(vRow, tipo, outputCols, colm) {
     if (colm.aeronave)  row[colm.aeronave]   = vRow['Aircraft type'] || '';
     if (colm.matricula) row[colm.matricula]  = vRow['Registration']  || '';
     if (colm.routing)   row[colm.routing]    = vRow['Routing']       || '';
-    if (Object.prototype.hasOwnProperty.call(row, 'RUTA')) row['RUTA'] = vRow['Routing'] || '';
+    if (Object.prototype.hasOwnProperty.call(row, 'RUTA')) row['RUTA'] = _conciRutaPierna(vRow['Routing'], tipo);
     if (colm.stand)     row[colm.stand]      = isArr ? vRow['[Arr] Stand']  : vRow['[Dep] Stand'];
     if (colm.puerta)    row[colm.puerta]     = isArr ? vRow['[Arr] Gates']  : vRow['[Dep] Gates'];
     if (colm.pax)       row[colm.pax]        = isArr ? vRow['[Arr] Boarded']: vRow['[Dep] Boarded'];
@@ -23129,7 +23163,7 @@ const _CONCI_EXPORT_COLS_PAX = [
     { h: 'ESTATUS MATRÍCULA', t: 'text', a: ['ESTATUS MATRÍCULA', 'ESTATUS MATRICULA'] },
     { h: '# DE VUELO', t: 'vuelo', a: ['# DE VUELO'] },
     { h: 'DESTINO / ORIGEN', t: 'routecity', a: ['DESTINO / ORIGEN'] },
-    { h: 'RUTA', t: 'text', a: ['RUTA', 'DESTINO / ORIGEN', 'ROUTING'] },
+    { h: 'RUTA', t: 'ruta', a: ['RUTA', 'DESTINO / ORIGEN', 'ROUTING'] },
     { h: 'SLOT ASIGNADO', t: 'datetime', a: ['SLOT ASIGNADO'] },
     { h: 'SLOT COORDINADO', t: 'datetime', a: ['SLOT COORDINADO'] },
     { h: 'HR. DE INICIO O TERMINO DE PERNOCTA', t: 'datetime', a: ['HR. DE INICIO O TERMINO DE PERNOCTA'] },
@@ -23302,7 +23336,7 @@ function _conciExportCargoRow(row, year) {
     const number = value => Number(String(value).replace(/,/g, '').trim());
     const isArr = /lleg|arr/i.test(get(['TIPO DE MANIFIESTO']));
     const isDep = /sal|dep/i.test(get(['TIPO DE MANIFIESTO']));
-    const route = String(get(['RUTA', 'ROUTING']) || get(['DESTINO / ORIGEN'])).trim();
+    const route = _conciRutaPierna(get(['RUTA', 'ROUTING']) || get(['DESTINO / ORIGEN']), get(['TIPO DE MANIFIESTO']));
     const parts = route.split(/[-/]+/).map(p => p.trim()).filter(Boolean);
     const origen = has(row.ORIGEN) ? row.ORIGEN : (parts.length > 1 || isArr ? parts[0] || '' : (parts.length && isDep ? 'NLU' : ''));
     const destino = has(row.DESTINO) ? row.DESTINO : (parts.length > 1 || isDep ? parts[parts.length - 1] || '' : (parts.length && isArr ? 'NLU' : ''));
@@ -23502,6 +23536,8 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
                 return { value: routeCity(rawVal, isArr) };
             case 'codecity':
                 return { value: codeCity(rawVal) };
+            case 'ruta':
+                return { value: _conciRutaPierna(rawVal, get(row, ['TIPO DE MANIFIESTO'])) };
             case 'hrmax':
                 return { value: _conciHrMaximaEntrega(get(row, ['HR. DE OPERACIÓN']), row, 'FECHA', year) };
             case 'hrscump': {
@@ -25416,10 +25452,11 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                     td.dataset.raw = shown;
                     if (rawStr && rawStr.toUpperCase() !== String(shown).toUpperCase()) td.title = rawStr;
                 } else if (meta.isRuta) {
-                    // RUTA: pierna completa (origen-destino) tal cual; si la fila aun
-                    // no tiene RUTA propia, cae al routing crudo de DESTINO / ORIGEN.
+                    // RUTA: solo la pierna del movimiento (ver _conciRutaPierna); si la
+                    // fila aun no tiene RUTA propia, cae al routing crudo de DESTINO / ORIGEN.
                     const routingRaw = _routingCol ? String(row[_routingCol] || '').trim() : '';
-                    const shownRuta = (rawStr || routingRaw).toUpperCase();
+                    const tipoRuta = _tipoCol ? String(row[_tipoCol] || '') : '';
+                    const shownRuta = _conciRutaPierna(rawStr || routingRaw, tipoRuta).toUpperCase();
                     td.textContent = shownRuta;
                     td.dataset.raw = shownRuta;
                 } else if (meta.isOptype) {
@@ -27262,6 +27299,27 @@ function _conciRoutingEndpointCode(routingRaw, manifestType) {
     return _conciNormalizeManifestType(manifestType) === 'Llegada'
         ? parts[0]
         : parts[parts.length - 1];
+}
+
+// El Routing del itinerario es la rotación completa (llegada + salida):
+// "ANC-NLU-ANC", "UIO-NLU-LAX". La RUTA de un manifiesto es solo su pierna:
+// en la llegada, del origen (con escalas) hasta NLU; en la salida, de NLU al
+// destino. Si la ruta no pasa por NLU, o no sobra nada que recortar, va igual.
+function _conciRutaPierna(routingRaw, manifestType) {
+    const raw = String(routingRaw || '').trim();
+    const parts = raw.toUpperCase().split(/[-/]+/).map(value => value.trim()).filter(Boolean);
+    const esLocal = code => code === 'NLU' || code === 'MMSM';
+    const tipo = _conciNormalizeManifestType(manifestType);
+    let pierna = null;
+    if (tipo === 'Llegada') {
+        const i = parts.findIndex(esLocal);
+        if (i > 0 && i < parts.length - 1) pierna = parts.slice(0, i + 1);
+    } else if (tipo === 'Salida') {
+        let i = -1;
+        parts.forEach((code, index) => { if (esLocal(code)) i = index; });
+        if (i > 0 && i < parts.length - 1) pierna = parts.slice(i);
+    }
+    return pierna ? pierna.join('-') : raw;
 }
 
 function _conciResolveOperationTypeFromRoute(routingRaw, manifestType) {

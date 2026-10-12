@@ -25698,3 +25698,21 @@ body.dark-mode .conci-conteo-filas { color: #9aa7b8; }
 .conci-btn-inicio-fila:focus-visible { outline: 2px solid #0d6efd; outline-offset: 1px; }
 .conci-btn-inicio-fila i { font-size: .62rem; margin-right: 3px; }
 body.dark-mode .conci-btn-inicio-fila { color: #dbe6f5; background: #23324a; border-color: #3a5174; }
+
+/* Inicio · día de carga con ajuste contra el cierre oficial (sólo superadmin,
+   ver ndwMarcaAjusteCarga en script.js). Sin texto: es una marca interna. */
+.ndw-card,
+.ndw-tile { position: relative; }
+.ndw-marca-ajuste {
+    position: absolute;
+    top: .62rem;
+    right: 1.45rem;
+    width: .5rem;
+    height: .5rem;
+    border-radius: 50%;
+    background: #f97316;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, .85);
+    pointer-events: none;
+    z-index: 2;
+}
+.ndw-tile .ndw-marca-ajuste { top: 7px; right: 7px; }

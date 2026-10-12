@@ -147,6 +147,8 @@
     'aerovias': 'Aeroméxico',
     'aerovias de mexico': 'Aeroméxico',
     'aerovias de mexico sa de cv': 'Aeroméxico',
+    // Aerolitoral (Aeroméxico Connect) también es Aeroméxico (09/10/2026).
+    'aerolitoral': 'Aeroméxico',
   };
 
   const _nombreAerolineaCache = new Map();

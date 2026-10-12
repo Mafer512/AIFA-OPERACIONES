@@ -51,6 +51,9 @@ const construir = new Function(`
   ${extraer('_conciParseDateTimeParts')}
   ${extraer('_conciPad2')}
   ${extraer('_conciResolveYear')}
+  ${extraer('_conciNormalizedColumnName')}
+  ${extraer('_conciNormalizeManifestType')}
+  ${extraer('_conciRutaPierna')}
   ${extraer('_conciVueloToRow')}
   ${extraer('_conciBuildEnriched')}
   return { _conciBuildEnriched, _CONCI_OUTPUT_COLUMNS };
@@ -100,7 +103,8 @@ describe('Conciliación con vuelos pero sin ningún manifiesto', () => {
     expect(llegada['AEROLINEA']).toBe('W8');
     expect(llegada['AERONAVE']).toBe('763');
     expect(llegada['MATRÍCULA']).toBe('CFMAJ');
-    expect(llegada['RUTA']).toBe('CVG-NLU-CVG');
+    // RUTA es solo la pierna de la llegada; el Routing trae la rotación completa.
+    expect(llegada['RUTA']).toBe('CVG-NLU');
     expect(llegada['SLOT ASIGNADO']).toBe('27AUG 07:50');
     expect(llegada['HR. DE OPERACIÓN']).toBe('27AUG 07:47');
     expect(llegada['FECHA']).toBe('27/08');
@@ -118,6 +122,7 @@ describe('Conciliación con vuelos pero sin ningún manifiesto', () => {
     expect(salida['# DE VUELO']).toBe('W8 951');
     expect(salida['SLOT ASIGNADO']).toBe('27AUG 20:00');
     expect(salida['HR. DE OPERACIÓN']).toBe('27AUG 21:22');
+    expect(salida['RUTA']).toBe('NLU-CVG');
   });
 
   test('las columnas son las mismas haya o no manifiestos', () => {
