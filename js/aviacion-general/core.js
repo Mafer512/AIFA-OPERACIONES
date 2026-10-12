@@ -18,8 +18,9 @@
  * LO QUE ESTE ARCHIVO NO HACE
  *
  *   No calcula métricas. Cuántas operaciones hubo, cuántos pasajeros, quién es
- *   el operador más frecuente: todo eso lo suma PostgreSQL en
- *   aviacion_general_resumen (migración 046) y aquí nunca se recalcula. La
+ *   el operador más frecuente: todo eso lo suma PostgreSQL en fbo_resumen
+ *   (migración 064a) y aquí nunca se recalcula. La lectura del Layout del
+ *   sistema FBO vive aparte, en layout-fbo.js. La
  *   única suma que sí ocurre es adultos + infantes, y sólo para la vista previa
  *   de la importación —en la base esa columna es GENERADA y jamás se envía—.
  */
@@ -665,21 +666,59 @@
         return { fecha_desde: `${anio}-01-01`, fecha_hasta: `${anio}-12-31` };
     }
 
+    /**
+     * Filtros del módulo, con los nombres que espera fbo_movimientos_filtrados
+     * (migración 064a). Un valor vacío no filtra.
+     *   tipo_movimiento: '' | LLEGADA | SALIDA
+     *   ambito:          '' | NAC | INT
+     */
     function filtrosVacios() {
         return {
-            fecha_desde: '', fecha_hasta: '', tipo_operacion: '', ambito_operacion: '',
-            operador: '', matricula: '', tipo_aeronave: '', aeropuerto: '',
-            estado_validacion: '', estatus_registro: 'ACTIVO', texto: ''
+            fecha_desde: '', fecha_hasta: '', tipo_movimiento: '', ambito: '',
+            operador: '', matricula: '', tipo_aeronave: '', aeropuerto: '', texto: ''
         };
     }
 
-    /** ¿Hay algún filtro puesto además del estatus por omisión? */
+    /**
+     * Desde esta fecha los movimientos salen de operaciones_fbo y tienen
+     * operación (llegada + salida). Antes, del histórico, que no la tiene.
+     */
+    const INICIO_OPERACIONES_FBO = '2026-01-01';
+
+    /** ¿El periodo filtrado toca años anteriores a 2026 (histórico)? */
+    function periodoIncluyeHistorico(filtros) {
+        const desde = (filtros || {}).fecha_desde;
+        return !desde || desde < INICIO_OPERACIONES_FBO;
+    }
+
+    /** ¿Hay algún filtro puesto? */
     function hayFiltros(filtros) {
-        const base = filtrosVacios();
-        return Object.keys(base).some((k) => {
-            if (k === 'estatus_registro') return (filtros[k] || 'ACTIVO') !== 'ACTIVO';
-            return String(filtros[k] || '') !== '';
-        });
+        const f = filtros || {};
+        return Object.keys(filtrosVacios()).some((k) => String(f[k] || '') !== '');
+    }
+
+    /**
+     * Los mismos filtros traducidos a la fuente anterior
+     * (aviacion_general_operaciones), que siguen usando Validación y
+     * Auditoría: allí el ámbito se escribe NACIONAL/INTERNACIONAL y el
+     * movimiento se llama tipo_operacion. Sólo registros ACTIVOS.
+     */
+    function filtrosFuenteAnterior(filtros) {
+        const f = Object.assign(filtrosVacios(), filtros || {});
+        const ambitos = { NAC: 'NACIONAL', INT: 'INTERNACIONAL' };
+        return {
+            fecha_desde: f.fecha_desde,
+            fecha_hasta: f.fecha_hasta,
+            tipo_operacion: f.tipo_movimiento,
+            ambito_operacion: ambitos[f.ambito] || '',
+            operador: f.operador,
+            matricula: f.matricula,
+            tipo_aeronave: f.tipo_aeronave,
+            aeropuerto: f.aeropuerto,
+            texto: f.texto,
+            estado_validacion: '',
+            estatus_registro: 'ACTIVO'
+        };
     }
 
     return {
@@ -698,6 +737,7 @@
         // presentación
         horaCorta, fechaLarga, periodoLargo, numero,
         // filtros
-        filtrosVacios, hayFiltros, rangoAnioActual
+        filtrosVacios, hayFiltros, filtrosFuenteAnterior, rangoAnioActual,
+        INICIO_OPERACIONES_FBO, periodoIncluyeHistorico
     };
 });

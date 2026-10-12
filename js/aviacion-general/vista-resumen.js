@@ -1,10 +1,16 @@
 /* Pantalla "Resumen" del módulo de Aviación General / FBO.
  *
- * De dónde salen las cifras: de UN solo viaje al RPC
- * public.aviacion_general_resumen (migración 046), que suma en PostgreSQL.
+ * De dónde salen las cifras: de dos RPC en paralelo, fbo_resumen y
+ * fbo_movimientos_por_mes (migración 064a), que suman en PostgreSQL sobre
+ * v_fbo_movimientos: operaciones_fbo desde 2026 e histórico 2022-2025.
  * Aquí no se recorre ninguna tabla con reduce/filter/map para calcular una
- * métrica; lo que llega son decenas de renglones ya agregados y esta pantalla
- * sólo los pinta.
+ * métrica —PostgREST corta en 1000 filas y la cifra saldría truncada—; lo que
+ * llega son decenas de renglones ya agregados y esta pantalla sólo los pinta.
+ * La única suma local es el renglón de totales de la tabla mensual, sobre los
+ * meses ya agregados.
+ *
+ * Regla de conteo: cada movimiento (llegada o salida) cuenta en su propia
+ * fecha. En el histórico se conserva la fecha con la que ya contaba el módulo.
  *
  * DECISIONES DE VISUALIZACIÓN
  *
@@ -45,14 +51,6 @@
 
     const graficas = {};
     let ultimoResumen = null;
-
-    // Conteo con el que se pintan las cifras: SIEMPRE el oficial.
-    //
-    // 'rotacion' ancla cada salida a la fecha de la llegada con la que forma
-    // pareja, que es como cuenta el reporte de GAG. Es la cifra auténtica y la
-    // única que este módulo enseña: ofrecer dos conteos en pantalla invitaba a
-    // reportar el que no es.
-    const MODO = 'rotacion';
 
     /**
      * Escribe el valor al final de cada barra.
@@ -249,20 +247,31 @@
     /**
      * Cómo se capturaron los pasajeros del periodo.
      *
-     * Muestra los adultos e infantes disponibles. Los registros capturados
-     * como total siguen incluidos en pax, sin agregar una cifra pendiente
-     * de desglose al texto del resumen.
+     * Desde 2026 todo viene desglosado en adultos e infantes. En el histórico
+     * hay años capturados sólo como total: esos pasajeros están en `pax` pero
+     * no en adultos ni infantes, y se dice en vez de mostrar "0 adultos".
      */
     function desglosePax(t) {
         const pax = Number(t.pax) || 0;
         const adultos = Number(t.adultos) || 0;
         const infantes = Number(t.infantes) || 0;
+        const sinDesglose = pax - adultos - infantes;
 
         if (!pax) return 'Sin pasajeros registrados';
         if (!adultos && !infantes) return 'Capturados como total, sin desglose por edad';
 
         const partes = [`${Core.numero(adultos)} adultos`, `${Core.numero(infantes)} infantes`];
+        if (sinDesglose > 0) partes.push(`${Core.numero(sinDesglose)} sin desglose (histórico)`);
         return partes.join(' · ');
+    }
+
+    /** Pie del KPI de operaciones: abiertas y, si toca, el aviso de cobertura. */
+    function pieOperaciones(t) {
+        const partes = [];
+        if (Core.periodoIncluyeHistorico(AG.filtros)) partes.push('Operaciones disponibles desde 2026');
+        const abiertas = Number(t.operaciones_abiertas) || 0;
+        partes.push(`${Core.numero(abiertas)} abierta${abiertas === 1 ? '' : 's'} (sin salida)`);
+        return esc(partes.join(' · '));
     }
 
     function kpi(etiqueta, valor, pie, color, icono) {
@@ -323,7 +332,8 @@
 
     function plantilla() {
         return `
-        <div class="row g-2 mb-3" id="ag-res-kpis"></div>
+        <div class="row g-2 mb-1" id="ag-res-kpis"></div>
+        <div class="small text-muted mb-3" id="ag-res-nota"></div>
 
         <div class="row g-3">
             <div class="col-12">
@@ -385,17 +395,13 @@
         </div>`;
     }
 
-    function pintar(panel, resumen) {
-        ultimoResumen = resumen;
+    function pintar(panel, resumen, porMes) {
+        ultimoResumen = Object.assign({}, resumen, { por_mes: porMes });
         const t = resumen.totales || {};
-        const porMes = resumen.por_mes || [];
 
         const rango = (t.fecha_min && t.fecha_max)
             ? `${Core.fechaLarga(t.fecha_min)} — ${Core.fechaLarga(t.fecha_max)}`
             : 'Sin registros';
-
-        const pendientes = Number(t.pendientes) || 0;
-        AG.marcador('validacion', pendientes || '', pendientes ? 'bg-warning text-dark' : 'bg-secondary');
 
         panel.querySelector('#ag-res-kpis').innerHTML = [
             kpi('Movimientos', Core.numero(t.movimientos), esc(rango), AZUL, 'fa-plane'),
@@ -403,9 +409,7 @@
                 `${Core.numero(t.llegadas)} / ${Core.numero(t.salidas)}`,
                 `${Core.numero(t.movimientos)} movimientos`, VERDE, 'fa-right-left'),
             kpi('Pasajeros A.G.', Core.numero(t.pax), esc(desglosePax(t)), MORADO, 'fa-users'),
-            kpi('Por validar', Core.numero(t.pendientes),
-                `${Core.numero(t.validados)} validados · ${Core.numero(t.observados)} observados`,
-                pendientes ? '#f59e0b' : '#16a34a', 'fa-clipboard-check'),
+            kpi('Operaciones', Core.numero(t.operaciones), pieOperaciones(t), '#0f766e', 'fa-plane-circle-check'),
             kpi('Nacional', Core.numero(t.nacionales),
                 porcentaje(t.nacionales, t.movimientos), '#0891b2', 'fa-flag'),
             kpi('Internacional', Core.numero(t.internacionales),
@@ -413,6 +417,13 @@
             kpi('Operadores distintos', Core.numero(t.operadores), 'en el periodo', '#475569', 'fa-building'),
             kpi('Matrículas distintas', Core.numero(t.matriculas), 'en el periodo', '#475569', 'fa-hashtag')
         ].join('');
+
+        // Un movimiento sin ámbito no es nacional ni internacional: se dice
+        // cuántos hay para que los dos porcentajes no parezcan no sumar 100.
+        const sinAmbito = Number(t.sin_ambito) || 0;
+        panel.querySelector('#ag-res-nota').textContent = sinAmbito
+            ? `${Core.numero(sinAmbito)} movimiento(s) sin ámbito nacional/internacional en el periodo.`
+            : '';
 
         serieMensual(panel.querySelector('#ag-res-mes'), porMes);
         panel.querySelector('#ag-res-tabla-mes').innerHTML = tablaMensual(porMes);
@@ -508,8 +519,9 @@
         async refrescar(panel) {
             const kpis = panel.querySelector('#ag-res-kpis');
             kpis.innerHTML = `<div class="col-12">${cargando('Calculando el resumen…')}</div>`;
-            const resumen = await Datos.resumen(AG.filtros, MODO);
-            pintar(panel, resumen);
+            const filtros = AG.filtros;
+            const [resumen, porMes] = await Promise.all([Datos.resumen(filtros), Datos.porMes(filtros)]);
+            pintar(panel, resumen, porMes || []);
         }
     });
 

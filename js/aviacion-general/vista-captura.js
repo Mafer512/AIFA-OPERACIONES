@@ -411,8 +411,12 @@
         etiqueta: 'Captura',
         icono: 'fa-keyboard',
         orden: 30,
-        // Un lector no necesita ver un formulario que no puede usar.
-        visible: () => AG.puedeCapturar(),
+        // Oculta (decisión D4, 2026-10-09): el formulario escribe en la fuente
+        // anterior, aviacion_general_operaciones, y lo capturado no aparecería
+        // en el Resumen, que lee operaciones_fbo. Las operaciones entran por
+        // Importación. El archivo queda intacto; para reactivarla:
+        // visible: () => AG.puedeCapturar(),
+        visible: () => false,
 
         async montar(panel) {
             panelRef = panel;

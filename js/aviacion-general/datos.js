@@ -4,20 +4,17 @@
  * existe una pantalla: recibe parámetros, devuelve datos o lanza un Error con
  * un mensaje que se le puede enseñar a un operador.
  *
- * POR QUÉ UNA CAPA APARTE
+ * DOS FUENTES
  *
- *   Para que el día que cambie el backend —o se encienda RLS, o se mueva una
- *   consulta a una función de PostgreSQL— haya UN archivo que tocar y no cinco
- *   pantallas. Las vistas de arriba no saben si algo viene de PostgREST o de un
- *   RPC, y no deben saberlo.
- *
- * REPARTO DE TRABAJO CON LA BASE
- *
- *   · El listado paginado va por PostgREST (select + range + count exacto):
- *     es su terreno y aprovecha los índices de la migración 046.
- *   · Todo lo demás —resumen, catálogos, importación, validación, baja,
- *     enlace de rotaciones— va por RPC, porque son reglas de negocio y viven
- *     en la base, no aquí.
+ *   · Resumen, Movimientos e Importación leen y escriben la fuente FBO
+ *     (migraciones 064a/064b): la vista v_fbo_movimientos —operaciones_fbo
+ *     desde 2026 más el histórico 2022-2025 de aviacion_general_operaciones,
+ *     sólo lectura— y sus funciones fbo_*. Todo se suma en PostgreSQL: el
+ *     navegador nunca descarga la tabla para calcular un KPI, porque PostgREST
+ *     corta cada respuesta en 1000 filas y la cifra saldría truncada en
+ *     silencio.
+ *   · Validación, Auditoría y Captura (oculta) siguen en su fuente anterior,
+ *     aviacion_general_operaciones (migración 046), sin cambios.
  *
  * Columnas de auditoría verificadas contra la base en vivo:
  *   id, registro_id, operacion, datos_anteriores, datos_nuevos,
@@ -28,17 +25,39 @@
 
     const TABLA     = 'aviacion_general_operaciones';
     const TABLA_AUD = 'aviacion_general_operaciones_auditoria';
+    const TABLA_FBO = 'operaciones_fbo';
 
-    // Lo que pide el listado. Se enumeran las columnas en vez de usar '*' para
-    // no arrastrar por la red campos que la tabla pueda ganar después y que
-    // ninguna pantalla use.
+    // PostgREST devuelve como máximo 1000 filas por respuesta: las descargas
+    // completas (exportar) se piden en páginas de este tamaño.
+    const PAGINA_MAXIMA = 1000;
+    // Cada bloque de importación es una transacción de fbo_importar_operaciones.
+    const BLOQUE_IMPORTACION = 500;
+
+    /**
+     * @typedef {Object} FiltrosFbo
+     * @property {string} [fecha_desde]      'YYYY-MM-DD'
+     * @property {string} [fecha_hasta]      'YYYY-MM-DD'
+     * @property {string} [tipo_movimiento]  '' | 'LLEGADA' | 'SALIDA'
+     * @property {string} [ambito]           '' | 'NAC' | 'INT'
+     * @property {string} [operador]
+     * @property {string} [matricula]
+     * @property {string} [tipo_aeronave]
+     * @property {string} [aeropuerto]       Origen en llegadas, destino en salidas.
+     * @property {string} [texto]            Búsqueda libre.
+     */
+
+    const CLAVES_FILTRO_FBO = [
+        'fecha_desde', 'fecha_hasta', 'tipo_movimiento', 'ambito',
+        'operador', 'matricula', 'tipo_aeronave', 'aeropuerto', 'texto'
+    ];
+
+    // Lo que pide la lista de la fuente anterior (Validación). Se enumeran las
+    // columnas en vez de usar '*' para no arrastrar campos que nadie usa.
     const COLUMNAS_LISTA = [
         'id', 'folio_rotacion', 'fecha_operacion', 'tipo_operacion', 'ambito_operacion',
         'operador', 'matricula', 'tipo_aeronave',
-        // Las dos del origen/destino: el histórico usa una u otra según el año.
         'aeropuerto_origen_destino', 'ciudad_origen_destino',
         'hora_programada', 'hora_real',
-        // El paso por plataforma, que antes no se pedía y por tanto no se veía.
         'hora_aterrizaje', 'hora_entrada_posicion', 'hora_salida_posicion', 'hora_despegue',
         'adultos', 'infantes', 'pax_total_reportado', 'pax_ag', 'pax_od',
         'estado', 'pais', 'observaciones', 'movimiento_relacionado_id',
@@ -55,12 +74,16 @@
         return c;
     }
 
+    /** Qué migración falta, según el objeto que no se encontró. */
+    function migracionDe(msg) {
+        if (/fbo_(importar_operaciones|previa_importacion)/.test(msg)) return '064b_fbo_importar_operaciones.sql';
+        if (/fbo_|v_fbo_movimientos/.test(msg)) return '064a_fbo_movimientos_vista_y_rpc.sql';
+        return '046_aviacion_general_fbo.sql';
+    }
+
     /**
      * Traduce los errores de Postgres a algo que un capturista pueda accionar.
-     *
-     * Un "violates check constraint chk_ag_tipo_operacion" en pantalla no le
-     * dice nada a nadie; "El tipo de operación debe ser LLEGADA o SALIDA" sí.
-     * Los códigos salen de los CHECK verificados contra la base.
+     * Los códigos chk_* salen de los CHECK de la fuente anterior.
      */
     function traducirError(error, contexto) {
         if (!error) return null;
@@ -86,13 +109,30 @@
         if (error.code === '42501' || /permission denied/i.test(msg)) {
             return new Error('No tienes permiso para realizar esta operación.');
         }
-        if (error.code === 'PGRST202' || /Could not find the function/i.test(msg)) {
-            return new Error('El módulo no está instalado completo en la base: falta aplicar la migración 046_aviacion_general_fbo.sql.');
+        if (error.code === 'PGRST202' || error.code === '42P01' || error.code === '42883'
+            || /Could not find the function|does not exist/i.test(msg)) {
+            return new Error(`El módulo no está instalado completo en la base: falta aplicar la migración ${migracionDe(msg)}.`);
         }
         return new Error(`${contexto}: ${msg || 'error desconocido'}`);
     }
 
-    /** Aplica el objeto de filtros del núcleo sobre una consulta de PostgREST. */
+    /**
+     * Filtros tal como los espera fbo_movimientos_filtrados: sólo las claves
+     * conocidas y sin vacíos (una clave ausente no filtra).
+     * @param {FiltrosFbo} filtros
+     */
+    function filtrosRpc(filtros) {
+        const f = filtros || {};
+        /** @type {Object<string, string>} */
+        const salida = {};
+        CLAVES_FILTRO_FBO.forEach((k) => {
+            const v = f[k] === null || f[k] === undefined ? '' : String(f[k]).trim();
+            if (v) salida[k] = v;
+        });
+        return salida;
+    }
+
+    /** Aplica los filtros de la fuente anterior sobre una consulta de PostgREST. */
     function aplicarFiltros(consulta, filtros) {
         const f = filtros || {};
         const estatus = f.estatus_registro || 'ACTIVO';
@@ -104,15 +144,11 @@
         if (f.ambito_operacion)  consulta = consulta.eq('ambito_operacion', f.ambito_operacion);
         if (f.estado_validacion) consulta = consulta.eq('estado_validacion', f.estado_validacion);
 
-        // ilike con comodines: coincidencia parcial sin distinguir mayúsculas,
-        // que es como la gente busca ("gulf" debe encontrar "GULFSTREAM").
         if (f.operador)      consulta = consulta.ilike('operador', `%${f.operador}%`);
         if (f.matricula)     consulta = consulta.ilike('matricula', `%${f.matricula}%`);
         if (f.tipo_aeronave) consulta = consulta.ilike('tipo_aeronave', `%${f.tipo_aeronave}%`);
 
-        // Buscar "MMTO" o "TOLUCA" tiene que encontrar lo mismo: hasta 2024 el
-        // origen se anotó como ciudad y desde 2025 como código, y quien busca no
-        // tiene por qué saber en qué año cambió la convención.
+        // Hasta 2024 el origen se anotó como ciudad y desde 2025 como código.
         if (f.aeropuerto) {
             const a = String(f.aeropuerto).replace(/[(),]/g, ' ').trim();
             if (a) {
@@ -135,17 +171,173 @@
         return consulta;
     }
 
+    /** Parte un arreglo en trozos de `tam`. */
+    function enBloques(lista, tam) {
+        const bloques = [];
+        for (let i = 0; i < lista.length; i += tam) bloques.push(lista.slice(i, i + tam));
+        return bloques;
+    }
+
     const api = {
         TABLA,
         TABLA_AUD,
+        TABLA_FBO,
+        PAGINA_MAXIMA,
+        BLOQUE_IMPORTACION,
+        filtrosRpc,
+
+        // ── Fuente FBO (064a/064b) ──────────────────────────────────────────
 
         /**
-         * Página de movimientos + total exacto.
-         *
-         * El total viene con count:'exact' porque el paginador necesita saber
-         * cuántas páginas hay; sobre miles de filas con los índices de la 046
-         * el costo es despreciable, y sin él no se puede decir "1–50 de 1,892".
+         * KPIs y tops del periodo, ya sumados por PostgreSQL (fbo_resumen).
+         * @param {FiltrosFbo} filtros
          */
+        async resumen(filtros) {
+            const c = await cliente();
+            const { data, error } = await c.rpc('fbo_resumen', { p_filtros: filtrosRpc(filtros) });
+            if (error) throw traducirError(error, 'No se pudo calcular el resumen');
+            return data || {};
+        },
+
+        /**
+         * Llegadas, salidas y pasajeros por mes (fbo_movimientos_por_mes).
+         * Una fila por mes: nunca se acerca al tope de 1000 filas.
+         * @param {FiltrosFbo} filtros
+         */
+        async porMes(filtros) {
+            const c = await cliente();
+            const { data, error } = await c.rpc('fbo_movimientos_por_mes', { p_filtros: filtrosRpc(filtros) });
+            if (error) throw traducirError(error, 'No se pudo calcular la serie mensual');
+            return data || [];
+        },
+
+        /**
+         * Una página de movimientos y el total exacto. Filtra, ordena y pagina
+         * PostgreSQL (fbo_movimientos_filtrados + range), así la pantalla no
+         * crece en costo aunque la tabla sí.
+         */
+        async movimientos({ filtros = {}, pagina = 1, porPagina = 50, orden = 'fecha', ascendente = false } = {}) {
+            const c = await cliente();
+            const desde = (Math.max(1, pagina) - 1) * porPagina;
+            const consulta = c.rpc('fbo_movimientos_filtrados', { p_filtros: filtrosRpc(filtros) }, { count: 'exact' })
+                .order(orden, { ascending: ascendente, nullsFirst: false })
+                // Desempates estables: sin ellos, dos movimientos iguales en el
+                // criterio pueden cambiar de página y verse repetidos o perderse.
+                .order('hora', { ascending: ascendente, nullsFirst: false })
+                .order('movimiento_id', { ascending: ascendente })
+                .range(desde, desde + porPagina - 1);
+            const { data, error, count } = await consulta;
+            if (error) throw traducirError(error, 'No se pudieron consultar los movimientos');
+            return { filas: data || [], total: count || 0, pagina, porPagina };
+        },
+
+        /**
+         * Todos los movimientos filtrados, para exportar. Por páginas de 1000
+         * porque PostgREST corta las respuestas, y una exportación truncada en
+         * silencio es peor que no exportar.
+         */
+        async movimientosTodos({ filtros = {}, limite = 50000 } = {}) {
+            const filas = [];
+            let total = 0;
+            for (let pagina = 1; filas.length < limite; pagina++) {
+                const r = await api.movimientos({ filtros, pagina, porPagina: PAGINA_MAXIMA, orden: 'fecha', ascendente: true });
+                total = r.total;
+                filas.push(...r.filas);
+                if (filas.length >= r.total || r.filas.length < PAGINA_MAXIMA) break;
+            }
+            return { filas: filas.slice(0, limite), total };
+        },
+
+        /** Valores presentes, para los desplegables de los filtros. */
+        async opciones() {
+            const c = await cliente();
+            const { data, error } = await c.rpc('fbo_opciones', {});
+            if (error) throw traducirError(error, 'No se pudieron cargar los catálogos');
+            return data || {};
+        },
+
+        /**
+         * Para la vista previa: qué registros ya existen y qué operaciones
+         * guardadas con otro registro coinciden por matrícula + fecha de
+         * aterrizaje. En bloques de 500 para no mandar un cuerpo enorme.
+         * @param {{registro: string, matricula: string|null, fecha_aterrizaje: string|null}[]} filas
+         */
+        async previaImportacion(filas) {
+            const c = await cliente();
+            const salida = { existentes: [], coincidencias: [] };
+            for (const bloque of enBloques(filas || [], BLOQUE_IMPORTACION)) {
+                const { data, error } = await c.rpc('fbo_previa_importacion', { p_filas: bloque });
+                if (error) throw traducirError(error, 'No se pudo preparar la vista previa');
+                salida.existentes.push(...((data && data.existentes) || []));
+                salida.coincidencias.push(...((data && data.coincidencias) || []));
+            }
+            return salida;
+        },
+
+        /**
+         * Importa en bloques de 500. Cada bloque es UNA transacción en la base
+         * (fbo_importar_operaciones): o entra completo o no entra nada de él.
+         * Si un bloque falla se detiene; el Error lleva `parcial` con lo que
+         * ya quedó guardado en los bloques anteriores.
+         */
+        async importarOperaciones({ filas, tamanoBloque = BLOQUE_IMPORTACION, onProgreso = null }) {
+            const c = await cliente();
+            const bloques = enBloques(filas || [], tamanoBloque);
+            const total = {
+                recibidas: 0, insertados: 0, reemplazados: 0,
+                reemplazados_por_coincidencia: 0, bloques: bloques.length, bloquesGuardados: 0
+            };
+
+            for (let i = 0; i < bloques.length; i++) {
+                const { data, error } = await c.rpc('fbo_importar_operaciones', { p_filas: bloques[i] });
+                if (error) {
+                    const e = traducirError(error, `No se pudo importar el bloque ${i + 1} de ${bloques.length}`);
+                    e.parcial = Object.assign({}, total);
+                    throw e;
+                }
+                const r = data || {};
+                total.recibidas += Number(r.recibidas) || 0;
+                total.insertados += Number(r.insertados) || 0;
+                total.reemplazados += Number(r.reemplazados) || 0;
+                total.reemplazados_por_coincidencia += Number(r.reemplazados_por_coincidencia) || 0;
+                total.bloquesGuardados = i + 1;
+                if (typeof onProgreso === 'function') {
+                    onProgreso({ bloque: i + 1, bloques: bloques.length, acumulado: Math.min((i + 1) * tamanoBloque, filas.length) });
+                }
+            }
+            return total;
+        },
+
+        /**
+         * ¿Están aplicadas 064a y 064b? Se pregunta una vez al arrancar para
+         * poder decir qué archivo falta correr en lugar de dejar la pantalla en
+         * blanco. Se usan las funciones más baratas de cada migración.
+         */
+        async diagnostico() {
+            const salida = { tabla: false, funciones: false, importacion: false, mensaje: '' };
+            try {
+                const c = await cliente();
+                const { error: e1 } = await c.from(TABLA_FBO).select('id').limit(1);
+                salida.tabla = !e1;
+                if (e1) { salida.mensaje = traducirError(e1, 'Tabla').message; return salida; }
+
+                const { error: e2 } = await c.rpc('fbo_patron', { p: 'x' });
+                salida.funciones = !e2;
+                if (e2) { salida.mensaje = traducirError(e2, 'Funciones').message; return salida; }
+
+                const { error: e3 } = await c.rpc('fbo_previa_importacion', { p_filas: [] });
+                salida.importacion = !e3;
+                if (e3) salida.mensaje = traducirError(e3, 'Importación').message;
+            } catch (err) {
+                salida.mensaje = err.message || String(err);
+            }
+            return salida;
+        },
+
+        // ── Fuente anterior: aviacion_general_operaciones (Validación,
+        //    Auditoría y Captura) ─────────────────────────────────────────────
+
+        /** Página de la fuente anterior + total exacto. */
         async listar({ filtros = {}, pagina = 1, porPagina = 50, orden = 'fecha_operacion', ascendente = false } = {}) {
             const c = await cliente();
             const desde = (Math.max(1, pagina) - 1) * porPagina;
@@ -154,31 +346,12 @@
             consulta = aplicarFiltros(consulta, filtros);
             consulta = consulta
                 .order(orden, { ascending: ascendente, nullsFirst: false })
-                // Desempate estable: sin esto, dos movimientos del mismo día
-                // pueden intercambiarse entre páginas y aparecer repetidos o
-                // desaparecer al paginar.
                 .order('id', { ascending: ascendente })
                 .range(desde, desde + porPagina - 1);
 
             const { data, error, count } = await consulta;
             if (error) throw traducirError(error, 'No se pudo consultar el histórico');
             return { filas: data || [], total: count || 0, pagina, porPagina };
-        },
-
-        /**
-         * Todas las filas que cumplen el filtro, para exportar.
-         * Se pide por páginas de 1000 porque PostgREST corta las respuestas y
-         * una exportación silenciosamente truncada es peor que no exportar.
-         */
-        async listarTodo({ filtros = {}, limite = 20000 } = {}) {
-            const filas = [];
-            const tam = 1000;
-            for (let pagina = 1; filas.length < limite; pagina++) {
-                const r = await api.listar({ filtros, pagina, porPagina: tam });
-                filas.push(...r.filas);
-                if (filas.length >= r.total || r.filas.length < tam) break;
-            }
-            return filas;
         },
 
         async obtener(id) {
@@ -198,13 +371,7 @@
             return data;
         },
 
-        /**
-         * Actualiza y deja constancia de quién lo hizo.
-         *
-         * El trigger de la tabla se encarga de la versión y de escribir la
-         * auditoría; aquí sólo se sella fecha_modificacion para que no dependa
-         * de que el trigger exista.
-         */
+        /** El trigger de la tabla lleva la versión y la auditoría. */
         async actualizar(id, payload) {
             const c = await cliente();
             const { data, error } = await c.from(TABLA)
@@ -226,119 +393,7 @@
             return Number(data) || 0;
         },
 
-        /** Baja lógica. Nada se borra: cambia el estatus y queda el motivo. */
-        async baja(id, motivo, modo) {
-            const c = await cliente();
-            const { data, error } = await c.rpc('aviacion_general_baja', {
-                p_id: id, p_motivo: motivo, p_modo: modo || 'ANULADO'
-            });
-            if (error) throw traducirError(error, 'No se pudo dar de baja el movimiento');
-            return data === true;
-        },
-
-        /** Reactiva un movimiento anulado. */
-        async reactivar(id) {
-            const c = await cliente();
-            const { data, error } = await c.from(TABLA)
-                .update({
-                    estatus_registro: 'ACTIVO',
-                    motivo_anulacion: null,
-                    eliminado_por: null,
-                    fecha_eliminacion: null,
-                    fecha_modificacion: new Date().toISOString()
-                })
-                .eq('id', id)
-                .select(COLUMNAS_LISTA)
-                .single();
-            if (error) throw traducirError(error, 'No se pudo reactivar el movimiento');
-            return data;
-        },
-
-        /**
-         * Todas las cifras del tablero, ya sumadas por PostgreSQL.
-         *
-         * modo 'rotacion' (por omisión) es el conteo OFICIAL: el del reporte de
-         * GAG, que ancla cada salida a la fecha de su llegada. 'movimiento'
-         * cuenta cada operación en la fecha en que ocurrió.
-         */
-        async resumen(filtros, modo) {
-            const c = await cliente();
-            const { data, error } = await c.rpc('aviacion_general_resumen', {
-                p_filtros: filtros || {},
-                p_modo: modo || 'rotacion'
-            });
-            if (error) throw traducirError(error, 'No se pudo calcular el resumen');
-            return data || {};
-        },
-
-        /** Valores presentes en la tabla, para poblar los desplegables. */
-        async opciones() {
-            const c = await cliente();
-            const { data, error } = await c.rpc('aviacion_general_opciones', {});
-            if (error) throw traducirError(error, 'No se pudieron cargar los catálogos');
-            return data || {};
-        },
-
-        /**
-         * Importación por lotes.
-         *
-         * Se parte en tandas porque un solo jsonb con miles de filas es una
-         * petición enorme que puede toparse con el límite del gateway, y porque
-         * un error a la mitad de 2,000 filas no dice nada útil mientras que uno
-         * en la tanda 3 de 8 acota el problema. Cada tanda es transaccional por
-         * sí sola.
-         *
-         * onProgreso recibe {tanda, tandas, acumulado} para que la pantalla
-         * pueda mover una barra sin que esta capa sepa qué es una barra.
-         */
-        async importar({ filas, archivo, hoja, simulacion = false, tamanoTanda = 250, onProgreso = null }) {
-            const c = await cliente();
-            const total = {
-                simulacion, recibidas: 0, insertadas: 0, duplicadas: 0, rechazadas: 0,
-                detalle_duplicadas: [], detalle_rechazadas: []
-            };
-            const tandas = Math.max(1, Math.ceil(filas.length / tamanoTanda));
-
-            for (let i = 0; i < tandas; i++) {
-                const trozo = filas.slice(i * tamanoTanda, (i + 1) * tamanoTanda);
-                const { data, error } = await c.rpc('aviacion_general_importar', {
-                    p_filas: trozo,
-                    p_archivo: archivo || null,
-                    p_hoja: hoja || null,
-                    p_simulacion: simulacion
-                });
-                if (error) throw traducirError(error, `No se pudo importar la tanda ${i + 1} de ${tandas}`);
-
-                const r = data || {};
-                total.recibidas  += Number(r.recibidas)  || 0;
-                total.insertadas += Number(r.insertadas) || 0;
-                total.duplicadas += Number(r.duplicadas) || 0;
-                total.rechazadas += Number(r.rechazadas) || 0;
-
-                // Los índices que devuelve la base son relativos a su tanda:
-                // se corrigen aquí para que el reporte señale la fila real.
-                const corrimiento = i * tamanoTanda;
-                (r.detalle_duplicadas || []).forEach((d) => {
-                    total.detalle_duplicadas.push(Object.assign({}, d, { indice: (d.indice || 0) + corrimiento }));
-                });
-                (r.detalle_rechazadas || []).forEach((d) => {
-                    total.detalle_rechazadas.push(Object.assign({}, d, { indice: (d.indice || 0) + corrimiento }));
-                });
-
-                if (typeof onProgreso === 'function') {
-                    onProgreso({ tanda: i + 1, tandas, acumulado: Math.min((i + 1) * tamanoTanda, filas.length) });
-                }
-            }
-            return total;
-        },
-
-        /**
-         * Movimientos capturados dos veces.
-         *
-         * Misma llave natural con la que la importación decide si algo ya
-         * existe, así que lo que aparece aquí es exactamente lo que una
-         * reimportación rechazaría. No modifica nada: señala.
-         */
+        /** Movimientos capturados dos veces (misma llave natural). Sólo señala. */
         async duplicados(filtros, limite) {
             const c = await cliente();
             const { data, error } = await c.rpc('aviacion_general_duplicados', {
@@ -381,30 +436,6 @@
                 .limit(limite);
             if (error) throw traducirError(error, 'No se pudo leer la auditoría');
             return data || [];
-        },
-
-        /**
-         * ¿Está el módulo instalado en la base?
-         *
-         * Se pregunta una vez al arrancar para poder decir "falta correr la
-         * migración 046" en lugar de dejar la pantalla en blanco con un error
-         * de consola que nadie va a leer.
-         */
-        async diagnostico() {
-            const salida = { tabla: false, funciones: false, mensaje: '' };
-            try {
-                const c = await cliente();
-                const { error: e1 } = await c.from(TABLA).select('id').limit(1);
-                salida.tabla = !e1;
-                if (e1) { salida.mensaje = traducirError(e1, 'Tabla').message; return salida; }
-
-                const { error: e2 } = await c.rpc('aviacion_general_resumen', { p_filtros: {} });
-                salida.funciones = !e2;
-                if (e2) salida.mensaje = traducirError(e2, 'Funciones').message;
-            } catch (err) {
-                salida.mensaje = err.message || String(err);
-            }
-            return salida;
         }
     };
 

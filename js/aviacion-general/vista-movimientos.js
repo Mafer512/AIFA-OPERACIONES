@@ -1,18 +1,23 @@
 /* Pantalla "Movimientos" del módulo de Aviación General / FBO.
  *
- * El histórico completo, paginado, ordenable y exportable.
+ * Una fila por movimiento (llegada o salida) de v_fbo_movimientos: las
+ * operaciones de operaciones_fbo desde 2026 y el histórico 2022-2025.
+ * Paginado, ordenable y exportable.
  *
- * POR QUÉ PAGINADO Y NO "CARGAR TODO Y FILTRAR EN EL NAVEGADOR"
+ * POR QUÉ PAGINADO EN EL SERVIDOR
  *
- *   Hoy son 1,892 registros y cabrían en memoria. En dos años no, y para
- *   entonces cambiar el enfoque significa reescribir la pantalla con gente
- *   usándola. Se pide una página a la vez desde el principio: el filtro, el
- *   orden y el conteo los resuelve PostgreSQL con los índices de la migración
- *   046, y la pantalla no crece en costo aunque la tabla sí.
+ *   PostgREST corta cada respuesta en 1000 filas y la tabla ya pasa de eso.
+ *   Se pide una página a la vez a fbo_movimientos_filtrados con range() y el
+ *   conteo exacto: el filtro, el orden y el total los resuelve PostgreSQL con
+ *   la MISMA definición de filtros que el Resumen, así el "de N movimientos"
+ *   de aquí es el mismo número que el KPI.
  *
- * La exportación es la excepción y está acotada: baja lo filtrado por tandas de
- * mil y avisa si se topa con el límite, porque una exportación truncada en
- * silencio es peor que una que no se hizo.
+ * La exportación baja lo filtrado por páginas de mil y avisa si se topa con el
+ * límite, porque una exportación truncada en silencio es peor que una que no
+ * se hizo.
+ *
+ * Sin edición ni bajas: el módulo es estadístico y las correcciones entran
+ * reimportando el Layout, que reemplaza por registro.
  */
 (function (root) {
     'use strict';
@@ -23,120 +28,82 @@
     const { Core, Datos, esc, aviso, cargando, vacio } = AG;
 
     const TAMANOS = [25, 50, 100, 200];
+    const LIMITE_EXPORTACION = 50000;
 
     const estado = {
         pagina: 1,
         porPagina: 50,
-        orden: 'fecha_operacion',
+        orden: 'fecha',
         ascendente: false,
         total: 0,
         filas: []
     };
 
-    // Columnas de la tabla. `orden` indica por cuál campo ordena la base al
+    // `orden` es la columna de v_fbo_movimientos por la que ordena la base al
     // hacer clic en el encabezado; sin `orden`, el encabezado no es pulsable.
     const COLUMNAS = [
-        { campo: 'folio_rotacion',            titulo: 'No.',        orden: 'folio_rotacion', clase: 'ag-num' },
-        { campo: 'fecha_operacion',           titulo: 'Fecha',      orden: 'fecha_operacion' },
-        { campo: 'tipo_operacion',            titulo: 'Movimiento', orden: 'tipo_operacion' },
-        { campo: 'ambito_operacion',          titulo: 'Ámbito',     orden: 'ambito_operacion' },
-        { campo: 'operador',                  titulo: 'Operador',   orden: 'operador' },
-        { campo: 'matricula',                 titulo: 'Matrícula',  orden: 'matricula', clase: 'ag-mono' },
-        { campo: 'tipo_aeronave',             titulo: 'Aeronave',   orden: 'tipo_aeronave' },
-        // Sin `orden` a propósito: el origen vive en dos columnas según el año y
-        // ordenar sólo por una de ellas dejaría la mitad del histórico fuera del
-        // criterio, que es peor que no ofrecer el orden.
-        { campo: '__origen',                  titulo: 'Orig./Dest.', clase: 'ag-mono' },
-        { campo: 'hora_programada',           titulo: 'Hr. prog.',  orden: 'hora_programada', clase: 'ag-num' },
-        { campo: 'hora_real',                 titulo: 'Hr. real',   orden: 'hora_real', clase: 'ag-num' },
-        { campo: 'hora_aterrizaje',           titulo: 'Aterr.',     clase: 'ag-num' },
-        { campo: 'hora_entrada_posicion',     titulo: 'Ent. pos.',  clase: 'ag-num' },
-        { campo: 'hora_salida_posicion',      titulo: 'Sal. pos.',  clase: 'ag-num' },
-        { campo: 'hora_despegue',             titulo: 'Despegue',   clase: 'ag-num' },
-        { campo: 'adultos',                   titulo: 'Ad.',        clase: 'ag-num' },
-        { campo: 'infantes',                  titulo: 'Inf.',       clase: 'ag-num' },
-        { campo: 'pax_total_reportado',       titulo: 'Pax rep.',   clase: 'ag-num' },
-        { campo: 'pax_ag',                    titulo: 'Pax A.G.',   clase: 'ag-num fw-bold' },
-        { campo: 'estado_validacion',         titulo: 'Validación', orden: 'estado_validacion' },
-        { campo: '__acciones',                titulo: '' }
+        { campo: 'registro',          titulo: 'Registro',    orden: 'registro', clase: 'ag-mono' },
+        { campo: 'fecha',             titulo: 'Fecha',       orden: 'fecha' },
+        { campo: 'hora',              titulo: 'Hora',        orden: 'hora', clase: 'ag-num' },
+        { campo: 'tipo_movimiento',   titulo: 'Movimiento',  orden: 'tipo_movimiento' },
+        { campo: 'ambito',            titulo: 'Ámbito',      orden: 'ambito' },
+        { campo: 'operador',          titulo: 'Operador',    orden: 'operador' },
+        { campo: 'vuelo_operado_por', titulo: 'Prestador',   orden: 'vuelo_operado_por' },
+        { campo: 'matricula',         titulo: 'Matrícula',   orden: 'matricula', clase: 'ag-mono' },
+        { campo: 'tipo_aeronave',     titulo: 'Aeronave',    orden: 'tipo_aeronave' },
+        { campo: 'tipo_ala',          titulo: 'Ala' },
+        { campo: 'aeropuerto',        titulo: 'Orig./Dest.', orden: 'aeropuerto', clase: 'ag-mono' },
+        { campo: 'hora_pista',        titulo: 'Pista',       clase: 'ag-num' },
+        { campo: 'hora_posicion',     titulo: 'Posición',    clase: 'ag-num' },
+        { campo: 'pax_adultos',       titulo: 'Ad.',         clase: 'ag-num' },
+        { campo: 'pax_infantes',      titulo: 'Inf.',        clase: 'ag-num' },
+        { campo: 'pax_total',         titulo: 'Pax',         orden: 'pax_total', clase: 'ag-num fw-bold' }
     ];
 
     // ── Presentación de una celda ───────────────────────────────────────────
 
     function insigniaTipo(valor) {
-        const clase = valor === 'LLEGADA' ? 'ag-badge--llegada' : 'ag-badge--salida';
-        const icono = valor === 'LLEGADA' ? 'fa-plane-arrival' : 'fa-plane-departure';
+        const llegada = valor === 'LLEGADA';
+        const clase = llegada ? 'ag-badge--llegada' : 'ag-badge--salida';
+        const icono = llegada ? 'fa-plane-arrival' : 'fa-plane-departure';
         return `<span class="ag-badge ${clase}"><i class="fas ${icono} me-1"></i>${esc(valor)}</span>`;
     }
 
     function insigniaAmbito(valor) {
-        const clase = valor === 'INTERNACIONAL' ? 'ag-badge--int' : 'ag-badge--nal';
-        return `<span class="ag-badge ${clase}">${esc(valor === 'INTERNACIONAL' ? 'INT' : 'NAL')}</span>`;
-    }
-
-    function insigniaValidacion(fila) {
-        const mapa = {
-            PENDIENTE: ['ag-badge--pend', 'fa-clock', 'Pendiente'],
-            VALIDADO:  ['ag-badge--val', 'fa-check', 'Validado'],
-            OBSERVADO: ['ag-badge--obs', 'fa-triangle-exclamation', 'Observado']
-        };
-        const [clase, icono, texto] = mapa[fila.estado_validacion] || mapa.PENDIENTE;
-        const titulo = fila.observacion_validacion ? ` title="${esc(fila.observacion_validacion)}"` : '';
-        return `<span class="ag-badge ${clase}"${titulo}><i class="fas ${icono} me-1"></i>${texto}</span>`;
+        if (valor !== 'NAC' && valor !== 'INT') return valor ? esc(valor) : '—';
+        return `<span class="ag-badge ${valor === 'INT' ? 'ag-badge--int' : 'ag-badge--nal'}">${esc(valor)}</span>`;
     }
 
     function celda(fila, col) {
         switch (col.campo) {
-            case 'fecha_operacion':   return esc(Core.fechaLarga(fila.fecha_operacion));
-            case 'tipo_operacion':    return insigniaTipo(fila.tipo_operacion);
-            case 'ambito_operacion':  return insigniaAmbito(fila.ambito_operacion);
-            case 'hora_programada':
-            case 'hora_real':
-            case 'hora_aterrizaje':
-            case 'hora_entrada_posicion':
-            case 'hora_salida_posicion':
-            case 'hora_despegue':
-                return esc(Core.horaCorta(fila[col.campo]));
-            case '__origen': {
-                // Hasta 2024 se anotó la ciudad; desde 2025, el código. Se
-                // muestra lo que haya y se distingue cuál de los dos es, porque
-                // "TOLUCA" y "MMTO" no se leen igual en un reporte.
-                const od = Core.origenDestino(fila);
-                if (!od.valor) return '—';
-                if (od.esCodigo) return esc(od.valor);
-                return `<span class="ag-od-ciudad" title="Capturado como ciudad, no como código de aeropuerto">${esc(od.valor)}</span>`;
+            case 'registro':
+                if (fila.fuente === 'HISTORICO') {
+                    return `<span class="ag-od-ciudad" title="Histórico 2022–2025 (aviacion_general_operaciones)">${esc(fila.registro)}</span>`;
+                }
+                return esc(fila.registro || '—');
+            case 'fecha': {
+                // En el histórico, una salida de 2022-2023 cuenta en la fecha de
+                // su llegada (como siempre ha contado el módulo). Se enseña la
+                // fecha real y se avisa en qué fecha cuenta.
+                const real = esc(Core.fechaLarga(fila.fecha_real || fila.fecha));
+                if (fila.fecha_real && fila.fecha && fila.fecha_real !== fila.fecha) {
+                    return `<span class="ag-od-ciudad" title="Cuenta el ${esc(Core.fechaLarga(fila.fecha))}, fecha de su llegada (rotación)">${real}</span>`;
+                }
+                return real;
             }
-            case 'estado_validacion': return insigniaValidacion(fila);
+            case 'hora':
+            case 'hora_pista':
+            case 'hora_posicion':
+                return esc(Core.horaCorta(fila[col.campo]));
+            case 'tipo_movimiento': return insigniaTipo(fila.tipo_movimiento);
+            case 'ambito':          return insigniaAmbito(fila.ambito);
             case 'operador':
-                return `<span class="d-inline-block text-truncate" style="max-width:220px" title="${esc(fila.operador)}">${esc(fila.operador)}</span>`;
-            case 'observaciones':     return esc(fila.observaciones || '');
-            case '__acciones':        return acciones(fila);
+                return `<span class="d-inline-block text-truncate" style="max-width:220px" title="${esc(fila.operador)}">${esc(fila.operador || '—')}</span>`;
             default: {
                 const v = fila[col.campo];
                 return v === null || v === undefined || v === '' ? '—' : esc(v);
             }
         }
-    }
-
-    function acciones(fila) {
-        const botones = [];
-        const anulado = fila.estatus_registro !== 'ACTIVO';
-
-        botones.push(`<button class="btn btn-sm btn-link p-0 px-1 text-secondary" data-ag-accion="historial" data-id="${fila.id}"
-                        title="Ver historial de cambios"><i class="fas fa-clock-rotate-left"></i></button>`);
-
-        if (AG.puedeCapturar() && !anulado) {
-            botones.push(`<button class="btn btn-sm btn-link p-0 px-1 text-primary" data-ag-accion="editar" data-id="${fila.id}"
-                            title="Editar movimiento"><i class="fas fa-pen"></i></button>`);
-        }
-        if (AG.puedeEditar()) {
-            botones.push(anulado
-                ? `<button class="btn btn-sm btn-link p-0 px-1 text-success" data-ag-accion="reactivar" data-id="${fila.id}"
-                     title="Reactivar movimiento"><i class="fas fa-rotate-left"></i></button>`
-                : `<button class="btn btn-sm btn-link p-0 px-1 text-danger" data-ag-accion="baja" data-id="${fila.id}"
-                     title="Dar de baja (no se borra)"><i class="fas fa-ban"></i></button>`);
-        }
-        return `<div class="d-flex gap-1 ag-no-print">${botones.join('')}</div>`;
     }
 
     // ── Armado de la tabla ──────────────────────────────────────────────────
@@ -157,9 +124,8 @@
             return `<tr><td colspan="${COLUMNAS.length}">${vacio('No hay movimientos con estos filtros', 'fa-filter-circle-xmark')}</td></tr>`;
         }
         return estado.filas.map((fila) => {
-            const anulada = fila.estatus_registro !== 'ACTIVO' ? ' class="ag-anulada"' : '';
             const celdas = COLUMNAS.map((col) => `<td class="${col.clase || ''}">${celda(fila, col)}</td>`).join('');
-            return `<tr${anulada} data-id="${fila.id}">${celdas}</tr>`;
+            return `<tr data-id="${esc(fila.movimiento_id)}">${celdas}</tr>`;
         }).join('');
     }
 
@@ -195,9 +161,9 @@
     function plantilla() {
         return `
         <div class="d-flex flex-wrap align-items-center gap-2 mb-2 ag-no-print">
-            <button class="btn btn-sm btn-success" id="ag-mov-nuevo" hidden>
-                <i class="fas fa-plus me-1"></i>Nuevo movimiento
-            </button>
+            <span class="small text-muted">
+                Llegadas cuentan en su fecha de aterrizaje y salidas en su fecha de salida de posición.
+            </span>
             <div class="ms-auto d-flex gap-2">
                 <button class="btn btn-sm btn-outline-success" id="ag-mov-excel">
                     <i class="fas fa-file-excel me-1"></i>Excel
@@ -224,9 +190,9 @@
 
     async function consultar(panel) {
         const tbody = panel.querySelector('#ag-mov-tbody');
-        tbody.innerHTML = `<tr><td colspan="${COLUMNAS.length}">${cargando('Consultando el histórico…')}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${COLUMNAS.length}">${cargando('Consultando los movimientos…')}</td></tr>`;
 
-        const r = await Datos.listar({
+        const r = await Datos.movimientos({
             filtros: AG.filtros,
             pagina: estado.pagina,
             porPagina: estado.porPagina,
@@ -245,7 +211,7 @@
     }
 
     function conectarPaginador(panel) {
-        const ir = (pagina) => { estado.pagina = pagina; consultar(panel); };
+        const ir = (pagina) => { estado.pagina = pagina; consultar(panel).catch((e) => AG.pintarError(panel.querySelector('#ag-mov-paginador'), e)); };
         const paginas = Math.max(1, Math.ceil(estado.total / estado.porPagina));
         panel.querySelector('#ag-mov-primera')?.addEventListener('click', () => ir(1));
         panel.querySelector('#ag-mov-antes')?.addEventListener('click', () => ir(Math.max(1, estado.pagina - 1)));
@@ -259,51 +225,34 @@
 
     // ── Exportación ─────────────────────────────────────────────────────────
 
-    /**
-     * Se exportan los MISMOS encabezados del Excel original.
-     *
-     * No es nostalgia: lo que sale de aquí se pega en oficios y comparativos
-     * que llevan años con esos títulos. Cambiarlos por los nombres técnicos de
-     * la base obligaría a quien recibe el archivo a traducir columna por
-     * columna.
-     */
     function aFilasPlanas(filas) {
         return filas.map((f) => ({
-            'No.': f.folio_rotacion,
-            'FECHA': f.fecha_operacion,
-            'TIPO DE OPERACIÓN': f.tipo_operacion,
-            'NACIONAL': f.ambito_operacion,
-            'NOMBRE DEL OPERADOR': f.operador,
+            'REGISTRO': f.registro,
+            'FUENTE': f.fuente === 'HISTORICO' ? 'HISTÓRICO' : 'FBO',
+            'FECHA': f.fecha_real || f.fecha,
+            'FECHA DE CONTEO': f.fecha,
+            'HORA': Core.horaCorta(f.hora).replace('—', ''),
+            'MOVIMIENTO': f.tipo_movimiento,
+            'ÁMBITO': f.ambito,
+            'OPERADOR': f.operador,
+            'PRESTADOR': f.vuelo_operado_por,
             'MATRÍCULA': f.matricula,
             'TIPO DE AERONAVE': f.tipo_aeronave,
-            'DESTINO / ORIGEN': f.aeropuerto_origen_destino,
-            // Las seis que el diccionario no declara pero la tabla sí guarda.
-            // Omitirlas hacía que quien descargaba el histórico se llevara un
-            // archivo con 5,438 orígenes y 5,331 horas en blanco.
-            'CIUDAD ORIGEN / DESTINO': f.ciudad_origen_destino,
-            'HR. PROG.': Core.horaCorta(f.hora_programada).replace('—', ''),
-            'HR. REAL': Core.horaCorta(f.hora_real).replace('—', ''),
-            'HR. ATERRIZAJE': Core.horaCorta(f.hora_aterrizaje).replace('—', ''),
-            'HR. ENTRADA POSICIÓN': Core.horaCorta(f.hora_entrada_posicion).replace('—', ''),
-            'HR. SALIDA POSICIÓN': Core.horaCorta(f.hora_salida_posicion).replace('—', ''),
-            'HR. DESPEGUE': Core.horaCorta(f.hora_despegue).replace('—', ''),
-            'ADULTOS': f.adultos,
-            'INFANTES': f.infantes,
-            'PAX. TOTAL REPORTADO': f.pax_total_reportado,
-            'PAX. A.G.': f.pax_ag,
-            'PAX. O.D.': f.pax_od,
-            'ESTADO': f.estado,
-            'PAÍS': f.pais,
-            'OBSERVACIONES': f.observaciones,
-            'VALIDACIÓN': f.estado_validacion,
-            'ESTATUS': f.estatus_registro
+            'TIPO DE ALA': f.tipo_ala,
+            'ORIGEN': f.origen,
+            'DESTINO': f.destino,
+            'HR. PISTA': Core.horaCorta(f.hora_pista).replace('—', ''),
+            'HR. POSICIÓN': Core.horaCorta(f.hora_posicion).replace('—', ''),
+            'PAX ADULTOS': f.pax_adultos,
+            'PAX INFANTES': f.pax_infantes,
+            'PAX TOTAL': f.pax_total
         }));
     }
 
     function nombreArchivo(extension) {
         const f = AG.filtros;
         const rango = [f.fecha_desde, f.fecha_hasta].filter(Boolean).join('_a_') || 'completo';
-        return `aviacion_general_${rango}.${extension}`;
+        return `aviacion_general_movimientos_${rango}.${extension}`;
     }
 
     async function exportar(panel, formato) {
@@ -312,22 +261,19 @@
         boton.disabled = true;
         boton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Preparando…';
         try {
-            const LIMITE = 20000;
-            const filas = await Datos.listarTodo({ filtros: AG.filtros, limite: LIMITE });
-            if (!filas.length) { aviso('No hay movimientos que exportar con estos filtros.', 'warning'); return; }
-            if (filas.length >= LIMITE) {
-                aviso(`La exportación se detuvo en ${Core.numero(LIMITE)} registros. Acota el rango de fechas para llevarte el resto.`, 'warning');
-            }
-
             if (typeof root.XLSX === 'undefined') {
                 aviso('No se pudo cargar la librería de Excel. Revisa tu conexión.', 'error');
                 return;
             }
+            const { filas, total } = await Datos.movimientosTodos({ filtros: AG.filtros, limite: LIMITE_EXPORTACION });
+            if (!filas.length) { aviso('No hay movimientos que exportar con estos filtros.', 'warning'); return; }
+            if (filas.length < total) {
+                aviso(`La exportación se detuvo en ${Core.numero(filas.length)} de ${Core.numero(total)} movimientos. Acota el rango de fechas para llevarte el resto.`, 'warning');
+            }
 
             const hoja = root.XLSX.utils.json_to_sheet(aFilasPlanas(filas));
             const libro = root.XLSX.utils.book_new();
-            root.XLSX.utils.book_append_sheet(libro, hoja, 'Aviación General');
-
+            root.XLSX.utils.book_append_sheet(libro, hoja, 'Movimientos');
             if (formato === 'csv') {
                 root.XLSX.writeFile(libro, nombreArchivo('csv'), { bookType: 'csv' });
             } else {
@@ -343,45 +289,6 @@
         }
     }
 
-    // ── Acciones sobre una fila ─────────────────────────────────────────────
-
-    async function manejarAccion(panel, accion, id) {
-        const fila = estado.filas.find((f) => String(f.id) === String(id));
-
-        if (accion === 'editar') {
-            AG.emit('movimiento:editar', fila || { id: Number(id) });
-            return;
-        }
-        if (accion === 'historial') {
-            AG.emit('movimiento:historial', fila || { id: Number(id) });
-            return;
-        }
-        if (accion === 'baja') {
-            // Un motivo obligatorio, no un "¿estás seguro?". Dentro de un mes
-            // la pregunta no va a ser si estaba seguro, va a ser por qué lo hizo.
-            const motivo = root.prompt(
-                `Dar de baja el movimiento #${id}.\n\nEl registro NO se borra: queda como ANULADO con este motivo.\n\nMotivo:`
-            );
-            if (motivo === null) return;
-            if (!motivo.trim()) { aviso('La baja exige un motivo.', 'warning'); return; }
-            try {
-                await Datos.baja(Number(id), motivo.trim(), 'ANULADO');
-                aviso('Movimiento dado de baja.', 'success');
-                await consultar(panel);
-                AG.emit('datos:cambiaron');
-            } catch (error) { aviso(error.message, 'error'); }
-            return;
-        }
-        if (accion === 'reactivar') {
-            try {
-                await Datos.reactivar(Number(id));
-                aviso('Movimiento reactivado.', 'success');
-                await consultar(panel);
-                AG.emit('datos:cambiaron');
-            } catch (error) { aviso(error.message, 'error'); }
-        }
-    }
-
     AG.registrarVista({
         id: 'movimientos',
         etiqueta: 'Movimientos',
@@ -391,33 +298,26 @@
         async montar(panel) {
             panel.innerHTML = plantilla();
 
-            const nuevo = panel.querySelector('#ag-mov-nuevo');
-            nuevo.hidden = !AG.puedeCapturar();
-            nuevo.addEventListener('click', () => AG.emit('movimiento:nuevo'));
-
             panel.querySelector('#ag-mov-excel').addEventListener('click', () => exportar(panel, 'xlsx'));
             panel.querySelector('#ag-mov-csv').addEventListener('click', () => exportar(panel, 'csv'));
             panel.querySelector('#ag-mov-imprimir').addEventListener('click', () => root.print());
 
-            // Delegación: la tabla se redibuja entera en cada consulta, así que
-            // enganchar cada botón por separado sería volver a hacerlo cada vez.
+            // Delegación: la tabla se redibuja entera en cada consulta.
             panel.querySelector('#ag-mov-tabla').addEventListener('click', (e) => {
                 const th = e.target.closest('[data-ag-orden]');
-                if (th) {
-                    const campo = th.dataset.agOrden;
-                    if (estado.orden === campo) estado.ascendente = !estado.ascendente;
-                    else { estado.orden = campo; estado.ascendente = false; }
-                    estado.pagina = 1;
-                    consultar(panel);
-                    return;
-                }
-                const btn = e.target.closest('[data-ag-accion]');
-                if (btn) manejarAccion(panel, btn.dataset.agAccion, btn.dataset.id);
+                if (!th) return;
+                const campo = th.dataset.agOrden;
+                if (estado.orden === campo) estado.ascendente = !estado.ascendente;
+                else { estado.orden = campo; estado.ascendente = false; }
+                estado.pagina = 1;
+                consultar(panel).catch((err) => AG.pintarError(panel.querySelector('#ag-mov-paginador'), err));
             });
 
-            // Cuando otra pantalla guarda algo, ésta deja de estar al día.
+            // Cuando la importación guarda algo, esta lista deja de estar al día.
             AG.on('datos:cambiaron', () => {
-                if (panel.classList.contains('active')) consultar(panel);
+                if (panel.classList.contains('active')) {
+                    consultar(panel).catch((err) => AG.pintarError(panel.querySelector('#ag-mov-paginador'), err));
+                }
             });
         },
 

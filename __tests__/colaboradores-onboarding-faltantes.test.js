@@ -58,7 +58,7 @@ const FIN_ARREGLO = '\n' + ' '.repeat(24) + '];';
  * Monta el alta y el modal de faltantes reales en jsdom y corre encima las
  * funciones reales de index.html. Devuelve el contexto y lo que se espió.
  */
-function montarAlta() {
+function montarAlta(opciones = {}) {
   document.body.innerHTML =
     trozoHtml('<div class="modal fade" id="colabNuevoModal"', '<!-- /colabNuevoModal -->') +
     trozoHtml('<div class="modal fade" id="colabOnboardingFaltantesModal"', '<!-- /colabOnboardingFaltantesModal -->');
@@ -70,6 +70,8 @@ function montarAlta() {
     console,
     colabRequireEdit: () => true,
     colabGenerarOnboardingQrDesdeDatos: async (datos) => { espia.generado = datos; },
+    ColaboradoresCatalogos: opciones.catalogo,
+    ColaboradoresCampos: require('../js/colaboradores-campos'),
     bootstrap: {
       Modal: {
         getOrCreateInstance: (el) => ({ show: () => { espia.mostrados.push(el.id); el.classList.add('show'); } }),
@@ -83,7 +85,9 @@ function montarAlta() {
 
   vm.runInContext([
     codigo('const COLAB_ONBOARDING_FIJOS = [', FIN_ARREGLO),
-    codigo('const COLAB_ONBOARDING_REQUERIDOS = [', '.concat(COLAB_ONBOARDING_FIJOS);'),
+    codigo('const COLAB_ONBOARDING_ADMIN = [', FIN_ARREGLO),
+    codigo('const COLAB_ONBOARDING_REQUERIDOS = [', '.filter(c => c.requerido));'),
+    codigo('function colabNivelOrgRequerido(', FIN_FUNCION),
     codigo('function colabSeccionDeTab(', FIN_FUNCION),
     codigo('function colabPintarFaltantesOnboarding(', FIN_FUNCION),
     codigo('function colabAbrirFaltantesOnboarding(', FIN_FUNCION),
@@ -99,6 +103,7 @@ function capturarTodo(ctx, omitir = []) {
   const valores = {
     'cn-num': '1299-2',
     'cn-nombre': 'Pérez López Juan',
+    'cn-fecha-ingreso': '01/10/2026',
     'cn-puesto': 'Analista de Operaciones',
     'cn-nivel': '11',
     'cn-plaza': 'Base',
@@ -166,13 +171,13 @@ describe('cuando falta algo, el modal lo junta todo', () => {
 
   test('cada campo apunta a un input que existe en el alta', async () => {
     const { ctx } = montarAlta();
-    capturarTodo(ctx, ['cn-num', 'cn-nombre', 'cn-puesto', 'cn-nivel', 'cn-plaza',
+    capturarTodo(ctx, ['cn-num', 'cn-nombre', 'cn-fecha-ingreso', 'cn-puesto', 'cn-nivel', 'cn-plaza',
                        'cn-direccion', 'cn-subdireccion', 'cn-gerencia', 'cn-coordinacion']);
 
     await ctx.colabGenerarNuevoOnboardingQr();
 
     const destinos = idsEnElModal();
-    expect(destinos).toHaveLength(9);
+    expect(destinos).toHaveLength(10);
     for (const id of destinos) {
       expect(document.getElementById(id)).not.toBeNull();
     }
@@ -210,5 +215,128 @@ describe('al confirmar el modal', () => {
     expect(espia.ocultados).toEqual(['colabOnboardingFaltantesModal']);
     expect(espia.generado.fijos.puesto).toBe('Jefe de Plataforma');
     expect(espia.generado.fijos.gerencia).toBe('Gerencia de Rampa');
+  });
+});
+
+describe('con el catálogo de áreas cargado', () => {
+  const catalogo = require('../js/colaboradores-catalogos');
+
+  function capturarArea(valores) {
+    const base = {
+      'cn-num': '1800', 'cn-nombre': 'Pérez López Juan', 'cn-fecha-ingreso': '01/10/2026',
+      'cn-puesto': 'Gerente de Carga', 'cn-nivel': 'N32', 'cn-plaza': '90',
+      'cn-direccion': '', 'cn-subdireccion': '', 'cn-gerencia': '', 'cn-coordinacion': '',
+    };
+    for (const [id, valor] of Object.entries(Object.assign(base, valores))) {
+      document.getElementById(id).value = valor;
+    }
+  }
+
+  test('no exige la coordinación de una gerencia que no tiene', async () => {
+    const { ctx, espia } = montarAlta({ catalogo });
+    capturarArea({
+      'cn-direccion': 'Dirección de Operación',
+      'cn-subdireccion': 'Subdirección de Servicios Conexos',
+      'cn-gerencia': 'Gerencia de Carga',
+    });
+
+    await ctx.colabGenerarNuevoOnboardingQr();
+
+    expect(espia.mostrados).toEqual([]);
+    expect(espia.generado.fijos.gerencia).toBe('Gerencia de Carga');
+    expect(espia.generado.fijos).not.toHaveProperty('coordinacion');
+  });
+
+  test('no exige subdirección ni gerencia de lo que depende directo de la Dirección', async () => {
+    const { ctx, espia } = montarAlta({ catalogo });
+    capturarArea({ 'cn-direccion': 'Dirección de Operación', 'cn-coordinacion': 'Coordinación de Auditoría' });
+
+    await ctx.colabGenerarNuevoOnboardingQr();
+
+    expect(espia.mostrados).toEqual([]);
+    expect(espia.generado.fijos.coordinacion).toBe('Coordinación de Auditoría');
+  });
+
+  test('sí exige la coordinación cuando la gerencia tiene, y la ofrece del catálogo', async () => {
+    const { ctx } = montarAlta({ catalogo });
+    capturarArea({
+      'cn-direccion': 'Dirección de Operación',
+      'cn-subdireccion': 'Subdirección de Seguridad Operacional',
+      'cn-gerencia': 'Gerencia de Seguridad Operacional',
+    });
+
+    await ctx.colabGenerarNuevoOnboardingQr();
+
+    expect(idsEnElModal()).toEqual(['cn-coordinacion']);
+    // En el modal se elige del catálogo, filtrado por la gerencia del alta.
+    const opciones = Array.from(document.getElementById('cf-cn-coordinacion-sel').options).map(o => o.textContent);
+    expect(opciones).toContain('Coordinación de Control de Fauna');
+    expect(opciones).not.toContain('Coordinación de Auditoría');
+  });
+});
+
+/**
+ * La fecha de ingreso ya no la captura el colaborador: la pone quien hace el
+ * alta, antes de generar el QR. Y lo demás que es sólo del área (RyR, turno,
+ * comisionado, doc. de ingreso, extensión y correo institucional) viaja aparte
+ * en la metadata, para que el guardado lo escriba sin que el portal lo muestre.
+ */
+describe('los datos que sólo captura el área', () => {
+  test('sin fecha de ingreso no hay QR: se pide en el modal', async () => {
+    const { ctx, espia } = montarAlta();
+    capturarTodo(ctx, ['cn-fecha-ingreso']);
+
+    await ctx.colabGenerarNuevoOnboardingQr();
+
+    expect(espia.generado).toBeNull();
+    expect(idsEnElModal()).toEqual(['cn-fecha-ingreso']);
+    expect(document.getElementById('cf-cn-fecha-ingreso').placeholder).toBe('DD/MM/AAAA');
+  });
+
+  test('una fecha de ingreso que no es fecha no pasa', async () => {
+    const { ctx, espia } = montarAlta();
+    capturarTodo(ctx, ['cn-fecha-ingreso']);
+    await ctx.colabGenerarNuevoOnboardingQr();
+
+    document.getElementById('cf-cn-fecha-ingreso').value = '31/02/2026';
+    await ctx.colabConfirmarFaltantesOnboarding();
+
+    expect(espia.generado).toBeNull();
+    expect(document.getElementById('cf-cn-fecha-ingreso').classList.contains('is-invalid')).toBe(true);
+    expect(document.getElementById('colab-faltantes-error').textContent).toContain('DD/MM/AAAA');
+
+    document.getElementById('cf-cn-fecha-ingreso').value = '28/02/2026';
+    await ctx.colabConfirmarFaltantesOnboarding();
+    expect(document.getElementById('cn-fecha-ingreso').value).toBe('28/02/2026');
+    expect(espia.generado.admin.fecha_ingreso).toBe('28/02/2026');
+  });
+
+  test('viajan en admin, no entre los fijos que ve el colaborador', async () => {
+    const { ctx, espia } = montarAlta();
+    capturarTodo(ctx);
+    document.getElementById('cn-ryr').value = '15/03/2024';
+    document.getElementById('cn-turno').value = 'Matutino';
+    document.getElementById('cn-correo').value = 'juan.perez@aifa.com.mx';
+
+    await ctx.colabGenerarNuevoOnboardingQr();
+
+    expect(espia.generado.admin).toEqual(expect.objectContaining({
+      fecha_ingreso: '01/10/2026', ryr: '15/03/2024', turno: 'Matutino', correo: 'juan.perez@aifa.com.mx',
+    }));
+    for (const clave of ['fecha_ingreso', 'ryr', 'turno', 'correo']) {
+      expect(espia.generado.fijos).not.toHaveProperty(clave);
+    }
+  });
+
+  test('cada uno apunta a un input del alta marcado como sólo del área', () => {
+    const arr = app.match(/const COLAB_ONBOARDING_ADMIN = \[([\s\S]*?)\n {24}\];/);
+    const campos = [...arr[1].matchAll(/clave: '([^']+)',\s*input: '([^']+)'/g)];
+    expect(campos.map(m => m[1]).sort()).toEqual(
+      ['comisionado', 'correo', 'doc_ingreso', 'extension', 'fecha_ingreso', 'ryr', 'turno']);
+    for (const [, , input] of campos) {
+      const label = app.match(new RegExp('<label[^>]*for="' + input + '"[^>]*>([\\s\\S]*?)</label>'));
+      expect(label).not.toBeNull();
+      expect(label[1]).toContain('cn-solo-area');
+    }
   });
 });
