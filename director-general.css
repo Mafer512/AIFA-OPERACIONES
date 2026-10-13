@@ -1,0 +1,680 @@
+/* ==========================================================================
+   Vista de Dirección General (js/vista-director-general.js)
+   --------------------------------------------------------------------------
+   Todo cuelga de body.rol-director-general, que solo se pone con el rol
+   director_general: para los demás roles este archivo no cambia nada, salvo
+   ocultar las piezas que solo usa esta vista. El prefijo :root sube la
+   especificidad por encima de las reglas del Inicio en style.css.
+   ========================================================================== */
+
+/* Piezas que solo existen para esta vista. */
+.dg-barra[hidden],
+.dg-barra-estado[hidden],
+.ndw-card-cat,
+.ndw-card-unidad,
+.ndw-resumen-cabeza,
+.main-title-dg,
+.hdr-user-iniciales {
+   display: none !important;
+}
+
+:root body.rol-director-general {
+   --dg-navy: #14284b;
+   --dg-navy-2: #0f1d33;
+   --dg-ink: #0f172a;
+   --dg-sobre-blanco: #0f172a;
+   --dg-texto: #334155;
+   --dg-muted: #64748b;
+   --dg-linea: #e2e8f0;
+   --dg-tarjeta: #fff;
+   --dg-fondo: #f5f6f8;
+   --dg-ambar: #d6a54b;
+   --dg-comercial: #1e3a8a;
+   --dg-carga: #b45309;
+   --dg-general: #15803d;
+}
+
+:root body.rol-director-general.dark-mode {
+   --dg-ink: #e2e8f0;
+   --dg-texto: #cbd5e1;
+   --dg-muted: #94a3b8;
+   --dg-linea: rgba(148, 163, 184, .22);
+   --dg-tarjeta: #162033;
+   --dg-fondo: #0b1220;
+   --dg-comercial: #93c5fd;
+   --dg-carga: #fbbf24;
+   --dg-general: #4ade80;
+}
+
+/* ── Fuera de esta vista: Subdirecciones y opciones de menú que no usa ── */
+:root body.rol-director-general #sidebar-nav > .si-sep,
+:root body.rol-director-general #sidebar-nav > .si-section-lbl,
+:root body.rol-director-general #sidebar-nav > .si-group,
+:root body.rol-director-general #historia-admin-menu,
+:root body.rol-director-general #miscelanea-menu,
+:root body.rol-director-general #data-management-menu,
+:root body.rol-director-general #admin-users-menu,
+:root body.rol-director-general #sidebar-toggler,
+:root body.rol-director-general .sidebar.nav-deck > .si-brand,
+:root body.rol-director-general .header img.header-logo[src*="emblema-aviacion"],
+:root body.rol-director-general .ag-tb-icon,
+:root body.rol-director-general .ag-tb-hint {
+   display: none !important;
+}
+
+:root body.rol-director-general.navdeck-mode:not(.navdeck-active),
+:root body.rol-director-general.navdeck-mode:not(.navdeck-active) .main-app,
+:root body.rol-director-general.navdeck-mode:not(.navdeck-active) .app-body {
+   background: var(--dg-fondo) !important;
+}
+
+/* ── Encabezado: logos y título a la izquierda; horas, acciones y usuario a la
+   derecha. En escritorio los bloques del encabezado se aplanan para poder
+   ordenar sus piezas; en teléfono se queda el acomodo de siempre. ── */
+:root body.rol-director-general .main-title-app,
+:root body.rol-director-general .main-title-est {
+   display: none !important;
+}
+
+:root body.rol-director-general .main-title-dg {
+   display: flex !important;
+   flex-direction: column;
+   gap: .1rem;
+   color: var(--dg-ink);
+   font-size: 1.12rem;
+   font-weight: 700;
+   letter-spacing: 0;
+   line-height: 1.2;
+   text-transform: none;
+}
+
+:root body.rol-director-general .main-title-dg small {
+   color: var(--dg-muted);
+   font-size: .72rem;
+   font-weight: 500;
+   letter-spacing: .02em;
+}
+
+@media (min-width: 992px) {
+   :root body.rol-director-general.navdeck-mode .header {
+      background: var(--dg-tarjeta) !important;
+      border-bottom: 1px solid var(--dg-linea);
+      box-shadow: none !important;
+   }
+
+   :root body.rol-director-general .header-center-content,
+   :root body.rol-director-general .header-center-content .header-title-row,
+   :root body.rol-director-general .header-right-content {
+      display: contents !important;
+   }
+
+   :root body.rol-director-general .header-brand-block { order: 1; }
+   :root body.rol-director-general .header img.header-logo { order: 2; }
+   :root body.rol-director-general .header .main-title { order: 3; flex: 0 1 auto; min-width: 0; }
+   :root body.rol-director-general #navdeck-back { order: 4; }
+   :root body.rol-director-general .clocks-wrapper { order: 5; margin-left: auto; }
+   :root body.rol-director-general #btn-global-refresh { order: 6; }
+   :root body.rol-director-general #theme-toggler { order: 7; }
+   :root body.rol-director-general .header .hdr-user { order: 8; margin-left: 0 !important; }
+   :root body.rol-director-general .header-subtext { display: none !important; }
+
+   /* Horas: un solo recuadro, local y UTC separadas por una línea. */
+   :root body.rol-director-general .clocks-wrapper {
+      gap: 0 !important;
+      padding: .3rem .2rem;
+      border: 1px solid var(--dg-linea);
+      border-radius: 10px;
+      background: var(--dg-tarjeta);
+   }
+
+   :root body.rol-director-general .clocks-wrapper .formal-clock-container,
+   :root body.rol-director-general .clocks-wrapper .utc-clock-container {
+      padding: 0 .8rem !important;
+      border: 0 !important;
+      background: transparent !important;
+      box-shadow: none !important;
+   }
+
+   :root body.rol-director-general .clocks-wrapper .utc-clock-container {
+      border-left: 1px solid var(--dg-linea) !important;
+   }
+
+   :root body.rol-director-general .clocks-wrapper .header-chip-icon { display: none; }
+
+   :root body.rol-director-general .clocks-wrapper .clock-label {
+      color: var(--dg-muted) !important;
+      font-size: .6rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+   }
+
+   :root body.rol-director-general .clocks-wrapper .formal-clock,
+   :root body.rol-director-general .clocks-wrapper .utc-clock {
+      color: var(--dg-ink) !important;
+      font-size: .95rem;
+   }
+
+   :root body.rol-director-general #btn-global-refresh {
+      height: 2.75rem;
+      padding: 0 1rem;
+      border: 1px solid var(--dg-linea);
+      border-radius: 10px;
+      background: var(--dg-tarjeta);
+      color: var(--dg-ink);
+      font-weight: 600;
+   }
+
+   :root body.rol-director-general #btn-global-refresh span { display: inline !important; }
+
+   :root body.rol-director-general #theme-toggler {
+      width: 2.75rem;
+      height: 2.75rem;
+      border: 1px solid var(--dg-linea);
+      border-radius: 10px;
+      background: var(--dg-tarjeta);
+      color: var(--dg-ink);
+   }
+}
+
+/* Botón de usuario: iniciales en un cuadro azul marino. */
+:root body.rol-director-general .hdr-user-btn {
+   border-color: var(--dg-linea);
+   border-radius: 10px;
+   background: var(--dg-tarjeta);
+   box-shadow: none;
+}
+
+:root body.rol-director-general .hdr-user-icono {
+   border-radius: 8px;
+   background: var(--dg-navy);
+   color: #fff;
+}
+
+:root body.rol-director-general .hdr-user-iniciales:not(:empty) {
+   display: inline !important;
+   font-size: .78rem;
+   font-weight: 700;
+   letter-spacing: .02em;
+}
+
+:root body.rol-director-general .hdr-user-iniciales:not(:empty) ~ i,
+:root body.rol-director-general .hdr-user-icono:has(.hdr-user-iniciales:not(:empty)) > i {
+   display: none;
+}
+
+/* ── Barra de agenda: texto sobrio, fichas con línea fina ── */
+:root body.rol-director-general #ag-today-bar {
+   min-height: 3.6rem;
+   border-bottom: 1px solid var(--dg-linea);
+   background: var(--dg-tarjeta) !important;
+   box-shadow: none !important;
+}
+
+:root body.rol-director-general .ag-tb-day-label {
+   padding: 0;
+   border: 0;
+   background: none !important;
+   box-shadow: none !important;
+   color: var(--dg-comercial) !important;
+   font-size: .72rem;
+   font-weight: 800;
+   letter-spacing: .1em;
+}
+
+:root body.rol-director-general .ag-tb-tom-lbl { color: var(--dg-muted) !important; }
+
+:root body.rol-director-general .ag-tb-day-block { gap: .5rem; }
+
+:root body.rol-director-general .ag-tb-date {
+   color: var(--dg-ink) !important;
+   font-size: .85rem;
+   font-weight: 600;
+}
+
+:root body.rol-director-general .ag-tb-chip {
+   padding: .32rem .65rem;
+   border: 1px solid var(--dg-linea) !important;
+   border-radius: 8px;
+   background: var(--dg-tarjeta) !important;
+   box-shadow: none !important;
+   color: var(--dg-ink) !important;
+   font-size: .78rem;
+}
+
+:root body.rol-director-general .ag-tb-chip-time { color: var(--dg-muted) !important; }
+
+:root body.rol-director-general .ag-tb-chip-area {
+   background: rgba(30, 58, 138, .08) !important;
+   color: var(--dg-comercial) !important;
+}
+
+:root body.rol-director-general .ag-tb-sep { background: var(--dg-linea) !important; }
+
+/* La fecha y el Mapa se quedan a la derecha en el mismo renglón; si hay muchas
+   sesiones, son las fichas las que bajan de renglón. */
+@media (min-width: 992px) {
+   :root body.rol-director-general #ag-today-bar { flex-wrap: nowrap !important; }
+   :root body.rol-director-general .ag-tb-inner { flex: 1 1 auto; min-width: 0; }
+   :root body.rol-director-general .ag-tb-actions { flex: 0 0 auto; gap: 1rem; margin-left: auto; }
+}
+
+:root body.rol-director-general .ag-tb-fecha {
+   color: var(--dg-muted) !important;
+   font-size: .82rem;
+   font-weight: 500;
+}
+
+:root body.rol-director-general .ag-tb-fecha i { display: none; }
+
+:root body.rol-director-general #btn-mapa-interactivo {
+   padding: .45rem .9rem;
+   border: 1px solid var(--dg-linea);
+   border-radius: 8px;
+   background: var(--dg-tarjeta);
+   color: var(--dg-ink);
+   font-weight: 600;
+}
+
+/* ── Banner: azul marino, la foto solo a la derecha ── */
+:root body.rol-director-general.navdeck-mode .sidebar.nav-deck {
+   background: transparent !important;
+   box-shadow: none !important;
+}
+
+/* Abajo queda aire para que el botón flotante de Sugerencias no tape la barra. */
+:root body.rol-director-general.navdeck-mode .si-nav {
+   padding: 1.4rem 2rem 6rem !important;
+}
+
+:root body.rol-director-general .ndw-banner { width: 100%; }
+
+/* El fondo del banner (la torre centrada y su difuminado) es el del Inicio de
+   siempre; aquí solo se separa del encabezado "Resumen operativo". */
+:root body.rol-director-general .ndw-hero { margin-bottom: 1.5rem; }
+
+:root body.rol-director-general .ndw-hero-main {
+   position: relative;
+   z-index: 1;
+   gap: 1.3rem;
+}
+
+:root body.rol-director-general .ndw-hero-icon { display: none !important; }
+
+:root body.rol-director-general .ndw-hero-card {
+   max-width: none !important;
+   padding: 0 !important;
+   background: none !important;
+   border: 0 !important;
+   box-shadow: none !important;
+}
+
+/* Selector Día · Semana · Mes · Año · Histórico total */
+:root body.rol-director-general .ndw-view-toggle {
+   gap: .15rem;
+   padding: .25rem !important;
+   border: 1px solid rgba(255, 255, 255, .16) !important;
+   border-radius: 10px !important;
+   background: rgba(255, 255, 255, .04) !important;
+   box-shadow: none !important;
+   backdrop-filter: none !important;
+}
+
+:root body.rol-director-general .ndw-view-btn {
+   padding: .45rem .95rem !important;
+   border: 0 !important;
+   border-radius: 7px !important;
+   background: transparent !important;
+   box-shadow: none !important;
+   color: rgba(255, 255, 255, .82) !important;
+   font-size: .86rem !important;
+   font-weight: 600 !important;
+   letter-spacing: 0 !important;
+   text-transform: none !important;
+}
+
+:root body.rol-director-general .ndw-view-btn:hover { color: #fff !important; background: rgba(255, 255, 255, .08) !important; }
+
+:root body.rol-director-general .ndw-view-btn.is-active {
+   background: #fff !important;
+   color: var(--dg-sobre-blanco) !important;
+}
+
+:root body.rol-director-general .ndw-view-sep { color: #fff; }
+
+:root body.rol-director-general .ndw-hero-kicker {
+   color: var(--dg-ambar) !important;
+   font-size: .72rem !important;
+   font-weight: 700 !important;
+   letter-spacing: .14em !important;
+   text-transform: uppercase;
+   -webkit-text-fill-color: currentColor;
+}
+
+:root body.rol-director-general .ndw-hero-title {
+   margin: .35rem 0 1rem;
+   background: none !important;
+   color: #fff !important;
+   -webkit-text-fill-color: #fff !important;
+   font-size: clamp(1.6rem, 1.1rem + 1.1vw, 2.15rem) !important;
+   font-weight: 800 !important;
+   letter-spacing: -.01em;
+   text-shadow: none !important;
+}
+
+:root body.rol-director-general .ndw-current-picker {
+   display: flex;
+   align-items: flex-end;
+   gap: .6rem;
+   flex-wrap: wrap;
+}
+
+:root body.rol-director-general .ndw-current-picker label {
+   display: flex;
+   flex-direction: column;
+   gap: .45rem;
+   margin: 0;
+   color: rgba(255, 255, 255, .85) !important;
+   font-size: .8rem;
+   font-weight: 600;
+   text-shadow: none !important;
+}
+
+/* Campo de fecha del portal (texto dd/mm/aaaa + botón de calendario). */
+:root body.rol-director-general .ndw-current-picker .fecha-ddmm {
+   height: 2.6rem;
+   overflow: hidden;
+   border: 1px solid rgba(255, 255, 255, .22);
+   border-radius: 8px;
+   background: rgba(255, 255, 255, .06);
+}
+
+:root body.rol-director-general .ndw-current-picker .fecha-ddmm > .fecha-ddmm-texto {
+   width: 7.4rem;
+   min-height: 0 !important;
+   height: 100%;
+   padding: 0 .8rem !important;
+   border: 0 !important;
+   border-radius: 0 !important;
+   background: transparent !important;
+   color: #fff !important;
+   font-size: .95rem;
+   font-weight: 600;
+   color-scheme: dark;
+}
+
+:root body.rol-director-general .ndw-current-picker .fecha-ddmm > .fecha-ddmm-calendario {
+   min-height: 0 !important;
+   padding: 0 .75rem !important;
+   border: 0 !important;
+   border-radius: 0 !important;
+   background: transparent !important;
+   color: rgba(255, 255, 255, .85) !important;
+}
+
+:root body.rol-director-general .ndw-current-picker .fecha-ddmm > .fecha-ddmm-calendario:hover { background: rgba(255, 255, 255, .08) !important; }
+
+:root body.rol-director-general .ndw-current-picker [data-ndw-refresh] {
+   min-height: 0 !important;
+   height: 2.6rem;
+   padding: 0 1rem !important;
+   border: 0 !important;
+   border-radius: 8px !important;
+   background: #fff !important;
+   color: var(--dg-sobre-blanco) !important;
+   font-size: .9rem;
+   font-weight: 700;
+   box-shadow: none !important;
+}
+
+:root body.rol-director-general .ndw-current-picker [data-ndw-refresh]:hover { background: #e2e8f0 !important; }
+
+/* El texto del banner fluye en bloque para que las leyendas vayan en un
+   renglón, separadas por un punto. */
+:root body.rol-director-general .ndw-hero-text { display: block !important; max-width: none !important; }
+:root body.rol-director-general .ndw-hero-kicker,
+:root body.rol-director-general .ndw-hero-title { display: block !important; }
+:root body.rol-director-general .ndw-current-picker,
+:root body.rol-director-general .ndw-period-picker { margin: 0 0 1.1rem !important; }
+
+:root body.rol-director-general .ndw-tap-hint {
+   display: inline !important;
+   margin: 0 !important;
+   color: rgba(255, 255, 255, .62) !important;
+   font-size: .74rem !important;
+   font-weight: 500 !important;
+   text-shadow: none !important;
+}
+
+:root body.rol-director-general .ndw-tap-hint + .ndw-tap-hint::before { content: " · "; }
+:root body.rol-director-general .ndw-tap-hint i { display: none; }
+
+/* Semanas, meses y años: con contorno, la elegida en blanco como las pestañas.
+   Llevan .ndw-hero-card para ganarle a la regla del Inicio que les pone fondo
+   blanco sobre la foto en tema claro. */
+:root body.navdeck-mode.rol-director-general .ndw-hero-card .ndw-period-chip {
+   min-height: 0 !important;
+   padding: .42rem .85rem !important;
+   border: 1px solid rgba(255, 255, 255, .2) !important;
+   border-radius: 8px !important;
+   background: rgba(255, 255, 255, .06) !important;
+   box-shadow: none !important;
+   color: rgba(255, 255, 255, .88) !important;
+   font-size: .84rem !important;
+   font-weight: 600 !important;
+   text-shadow: none !important;
+}
+
+:root body.navdeck-mode.rol-director-general .ndw-hero-card .ndw-period-chip:hover { background: rgba(255, 255, 255, .12) !important; }
+
+:root body.navdeck-mode.rol-director-general .ndw-hero-card .ndw-period-chip.is-active {
+   border-color: #fff !important;
+   background: #fff !important;
+   color: var(--dg-sobre-blanco) !important;
+}
+
+:root body.navdeck-mode.rol-director-general .ndw-hero-card .ndw-month-stepper {
+   border: 1px solid rgba(255, 255, 255, .2) !important;
+   border-radius: 8px !important;
+   background: rgba(255, 255, 255, .06) !important;
+   box-shadow: none !important;
+}
+
+:root body.navdeck-mode.rol-director-general .ndw-hero-card .ndw-month-step,
+:root body.navdeck-mode.rol-director-general .ndw-hero-card .ndw-month-step-label {
+   border: 0 !important;
+   background: transparent !important;
+   box-shadow: none !important;
+   color: #fff !important;
+   text-shadow: none !important;
+}
+
+:root body.rol-director-general .ndw-month-step:disabled { opacity: .35; }
+:root body.rol-director-general .ndw-period-sep { background: rgba(255, 255, 255, .2) !important; }
+
+/* ── Resumen operativo: encabezado sobre las tarjetas de siempre ── */
+:root body.rol-director-general .ndw-resumen-cabeza {
+   display: flex !important;
+   align-items: baseline;
+   justify-content: space-between;
+   gap: 1rem;
+   margin: 0 0 .8rem;
+}
+
+:root body.rol-director-general .ndw-resumen-titulo {
+   color: var(--dg-ink);
+   font-size: 1rem;
+   font-weight: 700;
+}
+
+:root body.rol-director-general .ndw-resumen-nota {
+   color: var(--dg-muted);
+   font-size: .78rem;
+}
+
+/* ── Accesos nuevos (Informe Estadístico y SWEAR): en el mismo renglón que los accesos de siempre (que se
+   quedan con su estilo), a la derecha y con la misma forma de tarjeta blanca. ── */
+:root body.rol-director-general .dg-barra {
+   display: flex !important;
+   flex: 1 1 auto;
+   flex-wrap: wrap;
+   align-items: center;
+   justify-content: flex-end;
+   gap: .5rem 1rem;
+   align-self: center;
+   position: relative;
+}
+
+:root body.rol-director-general .dg-barra-acciones {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: center;
+   gap: .75rem;
+}
+
+:root body.rol-director-general .dg-btn {
+   display: inline-flex;
+   align-items: center;
+   gap: .45rem;
+   height: 3rem;
+   padding: 0 1.05rem;
+   border: 1px solid rgba(20, 33, 61, .1);
+   border-radius: 14px;
+   background: var(--dg-tarjeta);
+   box-shadow: 0 6px 16px -12px rgba(15, 23, 42, .4);
+   color: var(--dg-ink);
+   font-size: .86rem;
+   font-weight: 600;
+   cursor: pointer;
+   transition: background .15s ease, border-color .15s ease, transform .12s ease;
+}
+
+:root body.rol-director-general.dark-mode .dg-btn { border-color: rgba(148, 163, 184, .25); }
+
+:root body.rol-director-general .dg-btn:hover { border-color: #c7d2e1; background: #f8fafc; }
+:root body.rol-director-general.dark-mode .dg-btn:hover { background: rgba(255, 255, 255, .05); }
+:root body.rol-director-general .dg-btn:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+:root body.rol-director-general .dg-btn:disabled { cursor: progress; opacity: .6; }
+:root body.rol-director-general .dg-btn i { font-size: .8rem; }
+
+/* Informe Estadístico: el icono de PDF en rojo, como en el resto del portal. */
+:root body.rol-director-general .dg-informe i { color: #dc2626; }
+:root body.rol-director-general.dark-mode .dg-informe i { color: #f87171; }
+
+:root body.rol-director-general .dg-swear {
+   border-color: var(--dg-navy);
+   background: var(--dg-navy);
+   color: #fff;
+   letter-spacing: .03em;
+}
+
+:root body.rol-director-general .dg-swear:hover { border-color: #1d3a6b; background: #1d3a6b; }
+
+:root body.rol-director-general .dg-btn.is-ocupado i::before { content: "\f110"; }
+:root body.rol-director-general .dg-btn.is-ocupado i { animation: fa-spin 1s linear infinite; }
+
+/* El aviso va debajo de los botones sin empujar nada: así la barra no baja
+   de renglón mientras se genera o al terminar. */
+:root body.rol-director-general .dg-barra-estado {
+   position: absolute;
+   top: calc(100% + .45rem);
+   right: 0;
+   margin: 0;
+   max-width: min(36rem, 90vw);
+   color: var(--dg-muted);
+   font-size: .78rem;
+   text-align: right;
+}
+
+:root body.rol-director-general .dg-barra-estado--error { color: #b91c1c; }
+:root body.rol-director-general.dark-mode .dg-barra-estado--error { color: #fca5a5; }
+
+/* ── Pantallas medianas y teléfono ── */
+@media (max-width: 991.98px) {
+   :root body.rol-director-general.navdeck-mode .si-nav { padding: 1rem !important; }
+   :root body.rol-director-general .dg-barra { justify-content: flex-start; }
+   :root body.rol-director-general .dg-barra-estado { right: auto; left: 0; text-align: left; }
+}
+
+@media (max-width: 575.98px) {
+   :root body.rol-director-general .ndw-view-toggle { max-width: 100%; overflow-x: auto; flex-wrap: nowrap !important; scrollbar-width: none; }
+   :root body.rol-director-general .ndw-view-btn { flex: 0 0 auto; }
+   :root body.rol-director-general .ndw-resumen-cabeza { flex-direction: column; gap: .15rem; }
+}
+
+/* ── Ventana "Informe oficial": antes de descargar se elige la fecha de corte
+   y qué años van en las tablas. Vive en <body>, fuera del Inicio, así que sus
+   estilos no dependen de la clase del rol. ── */
+#modalDgInforme .dg-informe-ventana { border-radius: 14px; }
+#modalDgInforme .modal-header { padding: 1rem 1.25rem; border-bottom: 1px solid #e2e8f0; }
+#modalDgInforme .modal-title { color: #0f172a; font-size: 1.05rem; font-weight: 700; }
+#modalDgInforme .modal-title i { color: #dc2626; }
+#modalDgInforme .modal-body { padding: 1.1rem 1.25rem 1.2rem; }
+#modalDgInforme .modal-footer { padding: .75rem 1.25rem; border-top: 1px solid #e2e8f0; }
+
+#modalDgInforme .dg-iv-cargando {
+   display: flex;
+   align-items: center;
+   margin: 0;
+   color: #475569;
+   font-size: .9rem;
+}
+
+#modalDgInforme .dg-iv-campos { display: flex; flex-direction: column; }
+#modalDgInforme .dg-iv-campos[hidden] { display: none; }
+
+#modalDgInforme .dg-iv-campo {
+   margin: 0 0 .35rem;
+   color: #475569;
+   font-size: .78rem;
+   font-weight: 600;
+}
+
+#modalDgInforme .dg-iv-campos .fecha-ddmm { width: 100%; }
+
+#modalDgInforme .dg-iv-ayuda {
+   margin: .6rem 0 1.1rem;
+   padding: .55rem .75rem;
+   border-radius: 8px;
+   background: #f1f5f9;
+   color: #0f172a;
+   font-size: .82rem;
+   font-weight: 500;
+}
+
+#modalDgInforme .dg-iv-ayuda--error { background: #fef2f2; color: #b91c1c; }
+
+#modalDgInforme .dg-iv-anios {
+   display: flex;
+   align-items: center;
+   gap: .6rem;
+}
+
+#modalDgInforme .dg-iv-anios .form-select { flex: 1 1 0; min-width: 0; }
+#modalDgInforme .dg-iv-vs { color: #64748b; font-size: .82rem; }
+
+#modalDgInforme .dg-iv-descargar {
+   border: 1px solid #14284b;
+   background: #14284b;
+   color: #fff;
+   font-weight: 700;
+}
+
+#modalDgInforme .dg-iv-descargar:hover:not(:disabled) { border-color: #1d3a6b; background: #1d3a6b; color: #fff; }
+#modalDgInforme .dg-iv-descargar:disabled { opacity: .55; }
+#modalDgInforme .dg-iv-descargar.is-ocupado { cursor: progress; opacity: .85; }
+#modalDgInforme .dg-iv-descargar.is-ocupado i::before { content: "\f110"; }
+#modalDgInforme .dg-iv-descargar.is-ocupado i { animation: fa-spin 1s linear infinite; }
+
+/* Tema oscuro */
+body.dark-mode #modalDgInforme .modal-content { background: #162033; color: #e2e8f0; }
+body.dark-mode #modalDgInforme .modal-header,
+body.dark-mode #modalDgInforme .modal-footer { border-color: rgba(148, 163, 184, .22); }
+body.dark-mode #modalDgInforme .modal-title { color: #e2e8f0; }
+body.dark-mode #modalDgInforme .modal-title i { color: #f87171; }
+body.dark-mode #modalDgInforme .btn-close { filter: invert(1) grayscale(1) brightness(2); }
+body.dark-mode #modalDgInforme .dg-iv-cargando,
+body.dark-mode #modalDgInforme .dg-iv-campo,
+body.dark-mode #modalDgInforme .dg-iv-vs { color: #94a3b8; }
+body.dark-mode #modalDgInforme .dg-iv-ayuda { background: rgba(255, 255, 255, .06); color: #e2e8f0; }
+body.dark-mode #modalDgInforme .dg-iv-ayuda--error { background: rgba(185, 28, 28, .18); color: #fca5a5; }
+body.dark-mode #modalDgInforme .dg-iv-descargar { border-color: #3b82f6; background: #1d4ed8; }

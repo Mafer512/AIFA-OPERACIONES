@@ -99,7 +99,7 @@ async function _agEnsureData(force) {
                 if (_rd) {
                     const _r2 = _rd.role;
                     const _rl = { operacion:'DO', administracion:'DA', planeacion:'DPE', comercial:'DCS', seguridad_op:'GSO', transparencia:'UT', calidad:'GC' };
-                    const _gl = ['admin','superadmin','editor','capturista','lector','viewer','colab_viewer','colab_editor'];
+                    const _gl = ['admin','superadmin','director_general','editor','capturista','lector','viewer','colab_viewer','colab_editor'];
                     const _ua = _rd.permissions?.area || _rl[_r2] || (!_gl.includes(_r2) && _r2 ? _r2 : null);
                     if (_ua) sessionStorage.setItem('user_area', _ua);
                 }
@@ -1207,7 +1207,7 @@ async function agLoadAcuerdos() {
 function _agUserRole()   { return sessionStorage.getItem('user_role') || 'viewer'; }
 
 // Roles globales (sin área asignada)
-const _AG_GLOBAL_ROLES = ['admin','editor','superadmin','capturista','lector','viewer','colab_viewer','colab_editor'];
+const _AG_GLOBAL_ROLES = ['admin','editor','superadmin','director_general','capturista','lector','viewer','colab_viewer','colab_editor'];
 
 // Mapa de compatibilidad con roles legacy de nombre descriptivo
 const _AG_ROLE_AREA = {

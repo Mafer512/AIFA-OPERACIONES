@@ -16,7 +16,7 @@
     'use strict';
 
     const ROLES = {
-        admin: 'Admin', superadmin: 'Superadmin', editor: 'Editor', viewer: 'Viewer',
+        admin: 'Admin', superadmin: 'Superadmin', director_general: 'Director General', editor: 'Editor', viewer: 'Viewer',
         colab_viewer: 'Colaborador', colab_editor: 'Colaborador Ed.'
     };
 

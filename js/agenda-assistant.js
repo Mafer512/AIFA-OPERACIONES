@@ -69,7 +69,7 @@ La app AIFA OPERACIONES es un sistema web de gestión interna con los siguientes
 
 8. COLABORADORES: Gestión del directorio de personal del aeropuerto, historial de plazas, CV y documentación.
 
-9. ADMINISTRACIÓN DE USUARIOS: Control de acceso por roles y áreas. Roles: admin, editor, viewer, control_fauna, servicio_medico, colab_editor, colab_viewer.
+9. ADMINISTRACIÓN DE USUARIOS: Control de acceso por roles y áreas. Roles: admin, director_general (Director General, solo lectura), editor, viewer, control_fauna, servicio_medico, colab_editor, colab_viewer.
 
 ÁREAS DEL AEROPUERTO:
 DO (Dirección de Operaciones), DA (Dirección Administrativa), DPE (Dirección de Planeación Estratégica), DCS (Dirección Comercial), GSO (Grupo de Seguridad Operacional), SMS (Safety Management System), GPE.

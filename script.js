@@ -2554,8 +2554,10 @@ async function refreshUserPermissionsFromServer() {
         const name = sessionStorage.getItem('user_fullname') || sessionStorage.getItem(SESSION_USER) || '';
         // Actualizar rol si cambió
         if (roleData.role) sessionStorage.setItem('user_role', roleData.role);
+        // Si el admin dio o quitó el rol de Director General, la vista cambia ya.
+        try { window.VistaDirectorGeneral?.aplicar(roleData.role || ''); } catch (_) {}
         // Actualizar área: override > role legacy > role=clave directa
-        const _GL = ['admin','superadmin','editor','viewer','colab_viewer','colab_editor'];
+        const _GL = ['admin','superadmin','director_general','editor','viewer','colab_viewer','colab_editor'];
         const _LG = { operacion:'DO', administracion:'DA', planeacion:'DPE', comercial:'DCS', seguridad_op:'GSO', transparencia:'UT', calidad:'GC' };
         const _rr = roleData?.role;
         const _area = roleData?.permissions?.area || _LG[_rr] || (!_GL.includes(_rr) && _rr ? _rr : null);
@@ -2566,7 +2568,7 @@ async function refreshUserPermissionsFromServer() {
         if (userEl) {
             const _freshArea = _area || null;
             const _freshRole = roleData.role || sessionStorage.getItem('user_role') || 'viewer';
-            const _RDISPLAY  = { admin:'Admin', superadmin:'Superadmin', editor:'Editor', viewer:'Viewer', colab_viewer:'Colaborador', colab_editor:'Colaborador Ed.' };
+            const _RDISPLAY  = { admin:'Admin', superadmin:'Superadmin', director_general:'Director General', editor:'Editor', viewer:'Viewer', colab_viewer:'Colaborador', colab_editor:'Colaborador Ed.' };
             const _rdLabel   = _RDISPLAY[_freshRole] || (_freshRole.charAt(0).toUpperCase() + _freshRole.slice(1));
             let _aHtml = '';
             if (_freshArea) {
@@ -4057,7 +4059,7 @@ async function ensureRoleInSessionStorage(userId) {
             //   1. permissions.area  = override explícito
             //   2. role IS clave de área (nuevo esquema v2: role='GSO', role='SD-SO', etc.)
             //   3. roles legacy descriptivos por compatibilidad
-            const _GLOBAL_ROLES = ['admin','superadmin','editor','capturista','lector','viewer','colab_viewer','colab_editor'];
+            const _GLOBAL_ROLES = ['admin','superadmin','director_general','editor','capturista','lector','viewer','colab_viewer','colab_editor'];
             const _LEGACY_AREA  = { operacion:'DO', administracion:'DA', planeacion:'DPE', comercial:'DCS', seguridad_op:'GSO', transparencia:'UT', calidad:'GC' };
             const _r = roleData?.role;
             const roleArea = roleData?.permissions?.area
@@ -12016,6 +12018,10 @@ function renderNavdeckWeeklyBanner() {
 
         /* ── card values per mode ── */
         const cardPeriodo = { current: 'Total del día', weekly: 'Total de la semana', monthly: 'Total del mes', annual: 'Total del año', historic: 'Total histórico', period: 'Total del periodo' }[mode] || 'Total histórico';
+        // Categoría y unidad de cada tarjeta. Solo se ven en la vista de
+        // Dirección General (director-general.css); para los demás, ocultas.
+        const cardCategoria = { comercial: 'Comercial', carga: 'Carga', general: 'Aviación general' };
+        const cardUnidad = { operaciones: 'Operaciones', pasajeros: 'Pasajeros', toneladas: 'Toneladas' };
         const getCardVal = (def) => {
             // Día y Semana: detalle. Mes, Año e Histórico: capa unificada.
             // "—" mientras se consultan.
@@ -12055,13 +12061,20 @@ function renderNavdeckWeeklyBanner() {
                 <span class="ndw-card-overlay" aria-hidden="true"></span>${marca}
                 <span class="ndw-card-icon"><i class="${def.icon}" aria-hidden="true"></i></span>
                 <span class="ndw-card-body">
+                    <span class="ndw-card-cat">${escapeHTML(cardCategoria[def.cat] || def.label)}</span>
                     <span class="ndw-card-tag">${escapeHTML(def.titulo)}</span>
                     <span class="ndw-card-value${valor.length >= 9 ? ' ndw-card-value--largo' : ''}">${valor}</span>
                     <span class="ndw-card-sub">${escapeHTML(cardPeriodo)}</span>
+                    <span class="ndw-card-unidad">${escapeHTML(cardUnidad[def.metric] || '')}</span>
                 </span>
                 <span class="ndw-card-cta" aria-hidden="true"><i class="fas fa-${(mode === 'weekly' || mode === 'current') ? 'chart-column' : 'chart-line'}"></i> ${(mode === 'weekly' || mode === 'current') ? 'Ver detalle' : 'Ver análisis'}</span>
             </button>`;
         }).join('');
+
+        // Encabezado de las tarjetas: solo en la vista de Dirección General.
+        // Día y Semana salen del detalle de manifiestos (preliminar); Mes, Año e
+        // Histórico, de la capa unificada.
+        const resumenNota = (mode === 'current' || mode === 'weekly') ? `${cardPeriodo} · cifras preliminares` : cardPeriodo;
 
         container.innerHTML = `
             <div class="ndw-hero ndw-hero--${mode}" style="--ndw-hero-img:url('${heroImg}')" data-ndw-hero-img="${heroImg}">
@@ -12078,6 +12091,7 @@ function renderNavdeckWeeklyBanner() {
                     </div>
                 </div>
             </div>
+            <div class="ndw-resumen-cabeza"><span class="ndw-resumen-titulo">Resumen operativo</span><span class="ndw-resumen-nota">${escapeHTML(resumenNota)}</span></div>
             <div class="ndw-cards">${cardsHtml}</div>
         `;
 
@@ -13251,7 +13265,7 @@ function showMainApp() {
             const userArea = sessionStorage.getItem('user_area') || null;
             // Capitalizar rol
             const _ROLE_DISPLAY = {
-                admin:'Admin', superadmin:'Superadmin', editor:'Editor', viewer:'Viewer',
+                admin:'Admin', superadmin:'Superadmin', director_general:'Director General', editor:'Editor', viewer:'Viewer',
                 colab_viewer:'Colaborador', colab_editor:'Colaborador Ed.',
             };
             const roleDisplay = _ROLE_DISPLAY[role] || (role.charAt(0).toUpperCase() + role.slice(1));
@@ -34927,13 +34941,16 @@ async function _conciSaveBulkEdits() {
     const AU_ROLE_LABELS = {
         superadmin: 'Super Admin', admin: 'Admin', editor: 'Editor',
         capturista: 'Capturista', lector: 'Lector',
+        director_general: 'Director General',
         viewer: 'Lector (legacy)',
         colab_viewer: 'Colab Viewer', colab_editor: 'Colab Editor',
         control_fauna: 'Control Fauna', servicio_medico: 'Serv. Médico'
     };
+    // 'director' no existe en Bootstrap: su clase .bg-director vive en admin.css.
     const AU_ROLE_COLORS = {
         superadmin: 'dark', admin: 'danger', editor: 'warning',
         capturista: 'primary', lector: 'secondary', viewer: 'secondary',
+        director_general: 'director',
         colab_viewer: 'info', colab_editor: 'primary',
         control_fauna: 'success', servicio_medico: 'success'
     };
@@ -34943,10 +34960,11 @@ async function _conciSaveBulkEdits() {
         admin: 'Acceso total (ve todos los módulos e ignora la lista de vistas).',
         editor: 'Agregar, modificar y borrar en los módulos visibles.',
         capturista: 'Solo agregar / capturar en los módulos visibles.',
-        lector: 'Solo lectura en los módulos visibles.'
+        lector: 'Solo lectura en los módulos visibles.',
+        director_general: 'Solo lectura en los módulos visibles (vista de Dirección General).'
     };
     // Roles principales v2 primero; legacy al final (siguen funcionando).
-    const AU_ALL_ROLES = ['superadmin','admin','editor','capturista','lector','control_fauna','servicio_medico','colab_editor','colab_viewer'];
+    const AU_ALL_ROLES = ['superadmin','admin','director_general','editor','capturista','lector','control_fauna','servicio_medico','colab_editor','colab_viewer'];
 
     // Etiqueta legible de una sección (data-section) para la UI de vistas.
     function auSectionLabel(key) {
@@ -36678,7 +36696,7 @@ async function _conciSaveBulkEdits() {
     // Prioridad: admin/superadmin → todo | user_area en sessionStorage → solo esa área
     //            roles legacy → mapa fijo | role=clave directa → esa clave
     //            editor/viewer/colab sin área → solo lectura
-    const _AG_GLOBAL_ROLES_SJS = ['admin','superadmin','editor','viewer','colab_viewer','colab_editor'];
+    const _AG_GLOBAL_ROLES_SJS = ['admin','superadmin','director_general','editor','viewer','colab_viewer','colab_editor'];
     const _AG_LEGACY_MAP_SJS   = { operacion:'DO', administracion:'DA', planeacion:'DPE', comercial:'DCS', seguridad_op:'GSO', transparencia:'UT', calidad:'GC' };
     function resolveEditableAreas(role) {
         if (['admin', 'superadmin'].includes(role)) {

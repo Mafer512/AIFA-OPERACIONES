@@ -87,6 +87,12 @@ body.dark-mode #table-weekly-frequencies thead th {
 }
 
 /* Dark mode overrides (assuming based on body class or media query used in project) */
+/* Insignia del rol Director General (Administración de Usuarios) */
+.badge.bg-director {
+    background-color: #8a6a1f !important;
+    color: #fff !important;
+}
+
 /* Adjust based on typical Bootstrap dark mode classes if present, or media query */
 @media (prefers-color-scheme: dark) {
     .autocomplete-items {
