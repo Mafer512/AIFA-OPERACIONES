@@ -11400,7 +11400,36 @@ function ndwFormatValue(value, metric) {
 }
 
 /* ── NDW shared view state ── */
-let NDW_VIEW_STATE = { mode: 'current', date: null, year: null, monthIdx: null, monthTouched: false, weekStart: null };
+let NDW_VIEW_STATE = { mode: 'current', date: null, year: null, monthIdx: null, monthTouched: false, weekStart: null,
+    periodoDesde: null, periodoHasta: null };
+
+/* Periodo: dos fechas libres. Por omisión, del 1 del mes en curso a ayer. */
+function ndwPeriodoFechas() {
+    const hasta = NDW_VIEW_STATE.periodoHasta || ndwPreviousDay();
+    const desde = NDW_VIEW_STATE.periodoDesde || `${hasta.slice(0, 8)}01`;
+    return { desde, hasta };
+}
+
+/* Total del periodo con la capa unificada (TotalesService.getTotales): los
+   meses completos hasta el corte oficial salen de la cifra oficial y los días
+   sueltos del detalle diario. Así un mes completo da lo mismo que la tarjeta
+   Mes. window._ndwPeriodo = { clave, status, total, leyenda }. */
+async function ndwLoadPeriodo(desde, hasta) {
+    const clave = `${desde}|${hasta}`;
+    if (window._ndwPeriodo?.clave === clave && window._ndwPeriodo.status !== 'error') return;
+    const entrada = window._ndwPeriodo = { clave, status: 'loading', total: null, leyenda: '' };
+    try {
+        if (!window.TotalesService) throw new Error('No se cargó js/totales-service.js');
+        const r = await window.TotalesService.getTotales({ desde, hasta, granularidad: 'total' });
+        if (window._ndwPeriodo !== entrada) return;
+        Object.assign(entrada, { status: 'ready', total: r.total, leyenda: r.leyenda || '' });
+    } catch (error) {
+        if (window._ndwPeriodo !== entrada) return;
+        entrada.status = 'error';
+        console.warn('[Inicio Periodo] No se pudo calcular el periodo:', error);
+    }
+    renderNavdeckWeeklyBanner();
+}
 
 function ndwGetAvailableYears() {
     // Los años salen de los totales unificados; mientras llegan, del catálogo
@@ -11820,6 +11849,12 @@ function renderNavdeckWeeklyBanner() {
             semana.estado = 'loading';
         }
 
+        /* ── periodo libre: se calcula al cambiar cualquiera de las dos fechas ── */
+        const periodo = mode === 'period' ? ndwPeriodoFechas() : null;
+        if (periodo && periodo.desde <= periodo.hasta) ndwLoadPeriodo(periodo.desde, periodo.hasta);
+        const periodoCalculo = periodo && window._ndwPeriodo?.clave === `${periodo.desde}|${periodo.hasta}`
+            ? window._ndwPeriodo : null;
+
         /* ── hero content per mode ── */
         let heroIcon, heroKicker, heroTitle, periodPickerHtml = '';
 
@@ -11912,6 +11947,31 @@ function renderNavdeckWeeklyBanner() {
                 <div class="ndw-period-picker ndw-period-picker--compact"><div class="ndw-period-group">${yearChipsHtml}</div></div>
                 <p class="ndw-tap-hint" aria-label="Las tarjetas son interactivas"><i class="fas fa-hand-pointer" aria-hidden="true"></i><span>Toca una tarjeta para ver el histórico anual</span></p>`;
 
+        } else if (mode === 'period') {
+            /* Periodo: dos fechas libres; las tarjetas suman ese rango. */
+            heroIcon   = 'fas fa-calendar-days';
+            heroKicker = 'Periodo';
+            const valido = periodo.desde <= periodo.hasta;
+            const fechaLarga = (iso) => {
+                const f = parseIsoDay(iso);
+                return `${f.getDate()} de ${_MONTH_NAMES_ES[f.getMonth()]} de ${f.getFullYear()}`;
+            };
+            heroTitle = !valido ? 'Revisa las fechas'
+                : periodo.desde === periodo.hasta ? fechaLarga(periodo.desde)
+                : `${fechaLarga(periodo.desde)} al ${fechaLarga(periodo.hasta)}`;
+            const hoyIso = ndwIsoDay(_now.getFullYear(), _now.getMonth(), _now.getDate());
+            const estadoPeriodo = !valido ? 'La fecha inicial no puede ser posterior a la final.'
+                : periodoCalculo?.status === 'error' ? 'No fue posible calcular el periodo. Intenta de nuevo.'
+                : periodoCalculo?.status === 'ready' ? (periodoCalculo.leyenda || '')
+                : 'Calculando el periodo…';
+            periodPickerHtml = `
+                <div class="ndw-current-picker ndw-periodo-picker">
+                    <label>Desde <input type="date" data-ndw-periodo="desde" value="${periodo.desde}" min="2022-01-01" max="${hoyIso}"></label>
+                    <label>Hasta <input type="date" data-ndw-periodo="hasta" value="${periodo.hasta}" min="2022-01-01" max="${hoyIso}"></label>
+                    <button type="button" data-ndw-periodo-refresh${periodoCalculo?.status === 'loading' ? ' disabled' : ''}>Actualizar cifras</button>
+                </div>
+                <p class="ndw-tap-hint ndw-fuente" aria-live="polite">${escapeHTML(estadoPeriodo)}</p>`;
+
         } else { /* historic */
             heroIcon   = 'fas fa-history';
             heroKicker = 'Acumulado histórico';
@@ -11924,13 +11984,14 @@ function renderNavdeckWeeklyBanner() {
 
         /* ── de dónde salen las cifras y avisos del periodo ── */
         const periodoAvisos = mode === 'current' ? [currentDateKey, currentDateKey]
+            : mode === 'period' ? [periodo.desde, periodo.hasta]
             : mode === 'weekly' ? [semana.tramo.inicio, semana.tramo.fin]
             : mode === 'monthly' ? ndwMonthBounds(selYear, selMonthIdx)
             : mode === 'annual' ? [`${selYear}-01-01`, `${selYear}-12-31`]
             : [`${availableYears[0] || currentYear}-01-01`, `${availableYears[availableYears.length - 1] || currentYear}-12-31`];
         if (mode === 'weekly') {
             periodPickerHtml += `<p class="ndw-tap-hint ndw-fuente">${escapeHTML(NDW_DETALLE_AYUDA)}</p>`;
-        } else if (mode !== 'current') {
+        } else if (mode !== 'current' && mode !== 'period') {
             periodPickerHtml += totalesInicio?.status === 'error'
                 ? '<p class="ndw-tap-hint" aria-live="polite">No fue posible consultar los totales. Intenta más tarde.</p>'
                 : `<p class="ndw-tap-hint ndw-fuente">${escapeHTML(totalesInicio?.leyenda || 'Consultando totales…')}</p>`;
@@ -11948,12 +12009,13 @@ function renderNavdeckWeeklyBanner() {
                 <button type="button" class="ndw-view-btn${mode === 'monthly' ? ' is-active' : ''}" data-ndw-mode="monthly" aria-pressed="${mode === 'monthly'}">Mes</button>
                 <button type="button" class="ndw-view-btn${mode === 'annual'  ? ' is-active' : ''}" data-ndw-mode="annual"  aria-pressed="${mode === 'annual'}">Año</button>
                 <button type="button" class="ndw-view-btn${mode === 'historic' ? ' is-active' : ''}" data-ndw-mode="historic" aria-pressed="${mode === 'historic'}">Histórico total</button>
+                <button type="button" class="ndw-view-btn${mode === 'period' ? ' is-active' : ''}" data-ndw-mode="period" aria-pressed="${mode === 'period'}">Periodo</button>
                 <span class="ndw-view-sep" aria-hidden="true"></span>
                 <button type="button" class="ndw-view-btn ndw-view-reset" data-ndw-reset title="Regresar al periodo actual" aria-label="Regresar al periodo actual"><i class="fas fa-rotate-right" aria-hidden="true"></i></button>
             </div>`;
 
         /* ── card values per mode ── */
-        const cardPeriodo = { current: 'Total del día', weekly: 'Total de la semana', monthly: 'Total del mes', annual: 'Total del año', historic: 'Total histórico' }[mode] || 'Total histórico';
+        const cardPeriodo = { current: 'Total del día', weekly: 'Total de la semana', monthly: 'Total del mes', annual: 'Total del año', historic: 'Total histórico', period: 'Total del periodo' }[mode] || 'Total histórico';
         const getCardVal = (def) => {
             // Día y Semana: detalle. Mes, Año e Histórico: capa unificada.
             // "—" mientras se consultan.
@@ -11963,6 +12025,10 @@ function renderNavdeckWeeklyBanner() {
             if (mode === 'weekly') {
                 if (semana.estado !== 'ready') return null;
                 return semana.dias.reduce((acc, d) => acc + getWeeklyValue(d, def.cat, def.metric), 0);
+            }
+            if (mode === 'period') {
+                // Periodo: total de la capa unificada para el rango elegido.
+                return periodoCalculo?.status === 'ready' ? Number(periodoCalculo.total?.[def.cat]?.[def.metric]) || 0 : null;
             }
             if (totalesInicio?.status !== 'ready') return null;
             if (mode === 'monthly') return ndwGetMonthlyVal(def.cat, def.metric, selYear, selMonthIdx);
@@ -12023,11 +12089,40 @@ function renderNavdeckWeeklyBanner() {
         if (!container._ndwWired) {
             container._ndwWired = true;
             container.addEventListener('change', (ev) => {
+                const campoPeriodo = ev.target.closest?.('[data-ndw-periodo]');
+                if (campoPeriodo) {
+                    if (!campoPeriodo.value) return;
+                    if (campoPeriodo.dataset.ndwPeriodo === 'desde') NDW_VIEW_STATE.periodoDesde = campoPeriodo.value;
+                    else NDW_VIEW_STATE.periodoHasta = campoPeriodo.value;
+                    renderNavdeckWeeklyBanner();
+                    return;
+                }
                 if (!ev.target.matches('[data-ndw-date]') || !ev.target.value) return;
                 NDW_VIEW_STATE.date = ev.target.value;
                 renderNavdeckWeeklyBanner();
             });
             container.addEventListener('click', (ev) => {
+                /* Periodo: vuelve a pedir las cifras del rango. Primero con lo que
+                   ya hay y, al terminar el refresco de los resúmenes en el
+                   servidor, otra vez con lo recién capturado. */
+                const refrescarPeriodo = ev.target.closest('[data-ndw-periodo-refresh]');
+                if (refrescarPeriodo) {
+                    if (refrescarPeriodo.disabled) return;
+                    const recalcular = () => {
+                        window.TotalesService?.invalidar?.();
+                        if (window._ndwTotales?.status !== 'loading') window._ndwTotales = null;
+                        window._ndwDetalle = {};
+                        window._ndwPeriodo = null;
+                        renderNavdeckWeeklyBanner();
+                    };
+                    recalcular();
+                    if (typeof ndwRefreshManifestSummary === 'function') {
+                        ndwRefreshManifestSummary(true).then((actualizado) => {
+                            if (actualizado && NDW_VIEW_STATE.mode === 'period') recalcular();
+                        });
+                    }
+                    return;
+                }
                 if (ev.target.closest('[data-ndw-refresh]')) {
                     // Los totales y el detalle por año se vuelven a pedir al cambiar de vista.
                     window.TotalesService?.invalidar?.();
@@ -12045,6 +12140,8 @@ function renderNavdeckWeeklyBanner() {
                     NDW_VIEW_STATE.year = null;
                     NDW_VIEW_STATE.monthIdx = null;
                     NDW_VIEW_STATE.monthTouched = false;
+                    NDW_VIEW_STATE.periodoDesde = null;
+                    NDW_VIEW_STATE.periodoHasta = null;
                     renderNavdeckWeeklyBanner();
                     return;
                 }
@@ -12105,6 +12202,8 @@ function renderNavdeckWeeklyBanner() {
                 if (!card) return;
                 const idx = Number(card.getAttribute('data-ndw-idx'));
                 if (!Number.isFinite(idx)) return;
+                // Periodo: la tarjeta ya es el total del rango; no abre otra ventana.
+                if (NDW_VIEW_STATE.mode === 'period') return;
                 if (NDW_VIEW_STATE.mode === 'weekly' || NDW_VIEW_STATE.mode === 'current') openNavdeckWeeklyDetail(idx);
                 else if (NDW_VIEW_STATE.mode === 'monthly') openNavdeckMonthlyDetail(idx);
                 else                                        openNavdeckAnnualDetail(idx);
@@ -20919,6 +21018,30 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
                     }
                 }
             }
+            // 1b) mismo vuelo por su SLOT ASIGNADO: el manifiesto lleva la FECHA
+            // de la operación y el itinerario la del slot. Un vuelo con slot el
+            // 10/10 a las 21:50 que operó pasada la medianoche se captura con
+            // FECHA 11/10; sin esto salía dos veces (capturado y "sin capturar").
+            // Sólo a un día de distancia de la FECHA, para no cruzar otro día.
+            if (!vRow && colm.slotAsignado && mMd !== null) {
+                const sp = _conciParseDateTimeParts(mRow[colm.slotAsignado]);
+                const sMd = sp && Number.isFinite(sp.month) && Number.isFinite(sp.day) ? sp.month * 100 + sp.day : null;
+                const dias = (md) => Date.UTC(2000, Math.floor(md / 100) - 1, md % 100) / 86400000;
+                const distancia = sMd === null ? null : Math.abs(dias(sMd) - dias(mMd));
+                if (sMd !== null && sMd !== mMd && Math.min(distancia, 366 - distancia) <= 1) {
+                    for (const d of dirs) {
+                        const ek = `${flightNum}|${d}|${sMd}`;
+                        const hit = vByKeyDate.get(ek);
+                        if (hit && !usedKeys.has(ek)) {
+                            vRow = hit;
+                            matchedDirection = d;
+                            usedKeys.add(ek);
+                            usedVuelo.add(`${vueloId.get(hit)}|${d}`);
+                            break;
+                        }
+                    }
+                }
+            }
             // 2) fallback: only vuelos with unknown date (never cross a known other day)
             if (!vRow) {
                 for (const d of dirs) {
@@ -23532,8 +23655,11 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
                 // Como en la tabla: solo el número, como texto (conserva ceros a
                 // la izquierda). "Exportar por capturista" sigue con el vuelo completo.
                 return { value: opts.vueloCompleto ? String(rawVal || '') : _conciNumeroDeVuelo(rawVal, get(row, ['AEROLINEA', 'AEROLÍNEA'])) };
-            case 'routecity':
-                return { value: routeCity(rawVal, isArr) };
+            case 'routecity': {
+                // Como en la tabla: sin DESTINO / ORIGEN, el otro extremo de la RUTA.
+                const ruta = String(rawVal || '').trim() ? '' : String(get(row, ['RUTA']) || '').trim();
+                return { value: ruta ? _conciDestinoOrigenRuta(ruta, isArr ? 'LLEGADA' : 'SALIDA') : routeCity(rawVal, isArr) };
+            }
             case 'codecity':
                 return { value: codeCity(rawVal) };
             case 'ruta':
@@ -25446,7 +25572,13 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                     td.textContent = _conciAeronaveDisplay(rawStr).text;
                     _conciMarcarAeronave(td, rawStr);
                 } else if (meta.isRouting) {
-                    const shown = _conciDestinoOrigenVisible(rawStr, _tipoCol ? String(row[_tipoCol] || '') : '', iataToCity);
+                    // Sin DESTINO / ORIGEN (p. ej. la carga del libro, que trae la
+                    // RUTA): la ciudad del otro extremo de la RUTA. Sólo se muestra;
+                    // lo guardado sigue vacío hasta que alguien lo capture.
+                    const rutaRespaldo = !String(rawStr || '').trim() && _rutaCol ? String(row[_rutaCol] || '').trim() : '';
+                    const shown = rutaRespaldo
+                        ? _conciDestinoOrigenRuta(rutaRespaldo, _tipoCol ? String(row[_tipoCol] || '') : '', iataToCity)
+                        : _conciDestinoOrigenVisible(rawStr, _tipoCol ? String(row[_tipoCol] || '') : '', iataToCity);
                     td.textContent = shown;
                     td.dataset.routeRaw = rawStr;
                     td.dataset.raw = shown;
@@ -27385,6 +27517,18 @@ function _conciDestinoOrigenVisible(rawStr, tipo, iataToCity = (c => (window._ia
     const catalogCity = code ? _conciAirportStoredValue(_conciAirportCatalogByIata.get(code)) : '';
     const city = _conciCiudadBonita(catalogCity || (code ? iataToCity(code) : rawStr));
     return city || rawStr;
+}
+
+// DESTINO / ORIGEN a partir de la RUTA: el extremo que no es el AIFA. En la
+// llegada el primero (HKG-ANC-NLU → Hong Kong), en la salida el último
+// (NLU-LAX → Los Ángeles). Si ese extremo es NLU (ruta capturada al revés) se
+// toma el más cercano que no lo sea.
+function _conciDestinoOrigenRuta(rutaRaw, tipo, iataToCity) {
+    const parts = String(rutaRaw ?? '').toUpperCase().split(/[-\/]+/).map(p => p.trim()).filter(Boolean);
+    const otros = parts.filter(p => p !== 'NLU' && p !== 'MMSM');
+    if (!otros.length) return '';
+    const codigo = /lleg|arr/i.test(String(tipo || '')) ? otros[0] : otros[otros.length - 1];
+    return _conciDestinoOrigenVisible(codigo, tipo, iataToCity);
 }
 
 function _conciAirportOptionLabel(airport) {
