@@ -129,8 +129,9 @@
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="style.css?v=20261007-inicio-fila-flotante">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
-    <link rel="stylesheet" href="admin.css?v=20260203">
+    <link rel="stylesheet" href="admin.css?v=20261012-director-general">
     <link rel="stylesheet" href="miscelanea.css?v=1">
+    <link rel="stylesheet" href="director-general.css?v=20261013-4">
     <link rel="icon" type="image/png" sizes="192x192" href="images/icons/aifa-app-icon-192.png?v=20251126">
     <link rel="icon" type="image/png" sizes="512x512" href="images/icons/aifa-app-icon-512.png?v=20251126">
     <link rel="apple-touch-icon" sizes="180x180" href="images/icons/aifa-app-icon-512.png?v=20251126">
@@ -1915,6 +1916,22 @@ FF
                         <span class="si-txt">Demoras</span>
                     </a>
 
+                    <!-- Vista de Dirección General (js/vista-director-general.js): con ese rol,
+                         junto a los accesos directos de arriba van dos accesos más que llaman a
+                         las funciones de su pantalla de origen. Para los demás roles queda oculta. -->
+                    <div class="dg-barra" id="dg-barra" hidden>
+                        <div class="dg-barra-acciones">
+                            <!-- El PDF de Conciliación › Estadística › Informe oficial, sin visto bueno. -->
+                            <button type="button" class="dg-btn dg-informe" data-dg-informe title="Descargar el Informe oficial en PDF">
+                                <i class="fas fa-file-pdf" aria-hidden="true"></i><span>Informe oficial</span>
+                            </button>
+                            <button type="button" class="dg-btn dg-swear" data-dg-swear title="Mensaje SWEAR para WhatsApp o Webex">
+                                <i class="fas fa-paper-plane" aria-hidden="true"></i><span>SWEAR</span>
+                            </button>
+                        </div>
+                        <p class="dg-barra-estado" id="dg-barra-estado" role="status" aria-live="polite" hidden></p>
+                    </div>
+
                     <div class="si-sep"></div>
                     <div class="si-section-lbl">Subdirecciones</div>
 
@@ -3014,6 +3031,7 @@ FF
                                             <option value="editor">&#x270F;&#xFE0F; Editor (captura + edición)</option>
                                             <option value="admin">&#x1F511;&#xFE0F; Admin</option>
                                             <option value="superadmin">&#x1F6E1;&#xFE0F; Super Admin</option>
+                                            <option value="director_general">&#x1F396;&#xFE0F; Director General</option>
                                             <option disabled>── Especiales ──</option>
                                             <option value="control_fauna">&#x1F985; Control Fauna</option>
                                             <option value="servicio_medico">&#x1F3E5; Serv. Médico</option>
@@ -3021,7 +3039,7 @@ FF
                                             <option value="colab_viewer">&#x1F465; Colab Viewer</option>
                                         </select>
                                         <div class="form-text small text-muted mt-1" style="font-size:.68rem;line-height:1.3">
-                                            <i class="fas fa-info-circle me-1"></i><strong>Lector</strong>: solo lectura · <strong>Capturista</strong>: solo agregar · <strong>Editor</strong>: agregar/modificar/borrar · <strong>Admin/Superadmin</strong>: acceso total. El rol define el nivel; las vistas definen qué módulos ve.
+                                            <i class="fas fa-info-circle me-1"></i><strong>Lector</strong>: solo lectura · <strong>Capturista</strong>: solo agregar · <strong>Editor</strong>: agregar/modificar/borrar · <strong>Admin/Superadmin</strong>: acceso total · <strong>Director General</strong>: solo lectura. El rol define el nivel; las vistas definen qué módulos ve.
                                         </div>
                                     </div>
                                     <div class="col-12 col-md-4">
@@ -39243,8 +39261,8 @@ FF
     <script src="js/vehiculos.js?v=2"></script>
     <script src="js/muebles-bienes.js?v=4"></script>
     <script src="js/email-analisis.js"></script>
-    <script src="js/agenda.js?v=8"></script>
-    <script src="js/agenda-assistant.js?v=1"></script>
+    <script src="js/agenda.js?v=9"></script>
+    <script src="js/agenda-assistant.js?v=2"></script>
     <!-- AIFONSO — Asistente AIFA (BETA). SOLO DESARROLLO LOCAL.
 
          Se carga por código y solo si el host es local, para que no llegue a
@@ -39435,11 +39453,12 @@ FF
     <!-- Capa única de totales (oficial hasta el corte, detalle después): ver el archivo -->
     <script src="js/totales-service.js?v=20261007-inicio-rapido" defer></script>
     <script src="js/manifiestos-avisos.js?v=20261005-manifiestos-hechos" defer></script>
-    <script src="script.js?v=20261007-actualizacion-al-ingresar-v2" defer></script>
+    <script src="script.js?v=20261012-director-general" defer></script>
     <!-- Campos de fecha en dd/mm/aaaa sin importar el idioma del navegador. -->
     <script src="js/fecha-ddmm.js?v=20260912-fecha-1" defer></script>
     <!-- Botón y menú de usuario del encabezado de inicio. -->
-    <script src="js/inicio-usuario.js?v=20260915-inicio-2" defer></script>
+    <script src="js/inicio-usuario.js?v=20261012-director-general" defer></script>
+    <script src="js/vista-director-general.js?v=20261013-4" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>
@@ -40259,6 +40278,45 @@ FF
         </div>
     </div>
 </div>
+<!-- MODAL: INFORME OFICIAL (js/vista-director-general.js) — en la vista de Dirección General,
+     antes de descargar el PDF se elige la fecha de corte y, si se quiere, qué años comparar. -->
+<div class="modal fade" id="modalDgInforme" tabindex="-1" aria-labelledby="modalDgInformeLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg dg-informe-ventana">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalDgInformeLabel">
+                    <i class="fas fa-file-pdf me-2" aria-hidden="true"></i>Informe oficial
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="dg-iv-cargando" id="dg-iv-cargando" role="status">
+                    <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Cargando el informe…
+                </p>
+                <div class="dg-iv-campos" id="dg-iv-campos" hidden>
+                    <label class="dg-iv-campo" for="dg-iv-corte">Fecha de corte</label>
+                    <input type="date" id="dg-iv-corte" class="form-control form-control-sm">
+                    <p class="dg-iv-ayuda" id="dg-iv-ayuda"></p>
+
+                    <span class="dg-iv-campo">Años en las tablas</span>
+                    <div class="dg-iv-anios">
+                        <select class="form-select form-select-sm" id="dg-iv-anio" aria-label="Año"></select>
+                        <span class="dg-iv-vs">vs</span>
+                        <select class="form-select form-select-sm" id="dg-iv-vs" aria-label="Comparar contra"></select>
+                    </div>
+                </div>
+                <div class="alert alert-danger py-2 px-3 small mb-0 mt-3 d-none" id="dg-iv-error" role="alert"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm dg-iv-descargar" id="dg-iv-descargar" disabled>
+                    <i class="fas fa-download me-1" aria-hidden="true"></i><span>Descargar PDF</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- MODAL: MENSAJE PARA WHATSAPP O WEBEX (js/conci-mensaje-envio.js) — las cifras de los
      oficios a la Subsecretaría en el texto que se envía a diario, listo para copiar. -->
 <div class="modal fade" id="modalConciMensaje" tabindex="-1" aria-labelledby="modalConciMensajeLabel" aria-hidden="true">
@@ -40820,7 +40878,7 @@ FF
 <script src="js/conci-alerta-30h.js?v=20260923-alerta30h" defer></script>
 <!-- Reportes de Conciliación (Carga / Pasajeros) -->
 <script src="js/conci-reportes.js?v=20260911-v1" defer></script>
-<script src="js/conci-reportes-edicion.js?v=20260911-v1" defer></script>
+<script src="js/conci-reportes-edicion.js?v=20261012-director-general" defer></script>
 <!-- Saldos oficiales de los oficios (acumulados del mes, año e histórico) -->
 <script src="js/conci-saldos-oficio.js?v=20261007-saldo-3009" defer></script>
 <script src="js/conci-reportes-pasajeros.js?v=20261007-saldos-oficio" defer></script>
@@ -40834,7 +40892,7 @@ FF
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
 <script src="js/estadistico-informe-core.js?v=20261006-totales" defer></script>
 <script src="js/resumen-estadistico.js?v=20260821-v6" defer></script>
-<script src="js/estadistico-informe.js?v=20261006-totales" defer></script>
+<script src="js/estadistico-informe.js?v=20261013-director-general-3" defer></script>
 <!-- Modulo estadistico de operaciones (pestana Estadistica de Conciliacion) -->
 <script src="js/estadistica-motor.js?v=20261006-totales" defer></script>
 <script src="js/estadistica-panel.js?v=20261006-totales" defer></script>

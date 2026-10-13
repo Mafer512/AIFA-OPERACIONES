@@ -1677,6 +1677,93 @@
         }
     }
 
+    // ── PDF desde fuera de la pestaña (vista de Dirección General) ───────────
+    // Solo el PDF, SIN visto bueno (no sube nada ni registra aprobación). Es el
+    // mismo documento de "Dar visto bueno y generar PDF": mismos datos (load),
+    // mismo armado (buildReportHtml) y mismo PDF. Opcionalmente con otra fecha
+    // de corte y/o con sólo algunos años en las tablas.
+    const INICIO_OPERACIONES = '2022-03-21';
+    const CLAVES_PERIODO = ['aggregated', 'acumulado', 'anios', 'corteIso', 'corte', 'diaCorte',
+        'ocupacion', 'ocupacionRowsRaw', 'ocupacionDesde', 'ocupacionHasta'];
+
+    function verificarGeneradorPdf() {
+        if (!window.jspdf?.jsPDF || typeof window.html2canvas === 'undefined') {
+            throw new Error('No se pudo cargar el generador de PDF. Recarga la página e intenta de nuevo.');
+        }
+    }
+
+    // Lo que se puede elegir antes de descargar: los años con datos y el rango
+    // de la fecha de corte (del inicio de operaciones a ayer, el corte normal).
+    async function opcionesPdf() {
+        await load();
+        if (!state.aggregated) throw new Error('No se pudo cargar el Informe Estadístico. Intenta de nuevo.');
+        return { anios: state.anios.slice(), corteIso: corteIsoPorOmision(), corteMin: INICIO_OPERACIONES, corteMax: corteIsoPorOmision() };
+    }
+
+    // Deja en `state` los datos del informe con corte en `corteIso`: los totales
+    // por mes de la capa unificada hasta ese día (getTotales parte el mes del
+    // corte con el detalle diario), el acumulado y el detalle de sus 15 días.
+    async function datosAlCorte(client, corteIso) {
+        const servicio = window.TotalesService;
+        const r = await servicio.getTotales({ desde: '2022-01-01', hasta: corteIso, granularidad: 'mes' });
+        const categorias = servicio.CATEGORIAS || ['comercial', 'carga', 'general'];
+        const meses = r.periodos.filter((p) => categorias.some((cat) =>
+            Object.values(p[cat] || {}).some((v) => Number(v) !== 0)));
+        // El desglose de cada mes (si lo hay) se toma de lo ya cargado.
+        const aggregated = Core.aplicarTotalesUnificados(state.aggregated, meses);
+        state.aggregated = aggregated;
+        state.acumulado = Core.buildAcumulado(aggregated);
+        state.anios = aggregated.anios.slice().sort((a, b) => b - a);
+        state.corteIso = corteIso;
+        state.corte = parseIsoDate(corteIso);
+        await loadDetalle(client);
+    }
+
+    async function descargarPdf(avisar, opciones) {
+        verificarGeneradorPdf();
+        const aviso = (texto) => { if (typeof avisar === 'function') avisar(texto); };
+        aviso('Cargando el informe…');
+        await load();
+        if (!state.aggregated || !state.acumulado) throw new Error('No se pudo cargar el Informe Estadístico. Intenta de nuevo.');
+
+        const o = opciones || {};
+        const corteIso = o.corteIso || state.corteIso;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(corteIso))) throw new Error('Elige la fecha de corte.');
+        if (corteIso < INICIO_OPERACIONES || corteIso > corteIsoPorOmision()) {
+            throw new Error(`La fecha de corte debe estar entre el ${isoToLong(INICIO_OPERACIONES)} y el ${isoToLong(corteIsoPorOmision())}.`);
+        }
+
+        // Lo que cambia para este PDF se guarda y se regresa al final: la
+        // pestaña del Informe sigue mostrando su propio corte y sus años.
+        const previo = {};
+        CLAVES_PERIODO.forEach((k) => { previo[k] = state[k]; });
+        setBusy('Generando el Informe Estadístico…');
+        try {
+            // Siempre se vuelven a leer los totales hasta el corte: lo cargado al
+            // abrir la sesión puede tener horas, y el PDF debe salir al día.
+            aviso(`Calculando las cifras al ${isoToLong(corteIso)}…`);
+            window.TotalesService.invalidar?.();
+            await datosAlCorte(await getClient(), corteIso);
+            if (Array.isArray(o.anios) && o.anios.length) {
+                const elegidos = o.anios.map(Number).filter((a) => state.anios.includes(a));
+                if (!elegidos.length) throw new Error('No hay datos de esos años a la fecha de corte elegida.');
+                state.anios = [...new Set(elegidos)].sort((a, b) => b - a);
+            }
+            const pdfBlob = await construirPdfDesdeHtml(buildReportHtml(), PDF_PAGINA, '.informe-hoja', (hoja, total) => {
+                setBusy(`Informe Estadístico: hoja ${hoja} de ${total}…`);
+                aviso(`Generando el PDF: hoja ${hoja} de ${total}…`);
+            });
+            const fileName = `informe_estadistico_corte_${corteIso}_${Date.now()}.pdf`;
+            downloadBlob(pdfBlob, fileName);
+            return { fileName, corteIso, anios: state.anios.slice() };
+        } finally {
+            CLAVES_PERIODO.forEach((k) => { state[k] = previo[k]; });
+            setBusy(null);
+        }
+    }
+
+    window.InformeEstadistico = { opcionesPdf, descargarPdf };
+
     function bindToolbar() {
         $('informe-est-btn-refresh')?.addEventListener('click', () => reload());
         $('informe-est-btn-csv')?.addEventListener('click', exportCsv);

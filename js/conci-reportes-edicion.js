@@ -27,7 +27,7 @@
         morado: { nombre: 'Morado', hex: 'D6A8F5' }
     };
 
-    const ROLES_SOLO_LECTURA = ['viewer', 'lector', 'colab_viewer'];
+    const ROLES_SOLO_LECTURA = ['viewer', 'lector', 'colab_viewer', 'director_general'];
 
     // Lo que se puede reescribir: celdas y renglones de texto. La hoja entera
     // no se vuelve editable para que no se puedan borrar tablas completas.
