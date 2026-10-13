@@ -12,6 +12,11 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./js/supabase-client.js"></script>
+  <script src="./js/colaboradores-catalogos.js?v=20261003d"></script>
+  <script src="./js/colaboradores-campos.js?v=20261003g"></script>
+  <script src="./js/combo-bonito.js?v=20261003d"></script>
+  <script src="./js/domicilio-mapa.js?v=20261003c"></script>
+  <script src="./js/documento-foto.js?v=20261003a"></script>
   <style>
     :root {
       --ink: #10233f;
@@ -30,7 +35,18 @@
       --radius: 16px;
       --shadow-sm: 0 1px 2px rgba(16, 35, 63, .05), 0 2px 8px rgba(16, 35, 63, .05);
       --shadow-md: 0 10px 30px rgba(11, 37, 69, .10);
+      /* Los combos (js/combo-bonito.js), con el azul del portal. */
+      --cb-acento: var(--accent);
+      --cb-acento-sombra: rgba(26, 115, 232, .14);
+      --cb-hover: #9fc0ee;
+      --cb-suave: #eaf2fe;
+      --cb-grupo-fondo: #f1f6fe;
+      --cb-grupo-texto: var(--accent-dark);
+      --cb-fondo: #fbfdff;
+      --cb-borde: #d6e1f0;
     }
+    /* El botón del combo toma el tamaño del campo; aquí, el tono de los demás. */
+    .cb-btn { color: var(--ink); font-size: .95rem; padding: 0 .8rem; }
 
     * { box-sizing: border-box; }
 
@@ -186,6 +202,16 @@
       transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
     }
     .form-control::placeholder { color: #9fb0c6; }
+    /* El "background" de arriba borra la flecha de Bootstrap: se repone. */
+    .form-select {
+      padding-right: 2.4rem;
+      background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2346597a' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+      background-repeat: no-repeat;
+      background-position: right .85rem center;
+      background-size: 14px 10px;
+      cursor: pointer;
+    }
+    .form-select:focus { background-color: #fff; }
     .form-control:focus, .form-select:focus {
       background: #fff;
       border-color: var(--accent);
@@ -245,6 +271,32 @@
       border-color: #f0dcae;
       border-left-color: #e3a53a;
     }
+
+    /* Domicilio por partes: un recuadro para que se lea como un solo dato. */
+    .dom-box {
+      border: 1px solid #e3ebf6;
+      border-radius: 14px;
+      background: #f9fbff;
+      padding: 12px 14px 14px;
+    }
+    .dom-box legend {
+      float: none;
+      width: auto;
+      margin-bottom: 8px;
+      padding: 0;
+      font-size: .82rem;
+      color: var(--ink-soft);
+      font-weight: 700;
+    }
+    .dom-box .form-label.small { font-size: .76rem; font-weight: 600; color: #6a7d99; }
+
+    /* ── Identificaciones: cada documento con sus datos y sus fotos ─────────── */
+    .id-card { border: 1px solid #e3ebf6; border-radius: 14px; background: #fbfdff; padding: 14px; }
+    .id-card + .id-card { margin-top: 14px; }
+    .id-titulo { margin: 0 0 10px; font-size: .92rem; font-weight: 800; color: var(--navy); }
+    .id-ayuda { margin-top: 5px; font-size: .76rem; line-height: 1.35; color: var(--muted); }
+    .id-check { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: .84rem; font-weight: 600; color: var(--ink-soft); cursor: pointer; }
+    .id-check input { width: 18px; height: 18px; accent-color: var(--accent); }
 
     /* ── Documentos ──────────────────────────────────────────────────────── */
     .dropzone {
@@ -426,31 +478,23 @@
             <input id="f-puesto" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
           <div class="col-md-4">
-            <label class="form-label">Profesión</label>
-            <input id="f-profesion" class="form-control">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">Grado académico</label>
+            <label class="form-label" for="f-grado-academico">Grado académico</label>
             <input id="f-grado-academico" class="form-control">
           </div>
           <div class="col-md-4">
-            <label class="form-label">Matrícula</label>
-            <input id="f-matricula" class="form-control">
+            <label class="form-label" for="f-profesion">Profesión</label>
+            <input id="f-profesion" class="form-control">
           </div>
           <div class="col-md-4">
-            <label class="form-label">Cédula</label>
-            <input id="f-cedula" class="form-control">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">RYR</label>
-            <input id="f-ryr" class="form-control">
+            <label class="form-label" for="f-cedula">Cédula profesional <span class="opt-tag">Si tienes</span></label>
+            <input id="f-cedula" class="form-control" inputmode="numeric" autocomplete="off">
           </div>
         </div>
       </section>
 
       <section class="panel">
         <h2 class="sec-title"><span class="sec-num">2</span>Datos laborales</h2>
-        <div class="lock-hint mb-3">&#128274; Tu adscripción la registra el área de personal. Aquí solo capturas turno, si eres militar o civil, y si estás comisionado.</div>
+        <div class="lock-hint mb-3">&#128274; Tu adscripción la registra el área de personal. Aquí solo indicas si eres militar o civil y, si eres militar, tu grado.</div>
         <div class="row g-3">
           <div class="col-md-3">
             <label class="form-label">Nivel <span class="lock-tag">&#128274; Fijo</span></label>
@@ -460,23 +504,34 @@
             <label class="form-label">Plaza <span class="lock-tag">&#128274; Fijo</span></label>
             <input id="f-plaza" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
-          <div class="col-md-3">
-            <label class="form-label">Turno</label>
-            <input id="f-turno" class="form-control">
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Militar / civil</label>
+          <div class="col-md-6">
+            <label class="form-label" for="f-militar">Militar / civil</label>
             <input id="f-militar" class="form-control">
           </div>
-          <div class="col-md-4">
-            <label class="form-label">Comisionado</label>
-            <input id="f-comisionado" class="form-control">
+          <div class="col-12" id="militar-detalle" hidden>
+            <div class="id-card">
+              <h3 class="id-titulo">Datos militares</h3>
+              <div class="row g-3">
+                <div class="col-md-5">
+                  <label class="form-label" for="f-grado">Grado <span class="req-tag">Obligatorio</span></label>
+                  <input id="f-grado" class="form-control">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label" for="f-situacion-militar">Situación</label>
+                  <input id="f-situacion-militar" class="form-control">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label" for="f-matricula">Matrícula militar</label>
+                  <input id="f-matricula" class="form-control" autocomplete="off" style="text-transform:uppercase">
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <label class="form-label">Dirección <span class="lock-tag">&#128274; Fijo</span></label>
             <input id="f-direccion" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
-          <div class="col-md-4">
+          <div class="col-md-6">
             <label class="form-label">Subdirección <span class="lock-tag">&#128274; Fijo</span></label>
             <input id="f-subdireccion" class="form-control locked-field" readonly tabindex="-1" aria-readonly="true" title="Este dato lo asigna el área de personal">
           </div>
@@ -507,16 +562,46 @@
             <input id="f-sangre" class="form-control">
           </div>
           <div class="col-md-6">
-            <label class="form-label">Estado civil</label>
+            <label class="form-label" for="f-estado-civil">Estado civil</label>
             <input id="f-estado-civil" class="form-control">
           </div>
           <div class="col-md-6">
-            <label class="form-label">Dependientes</label>
-            <input id="f-dependientes" class="form-control">
+            <label class="form-label" for="f-dependientes">Hijos</label>
+            <input id="f-dependientes" class="form-control" inputmode="numeric" placeholder="0 si no tienes">
           </div>
-          <div class="col-md-6">
-            <label class="form-label">Domicilio</label>
-            <input id="f-domicilio" class="form-control">
+          <div class="col-12">
+            <fieldset class="dom-box">
+              <legend class="form-label">Domicilio</legend>
+              <input id="f-domicilio" type="hidden">
+              <div class="mb-3" id="dom-mapa"></div>
+              <div class="row g-3">
+                <div class="col-md-8">
+                  <label class="form-label small" for="f-dom-calle">Calle</label>
+                  <input id="f-dom-calle" class="form-control" autocomplete="address-line1" placeholder="Av. Reforma">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small" for="f-dom-numero">Número</label>
+                  <input id="f-dom-numero" class="form-control" placeholder="123 Int. 4">
+                </div>
+                <div class="col-md-8">
+                  <label class="form-label small" for="f-dom-colonia">Colonia</label>
+                  <input id="f-dom-colonia" class="form-control" placeholder="Centro">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small" for="f-dom-cp">Código postal</label>
+                  <input id="f-dom-cp" class="form-control" inputmode="numeric" maxlength="5" autocomplete="postal-code" placeholder="55600">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small" for="f-dom-municipio">Municipio o alcaldía</label>
+                  <input id="f-dom-municipio" class="form-control" autocomplete="address-level2" placeholder="Tecámac">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small" for="f-dom-estado">Estado</label>
+                  <input id="f-dom-estado" class="form-control" autocomplete="address-level1" placeholder="Estado de México">
+                </div>
+              </div>
+              <div class="lock-hint warn mt-3 d-none" id="dom-libre"></div>
+            </fieldset>
           </div>
           <div class="col-md-6">
             <label class="form-label">NSS</label>
@@ -531,68 +616,100 @@
             <input id="f-alerg-ali" class="form-control">
           </div>
           <div class="col-md-6">
-            <label class="form-label">Rubrica</label>
-            <input id="f-rubrica" class="form-control">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Documento de ingreso</label>
-            <input id="f-doc-ingreso" class="form-control">
+            <label class="form-label" for="f-rubrica">Rúbrica</label>
+            <input id="f-rubrica" class="form-control" maxlength="12">
           </div>
         </div>
       </section>
 
       <section class="panel">
-        <h2 class="sec-title"><span class="sec-num">4</span>Contacto y vigencias</h2>
+        <h2 class="sec-title"><span class="sec-num">4</span>Contacto</h2>
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label">Celular</label>
             <input id="f-celular" class="form-control" inputmode="numeric">
           </div>
           <div class="col-md-4">
-            <label class="form-label">Extensión</label>
-            <input id="f-extension" class="form-control">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">Correo institucional</label>
-            <input id="f-correo" class="form-control" type="email">
-          </div>
-          <div class="col-md-6">
             <label class="form-label">Correo personal</label>
             <input id="f-correo-personal" class="form-control" type="email">
           </div>
-          <div class="col-md-3">
-            <label class="form-label">Fecha de ingreso</label>
-            <input id="f-fecha-ingreso" class="form-control" type="date">
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Onomástico</label>
+          <div class="col-md-4">
+            <label class="form-label" for="f-onomastico">Fecha de nacimiento</label>
             <input id="f-onomastico" class="form-control" type="date">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">Licencia</label>
-            <input id="f-licencia" class="form-control">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">Tipo de licencia</label>
-            <input id="f-licencia-tipo" class="form-control">
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">Vigencia licencia</label>
-            <input id="f-vig-licencia" class="form-control" type="date">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Vigencia credencial</label>
-            <input id="f-vig-credencial" class="form-control" type="date">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Vigencia INE</label>
-            <input id="f-vig-ine" class="form-control" type="date">
           </div>
         </div>
       </section>
 
       <section class="panel">
-        <h2 class="sec-title"><span class="sec-num">5</span>Contactos de emergencia</h2>
+        <h2 class="sec-title"><span class="sec-num">5</span>Identificaciones</h2>
+        <div class="lock-hint mb-3"><span aria-hidden="true">&#128247;</span><span>Puedes tomar las fotos con la cámara de tu celular. <strong>Que se lean todos los datos:</strong> buena luz, sin flash directo ni reflejos, la credencial completa (las 4 esquinas) y la foto enfocada.</span></div>
+
+        <div class="id-card">
+          <h3 class="id-titulo">INE</h3>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label" for="f-vig-ine">Vigencia (año) <span class="req-tag">Obligatorio</span></label>
+              <input id="f-vig-ine" class="form-control" inputmode="numeric" maxlength="4" placeholder="Ej. 2031" autocomplete="off">
+              <div class="id-ayuda">Es el año que dice "VIGENCIA" en tu credencial.</div>
+            </div>
+            <div class="col-md-8">
+              <div class="row g-3">
+                <div class="col-sm-6"><div id="foto-ine"></div></div>
+                <div class="col-sm-6"><div id="foto-ine-rev"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="id-card">
+          <h3 class="id-titulo">Licencia de manejo</h3>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label" for="f-licencia">¿Tienes licencia de manejo?</label>
+              <input id="f-licencia" class="form-control">
+            </div>
+          </div>
+          <div class="row g-3 mt-0" id="licencia-detalle" hidden>
+            <div class="col-md-4">
+              <div class="row g-3">
+                <div class="col-12">
+                  <label class="form-label" for="f-licencia-tipo">Tipo de licencia</label>
+                  <input id="f-licencia-tipo" class="form-control" maxlength="10" placeholder="A, B, C…" autocomplete="off" style="text-transform:uppercase">
+                </div>
+                <div class="col-12">
+                  <label class="form-label" for="f-vig-licencia">Vigencia</label>
+                  <input id="f-vig-licencia" class="form-control" type="date">
+                  <label class="id-check"><input type="checkbox" id="f-vig-licencia-perm"> Es permanente</label>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-8">
+              <div class="row g-3">
+                <div class="col-sm-6"><div id="foto-licencia"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="id-card">
+          <h3 class="id-titulo">TIA / Credencial AIFA</h3>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label" for="f-vig-credencial">Vigencia <span class="opt-tag">Cuando te la entreguen</span></label>
+              <input id="f-vig-credencial" class="form-control" type="date">
+              <div class="id-ayuda">Si todavía no te la dan, déjalo vacío y súbela después con este mismo QR.</div>
+            </div>
+            <div class="col-md-8">
+              <div class="row g-3">
+                <div class="col-sm-6"><div id="foto-tia"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="sec-title"><span class="sec-num">6</span>Contactos de emergencia</h2>
         <div class="row g-3">
           <div class="col-md-4">
             <label class="form-label">Contacto 1 nombre</label>
@@ -622,35 +739,13 @@
       </section>
 
       <section class="panel">
-        <h2 class="sec-title"><span class="sec-num">6</span>Documentos</h2>
-        <div class="lock-hint mb-3">Para finalizar tu registro solo necesitas tu <strong>CV</strong> y tu <strong>INE</strong> por los dos lados. La TIA la subes después, cuando te la entreguen.</div>
+        <h2 class="sec-title"><span class="sec-num">7</span>Currículum</h2>
         <div class="row g-3">
-          <div class="col-md-4">
-            <label class="form-label">CV <span class="req-tag">Obligatorio</span></label>
+          <div class="col-md-6">
+            <label class="form-label" for="doc-cv">CV <span class="req-tag">Obligatorio</span> <span class="opt-tag">Sólo PDF, hasta 5 MB</span></label>
             <div class="dropzone">
               <input id="doc-cv" class="form-control form-control-sm" type="file" accept="application/pdf,.pdf">
               <div id="prev-cv" class="preview"></div>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">INE frente <span class="req-tag">Obligatorio</span></label>
-            <div class="dropzone">
-              <input id="doc-ine" class="form-control form-control-sm" type="file" accept="image/*">
-              <div id="prev-ine" class="preview"></div>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">INE reverso <span class="req-tag">Obligatorio</span></label>
-            <div class="dropzone">
-              <input id="doc-ine-rev" class="form-control form-control-sm" type="file" accept="image/*">
-              <div id="prev-ine-rev" class="preview"></div>
-            </div>
-          </div>
-          <div class="col-md-4">
-            <label class="form-label">TIA / Credencial <span class="opt-tag">Opcional</span></label>
-            <div class="dropzone">
-              <input id="doc-tia" class="form-control form-control-sm" type="file" accept="image/*">
-              <div id="prev-tia" class="preview"></div>
             </div>
           </div>
         </div>
@@ -674,16 +769,18 @@
       'use strict';
 
       let token = '';
-      // Los campos de LOCKED_SPECS quedan fuera: los resuelve el backend.
+      // Los campos de LOCKED_SPECS quedan fuera: los resuelve el backend. Tampoco
+      // van RyR, turno, comisionado, fecha de ingreso, doc. de ingreso, extensión
+      // ni correo institucional: los captura el área de personal, el colaborador
+      // no los ve y save_colab_onboarding los ignora si llegan.
       const FIELD_SPECS = [
         ['f-profesion', 'profesion'],
         ['f-grado-academico', 'grado_academico'],
         ['f-matricula', 'matricula'],
+        ['f-grado', 'grado'],
+        ['f-situacion-militar', 'situacion_militar'],
         ['f-cedula', 'cedula'],
-        ['f-ryr', 'ryr'],
-        ['f-turno', 'turno'],
         ['f-militar', 'militar'],
-        ['f-comisionado', 'comisionado'],
         ['f-curp', 'curp'],
         ['f-rfc', 'rfc'],
         ['f-sangre', 'sangre'],
@@ -694,12 +791,8 @@
         ['f-alerg-med', 'alerg_med'],
         ['f-alerg-ali', 'alerg_ali'],
         ['f-rubrica', 'rubrica'],
-        ['f-doc-ingreso', 'doc_ingreso'],
         ['f-celular', 'celular'],
-        ['f-extension', 'extension'],
-        ['f-correo', 'correo'],
         ['f-correo-personal', 'correo_personal'],
-        ['f-fecha-ingreso', 'fecha_ingreso'],
         ['f-onomastico', 'onomastico'],
         ['f-licencia', 'licencia'],
         ['f-licencia-tipo', 'licencia_tipo'],
@@ -729,22 +822,23 @@
 
       const FIELD_LABELS = {
         nombre: 'Nombre completo', puesto: 'Puesto', profesion: 'Profesión',
-        grado_academico: 'Grado académico', matricula: 'Matrícula', cedula: 'Cédula', ryr: 'RYR',
+        grado_academico: 'Grado académico', matricula: 'Matrícula militar', cedula: 'Cédula', ryr: 'RYR',
+        grado: 'Grado militar', situacion_militar: 'Situación militar',
         nivel: 'Nivel', plaza: 'Plaza', turno: 'Turno', militar: 'Militar / civil',
         comisionado: 'Comisionado', direccion: 'Dirección', subdireccion: 'Subdirección',
         gerencia: 'Gerencia', coordinacion: 'Coordinación', curp: 'CURP', rfc: 'RFC',
-        sangre: 'Tipo de sangre', estado_civil: 'Estado civil', dependientes: 'Dependientes',
+        sangre: 'Tipo de sangre', estado_civil: 'Estado civil', dependientes: 'Hijos',
         domicilio: 'Domicilio', nss: 'NSS', alerg_med: 'Alergia a medicamento',
-        alerg_ali: 'Alergia a alimento', rubrica: 'Rubrica', doc_ingreso: 'Documento de ingreso',
+        alerg_ali: 'Alergia a alimento', rubrica: 'Rúbrica', doc_ingreso: 'Documento de ingreso',
         celular: 'Celular', extension: 'Extensión', correo: 'Correo institucional',
         correo_personal: 'Correo personal', fecha_ingreso: 'Fecha de ingreso',
-        onomastico: 'Onomástico', licencia: 'Licencia', licencia_tipo: 'Tipo de licencia',
+        onomastico: 'Fecha de nacimiento', licencia: 'Licencia de manejo', licencia_tipo: 'Tipo de licencia',
         vig_licencia: 'Vigencia licencia', vig_credencial: 'Vigencia credencial',
-        vig_ine: 'Vigencia INE', c1_nombre: 'Contacto 1 nombre',
+        vig_ine: 'Vigencia INE (año)', c1_nombre: 'Contacto 1 nombre',
         c1_parentesco: 'Contacto 1 parentesco', c1_tel: 'Contacto 1 teléfono',
         c2_nombre: 'Contacto 2 nombre', c2_parentesco: 'Contacto 2 parentesco',
         c2_tel: 'Contacto 2 teléfono', cv_url: 'CV', foto_ine: 'INE frente',
-        foto_ine_rev: 'INE reverso', foto_cred: 'TIA / Credencial'
+        foto_ine_rev: 'INE reverso', foto_cred: 'TIA / Credencial', foto_licencia: 'Foto de la licencia'
       };
 
       function etiquetar(keys) {
@@ -755,8 +849,22 @@
         cv_url: '',
         foto_ine: '',
         foto_ine_rev: '',
-        foto_cred: ''
+        foto_cred: '',
+        foto_licencia: ''
       };
+
+      // Lo guardado puede ser una marca del registro de origen ("0", "P",
+      // "Pendiente"): eso no es una foto ni un CV, aunque no esté vacío.
+      function tieneImagen(v) { return /^(data:image\/|https?:\/\/|storage:\/\/)/i.test(String(v || '').trim()); }
+      function tieneCv(v) { return /^(data:application\/pdf|https?:\/\/|storage:\/\/)/i.test(String(v || '').trim()); }
+
+      // ¿Tiene licencia de manejo? El registro de origen usa SI, Si, No y 0.
+      function respuestaLicencia(v) {
+        const t = String(v || '').trim().toLowerCase();
+        if (/^s/.test(t)) return 'si';
+        if (/^(n|0$)/.test(t)) return 'no';
+        return '';
+      }
 
       function $(id) { return document.getElementById(id); }
       function setStatus(id, text, cls) {
@@ -782,25 +890,6 @@
           fr.onerror = reject;
           fr.readAsDataURL(file);
         });
-      }
-
-      async function toCompressedDataUrl(file, maxW) {
-        const raw = await readAsDataUrl(file);
-        const img = await new Promise((resolve, reject) => {
-          const i = new Image();
-          i.onload = () => resolve(i);
-          i.onerror = reject;
-          i.src = raw;
-        });
-        const ratio = Math.min(1, maxW / img.width);
-        const w = Math.max(400, Math.round(img.width * ratio));
-        const h = Math.round(img.height * (w / img.width));
-        const cvs = document.createElement('canvas');
-        cvs.width = w;
-        cvs.height = h;
-        const ctx = cvs.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        return cvs.toDataURL('image/jpeg', 0.82);
       }
 
       function preview(id, dataUrl) {
@@ -850,33 +939,100 @@
         if (input) input.value = value || '';
       }
 
-      function bindFileInput(inputId, key, previewId, options) {
-        const input = $(inputId);
-        if (!input) return;
-        input.addEventListener('change', async function () {
-          const file = input.files && input.files[0] ? input.files[0] : null;
-          if (!file) return;
-          setStatus('save-status', 'Procesando archivo ' + file.name + ' ...', '');
-          try {
-            const data = options && options.raw ? await readAsDataUrl(file) : await toCompressedDataUrl(file, 1500);
-            currentData[key] = data;
-            preview(previewId, data);
-            refreshDocsState();
-            setStatus('save-status', 'Archivo listo para guardarse.', 'ok');
-          } catch (e) {
-            setStatus('save-status', 'No se pudo procesar la imagen: ' + (e.message || e), 'warn');
-          }
+      /* El domicilio se captura por partes y viaja como una sola columna
+         ("Av. Reforma No. 123, Col. Centro, C.P. 55600"); el input oculto
+         f-domicilio es el que lee collectPayload. */
+      const DOM_PARTES = {
+        calle: 'f-dom-calle', numero: 'f-dom-numero', colonia: 'f-dom-colonia', cp: 'f-dom-cp',
+        municipio: 'f-dom-municipio', estado: 'f-dom-estado'
+      };
+
+      function leerDomicilio() {
+        const partes = {};
+        Object.keys(DOM_PARTES).forEach(function (k) {
+          const el = $(DOM_PARTES[k]);
+          partes[k] = el ? el.value.trim() : '';
         });
+        return partes;
+      }
+
+      function sincronizarDomicilio() {
+        const campos = window.ColaboradoresCampos;
+        const oculto = $('f-domicilio');
+        if (!campos || !oculto || !$(DOM_PARTES.calle)) return;
+        oculto.value = campos.componerDomicilio(leerDomicilio());
+      }
+
+      function pintarDomicilio(texto) {
+        const campos = window.ColaboradoresCampos;
+        if (!campos) return;
+        const partes = campos.partirDomicilio(texto);
+        Object.keys(DOM_PARTES).forEach(function (k) {
+          const el = $(DOM_PARTES[k]);
+          if (el) el.value = partes[k] || '';
+        });
+        const aviso = $('dom-libre');
+        if (aviso) {
+          aviso.classList.toggle('d-none', !partes.libre);
+          aviso.textContent = partes.libre
+            ? 'Tu domicilio estaba en una sola línea. Revísalo y sepáralo en calle, número, colonia y código postal.'
+            : '';
+        }
+      }
+
+      /* Fotos de las identificaciones (js/documento-foto.js): cámara o archivo,
+         con aviso si salen ilegibles. Cada una vive junto a sus datos. */
+      const FOTOS = {
+        foto_ine: { id: 'foto-ine', titulo: 'INE frente', etiqueta: 'Obligatorio' },
+        foto_ine_rev: { id: 'foto-ine-rev', titulo: 'INE reverso', etiqueta: 'Obligatorio' },
+        foto_licencia: { id: 'foto-licencia', titulo: 'Foto de la licencia', etiqueta: 'Opcional' },
+        foto_cred: { id: 'foto-tia', titulo: 'TIA / Credencial AIFA', etiqueta: 'Cuando te la entreguen' }
+      };
+      const fotos = {};
+
+      function conectarFotos() {
+        if (!window.DocumentoFoto) return;
+        Object.keys(FOTOS).forEach(function (k) {
+          const cont = $(FOTOS[k].id);
+          if (!cont) return;
+          fotos[k] = window.DocumentoFoto.conectar({
+            contenedor: cont,
+            titulo: FOTOS[k].titulo,
+            etiqueta: FOTOS[k].etiqueta,
+            valor: currentData[k],
+            alCambiar: function (v) { currentData[k] = v; refreshDocsState(); }
+          });
+        });
+      }
+
+      // Tipo, vigencia y foto de la licencia sólo para quien dice que sí tiene.
+      function pintarLicencia() {
+        const detalle = $('licencia-detalle');
+        if (detalle) detalle.hidden = respuestaLicencia(($('f-licencia') || {}).value) !== 'si';
+      }
+
+      // Grado, situación y matrícula sólo para quien dice que es militar.
+      function pintarMilitar() {
+        const detalle = $('militar-detalle');
+        if (detalle) detalle.hidden = !/^mil/i.test(String(($('f-militar') || {}).value || '').trim());
+      }
+
+      function pintarPermanente() {
+        const perm = $('f-vig-licencia-perm');
+        const fecha = $('f-vig-licencia');
+        if (!perm || !fecha) return;
+        fecha.disabled = perm.checked;
+        if (perm.checked) fecha.value = '';
       }
 
       // La TIA se la entregan al colaborador despues de darse de alta, asi que
       // no puede ser requisito para cerrar su registro. Obligatorios: el CV y
       // las dos caras de la INE; lo demas se sube cuando lo tenga.
       function refreshDocsState() {
-        const okIne = !!currentData.foto_ine;
-        const okIneRev = !!currentData.foto_ine_rev;
-        const okTia = !!currentData.foto_cred;
-        const okCv = !!currentData.cv_url;
+        const okIne = tieneImagen(currentData.foto_ine);
+        const okIneRev = tieneImagen(currentData.foto_ine_rev);
+        const okTia = tieneImagen(currentData.foto_cred);
+        const okCv = tieneCv(currentData.cv_url);
         const missing = [];
         if (!okCv) missing.push('CV');
         if (!okIne) missing.push('INE frente');
@@ -891,22 +1047,50 @@
       }
 
       function collectPayload() {
+        sincronizarDomicilio();
         const payload = {
           cv_url: currentData.cv_url || '',
           foto_ine: currentData.foto_ine || '',
           foto_ine_rev: currentData.foto_ine_rev || '',
-          foto_cred: currentData.foto_cred || ''
+          foto_cred: currentData.foto_cred || '',
+          foto_licencia: currentData.foto_licencia || ''
         };
 
         FIELD_SPECS.forEach(function (spec) {
           const input = $(spec[0]);
           if (!input) return;
           let value = input.value == null ? '' : input.value.trim();
+          // Una fecha que el campo no pudo mostrar ("15/03/2024", "Sin información")
+          // y que nadie tocó se devuelve tal cual: mandarla vacía la borraba.
+          if (input.type === 'date' && input.dataset.original !== undefined && value === (input.dataset.iso || '')) {
+            value = input.dataset.original;
+          }
           if (spec[1] === 'curp' || spec[1] === 'rfc') {
             value = value.toUpperCase();
           }
           payload[spec[1]] = value;
         });
+
+        // Quien es civil no tiene grado, situación ni matrícula militar.
+        if (/^civ/i.test(String(payload.militar || '').trim())) {
+          payload.grado = '';
+          payload.situacion_militar = '';
+          payload.matricula = '';
+        }
+        if (payload.matricula) payload.matricula = payload.matricula.toUpperCase();
+
+        // Sin licencia no hay tipo, vigencia ni foto que guardar. "Permanente"
+        // va como texto: el campo de fecha no lo puede contener.
+        if (respuestaLicencia(payload.licencia) === 'no') {
+          payload.licencia_tipo = '';
+          payload.vig_licencia = '';
+          payload.foto_licencia = '';
+        } else {
+          const perm = $('f-vig-licencia-perm');
+          if (perm && perm.checked) payload.vig_licencia = 'Permanente';
+          else if (/perman/i.test(payload.vig_licencia || '')) payload.vig_licencia = '';
+        }
+        if (payload.licencia_tipo) payload.licencia_tipo = payload.licencia_tipo.toUpperCase();
 
         return payload;
       }
@@ -917,7 +1101,17 @@
           const input = $(spec[0]);
           if (!input) return;
           const value = data && data[key] != null ? data[key] : '';
-          input.value = value;
+          if (input.type === 'date') {
+            // <input type="date"> sólo acepta AAAA-MM-DD; lo demás lo deja en blanco.
+            const raw = String(value).trim();
+            const dmy = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(raw);
+            const iso = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : (dmy ? dmy[3] + '-' + dmy[2] + '-' + dmy[1] : '');
+            input.dataset.original = raw;
+            input.dataset.iso = iso;
+            input.value = iso;
+          } else {
+            input.value = value;
+          }
           currentData[key] = value;
         });
 
@@ -925,11 +1119,35 @@
         currentData.foto_ine = data && data.foto_ine ? data.foto_ine : currentData.foto_ine;
         currentData.foto_ine_rev = data && data.foto_ine_rev ? data.foto_ine_rev : currentData.foto_ine_rev;
         currentData.foto_cred = data && data.foto_cred ? data.foto_cred : currentData.foto_cred;
+        currentData.foto_licencia = data && data.foto_licencia ? data.foto_licencia : currentData.foto_licencia;
 
-        preview('prev-cv', currentData.cv_url);
-        preview('prev-ine', currentData.foto_ine);
-        preview('prev-ine-rev', currentData.foto_ine_rev);
-        preview('prev-tia', currentData.foto_cred);
+        // Vigencia de licencia "Permanente": la casilla, no la fecha.
+        const perm = $('f-vig-licencia-perm');
+        if (perm) {
+          perm.checked = /perman/i.test(String(data && data.vig_licencia || ''));
+          pintarPermanente();
+        }
+
+        pintarDomicilio(data && data.domicilio);
+        // Grado académico → profesión, con el catálogo del área de personal.
+        if (window.ColaboradoresCatalogos) {
+          window.ColaboradoresCatalogos.conectarEstudios({ gradoId: 'f-grado-academico', profesionId: 'f-profesion' });
+          window.ColaboradoresCatalogos.sincronizar();
+        }
+        if (window.ColaboradoresCampos) {
+          window.ColaboradoresCampos.conectarRubrica({ id: 'f-rubrica', nombreId: 'f-nombre' });
+          window.ColaboradoresCampos.conectarMilitar({ id: 'f-militar' });
+          window.ColaboradoresCampos.conectarGradoMilitar({ id: 'f-grado' });
+          window.ColaboradoresCampos.conectarSituacionMilitar({ id: 'f-situacion-militar' });
+          window.ColaboradoresCampos.conectarEstadoCivil({ id: 'f-estado-civil' });
+          window.ColaboradoresCampos.conectarLicencia({ id: 'f-licencia' });
+          window.ColaboradoresCampos.sincronizar();
+        }
+        pintarLicencia();
+        pintarMilitar();
+
+        preview('prev-cv', tieneCv(currentData.cv_url) ? currentData.cv_url : '');
+        Object.keys(FOTOS).forEach(function (k) { if (fotos[k]) fotos[k].poner(currentData[k]); });
         refreshDocsState();
       }
 
@@ -1011,9 +1229,44 @@
         }
 
         const payload = collectPayload();
-        if (finalMode && (!payload.cv_url || !payload.foto_ine || !payload.foto_ine_rev)) {
+        if (finalMode && (!tieneCv(payload.cv_url) || !tieneImagen(payload.foto_ine) || !tieneImagen(payload.foto_ine_rev))) {
           setStatus('save-status', 'Para finalizar necesitas tu CV y tu INE por los dos lados. La TIA la puedes subir después.', 'warn');
           return;
+        }
+
+        if (finalMode) {
+          const anio = String(payload.vig_ine || '').trim();
+          if (!/^(19|20)\d{2}$/.test(anio)) {
+            setStatus('save-status', 'Escribe el año de vigencia de tu INE (4 cifras, por ejemplo 2031).', 'warn');
+            if ($('f-vig-ine')) $('f-vig-ine').focus();
+            return;
+          }
+          if (/^mil/i.test(String(payload.militar || '').trim()) && !String(payload.grado || '').trim()) {
+            setStatus('save-status', 'Como eres militar, indica tu grado.', 'warn');
+            return;
+          }
+          if (respuestaLicencia(payload.licencia) === '') {
+            setStatus('save-status', 'Indica si tienes licencia de manejo.', 'warn');
+            return;
+          }
+          if (respuestaLicencia(payload.licencia) === 'si' && (!payload.licencia_tipo || !payload.vig_licencia)) {
+            setStatus('save-status', 'Completa el tipo y la vigencia de tu licencia (o marca que es permanente).', 'warn');
+            if ($(!payload.licencia_tipo ? 'f-licencia-tipo' : 'f-vig-licencia')) $(!payload.licencia_tipo ? 'f-licencia-tipo' : 'f-vig-licencia').focus();
+            return;
+          }
+        }
+
+        if (finalMode && window.ColaboradoresCampos) {
+          const partesDom = leerDomicilio();
+          const faltaDom = window.ColaboradoresCampos.faltantesDomicilio(partesDom);
+          if (faltaDom.length) {
+            setStatus('save-status', 'Completa tu domicilio: falta ' + faltaDom.join(', ') + '.', 'warn');
+            const vacio = ['calle', 'numero', 'colonia', 'cp'].find(function (k) {
+              return k === 'cp' ? !/^\d{5}$/.test(partesDom.cp) : !partesDom[k];
+            });
+            if (vacio && $(DOM_PARTES[vacio])) $(DOM_PARTES[vacio]).focus();
+            return;
+          }
         }
 
         setStatus('save-status', finalMode ? 'Guardando registro final...' : 'Guardando avance...', '');
@@ -1047,6 +1300,25 @@
       }
 
       document.addEventListener('DOMContentLoaded', function () {
+        // Los combos del formulario, con la misma lista bonita del alta.
+        // Grado, profesión y militar se crean después, al cargar los datos:
+        // mejorarEn también los alcanza.
+        if (window.ComboBonito) window.ComboBonito.mejorarEn($('onboarding-form'));
+
+        // Domicilio desde el mapa (js/domicilio-mapa.js): llena las partes y se
+        // quita el aviso de "estaba en una sola línea", que ya no aplica.
+        if (window.DomicilioMapa) {
+          window.DomicilioMapa.conectar({
+            contenedor: $('dom-mapa'),
+            campos: DOM_PARTES,
+            alLlenar: function () {
+              sincronizarDomicilio();
+              const aviso = $('dom-libre');
+              if (aviso) aviso.classList.add('d-none');
+            }
+          });
+        }
+
         const params = new URLSearchParams(window.location.search);
         const tokenFromUrl = params.get('token') || '';
         if (tokenFromUrl) {
@@ -1074,10 +1346,36 @@
           });
         });
 
-        bindFileInput('doc-cv', 'cv_url', 'prev-cv', { raw: true });
-        bindFileInput('doc-ine', 'foto_ine', 'prev-ine');
-        bindFileInput('doc-ine-rev', 'foto_ine_rev', 'prev-ine-rev');
-        bindFileInput('doc-tia', 'foto_cred', 'prev-tia');
+        const cp = $('f-dom-cp');
+        if (cp) cp.addEventListener('input', function () { cp.value = cp.value.replace(/\D/g, '').slice(0, 5); });
+
+        // CV: sólo PDF de verdad y hasta 5 MB (js/documento-foto.js lo revisa).
+        const cv = $('doc-cv');
+        if (cv) cv.addEventListener('change', async function () {
+          const file = cv.files && cv.files[0];
+          if (!file) return;
+          try {
+            const dataUrl = window.DocumentoFoto ? await window.DocumentoFoto.leerCv(file) : await readAsDataUrl(file);
+            currentData.cv_url = dataUrl;
+            preview('prev-cv', dataUrl);
+            refreshDocsState();
+            setStatus('save-status', 'CV listo para guardarse.', 'ok');
+          } catch (e) {
+            cv.value = '';
+            setStatus('docs-state', e && e.message ? e.message : 'No se pudo usar ese archivo.', 'warn');
+          }
+        });
+
+        conectarFotos();
+
+        const licencia = $('f-licencia');
+        if (licencia) licencia.addEventListener('input', pintarLicencia);
+        const militar = $('f-militar');
+        if (militar) militar.addEventListener('input', pintarMilitar);
+        const perm = $('f-vig-licencia-perm');
+        if (perm) perm.addEventListener('change', pintarPermanente);
+        const vigIne = $('f-vig-ine');
+        if (vigIne) vigIne.addEventListener('input', function () { vigIne.value = vigIne.value.replace(/\D/g, '').slice(0, 4); });
 
         if (tokenFromUrl) {
           loadByToken().catch(function () {});

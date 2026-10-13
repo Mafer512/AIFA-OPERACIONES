@@ -194,6 +194,24 @@ describe('saldo oficial del 30/09/2026 y datos enviados: todo cuadra desde el 01
     expect(texto).toContain('a. Pasajeros: 5,780,386 (5,472,773 Nacionales, 307,613 Internacionales).');
   });
 
+  test('la variación contra 2025 sale del libro "VARIACION 2025-2026", ya no "sin dato"', () => {
+    const S = window.ConciSaldosOficio;
+    // Los acumulados 2025 de la tabla del libro.
+    expect(S.acumuladoAnioAnterior('2025-10-01')).toEqual({ pax: 5171399, ton: 293940 });
+    expect(S.acumuladoAnioAnterior('2025-10-04')).toEqual({ pax: 5223905, ton: 297292 });
+    expect(S.acumuladoAnioAnterior('2025-10-31')).toEqual({ pax: 5739945, ton: 329972 });
+    expect(S.acumuladoAnioAnterior('2025-01-07')).toEqual({ pax: 145168, ton: 5105 });
+    expect(S.acumuladoAnioAnterior('2025-03-01')).toEqual({ pax: 1071347, ton: 55328 });
+    // Sin los días de ese mes no se inventa.
+    expect(S.acumuladoAnioAnterior('2025-02-14')).toBeNull();
+    expect(S.acumuladoAnioAnterior('2025-11-01')).toBeNull();
+    // 06/10/2026: 5,759,386 vs 5,262,647 y 320,156 t vs 299,576 t.
+    const texto = mensaje('2026-10-06');
+    expect(texto).toContain('5,759,386 (⬆️ 9.44%)');
+    expect(texto).toContain('320,156 (⬆️ 6.87%)');
+    expect(texto).not.toContain('sin dato');
+  });
+
   test('el oficio de pasajeros (Reportes) da lo mismo que el mensaje', () => {
     const r = P.agregar({ filas: OCTUBRE, columnas: COLUMNAS }, '2026-10-06').sub.actual.anio;
     const suma = lado => r.LLEGADA[lado].pax + r.SALIDA[lado].pax;

@@ -163,7 +163,7 @@
             <div>
                 <div class="ag-eyebrow"><i class="fas fa-paper-plane me-1"></i>GAG · Subdirección de Servicios Conexos</div>
                 <h2>Aviación General · FBO</h2>
-                <p class="ag-sub">Captura, consulta y resguardo del histórico de movimientos de aviación general.</p>
+                <p class="ag-sub">Estadística de movimientos de aviación general: operaciones FBO desde 2026 e histórico 2022–2025.</p>
             </div>
             <div class="d-flex align-items-center gap-2">
                 <span class="ag-nivel" id="ag-nivel-badge" title="Tu nivel de acceso en este módulo">—</span>
@@ -189,63 +189,46 @@
                     <label for="ag-f-tipo">Movimiento</label>
                     <select class="form-select form-select-sm" id="ag-f-tipo">
                         <option value="">Todos</option>
-                        <option value="LLEGADA">Llegadas</option>
-                        <option value="SALIDA">Salidas</option>
+                        <option value="LLEGADA">Llegada</option>
+                        <option value="SALIDA">Salida</option>
                     </select>
                 </div>
                 <div class="col-6 col-md-2">
                     <label for="ag-f-ambito">Ámbito</label>
                     <select class="form-select form-select-sm" id="ag-f-ambito">
                         <option value="">Todos</option>
-                        <option value="NACIONAL">Nacional</option>
-                        <option value="INTERNACIONAL">Internacional</option>
+                        <option value="NAC">Nacional</option>
+                        <option value="INT">Internacional</option>
                     </select>
                 </div>
-                <div class="col-6 col-md-2">
-                    <label for="ag-f-validacion">Validación</label>
-                    <select class="form-select form-select-sm" id="ag-f-validacion">
-                        <option value="">Todas</option>
-                        <option value="PENDIENTE">Pendientes</option>
-                        <option value="VALIDADO">Validados</option>
-                        <option value="OBSERVADO">Observados</option>
-                    </select>
-                </div>
-                <div class="col-6 col-md-2">
-                    <label for="ag-f-estatus">Estatus</label>
-                    <select class="form-select form-select-sm" id="ag-f-estatus">
-                        <option value="ACTIVO">Activos</option>
-                        <option value="ANULADO">Anulados</option>
-                        <option value="TODOS">Todos</option>
-                    </select>
-                </div>
-                <div class="col-12 col-md-3">
+                <div class="col-12 col-md-4">
                     <label for="ag-f-operador">Operador</label>
                     <input type="text" class="form-control form-control-sm" id="ag-f-operador"
                            list="ag-dl-operadores" placeholder="Nombre del operador">
                     <datalist id="ag-dl-operadores"></datalist>
                 </div>
-                <div class="col-6 col-md-2">
+                <div class="col-6 col-md-3">
                     <label for="ag-f-matricula">Matrícula</label>
                     <input type="text" class="form-control form-control-sm" id="ag-f-matricula"
                            list="ag-dl-matriculas" placeholder="XA-…">
                     <datalist id="ag-dl-matriculas"></datalist>
                 </div>
-                <div class="col-6 col-md-2">
+                <div class="col-6 col-md-3">
                     <label for="ag-f-aeronave">Tipo de aeronave</label>
                     <input type="text" class="form-control form-control-sm" id="ag-f-aeronave"
                            list="ag-dl-aeronaves" placeholder="G650, C421…">
                     <datalist id="ag-dl-aeronaves"></datalist>
                 </div>
-                <div class="col-6 col-md-2">
-                    <label for="ag-f-aeropuerto">Origen / destino</label>
+                <div class="col-6 col-md-3">
+                    <label for="ag-f-aeropuerto" title="Origen en llegadas, destino en salidas">Origen / destino</label>
                     <input type="text" class="form-control form-control-sm" id="ag-f-aeropuerto"
-                           list="ag-dl-aeropuertos" placeholder="MMTO, MMGL…">
+                           list="ag-dl-aeropuertos" placeholder="MMTO, KAEX…">
                     <datalist id="ag-dl-aeropuertos"></datalist>
                 </div>
                 <div class="col-12 col-md-3">
                     <label for="ag-f-texto">Búsqueda libre</label>
                     <input type="search" class="form-control form-control-sm" id="ag-f-texto"
-                           placeholder="Operador, matrícula, observaciones…">
+                           placeholder="Operador, matrícula, aeronave, origen, destino, registro…">
                 </div>
                 <div class="col-12 d-flex flex-wrap gap-2 align-items-center pt-1">
                     <button class="btn btn-sm btn-info text-white fw-semibold" id="ag-btn-aplicar">
@@ -347,17 +330,15 @@
 
     function leerFiltrosDelFormulario() {
         return {
-            fecha_desde:       $('ag-f-desde')?.value || '',
-            fecha_hasta:       $('ag-f-hasta')?.value || '',
-            tipo_operacion:    $('ag-f-tipo')?.value || '',
-            ambito_operacion:  $('ag-f-ambito')?.value || '',
-            estado_validacion: $('ag-f-validacion')?.value || '',
-            estatus_registro:  $('ag-f-estatus')?.value || 'ACTIVO',
-            operador:          ($('ag-f-operador')?.value || '').trim(),
-            matricula:         ($('ag-f-matricula')?.value || '').trim(),
-            tipo_aeronave:     ($('ag-f-aeronave')?.value || '').trim(),
-            aeropuerto:        ($('ag-f-aeropuerto')?.value || '').trim(),
-            texto:             ($('ag-f-texto')?.value || '').trim()
+            fecha_desde:     $('ag-f-desde')?.value || '',
+            fecha_hasta:     $('ag-f-hasta')?.value || '',
+            tipo_movimiento: $('ag-f-tipo')?.value || '',
+            ambito:          $('ag-f-ambito')?.value || '',
+            operador:        ($('ag-f-operador')?.value || '').trim(),
+            matricula:       ($('ag-f-matricula')?.value || '').trim(),
+            tipo_aeronave:   ($('ag-f-aeronave')?.value || '').trim(),
+            aeropuerto:      ($('ag-f-aeropuerto')?.value || '').trim(),
+            texto:           ($('ag-f-texto')?.value || '').trim()
         };
     }
 
@@ -365,10 +346,8 @@
         const asigna = (id, valor) => { const el = $(id); if (el) el.value = valor || ''; };
         asigna('ag-f-desde', f.fecha_desde);
         asigna('ag-f-hasta', f.fecha_hasta);
-        asigna('ag-f-tipo', f.tipo_operacion);
-        asigna('ag-f-ambito', f.ambito_operacion);
-        asigna('ag-f-validacion', f.estado_validacion);
-        asigna('ag-f-estatus', f.estatus_registro || 'ACTIVO');
+        asigna('ag-f-tipo', f.tipo_movimiento);
+        asigna('ag-f-ambito', f.ambito);
         asigna('ag-f-operador', f.operador);
         asigna('ag-f-matricula', f.matricula);
         asigna('ag-f-aeronave', f.tipo_aeronave);
@@ -404,12 +383,14 @@
         if (f.fecha_desde || f.fecha_hasta) {
             partes.push(`${f.fecha_desde ? Core.fechaLarga(f.fecha_desde) : 'inicio'} — ${f.fecha_hasta ? Core.fechaLarga(f.fecha_hasta) : 'hoy'}`);
         }
-        if (f.tipo_operacion)    partes.push(f.tipo_operacion === 'LLEGADA' ? 'llegadas' : 'salidas');
-        if (f.ambito_operacion)  partes.push(f.ambito_operacion.toLowerCase());
-        if (f.estado_validacion) partes.push(f.estado_validacion.toLowerCase());
-        if (f.estatus_registro && f.estatus_registro !== 'ACTIVO') partes.push(f.estatus_registro.toLowerCase());
-        ['operador', 'matricula', 'tipo_aeronave', 'aeropuerto', 'texto'].forEach((k) => {
-            if (f[k]) partes.push(`${k.replace('_', ' ')}: ${f[k]}`);
+        if (f.tipo_movimiento) partes.push(f.tipo_movimiento === 'LLEGADA' ? 'llegadas' : 'salidas');
+        if (f.ambito) partes.push(f.ambito === 'NAC' ? 'nacional' : 'internacional');
+        const etiquetas = {
+            operador: 'operador', matricula: 'matrícula', tipo_aeronave: 'aeronave',
+            aeropuerto: 'origen/destino', texto: 'búsqueda'
+        };
+        Object.keys(etiquetas).forEach((k) => {
+            if (f[k]) partes.push(`${etiquetas[k]}: ${f[k]}`);
         });
         el.textContent = partes.length ? partes.join(' · ') : 'Sin filtros';
     }
@@ -434,16 +415,19 @@
     }
 
     /**
-     * Si la migración no está aplicada, decirlo con todas sus letras y con el
+     * Si una migración no está aplicada, decirlo con todas sus letras y con el
      * nombre del archivo que hay que correr. Es el error más probable la
      * primera vez que alguien abre el módulo en un entorno nuevo, y el más
      * fácil de arreglar si se explica.
+     *
+     * Devuelve true si se pueden consultar los datos (064a). Si sólo falta
+     * 064b se avisa, pero Resumen y Movimientos funcionan.
      */
     async function revisarInstalacion() {
         const caja = $('ag-diagnostico');
         if (!caja) return true;
         const d = await Datos.diagnostico();
-        if (d.tabla && d.funciones) { caja.innerHTML = ''; return true; }
+        if (d.tabla && d.funciones && d.importacion) { caja.innerHTML = ''; return true; }
 
         caja.innerHTML = `
             <div class="alert alert-warning d-flex align-items-start gap-2">
@@ -452,13 +436,12 @@
                     <div class="fw-bold">El módulo no está instalado completo en la base de datos</div>
                     <div class="small">${esc(d.mensaje || 'Faltan objetos en PostgreSQL.')}</div>
                     <div class="small mt-1">
-                        Aplicar <code>supabase/migrations/046_aviacion_general_fbo.sql</code>
-                        (se corre completo, se revisa la verificación y se cambia
-                        <code>ROLLBACK</code> por <code>COMMIT</code>).
+                        Correr en orden <code>supabase/migrations/064a_fbo_movimientos_vista_y_rpc.sql</code>
+                        y <code>064b_fbo_importar_operaciones.sql</code> (selecciona todo y Run).
                     </div>
                 </div>
             </div>`;
-        return false;
+        return d.tabla && d.funciones;
     }
 
     // ── API que se entrega a cada pantalla ──────────────────────────────────
@@ -535,7 +518,7 @@
         ['ag-f-operador', 'ag-f-matricula', 'ag-f-aeronave', 'ag-f-aeropuerto', 'ag-f-texto'].forEach((id) => {
             $(id)?.addEventListener('keydown', (e) => { if (e.key === 'Enter') aplicarFiltros(); });
         });
-        ['ag-f-desde', 'ag-f-hasta', 'ag-f-tipo', 'ag-f-ambito', 'ag-f-validacion', 'ag-f-estatus'].forEach((id) => {
+        ['ag-f-desde', 'ag-f-hasta', 'ag-f-tipo', 'ag-f-ambito'].forEach((id) => {
             $(id)?.addEventListener('change', aplicarFiltros);
         });
 

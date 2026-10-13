@@ -98,12 +98,16 @@
                 opsCarga: { total: ops.total.ops, nacional: ops.nacional.ops, internacional: ops.internacional.ops }
             };
         }
+        // 2025 no está en la base: su acumulado sale del libro de variación
+        // (js/conci-saldos-oficio.js). Sin dato ahí, lo que haya en la base.
+        const S = window.ConciSaldosOficio;
+        const oficial = S && typeof S.acumuladoAnioAnterior === 'function' ? S.acumuladoAnioAnterior(anterior) : null;
         return {
             fechaIso,
             cifras,
             anioAnterior: {
-                pax: tercia(paxAntes, 'pax').total,
-                carga: C.toneladas(cargaAntes).enteras.total
+                pax: oficial ? oficial.pax : tercia(paxAntes, 'pax').total,
+                carga: oficial ? oficial.ton : C.toneladas(cargaAntes).enteras.total
             }
         };
     }

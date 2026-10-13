@@ -25,11 +25,25 @@
 
     const { Core, Datos, esc, aviso, cargando, vacio } = AG;
 
-    const estado = { filas: [], seleccion: new Set(), porPagina: 200 };
+    const estado = { filas: [], seleccion: new Set(), porPagina: 200, estadoValidacion: 'PENDIENTE' };
 
     function plantilla() {
         return `
+        <div class="alert alert-secondary py-2 small d-flex align-items-start gap-2 mb-2">
+            <i class="fas fa-database mt-1"></i>
+            <div>
+                <strong>Fuente: histórico anterior</strong> (<code>aviacion_general_operaciones</code>).
+                Esta bandeja no incluye las operaciones de <code>operaciones_fbo</code> que alimentan
+                el Resumen y los Movimientos.
+            </div>
+        </div>
+
         <div class="d-flex flex-wrap align-items-center gap-2 mb-2 ag-no-print">
+            <select class="form-select form-select-sm w-auto" id="ag-val-estado" aria-label="Estado de validación">
+                <option value="PENDIENTE">Pendientes</option>
+                <option value="VALIDADO">Validados</option>
+                <option value="OBSERVADO">Observados</option>
+            </select>
             <div class="btn-group btn-group-sm">
                 <button class="btn btn-outline-secondary" id="ag-val-todos">
                     <i class="fas fa-check-double me-1"></i>Seleccionar todo
@@ -155,11 +169,11 @@
         tbody.innerHTML = `<tr><td colspan="12">${cargando('Cargando la bandeja…')}</td></tr>`;
         estado.seleccion.clear();
 
-        // Si el usuario no eligió un estado concreto en los filtros del módulo,
-        // esta pantalla asume PENDIENTE: es la bandeja de lo que falta revisar,
-        // no un segundo listado del histórico completo.
-        const filtros = Object.assign({}, AG.filtros);
-        if (!filtros.estado_validacion) filtros.estado_validacion = 'PENDIENTE';
+        // Los filtros del módulo, traducidos a la fuente anterior, más el estado
+        // elegido en esta pestaña (PENDIENTE por omisión: es la bandeja de lo
+        // que falta revisar, no un segundo listado del histórico completo).
+        const filtros = Core.filtrosFuenteAnterior(AG.filtros);
+        filtros.estado_validacion = estado.estadoValidacion || 'PENDIENTE';
 
         const r = await Datos.listar({ filtros, pagina: 1, porPagina: estado.porPagina, orden: 'fecha_operacion', ascendente: true });
         estado.filas = r.filas;
@@ -248,7 +262,7 @@
         boton.disabled = true;
         caja.innerHTML = cargando('Comparando llaves naturales…');
         try {
-            const grupos = await Datos.duplicados(AG.filtros);
+            const grupos = await Datos.duplicados(Core.filtrosFuenteAnterior(AG.filtros));
             if (!grupos.length) {
                 caja.innerHTML = `<div class="alert alert-success py-2 small mb-0">
                     <i class="fas fa-check me-1"></i>Ningún movimiento repetido con estos filtros.</div>`;
@@ -332,6 +346,11 @@
                 estado.seleccion.clear();
                 panel.querySelectorAll('.ag-val-check').forEach((c) => { c.checked = false; });
                 actualizarSeleccion(panel);
+            });
+
+            panel.querySelector('#ag-val-estado').addEventListener('change', (e) => {
+                estado.estadoValidacion = e.target.value || 'PENDIENTE';
+                consultar(panel).catch((err) => AG.pintarError(panel.querySelector('#ag-val-pie'), err));
             });
 
             panel.querySelector('#ag-val-validar').addEventListener('click', () => cambiarEstado(panel, 'VALIDADO'));

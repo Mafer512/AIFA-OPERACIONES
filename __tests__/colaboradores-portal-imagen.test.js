@@ -94,12 +94,13 @@ describe('el alta de colaborador', () => {
         const doc = montarAlta();
         const nombres = [...doc.querySelectorAll('#colabNuevoTabs .nav-link')]
             .map(b => b.textContent.trim());
-        expect(nombres).toEqual(['Generales', 'Clasificación', 'Organización', 'Documentos', 'Emergencias']);
+        expect(nombres).toEqual(['Generales', 'Clasificación', 'Organización', 'Documentos', 'Emergencias',
+            'Archivos', 'Notas']);
     });
 
     test('cada pestaña presenta sus campos en una hoja', () => {
         const doc = montarAlta();
-        for (const pane of ['cnuevo-gen', 'cnuevo-clas', 'cnuevo-org', 'cnuevo-docs', 'cnuevo-emerg']) {
+        for (const pane of ['cnuevo-gen', 'cnuevo-clas', 'cnuevo-org', 'cnuevo-docs', 'cnuevo-emerg', 'cnuevo-arch', 'cnuevo-notas']) {
             expect(doc.querySelector('#' + pane + ' > .cn-sheet > .row')).not.toBeNull();
         }
     });

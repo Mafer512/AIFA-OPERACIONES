@@ -14,7 +14,8 @@
     const TYPES = Object.freeze({
         ine_front: Object.freeze({ field: 'foto_ine', label: 'INE frente' }),
         ine_back: Object.freeze({ field: 'foto_ine_rev', label: 'INE reverso' }),
-        credential: Object.freeze({ field: 'foto_cred', label: 'TIA / Credencial AIFA' })
+        credential: Object.freeze({ field: 'foto_cred', label: 'TIA / Credencial AIFA' }),
+        license: Object.freeze({ field: 'foto_licencia', label: 'Licencia de manejo' })
     });
 
     class EmployeeDocumentUploadError extends Error {

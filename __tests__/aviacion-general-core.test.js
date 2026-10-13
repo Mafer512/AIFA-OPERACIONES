@@ -405,10 +405,34 @@ describe('presentación', () => {
 });
 
 describe('filtros', () => {
-    test('el estatus ACTIVO por omisión no cuenta como filtro puesto', () => {
+    test('los filtros vacíos usan los nombres de fbo_movimientos_filtrados y no cuentan como puestos', () => {
+        expect(Object.keys(Core.filtrosVacios()).sort()).toEqual([
+            'ambito', 'aeropuerto', 'fecha_desde', 'fecha_hasta', 'matricula',
+            'operador', 'texto', 'tipo_aeronave', 'tipo_movimiento'
+        ].sort());
         expect(Core.hayFiltros(Core.filtrosVacios())).toBe(false);
-        expect(Core.hayFiltros(Object.assign(Core.filtrosVacios(), { estatus_registro: 'TODOS' }))).toBe(true);
         expect(Core.hayFiltros(Object.assign(Core.filtrosVacios(), { matricula: 'XA' }))).toBe(true);
+        expect(Core.hayFiltros(Object.assign(Core.filtrosVacios(), { ambito: 'INT' }))).toBe(true);
+    });
+
+    test('se traducen a la fuente anterior para Validación', () => {
+        const f = Core.filtrosFuenteAnterior({
+            fecha_desde: '2025-01-01', fecha_hasta: '2025-12-31',
+            tipo_movimiento: 'SALIDA', ambito: 'INT', matricula: 'XA'
+        });
+        expect(f).toMatchObject({
+            fecha_desde: '2025-01-01', fecha_hasta: '2025-12-31',
+            tipo_operacion: 'SALIDA', ambito_operacion: 'INTERNACIONAL',
+            matricula: 'XA', estatus_registro: 'ACTIVO', estado_validacion: ''
+        });
+        expect(Core.filtrosFuenteAnterior({ ambito: 'NAC' }).ambito_operacion).toBe('NACIONAL');
+        expect(Core.filtrosFuenteAnterior({}).ambito_operacion).toBe('');
+    });
+
+    test('el periodo toca el histórico si empieza antes de 2026 o no tiene inicio', () => {
+        expect(Core.periodoIncluyeHistorico({ fecha_desde: '2026-01-01' })).toBe(false);
+        expect(Core.periodoIncluyeHistorico({ fecha_desde: '2025-12-31' })).toBe(true);
+        expect(Core.periodoIncluyeHistorico({ fecha_desde: '' })).toBe(true);
     });
 
     test('el rango por omisión es el año en curso completo', () => {
