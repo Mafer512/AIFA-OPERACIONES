@@ -130,3 +130,41 @@ describe('al elegir el grado se abre la profesión', () => {
     expect(botonDe('p2').getAttribute('aria-expanded')).toBe('true');
   });
 });
+
+describe('"Otra…" para lo que no está en el catálogo', () => {
+  test('en Posgrado dice "Otra maestría o doctorado" y va hasta arriba', () => {
+    document.body.innerHTML = '<div><input id="g3" class="form-control"></div><div><input id="p3" class="form-control"></div>';
+    const { gSel, pSel, pInput } = cat.conectarEstudios({ gradoId: 'g3', profesionId: 'p3' });
+    gSel.value = 'Posgrado';
+    gSel.dispatchEvent(new Event('change'));
+    expect(pSel.options[1].value).toBe('__otra__');
+    expect(pSel.options[1].textContent).toBe('Otra maestría o doctorado (escribir)…');
+    expect(pInput.getAttribute('placeholder')).toBe('Escribe el nombre de tu maestría o doctorado…');
+
+    gSel.value = 'Superior';
+    gSel.dispatchEvent(new Event('change'));
+    expect(pSel.options[1].textContent).toBe('Otra licenciatura o ingeniería (escribir)…');
+  });
+
+  test('se ve aunque la búsqueda no encuentre nada, y lo buscado se vuelve la respuesta', async () => {
+    require('../js/combo-bonito.js');
+    document.body.innerHTML = '<div><input id="g4" class="form-control" value="Posgrado"></div><div><input id="p4" class="form-control"></div>';
+    window.ComboBonito.mejorarEn(document.body);
+    cat.conectarEstudios({ gradoId: 'g4', profesionId: 'p4' });
+    await Promise.resolve();
+
+    document.getElementById('p4-sel').parentNode.querySelector('.cb-btn').click();
+    const buscador = document.querySelector('.cb-pop .cb-buscar input');
+    buscador.value = 'Maestría en Seguridad Aeroportuaria';
+    buscador.dispatchEvent(new Event('input'));
+
+    const ops = [...document.querySelectorAll('.cb-pop .cb-op')];
+    expect(ops.map(o => o.textContent.trim())).toEqual(['Otra maestría o doctorado (escribir)…']);
+    expect(ops[0].classList.contains('cb-accion')).toBe(true);
+    ops[0].click();
+
+    const p4 = document.getElementById('p4');
+    expect(p4.classList.contains('d-none')).toBe(false);
+    expect(p4.value).toBe('Maestría en Seguridad Aeroportuaria');
+  });
+});
