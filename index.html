@@ -9256,8 +9256,6 @@ FF
                         .vac-overlap-alert i { color: #e65100; }
                         #colabVacModal .modal-header    { background: linear-gradient(135deg, #0277bd, #0097a7); }
                         #colabVacModal .modal-body      { background: #f0f9ff; }
-                        #colabVacCalModal .modal-header { background: linear-gradient(135deg, #0277bd, #0097a7); }
-                        #colabVacCalModal .modal-body   { background: #f0f9ff; }
                         .btn-vac-global {
                             background: linear-gradient(135deg, #0288d1, #26c6da); color: #fff;
                             border: none; border-radius: 8px; padding: .38rem 1rem;
@@ -9295,8 +9293,6 @@ FF
                            Tres vistas sobre los mismos filtros: Por mes (línea de tiempo,
                            quién falta qué día), Lista (cronológica) y Año (mapa de calor
                            con cuántas personas faltan cada día). */
-                        @media (min-width: 1200px) { .vac-cal-dialog { max-width: 1320px; } }
-                        #colabVacCalModal .modal-body { background: #f4f8fb; }
                         .vac-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-bottom: .9rem; }
                         .vac-kpi { min-width: 0; display: flex; align-items: center; gap: .75rem; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
                             padding: .75rem .9rem; text-align: left; width: 100%; color: inherit; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
@@ -9482,7 +9478,6 @@ FF
                             .vac-mesnav-label { min-width: 7.5rem; }
                         }
 
-                        body.dark-mode #colabVacCalModal .modal-body { background: #0f172a; }
                         body.dark-mode .vac-kpi, body.dark-mode .vtl-wrap, body.dark-mode .vls, body.dark-mode .vac-vacio,
                         body.dark-mode .vtl-name, body.dark-mode .vtl-cabeza, body.dark-mode .vtl-foot { background: #111827; border-color: #1f2937; }
                         body.dark-mode .vtl-persona .vtl-name, body.dark-mode .vtl-persona .vtl-track, body.dark-mode .vtl-bg,
@@ -9504,6 +9499,105 @@ FF
                         body.dark-mode .vac-filtro label, body.dark-mode .vtl-head .vtl-name, body.dark-mode .vtl-foot .vtl-name span { color: #cbd5e1; }
                         body.dark-mode .vac-modos button.activo { color: #7dd3fc; }
                         body.dark-mode .vac-modos button.activo, body.dark-mode .vac-mesnav-btn, body.dark-mode .vac-mesnav-hoy, body.dark-mode .vac-mesnav-todo { background: #111827; color: #e5e7eb; border-color: #334155; }
+                        /* ════ Vacaciones: interfaz a pantalla completa ════ */
+                        #colabVacCalModal .modal-content { height: 100%; display: flex; flex-direction: column; overflow: hidden; border: 0; border-radius: 0; background: #f4f7fb; }
+                        .vac-app-top { flex: none; position: relative; z-index: 8; display: flex; align-items: center; gap: 1rem; padding: .7rem 1.25rem; color: #fff;
+                            background: linear-gradient(120deg, #0d2152 0%, #123a7a 55%, #1565c0 100%); box-shadow: 0 2px 12px rgba(13,33,82,.28); }
+                        .vac-app-marca { display: flex; align-items: center; gap: .75rem; min-width: 0; }
+                        .vac-app-logo { flex: none; width: 2.5rem; height: 2.5rem; border-radius: 12px; display: grid; place-items: center; font-size: 1.1rem; color: #0b2a55;
+                            background: linear-gradient(135deg, #7dd3fc, #22d3ee); box-shadow: inset 0 1px 0 rgba(255,255,255,.45), 0 4px 14px rgba(34,211,238,.35); }
+                        .vac-app-titulos { min-width: 0; display: flex; flex-direction: column; }
+                        .vac-app-top .modal-title { color: #fff; font-size: 1.12rem; font-weight: 800; letter-spacing: .01em; line-height: 1.2; margin: 0; }
+                        .vac-app-sub { font-size: .74rem; color: rgba(255,255,255,.72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                        .vac-app-top .vac-modos { margin: 0 auto; background: rgba(255,255,255,.1); box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
+                        .vac-app-top .vac-modos button { color: rgba(255,255,255,.82); padding: .42rem 1rem; }
+                        .vac-app-top .vac-modos button:hover { color: #fff; background: rgba(255,255,255,.08); }
+                        .vac-app-top .vac-modos button.activo { background: #fff; color: #0d2152; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+                        .vac-app-acciones { flex: none; display: flex; align-items: center; gap: .75rem; }
+                        .vac-app-cerrar { display: inline-flex; align-items: center; gap: .45rem; border: 1px solid rgba(255,255,255,.28); background: rgba(255,255,255,.08); color: #fff;
+                            font-size: .8rem; font-weight: 700; border-radius: 10px; padding: .42rem .7rem; transition: background .15s, border-color .15s; }
+                        .vac-app-cerrar:hover { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.45); }
+                        .vac-app-cerrar kbd { font-size: .62rem; font-weight: 700; background: rgba(255,255,255,.16); color: rgba(255,255,255,.88); border-radius: 4px; padding: .05rem .32rem; box-shadow: none; }
+
+                        .vac-app-cuerpo { flex: 1; min-height: 0; display: grid; grid-template-columns: 310px minmax(0, 1fr); }
+                        .vac-app-lateral { min-height: 0; overflow: auto; background: #fff; border-right: 1px solid #e2e8f0; padding: 1.1rem 1rem; }
+                        .vac-app-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 1rem 1.25rem; }
+                        .vac-app-main > .vac-kpis, .vac-app-main > .vac-barra { flex: none; }
+                        #colabVacCalModal #vac-cal-grid { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: auto; }
+                        #colabVacCalModal #vac-cal-grid > * { flex: none; }
+                        #colabVacCalModal #vac-cal-grid > .vtl-wrap { flex: 0 1 auto; min-height: 0; max-height: none; }
+                        #colabVacCalModal #vac-cal-grid > .vls { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
+                        #colabVacCalModal .vls-wrap { flex: 0 1 auto; min-height: 0; max-height: none; }
+                        @media (min-width: 1400px) { #colabVacCalModal .vac-months-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+
+                        /* Panel lateral */
+                        .vac-lat-bloque + .vac-lat-bloque { border-top: 1px solid #eef2f7; margin-top: 1.1rem; padding-top: 1.1rem; }
+                        .vac-lat-titulo { display: flex; align-items: center; gap: .5rem; font-size: .7rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #334155; margin-bottom: .65rem; }
+                        .vac-lat-titulo > i { width: 1rem; text-align: center; color: #0284c7; }
+                        .vac-lat-titulo small { font-size: .68rem; font-weight: 600; color: #94a3b8; text-transform: none; letter-spacing: 0; }
+                        .vac-lat-n { margin-left: auto; min-width: 1.6rem; text-align: center; font-size: .68rem; font-weight: 800; letter-spacing: 0; color: #0369a1; background: #e0f2fe; border-radius: 999px; padding: .08rem .45rem; }
+                        .vac-lat-limpiar { margin-left: auto; border: 0; background: none; padding: 0; color: #0284c7; font-size: .72rem; font-weight: 700; letter-spacing: 0; text-transform: none; }
+                        .vac-lat-limpiar:hover { text-decoration: underline; }
+                        .vac-app-lateral .vac-filtros { grid-template-columns: minmax(0, 1fr); gap: .7rem; margin: 0; }
+                        .vac-lat-lista { display: flex; flex-direction: column; gap: .1rem; margin: 0 -.35rem; }
+                        .vac-lat-item { display: flex; align-items: center; gap: .65rem; width: 100%; min-width: 0; text-align: left; color: inherit; border: 0; background: transparent;
+                            border-radius: 10px; padding: .45rem .35rem; transition: background .12s; }
+                        .vac-lat-item:hover, .vac-lat-item:focus-visible { background: #f1f7fd; outline: none; }
+                        .vac-lat-item .vtl-av { width: 2.1rem; height: 2.1rem; }
+                        .vac-lat-id { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+                        .vac-lat-nom { font-size: .8rem; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                        .vac-lat-sub { font-size: .7rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                        .vac-lat-sub b { font-weight: 700; color: #0369a1; }
+                        .vac-lat-fecha { flex: none; width: 2.6rem; height: 2.6rem; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
+                            border-radius: 10px; background: #f8fafc; border: 1px solid #e2e8f0; }
+                        .vac-lat-fecha b { font-size: .95rem; font-weight: 800; color: #0f172a; }
+                        .vac-lat-fecha small { margin-top: .12rem; font-size: .56rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #0284c7; }
+                        .vac-lat-en { flex: none; font-size: .66rem; font-weight: 700; color: #475569; background: #f1f5f9; border-radius: 999px; padding: .1rem .45rem; white-space: nowrap; }
+                        .vac-lat-en.pronto { background: #fef3c7; color: #92400e; }
+                        .vac-lat-vacio { display: flex; align-items: center; gap: .5rem; font-size: .76rem; color: #94a3b8; padding: .35rem .35rem; }
+                        .vac-lat-mas { font-size: .72rem; color: #64748b; padding: .35rem; }
+
+                        /* Persona a la que se saltó desde el panel lateral */
+                        .vac-resalta .vtl-name, .vac-resalta .vtl-track, tr.vac-resalta td { animation: vacResalta 2s ease-out; }
+                        @keyframes vacResalta {
+                            0%, 40% { box-shadow: inset 0 0 0 999px rgba(250,204,21,.3); }
+                            100% { box-shadow: inset 0 0 0 999px rgba(250,204,21,0); }
+                        }
+
+                        @media (max-width: 991.98px) {
+                            .vac-app-top { flex-wrap: wrap; gap: .6rem; padding: .6rem .9rem; }
+                            .vac-app-marca { flex: 1 1 0; }
+                            .vac-app-top .vac-modos { order: 3; width: 100%; margin: 0; display: flex; }
+                            .vac-app-top .vac-modos button { flex: 1; justify-content: center; }
+                            .vac-app-acciones { margin-left: auto; }
+                            /* Una sola columna: filtros, la vista y al final las listas del día */
+                            .vac-app-cuerpo { display: flex; flex-direction: column; overflow: auto; }
+                            .vac-app-lateral { display: contents; }
+                            .vac-lat-bloque { flex: none; background: #fff; padding: .85rem .9rem; border-bottom: 1px solid #e2e8f0; }
+                            .vac-lat-bloque + .vac-lat-bloque { margin-top: 0; padding-top: .85rem; border-top: 0; }
+                            .vac-lat-filtros { order: 0; }
+                            .vac-app-main { order: 1; flex: none; padding: .8rem; }
+                            .vac-lat-lst { order: 2; }
+                            .vac-app-lateral .vac-filtros { grid-template-columns: 1fr 1fr; }
+                            #colabVacCalModal #vac-cal-grid { overflow: visible; }
+                            #colabVacCalModal #vac-cal-grid > .vtl-wrap, #colabVacCalModal .vls-wrap { max-height: 75vh; }
+                        }
+                        @media (max-width: 575.98px) {
+                            .vac-app-cerrar span, .vac-app-cerrar kbd, .vac-app-acciones .modal-aifa-mark { display: none; }
+                            .vac-app-lateral .vac-filtros { grid-template-columns: 1fr; }
+                        }
+
+                        body.dark-mode #colabVacCalModal .modal-content { background: #0b1220; }
+                        body.dark-mode .vac-app-lateral, body.dark-mode .vac-lat-bloque { background: #0f172a; border-color: #1f2937; }
+                        body.dark-mode .vac-lat-bloque + .vac-lat-bloque { border-color: #1f2937; }
+                        body.dark-mode .vac-lat-titulo { color: #cbd5e1; }
+                        body.dark-mode .vac-lat-item:hover, body.dark-mode .vac-lat-item:focus-visible { background: #111c30; }
+                        body.dark-mode .vac-lat-nom, body.dark-mode .vac-lat-fecha b { color: #e5e7eb; }
+                        body.dark-mode .vac-lat-fecha, body.dark-mode .vac-lat-en { background: #111827; border-color: #1f2937; color: #94a3b8; }
+                        body.dark-mode .vac-lat-n { background: #0c4a6e; color: #e0f2fe; }
+                        body.dark-mode .vac-app-top .vac-modos { background: rgba(255,255,255,.1); }
+                        body.dark-mode .vac-app-top .vac-modos button { background: transparent; color: rgba(255,255,255,.82); border: 0; }
+                        body.dark-mode .vac-app-top .vac-modos button.activo { background: #e5e7eb; color: #0d2152; }
                         /* ── Tooltip flotante rich ── */
                         #vac-day-tip {
                             position: fixed; z-index: 9990;
@@ -19149,6 +19243,11 @@ FF
                                     }
                                 }
                                 _vacTodos.sort((a, b) => (a.fecha_inicio || '').localeCompare(b.fecha_inicio || '') || a._nom.localeCompare(b._nom));
+                                const sub = document.getElementById('vac-cal-sub');
+                                if (sub) {
+                                    const pers = new Set(_vacTodos.map(r => r._num)).size;
+                                    sub.textContent = `Dirección de Operación · ${pers.toLocaleString('es-MX')} colaboradores con registro · ${_vacTodos.length.toLocaleString('es-MX')} períodos`;
+                                }
                                 _vacLlenarAreas();
                                 vacCalFiltrar();
                             } catch (err) {
@@ -19208,6 +19307,9 @@ FF
                             }
 
                             _vacPintarResumen(f, delAnio);
+                            _vacPintarLateral(f);
+                            const limpiar = document.getElementById('vac-cal-limpiar');
+                            if (limpiar) limpiar.hidden = !(f.area || f.busq || f.estado !== 'vigentes');
 
                             // Barra: vista activa, navegación del mes y conteo
                             document.querySelectorAll('#colabVacCalModal .vac-modos button').forEach(b =>
@@ -19282,6 +19384,126 @@ FF
                         function vacCalTodoAnio() {
                             _vacVista.todoAnio = !_vacVista.todoAnio;
                             vacCalFiltrar();
+                        }
+
+                        /** Regresa los filtros del panel lateral a como abren */
+                        function vacCalLimpiar() {
+                            const poner = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+                            poner('vac-cal-search', '');
+                            poner('vac-cal-area-filter', '');
+                            poner('vac-cal-estado-filter', 'vigentes');
+                            vacCalFiltrar();
+                        }
+
+                        function _vacEsHabil(iso) {
+                            const [y, m, d] = iso.split('-').map(Number);
+                            const dow = new Date(y, m - 1, d).getDay();
+                            return dow !== 0 && dow !== 6 && !_vacFestivos(y).has(iso);
+                        }
+
+                        /** Primer día hábil en que la persona ya no está de vacaciones (desde hoy) */
+                        function _vacRegreso(dias, desdeISO) {
+                            const d = new Date(desdeISO + 'T00:00:00');
+                            for (let i = 0; i < 400; i++) {
+                                const iso = _vacISO(d);
+                                if (!dias.has(iso) && _vacEsHabil(iso)) return iso;
+                                d.setDate(d.getDate() + 1);
+                            }
+                            return '';
+                        }
+
+                        function _vacFmtDia(iso) {
+                            const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+                            const [y, m, d] = iso.split('-').map(Number);
+                            return `${DIAS[new Date(y, m - 1, d).getDay()]} ${d} ${VAC_MESES_CORTO[m - 1]}`;
+                        }
+
+                        /**
+                         * Panel lateral: quién está fuera hoy (y cuándo regresa) y quién sale
+                         * en los próximos 30 días. Como los indicadores, no depende del año ni
+                         * del estado elegidos, sí del área y del colaborador buscado.
+                         */
+                        function _vacPintarLateral(f) {
+                            const hoyBox = document.getElementById('vac-cal-hoy');
+                            const proxBox = document.getElementById('vac-cal-prox');
+                            if (!hoyBox && !proxBox) return;
+                            const hoyISO = _vacISO(new Date());
+                            const en30 = new Date(); en30.setDate(en30.getDate() + 30);
+                            const en30ISO = _vacISO(en30);
+                            const vivos = _vacTodos.filter(r => r.estado !== 'cancelado' && _vacPasa(r, f, false));
+                            const enc = num => encodeURIComponent(num).replace(/'/g, '%27');
+                            const MAX = 60;
+
+                            // Hoy: una fila por persona, con todos sus días para calcular el regreso
+                            const diasDe = new Map();
+                            for (const r of vivos) {
+                                if (!diasDe.has(r._num)) diasDe.set(r._num, new Set());
+                                r._dias.forEach(d => diasDe.get(r._num).add(d));
+                            }
+                            const hoy = new Map();
+                            for (const r of vivos) if (r._dias.includes(hoyISO) && !hoy.has(r._num)) hoy.set(r._num, r);
+                            const hoyLista = [...hoy.values()].map(r => ({ r, regreso: _vacRegreso(diasDe.get(r._num), hoyISO) }))
+                                .sort((a, b) => a.regreso.localeCompare(b.regreso) || a.r._nom.localeCompare(b.r._nom, 'es'));
+                            const nHoy = document.getElementById('vac-cal-hoy-n');
+                            if (nHoy) nHoy.textContent = hoyLista.length;
+                            if (hoyBox) {
+                                hoyBox.innerHTML = hoyLista.length
+                                    ? hoyLista.slice(0, MAX).map(({ r, regreso }) => `<button type="button" class="vac-lat-item" onclick="vacCalIrA('${enc(r._num)}','${hoyISO}')" title="Ver en el calendario">
+                                            <span class="vtl-av" style="background:${_vacColorArea(r._grupo)}">${_vacEsc(_vacIniciales(r._nom))}</span>
+                                            <span class="vac-lat-id">
+                                                <span class="vac-lat-nom">${_vacEsc(r._nom || r._num)}</span>
+                                                <span class="vac-lat-sub">${regreso ? `Regresa <b>${_vacFmtDia(regreso)}</b> · ` : ''}${_vacEsc(_vacAreaCorta(r._grupo))}</span>
+                                            </span>
+                                        </button>`).join('') + (hoyLista.length > MAX ? `<div class="vac-lat-mas">+${hoyLista.length - MAX} más</div>` : '')
+                                    : '<div class="vac-lat-vacio"><i class="fas fa-check-circle"></i>Nadie está de vacaciones hoy.</div>';
+                            }
+
+                            // Próximas salidas: períodos que inician mañana o en los siguientes 30 días
+                            const prox = vivos.filter(r => r.fecha_inicio > hoyISO && r.fecha_inicio <= en30ISO)
+                                .sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio) || a._nom.localeCompare(b._nom, 'es'));
+                            const nProx = document.getElementById('vac-cal-prox-n');
+                            if (nProx) nProx.textContent = prox.length;
+                            if (proxBox) {
+                                const base = new Date(hoyISO + 'T00:00:00');
+                                proxBox.innerHTML = prox.length
+                                    ? prox.slice(0, MAX).map(r => {
+                                        const [, m, d] = r.fecha_inicio.split('-').map(Number);
+                                        const faltan = Math.round((new Date(r.fecha_inicio + 'T00:00:00') - base) / 864e5);
+                                        const dias = Number(r.dias_totales) || r._dias.length;
+                                        const tipo = r.tipo === 'permiso_sin_goce' || r.tipo === 'medio_militar' ? ` · ${VAC_TIPO_LABEL[r.tipo] || ''}` : '';
+                                        return `<button type="button" class="vac-lat-item" onclick="vacCalIrA('${enc(r._num)}','${r.fecha_inicio}')" title="Ver en el calendario">
+                                            <span class="vac-lat-fecha"><b>${d}</b><small>${VAC_MESES_CORTO[m - 1]}</small></span>
+                                            <span class="vac-lat-id">
+                                                <span class="vac-lat-nom">${_vacEsc(r._nom || r._num)}</span>
+                                                <span class="vac-lat-sub">${dias} día${dias !== 1 ? 's' : ''} · hasta ${_vacFmtDia(r.fecha_fin)}${tipo}</span>
+                                            </span>
+                                            <span class="vac-lat-en${faltan <= 3 ? ' pronto' : ''}">${faltan === 1 ? 'mañana' : `en ${faltan} d`}</span>
+                                        </button>`;
+                                    }).join('') + (prox.length > MAX ? `<div class="vac-lat-mas">+${prox.length - MAX} más</div>` : '')
+                                    : '<div class="vac-lat-vacio"><i class="fas fa-calendar"></i>Sin salidas en los próximos 30 días.</div>';
+                            }
+                        }
+
+                        /** Lleva la vista al mes de una fecha y resalta la fila de la persona */
+                        function vacCalIrA(numEnc, iso) {
+                            const num = decodeURIComponent(numEnc);
+                            const [y, m] = iso.split('-').map(Number);
+                            const sel = document.getElementById('vac-cal-anio-filter');
+                            if (sel && [...sel.options].some(o => parseInt(o.value) === y)) sel.value = String(y);
+                            _vacVista.mes = m - 1;
+                            _vacVista.todoAnio = false;
+                            if (_vacVista.modo === 'anio') _vacVista.modo = 'mes';
+                            const r = _vacTodos.find(x => x._num === num);
+                            if (r) _vacVista.plegados.delete(r._grupo);
+                            vacCalFiltrar();
+                            const marca = document.querySelector(`#vac-cal-grid [data-num="${encodeURIComponent(num)}"]`);
+                            const fila = marca && (marca.closest('.vtl-persona, .vls-fila') || marca);
+                            if (!fila) return;
+                            fila.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+                            fila.classList.remove('vac-resalta');
+                            void fila.offsetWidth;
+                            fila.classList.add('vac-resalta');
+                            setTimeout(() => fila.classList.remove('vac-resalta'), 2100);
                         }
 
                         /** Cuatro indicadores; hoy y próximos no dependen del año elegido */
@@ -20124,6 +20346,8 @@ FF
                         window.vacCalVerDia     = vacCalVerDia;
                         window.vacCalAgrupar    = vacCalAgrupar;
                         window.vacCalPlegar     = vacCalPlegar;
+                        window.vacCalLimpiar    = vacCalLimpiar;
+                        window.vacCalIrA        = vacCalIrA;
                         window.vacCalPopupClose = vacCalPopupClose;
                         window.vacCalAbrirColab = vacCalAbrirColab;
                         window.vacAbrirModal    = vacAbrirModal;
@@ -20138,6 +20362,14 @@ FF
 
                         // Cerrar popup cuando se cierre el modal del calendario
                         document.getElementById('colabVacCalModal')?.addEventListener('hide.bs.modal', vacCalPopupClose);
+                        document.getElementById('colabVacCalModal')?.addEventListener('keydown', e => {
+                            if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+                            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                            if (e.target.closest('input, select, textarea, [contenteditable="true"], .cb-wrap')) return;
+                            if (_vacVista.modo === 'anio') return;
+                            e.preventDefault();
+                            vacCalMover(e.key === 'ArrowLeft' ? -1 : 1);
+                        });
 
                         /* --------------------------------------------------------------
                            CURSOS Y CAPACITACIONES
@@ -23079,80 +23311,110 @@ FF
                     </div>
                     <!-- /colabVacModal -->
 
-                    <!-- ── MODAL CALENDARIO GLOBAL VACACIONES ──────────────────── -->
-                    <div class="modal fade" id="colabVacCalModal" tabindex="-1"
+                    <!-- ── VACACIONES DEL PERSONAL ─────────────────────────────────
+                         Interfaz a pantalla completa: barra superior con las vistas,
+                         panel lateral (filtros, quién falta hoy, próximas salidas) y
+                         el área principal con indicadores y la vista activa. -->
+                    <div class="modal fade vac-app" id="colabVacCalModal" tabindex="-1"
                          aria-labelledby="colabVacCalModalLabel" aria-hidden="true">
-                        <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-lg-down vac-cal-dialog">
+                        <div class="modal-dialog modal-fullscreen">
                             <div class="modal-content">
-                                <div class="modal-header py-2">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <h5 class="modal-title text-white mb-0" id="colabVacCalModalLabel">
-                                            <i class="fas fa-umbrella-beach me-2"></i>Vacaciones del personal
-                                        </h5>
+                                <!-- Barra superior: título, vistas y cerrar -->
+                                <div class="vac-app-top">
+                                    <div class="vac-app-marca">
+                                        <span class="vac-app-logo" aria-hidden="true"><i class="fas fa-umbrella-beach"></i></span>
+                                        <div class="vac-app-titulos">
+                                            <h5 class="modal-title" id="colabVacCalModalLabel">Vacaciones del personal</h5>
+                                            <span class="vac-app-sub" id="vac-cal-sub">Dirección de Operación</span>
+                                        </div>
+                                    </div>
+                                    <div class="vac-modos" role="tablist" aria-label="Vista">
+                                        <button type="button" role="tab" data-modo="mes" onclick="vacCalModo('mes')"><i class="fas fa-stream"></i>Por mes</button>
+                                        <button type="button" role="tab" data-modo="lista" onclick="vacCalModo('lista')"><i class="fas fa-list-ul"></i>Lista</button>
+                                        <button type="button" role="tab" data-modo="anio" onclick="vacCalModo('anio')"><i class="fas fa-th"></i>Año</button>
+                                    </div>
+                                    <div class="vac-app-acciones">
                                         <span class="modal-aifa-mark" title="AIFA"><img src="images/aifa-logo.png" alt="AIFA"></span>
-                                    </div>
-                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-                                </div>
-                                <div class="modal-body p-3">
-                                    <!-- Indicadores: quién falta hoy, qué viene, el año y el día más cargado -->
-                                    <div id="vac-cal-resumen" class="vac-kpis"></div>
-
-                                    <!-- Filtros -->
-                                    <div class="vac-filtros">
-                                        <div class="vac-filtro vac-filtro-anio">
-                                            <label for="vac-cal-anio-filter">Año</label>
-                                            <select class="form-select form-select-sm" id="vac-cal-anio-filter" onchange="vacCalFiltrar()">
-                                                <!-- Años: los llena vacCalAbrir() desde 2022 hasta el año siguiente -->
-                                            </select>
-                                        </div>
-                                        <div class="vac-filtro vac-filtro-area">
-                                            <label for="vac-cal-area-filter">Área</label>
-                                            <select class="form-select form-select-sm" id="vac-cal-area-filter" onchange="vacCalFiltrar()">
-                                                <option value="">Todas las áreas</option>
-                                            </select>
-                                        </div>
-                                        <div class="vac-filtro vac-filtro-estado">
-                                            <label for="vac-cal-estado-filter">Estado</label>
-                                            <select class="form-select form-select-sm" id="vac-cal-estado-filter" onchange="vacCalFiltrar()">
-                                                <option value="vigentes" selected>Programados y disfrutados</option>
-                                                <option value="programado">Solo programados</option>
-                                                <option value="disfrutado">Solo disfrutados</option>
-                                                <option value="cancelado">Cancelados</option>
-                                                <option value="todos">Todos</option>
-                                            </select>
-                                        </div>
-                                        <div class="vac-filtro vac-filtro-buscar">
-                                            <label for="vac-cal-search">Colaborador</label>
-                                            <input type="search" class="form-control form-control-sm" id="vac-cal-search"
-                                                   placeholder="Nombre o número de empleado" autocomplete="off"
-                                                   oninput="vacCalFiltrar()">
-                                        </div>
-                                    </div>
-
-                                    <!-- Vista y navegación por mes -->
-                                    <div class="vac-barra">
-                                        <div class="vac-modos" role="tablist" aria-label="Vista">
-                                            <button type="button" role="tab" data-modo="mes" onclick="vacCalModo('mes')"><i class="fas fa-stream"></i>Por mes</button>
-                                            <button type="button" role="tab" data-modo="lista" onclick="vacCalModo('lista')"><i class="fas fa-list-ul"></i>Lista</button>
-                                            <button type="button" role="tab" data-modo="anio" onclick="vacCalModo('anio')"><i class="fas fa-th"></i>Año</button>
-                                        </div>
-                                        <div class="vac-mesnav" id="vac-cal-mesnav">
-                                            <button type="button" class="vac-mesnav-btn" onclick="vacCalMover(-1)" aria-label="Mes anterior"><i class="fas fa-chevron-left"></i></button>
-                                            <span class="vac-mesnav-label" id="vac-cal-mes-label">—</span>
-                                            <button type="button" class="vac-mesnav-btn" onclick="vacCalMover(1)" aria-label="Mes siguiente"><i class="fas fa-chevron-right"></i></button>
-                                            <button type="button" class="vac-mesnav-hoy" onclick="vacCalIrHoy()">Hoy</button>
-                                            <button type="button" class="vac-mesnav-todo" id="vac-cal-todo-anio" onclick="vacCalTodoAnio()">Todo el año</button>
-                                        </div>
-                                        <button type="button" class="vac-chip-toggle" id="vac-cal-agrupar" onclick="vacCalAgrupar()" title="Agrupar las filas por área">
-                                            <i class="fas fa-layer-group"></i>Agrupar por área
+                                        <button type="button" class="vac-app-cerrar" data-bs-dismiss="modal" aria-label="Cerrar">
+                                            <i class="fas fa-times"></i><span>Cerrar</span><kbd>Esc</kbd>
                                         </button>
-                                        <span class="vac-conteo" id="vac-cal-count">—</span>
                                     </div>
+                                </div>
 
-                                    <!-- Vista activa -->
-                                    <div id="vac-cal-grid" class="vac-cal-grid">
-                                        <div class="text-center text-muted py-4">
-                                            <i class="fas fa-circle-notch fa-spin me-2"></i>Cargando…
+                                <div class="vac-app-cuerpo">
+                                    <!-- Panel lateral -->
+                                    <aside class="vac-app-lateral" aria-label="Filtros y resumen del día">
+                                        <section class="vac-lat-bloque vac-lat-filtros">
+                                            <div class="vac-lat-titulo">
+                                                <i class="fas fa-sliders-h"></i>Filtros
+                                                <button type="button" class="vac-lat-limpiar" id="vac-cal-limpiar" onclick="vacCalLimpiar()" hidden>Limpiar</button>
+                                            </div>
+                                            <div class="vac-filtros">
+                                                <div class="vac-filtro vac-filtro-buscar">
+                                                    <label for="vac-cal-search">Colaborador</label>
+                                                    <input type="search" class="form-control form-control-sm" id="vac-cal-search"
+                                                           placeholder="Nombre o número de empleado" autocomplete="off"
+                                                           oninput="vacCalFiltrar()">
+                                                </div>
+                                                <div class="vac-filtro vac-filtro-area">
+                                                    <label for="vac-cal-area-filter">Área</label>
+                                                    <select class="form-select form-select-sm" id="vac-cal-area-filter" onchange="vacCalFiltrar()">
+                                                        <option value="">Todas las áreas</option>
+                                                    </select>
+                                                </div>
+                                                <div class="vac-filtro vac-filtro-estado">
+                                                    <label for="vac-cal-estado-filter">Estado</label>
+                                                    <select class="form-select form-select-sm" id="vac-cal-estado-filter" onchange="vacCalFiltrar()">
+                                                        <option value="vigentes" selected>Programados y disfrutados</option>
+                                                        <option value="programado">Solo programados</option>
+                                                        <option value="disfrutado">Solo disfrutados</option>
+                                                        <option value="cancelado">Cancelados</option>
+                                                        <option value="todos">Todos</option>
+                                                    </select>
+                                                </div>
+                                                <div class="vac-filtro vac-filtro-anio">
+                                                    <label for="vac-cal-anio-filter">Año</label>
+                                                    <select class="form-select form-select-sm" id="vac-cal-anio-filter" onchange="vacCalFiltrar()">
+                                                        <!-- Años: los llena vacCalAbrir() desde 2022 hasta el año siguiente -->
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </section>
+                                        <section class="vac-lat-bloque vac-lat-lst">
+                                            <div class="vac-lat-titulo"><i class="fas fa-user-clock"></i>Fuera hoy<span class="vac-lat-n" id="vac-cal-hoy-n">0</span></div>
+                                            <div class="vac-lat-lista" id="vac-cal-hoy"></div>
+                                        </section>
+                                        <section class="vac-lat-bloque vac-lat-lst">
+                                            <div class="vac-lat-titulo"><i class="fas fa-plane-departure"></i>Próximas salidas<small>30 días</small><span class="vac-lat-n" id="vac-cal-prox-n">0</span></div>
+                                            <div class="vac-lat-lista" id="vac-cal-prox"></div>
+                                        </section>
+                                    </aside>
+
+                                    <!-- Área principal -->
+                                    <div class="vac-app-main">
+                                        <!-- Indicadores: quién falta hoy, qué viene, el año y el día más cargado -->
+                                        <div id="vac-cal-resumen" class="vac-kpis"></div>
+
+                                        <!-- Navegación por mes -->
+                                        <div class="vac-barra">
+                                            <div class="vac-mesnav" id="vac-cal-mesnav">
+                                                <button type="button" class="vac-mesnav-btn" onclick="vacCalMover(-1)" aria-label="Mes anterior" title="Mes anterior (←)"><i class="fas fa-chevron-left"></i></button>
+                                                <span class="vac-mesnav-label" id="vac-cal-mes-label">—</span>
+                                                <button type="button" class="vac-mesnav-btn" onclick="vacCalMover(1)" aria-label="Mes siguiente" title="Mes siguiente (→)"><i class="fas fa-chevron-right"></i></button>
+                                                <button type="button" class="vac-mesnav-hoy" onclick="vacCalIrHoy()">Hoy</button>
+                                                <button type="button" class="vac-mesnav-todo" id="vac-cal-todo-anio" onclick="vacCalTodoAnio()">Todo el año</button>
+                                            </div>
+                                            <button type="button" class="vac-chip-toggle" id="vac-cal-agrupar" onclick="vacCalAgrupar()" title="Agrupar las filas por área">
+                                                <i class="fas fa-layer-group"></i>Agrupar por área
+                                            </button>
+                                            <span class="vac-conteo" id="vac-cal-count">—</span>
+                                        </div>
+
+                                        <!-- Vista activa -->
+                                        <div id="vac-cal-grid" class="vac-cal-grid">
+                                            <div class="text-center text-muted py-4">
+                                                <i class="fas fa-circle-notch fa-spin me-2"></i>Cargando…
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

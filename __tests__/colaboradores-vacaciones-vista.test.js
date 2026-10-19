@@ -48,10 +48,8 @@ const EMPLEADOS = [
     { num: '303', nombre: 'Sin vacaciones', subdireccion: 'Subdirección de Ingeniería', vacaciones: [] },
 ];
 
-function montar() {
-    document.body.innerHTML = '<div id="colabVacCalModal">'
-        + '<div class="modal-body">' + trozo('<!-- Indicadores: quién falta hoy', '<!-- Vista activa -->')
-        + '<div id="vac-cal-grid"></div></div></div>'
+function montar(empleados = EMPLEADOS) {
+    document.body.innerHTML = trozo('<div class="modal fade vac-app" id="colabVacCalModal"', '<!-- /colabVacCalModal -->')
         + '<div id="vac-day-tip"></div><div id="vac-day-popup"><div id="vdp-title"></div><div id="vdp-body"></div></div>';
 
     const codigo = [
@@ -64,13 +62,13 @@ function montar() {
     const entorno = {
         colabCols: { num: 'num', nombre: 'nombre' },
         gc: (r, k) => r[k],
-        colabCargarTodos: async () => EMPLEADOS,
+        colabCargarTodos: async () => empleados,
         vacCalAbrirColab: n => abiertos.push(decodeURIComponent(n)),
         _vacCalPopupOutside: () => {},
         bootstrap: { Modal: function () { return { show() {} }; } },
     };
     // eslint-disable-next-line no-new-func
-    const api = new Function(...Object.keys(entorno), `let _vacCalDayMap = {};\n${codigo}\nreturn { vacCalCargar, vacCalFiltrar, vacCalModo, vacCalMover, vacCalAgrupar, _vacVista, _vacTramos, _vacNivel, _vacLlenarAnios };`)(...Object.values(entorno));
+    const api = new Function(...Object.keys(entorno), `let _vacCalDayMap = {};\n${codigo}\nreturn { vacCalCargar, vacCalFiltrar, vacCalModo, vacCalMover, vacCalAgrupar, vacCalLimpiar, vacCalIrA, _vacVista, _vacTramos, _vacNivel, _vacLlenarAnios, _vacRegreso };`)(...Object.values(entorno));
     api._vacLlenarAnios(document.getElementById('vac-cal-anio-filter'));
     return { api, abiertos };
 }
@@ -176,6 +174,80 @@ describe('vista global de vacaciones', () => {
     });
 });
 
+describe('interfaz a pantalla completa', () => {
+    const en = n => iso(new Date(HOY.getFullYear(), HOY.getMonth(), HOY.getDate() + n));
+    const dias = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => en(a + i));
+    const EMP = [
+        { num: '501', nombre: 'Rosa Díaz', subdireccion: 'Subdirección de Ingeniería', vacaciones: [
+            { id: 'r1', fecha_inicio: en(5), fecha_fin: en(6), dias: dias(5, 6), dias_totales: 2, estado: 'programado', tipo: 'vacaciones' },
+            // Fuera de la ventana de 30 días
+            { id: 'r2', fecha_inicio: en(40), fecha_fin: en(41), dias: dias(40, 41), dias_totales: 2, estado: 'programado', tipo: 'vacaciones' },
+        ] },
+        { num: '502', nombre: 'Juan Ruiz', subdireccion: 'Subdirección de Seguridad Operacional', vacaciones: [
+            { id: 'j1', fecha_inicio: en(1), fecha_fin: en(1), dias: dias(1, 1), dias_totales: 1, estado: 'cancelado', tipo: 'vacaciones' },
+            { id: 'j2', fecha_inicio: en(1), fecha_fin: en(3), dias: dias(1, 3), dias_totales: 3, estado: 'programado', tipo: 'medio_militar' },
+        ] },
+    ];
+    let api;
+    beforeEach(async () => {
+        ({ api } = montar(EMP));
+        api._vacVista.modo = 'mes';
+        api._vacVista.mes = MES;
+        await api.vacCalCargar();
+    });
+
+    test('ocupa toda la pantalla y dice cuánto se cargó', () => {
+        const dialogo = document.querySelector('#colabVacCalModal .modal-dialog');
+        expect(dialogo.classList.contains('modal-fullscreen')).toBe(true);
+        expect(dialogo.classList.contains('modal-xl')).toBe(false);
+        expect(document.getElementById('vac-cal-sub').textContent).toMatch(/2 colaboradores con registro · 4 períodos/);
+    });
+
+    test('próximas salidas: en orden, sin cancelados ni lo que pasa de 30 días', () => {
+        const items = [...document.querySelectorAll('#vac-cal-prox .vac-lat-item')];
+        expect(document.getElementById('vac-cal-prox-n').textContent).toBe('2');
+        expect(items.map(i => i.querySelector('.vac-lat-nom').textContent)).toEqual(['Juan Ruiz', 'Rosa Díaz']);
+        expect(items[0].textContent).toMatch(/mañana/);
+        expect(items[0].textContent).toMatch(/3 días/);
+        expect(items[1].textContent).toMatch(/en 5 d/);
+        expect(document.getElementById('vac-cal-hoy').textContent).toMatch(/Nadie está de vacaciones hoy/);
+    });
+
+    test('el buscador filtra el panel y "Limpiar" lo regresa', () => {
+        const limpiar = document.getElementById('vac-cal-limpiar');
+        expect(limpiar.hidden).toBe(true);
+        document.getElementById('vac-cal-search').value = 'rosa';
+        api.vacCalFiltrar();
+        expect(limpiar.hidden).toBe(false);
+        expect(document.getElementById('vac-cal-prox-n').textContent).toBe('1');
+        api.vacCalLimpiar();
+        expect(document.getElementById('vac-cal-search').value).toBe('');
+        expect(limpiar.hidden).toBe(true);
+        expect(document.getElementById('vac-cal-prox-n').textContent).toBe('2');
+    });
+
+    test('clic en una salida lleva al mes y resalta a la persona', () => {
+        api.vacCalModo('anio');
+        api.vacCalIrA('501', en(5));
+        expect(api._vacVista.modo).toBe('mes');
+        expect(api._vacVista.mes).toBe(Number(en(5).slice(5, 7)) - 1);
+        const fila = document.querySelector('#vac-cal-grid .vtl-persona.vac-resalta');
+        expect(fila).not.toBeNull();
+        expect(fila.textContent).toContain('Rosa Díaz');
+    });
+});
+
+describe('fuera hoy', () => {
+    test('lista a quien falta hoy con su regreso', async () => {
+        const { api } = montar();
+        await api.vacCalCargar();
+        expect(document.getElementById('vac-cal-hoy-n').textContent).toBe('1');
+        const item = document.querySelector('#vac-cal-hoy .vac-lat-item');
+        expect(item.textContent).toContain('Ana Pérez');
+        expect(item.textContent).toMatch(/Regresa/);
+    });
+});
+
 describe('ayudas de la vista', () => {
     const { api } = montar();
 
@@ -185,6 +257,13 @@ describe('ayudas de la vista', () => {
         // 16 Sep 2026 es festivo (miércoles)
         expect(api._vacTramos(['2026-09-15', '2026-09-17'])).toEqual(['15 Sep – 17 Sep']);
         expect(api._vacTramos(['2026-04-23', '2026-04-28'])).toEqual(['23 Abr', '28 Abr']);
+    });
+
+    test('el regreso es el primer día hábil sin vacaciones', () => {
+        // Jue 29 y vie 30 Oct 2026 → regresa el lunes 2 Nov
+        expect(api._vacRegreso(new Set(['2026-10-29', '2026-10-30']), '2026-10-29')).toBe('2026-11-02');
+        // Mar 15 Sep; el 16 es festivo → regresa el jueves 17
+        expect(api._vacRegreso(new Set(['2026-09-15']), '2026-09-15')).toBe('2026-09-17');
     });
 
     test('la intensidad es relativa al día más cargado', () => {
