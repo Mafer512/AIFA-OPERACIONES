@@ -803,6 +803,17 @@
 
     const combosEstudios = [];
 
+    /* "Otra…" dice qué se va a escribir según el nivel: quien eligió Posgrado
+       busca "otra maestría", no "otra profesión". */
+    const OTRA_ESTUDIO = Object.freeze({
+        'Posgrado': ['Otra maestría o doctorado (escribir)…', 'Escribe el nombre de tu maestría o doctorado…'],
+        'Superior': ['Otra licenciatura o ingeniería (escribir)…', 'Escribe el nombre de tu licenciatura o ingeniería…'],
+        'TSU': ['Otra carrera técnica (escribir)…', 'Escribe el nombre de tu carrera técnica…'],
+        'Curso de Formación de Oficiales': ['Otra especialidad (escribir)…', 'Escribe tu especialidad…'],
+        'Preparatoria/Bachillerato': ['Otro bachillerato (escribir)…', 'Escribe tu bachillerato…'],
+    });
+    const OTRA_GENERICA = ['Otra profesión (escribir)…', 'Escribe la profesión…'];
+
     /** Grado académico y Profesión en cascada. Los inputs siguen siendo los que
         se guardan; los combos sólo los escriben, y lo capturado antes que no
         está en el catálogo se conserva tal cual. Elegir la profesión sin nivel
@@ -846,7 +857,10 @@
             const otra = pInput.dataset.otra === '1';
             const hit = !otra && pRaw ? buscarEspecialidad(pRaw, nivel || undefined)[0] : null;
             const grupos = nivel ? ESTUDIOS.filter(g => g.nivel === nivel) : ESTUDIOS;
+            const [otraTexto, otraAyuda] = OTRA_ESTUDIO[nivel] || OTRA_GENERICA;
             let ph = '<option value="">' + (nivel ? '— Seleccionar —' : '— Seleccionar (elige primero el grado o búscala) —') + '</option>';
+            // Arriba, y visible aunque se busque algo que no está en la lista.
+            ph += '<option value="' + OTRA + '" data-cb-siempre="1">' + esc(otraTexto) + '</option>';
             if (pRaw && !hit && !otra) ph += '<option value="__actual__">' + esc(pRaw) + ' (fuera de catálogo)</option>';
             grupos.forEach(g => {
                 const ops = g.especialidades.map(e => {
@@ -855,8 +869,8 @@
                 }).join('');
                 ph += nivel ? ops : '<optgroup label="' + esc(g.nivel) + '">' + ops + '</optgroup>';
             });
-            ph += '<option value="' + OTRA + '">Otra profesión (escribir)…</option>';
             pSel.innerHTML = ph;
+            pInput.setAttribute('placeholder', otraAyuda);
             pSel.value = otra ? OTRA : hit ? hit.nivel + '|' + hit.especialidad : (pRaw ? '__actual__' : '');
             pInput.classList.toggle('d-none', !otra);
         };
@@ -899,6 +913,9 @@
             if (v === '__actual__') return;
             if (v === OTRA) {
                 if (buscarEspecialidad(pInput.value).length) pInput.value = '';
+                // Lo que escribió en el buscador sin encontrarlo ya es su respuesta.
+                const buscado = (pSel.dataset.cbBuscado || '').trim();
+                if (buscado && !pInput.value.trim()) pInput.value = buscado;
                 pInput.dataset.otra = '1';
                 combo.render();
                 pInput.focus();

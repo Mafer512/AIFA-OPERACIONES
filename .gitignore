@@ -52,3 +52,9 @@ videos/FBO AIFA - Trim.mp4
 # versionan viven en excel/ y no los alcanza esta regla.
 /*.xlsx
 /*.pptx
+
+# Datos personales del personal (Agenda): exportaciones y SQL generado con
+# nombres, oficios y fechas. Se trabajan en local y se ejecutan en Supabase;
+# nunca se suben al repositorio.
+/privado/
+/Agenda*.csv
