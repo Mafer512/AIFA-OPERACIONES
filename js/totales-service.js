@@ -143,6 +143,15 @@
             return c;
         }
 
+        // totales_detalle_por_dia sólo la ejecuta 'authenticated': sin sesión la
+        // consulta viaja como anon, la base la rechaza (42501) y deja el error en
+        // el log de Postgres. Se corta aquí; el Inicio reintenta al iniciar sesión.
+        async function exigirSesion(c) {
+            if (!c.auth || typeof c.auth.getSession !== 'function') return;
+            const { data } = await c.auth.getSession();
+            if (!data || !data.session) throw new Error('Sin sesión iniciada.');
+        }
+
         function cacheado(clave, fn) {
             const entrada = cache.get(clave);
             if (entrada && cfg.ahora() - entrada.t < TTL_MS) return entrada.p;
@@ -231,6 +240,7 @@
                 });
                 const consulta = (async () => {
                     const c = await cliente();
+                    await exigirSesion(c);
                     if (controller.signal.aborted) throw new Error('Consulta cancelada');
                     const mapa = new Map();
                     for (let offset = 0; ; offset += 1000) {

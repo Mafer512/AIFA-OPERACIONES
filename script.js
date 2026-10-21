@@ -4159,6 +4159,8 @@ async function bindSupabaseAuthSessionBridge() {
                     // Si el inicio consultó antes de recuperar la sesión,
                     // reintentar al quedar autenticado, fuera del callback de auth.
                     setTimeout(() => {
+                        // Los avisos no se pidieron sin sesión: volver a pedirlos.
+                        window._ndwAvisosPedidos = false;
                         const days = window._ndwCurrentManifestDays || {};
                         Object.keys(days).forEach((date) => {
                             if (days[date].status === 'error') delete days[date];
