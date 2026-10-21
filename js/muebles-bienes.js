@@ -15,6 +15,9 @@
     const canCapture = () => window.dataManager?.canCaptureSection?.(SECTION) || ['admin', 'superadmin'].includes(sessionStorage.getItem('user_role'));
     const canEdit = () => window.dataManager?.canEditSection?.(SECTION) || ['admin', 'superadmin'].includes(sessionStorage.getItem('user_role'));
     const canViewHistory = () => canEdit();
+    // Eliminar un bien es sólo de administradores: es lo que permite la política
+    // mb_delete de la base (mb_access_level() = 'admin').
+    const canDelete = () => window.dataManager?.sectionLevel?.(SECTION) === 'admin' || ['admin', 'superadmin'].includes(sessionStorage.getItem('user_role'));
     const qty = row => Number(row.cantidad) || 1;
     const hasAvailableSignal = value => {
         const text = norm(value);
@@ -119,7 +122,7 @@
     }
 
     function modalHTML() {
-        return `<div class="modal fade" id="mb-detail-modal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 id="mb-detail-title" class="modal-title">Ficha del bien</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div id="mb-detail-body" class="modal-body"></div><div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button><button id="mb-edit-detail" class="btn btn-primary d-none">Editar</button></div></div></div></div>
+        return `<div class="modal fade" id="mb-detail-modal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 id="mb-detail-title" class="modal-title">Ficha del bien</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div id="mb-detail-body" class="modal-body"></div><div class="modal-footer"><button id="mb-delete-detail" type="button" class="btn btn-outline-danger me-auto d-none"><i class="fas fa-trash-can me-1"></i>Eliminar bien</button><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button><button id="mb-edit-detail" class="btn btn-primary d-none">Editar</button></div></div></div></div>
         <div class="modal fade" id="mb-form-modal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><h5 id="mb-form-title" class="modal-title">Bien</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form id="mb-form"><div class="row g-3">
           ${familiaField()}${field('descripcion','Descripción','text',true,'col-12')}${field('numero_serie','Número de serie')}${field('numero_control','Número de control')}${field('cantidad','Cantidad','number',true)}${field('area_responsable','Área responsable')}${field('numero_economico','Número económico / unidad')}${field('resguardo_folio','Folio de resguardo')}${field('fecha_resguardo','Fecha de resguardo','date')}${field('responsable','Responsable / firma')}${field('vehiculo_ubicacion','Vehículo o ubicación')}${field('observaciones','Observaciones','text',false,'col-12')}
         </div></form><div id="mb-form-error" class="alert alert-danger d-none mt-3"></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button id="mb-save" class="btn btn-primary">Guardar</button></div></div></div></div>
@@ -360,7 +363,7 @@
         return `<div class="text-center mb-card-visual mb-card-pdf-preview" data-mb-thumbnail-bien="${row.id}" data-mb-thumbnail-doc="${doc.id}" aria-busy="${cached?'false':'true'}">${content}</div>`;
     }
     function cardHTML(row) { const loading=state.quickUploads.has(row.id),success=state.quickSuccess.has(row.id),quickClass=loading?'mb-quick-uploading':success?'mb-quick-upload-success':'',quickState=loading?'<span class="mb-quick-state badge bg-success position-absolute top-0 start-50 translate-middle-x mt-2" data-mb-quick-state><span class="spinner-border spinner-border-sm me-1"></span>Subiendo PDF…</span>':success?'<span class="mb-quick-state badge bg-success position-absolute top-0 start-50 translate-middle-x mt-2" data-mb-quick-state><i class="fas fa-check-circle me-1"></i>Listo</span>':'';const fam=familyStyle(row.familia),free=isAvailable(row),area=row.area_responsable||'Sin asignar';return `<div class="col-12 col-md-6 col-xl-4 col-xxl-3" data-mb-card="${row.id}"><div class="card mb-card h-100 overflow-hidden position-relative ${quickClass}" style="--mb-c:${fam.color}">${quickState}${cardVisual(row)}<div class="card-body"><div class="mb-card-head"><span class="mb-card-fam"><i class="fas fa-${fam.icon}"></i><span>${esc(row.familia||'Sin familia')}</span></span>${docBadge(row)}</div><h6 class="mb-card-title" title="${esc(row.descripcion)}">${esc(row.descripcion||'Sin descripción')}</h6><div class="mb-card-serial"><i class="fas fa-barcode"></i><code title="${esc(row.numero_serie||'Lote')}">${esc(row.numero_serie||'Lote')}</code><span class="mb-status ${free?'is-free':'is-used'}">${free?'Disponible':'Asignado'}</span></div><dl class="mb-card-meta"><div><dt>Cantidad</dt><dd>${qty(row)}</dd></div><div><dt>Resguardo</dt><dd title="${esc(row.resguardo_folio||'')}">${esc(row.resguardo_folio||'—')}</dd></div><div class="mb-span"><dt>Área</dt><dd title="${esc(area)}">${esc(area)}</dd></div></dl></div><div class="card-footer"><button class="mb-card-open" onclick="mueblesBienesModule.openDetail('${row.id}')">Ver ficha completa<i class="fas fa-arrow-right"></i></button></div></div></div>`; }
-    function rowHTML(row) { return `<tr data-mb-row="${row.id}"><td><b><span class="mb-dot" style="--mb-c:${familyStyle(row.familia).color}"></span>${esc(row.familia)}</b><div class="small text-muted text-truncate" style="max-width:280px">${esc(row.descripcion)}</div></td><td><code>${esc(row.numero_serie||`Lote ${row.numero_control||''}`)}</code></td><td>${qty(row)}</td><td>${esc(row.area_responsable||'—')}</td><td>${esc(row.resguardo_folio||'—')}</td><td>${esc(row.responsable||'—')}</td><td>${docBadge(row)}</td><td><button class="btn btn-sm btn-outline-primary" onclick="mueblesBienesModule.openDetail('${row.id}')"><i class="fas fa-eye"></i></button></td></tr>`; }
+    function rowHTML(row) { return `<tr data-mb-row="${row.id}"><td><b><span class="mb-dot" style="--mb-c:${familyStyle(row.familia).color}"></span>${esc(row.familia)}</b><div class="small text-muted text-truncate" style="max-width:280px">${esc(row.descripcion)}</div></td><td><code>${esc(row.numero_serie||`Lote ${row.numero_control||''}`)}</code></td><td>${qty(row)}</td><td>${esc(row.area_responsable||'—')}</td><td>${esc(row.resguardo_folio||'—')}</td><td>${esc(row.responsable||'—')}</td><td>${docBadge(row)}</td><td class="text-nowrap"><button class="btn btn-sm btn-outline-primary" onclick="mueblesBienesModule.openDetail('${row.id}')" title="Ver ficha"><i class="fas fa-eye"></i></button>${canDelete()?`<button class="btn btn-sm btn-outline-danger ms-1" onclick="mueblesBienesModule.deleteBien('${row.id}')" title="Eliminar bien"><i class="fas fa-trash-can"></i></button>`:''}</td></tr>`; }
 
     function setView(view) { state.view=view; $('mb-grid-btn')?.classList.toggle('btn-primary',view==='grid'); $('mb-grid-btn')?.classList.toggle('btn-outline-secondary',view!=='grid'); $('mb-table-btn')?.classList.toggle('btn-primary',view==='table'); $('mb-table-btn')?.classList.toggle('btn-outline-secondary',view!=='table'); render(); }
 
@@ -422,6 +425,7 @@
         $('mb-detail-title').textContent=row.numero_serie?`${row.familia} · ${row.numero_serie}`:row.familia;
         $('mb-detail-body').innerHTML=`<div class="row g-4"><div class="col-lg-7"><h6>Información general</h6>${detailsTable(row)}</div><div class="col-lg-5"><div class="d-flex justify-content-between"><h6>Documentos</h6>${canEdit()?`<button class="btn btn-sm btn-outline-primary" onclick="mueblesBienesModule.openDocument('${id}')"><i class="fas fa-upload me-1"></i>Agregar PDF</button>`:''}</div><div class="list-group mt-2">${docs.length?docs.map(d=>docHTML(d,id)).join(''):'<div class="text-muted small p-3">Sin documentación relacionada.</div>'}</div></div></div>`;
         const edit=$('mb-edit-detail'); edit.classList.toggle('d-none',!canEdit()); edit.onclick=()=>{bootstrap.Modal.getInstance($('mb-detail-modal'))?.hide();openForm(id)};
+        const remove=$('mb-delete-detail'); if(remove){remove.classList.toggle('d-none',!canDelete()); remove.onclick=()=>deleteBien(id);}
         bootstrap.Modal.getOrCreateInstance($('mb-detail-modal')).show();
     }
     function detailsTable(r) { const fields=[['Descripción',r.descripcion],['Número de serie',r.numero_serie],['Número de control',r.numero_control],['Cantidad',qty(r)],['Área responsable',r.area_responsable],['Número económico / unidad',r.numero_economico],['Folio de resguardo',r.resguardo_folio],['Fecha de resguardo',fmtDate(r.fecha_resguardo)],['Responsable / firma',r.responsable],['Vehículo o ubicación',r.vehiculo_ubicacion],['Observaciones',r.observaciones],['Fuente',`${r.fuente_hoja||'—'} · fila ${r.fuente_fila||'—'}`]]; return `<table class="table table-sm">${fields.map(([k,v])=>`<tr><th style="width:38%">${k}</th><td>${esc(v||'—')}</td></tr>`).join('')}</table>`; }
@@ -430,6 +434,54 @@
     function openForm(id=null) { if(id&&!canEdit()||!id&&!canCapture())return; const row=id?state.all.find(x=>x.id===id):null; const activeFamily=!id?($('mb-filter-familia')?.value||''):''; state.editingId=id; $('mb-form-title').textContent=id?'Editar bien':'Agregar bien'; $('mb-form').reset(); const familiaSelect=$('mbf-familia'); if(familiaSelect)familiaSelect.innerHTML='<option value="" disabled selected>Selecciona una categoría…</option>'+familyList().map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join(''); ['familia','descripcion','numero_serie','numero_control','cantidad','area_responsable','numero_economico','resguardo_folio','fecha_resguardo','responsable','vehiculo_ubicacion','observaciones'].forEach(k=>{const el=$(`mbf-${k}`);if(el)el.value=row?.[k]??(k==='familia'?activeFamily:(k==='cantidad'?1:''))}); $('mb-form-error').classList.add('d-none'); bootstrap.Modal.getOrCreateInstance($('mb-form-modal')).show(); }
     async function save() { const form=$('mb-form'); if(!form.reportValidity())return; const payload=Object.fromEntries(new FormData(form)); payload.cantidad=Math.max(1,parseInt(payload.cantidad,10)||1); Object.keys(payload).forEach(k=>{if(payload[k]==='')payload[k]=null}); const old=state.all.find(x=>x.id===state.editingId); try{const sb=await window.ensureSupabaseClient();let res;if(state.editingId)res=await sb.from('muebles_bienes').update(payload).eq('id',state.editingId).select().single();else res=await sb.from('muebles_bienes').insert(payload).select().single();if(res.error)throw res.error;await window.logHistory?.(state.editingId?'EDITAR':'CREAR','Muebles y Bienes',res.data.id,{old,new:res.data,summary:state.editingId?'Bien actualizado':'Bien creado'});bootstrap.Modal.getInstance($('mb-form-modal'))?.hide();state.loaded=false;await load(true);toast('Información guardada correctamente.');}catch(e){const el=$('mb-form-error');el.textContent=e.message;el.classList.remove('d-none');} }
 
+    /* Eliminar un bien del inventario. La auditoría no es opcional: si la
+       eliminación no puede quedar en el historial, el bien se restaura (con
+       sus relaciones a PDFs) y no se da por eliminado. Los PDFs no se borran:
+       un mismo resguardo puede amparar varios bienes y el archivo es evidencia;
+       sólo se desliga de este bien (la relación cae por ON DELETE CASCADE). */
+    async function deleteBien(id) {
+        if(!canDelete())return toast('Sólo un administrador puede eliminar bienes del inventario.','warning');
+        const row=state.all.find(x=>x.id===id);
+        if(!row)return toast('No se encontró el bien que deseas eliminar.','danger');
+        const ref=referenciaBien(row),docIds=(state.docs.get(id)||[]).map(d=>d.id).filter(Boolean);
+        const question=`¿Eliminar del inventario ${ref}${row.resguardo_folio?` (resguardo ${row.resguardo_folio})`:''}?
+
+`
+            +(docIds.length?`Sus ${docIds.length} PDF(s) dejarán de estar ligados a este bien, pero no se borran.
+`:'')
+            +'La eliminación quedará registrada en el historial.';
+        if(!confirm(question))return;
+        const {_search,...snapshot}=row;
+        let sb=null,deleted=false;
+        try{
+            sb=await window.ensureSupabaseClient();
+            const userResult=await sb.auth.getUser();if(userResult.error)throw userResult.error;
+            const user=userResult.data?.user;
+            if(!user?.id)throw new Error('No se pudo identificar al usuario para registrar la auditoría.');
+            // Con RLS, un DELETE sin permiso no falla: borra cero filas. Por eso se pide la fila de vuelta.
+            const res=await sb.from('muebles_bienes').delete().eq('id',id).select('id');
+            if(res.error)throw res.error;
+            if(!res.data?.length)throw new Error('La base no eliminó el registro: sólo un administrador puede eliminar bienes.');
+            deleted=true;
+            await insertDocumentHistory(sb,user,'ELIMINAR',id,{bien:ref,summary:'Bien eliminado',resguardo:row.resguardo_folio||null,area:row.area_responsable||null,documentos_desligados:docIds.length,documento_ids:docIds,registro:snapshot});
+        }catch(e){
+            if(!deleted)return toast(`No se pudo eliminar el bien: ${e.message}`,'danger');
+            try{
+                const back=await sb.from('muebles_bienes').insert(snapshot);if(back.error)throw back.error;
+                if(docIds.length){const links=await sb.from('muebles_bienes_documentos').insert(docIds.map(documento_id=>({bien_id:id,documento_id})));if(links.error)throw links.error;}
+                toast(`No se eliminó el bien porque no pudo quedar en el historial: ${e.message} Se restauró tal como estaba.`,'danger');
+            }catch(restoreError){
+                console.error('[muebles-bienes] restaurar bien sin auditoría',restoreError);
+                toast(`El bien se eliminó pero no quedó en el historial, y no se pudo restaurar: ${e.message} / ${restoreError.message}. Solicita revisión administrativa.`,'danger');
+                state.loaded=false;await load(true);
+            }
+            return;
+        }
+        bootstrap.Modal.getInstance($('mb-detail-modal'))?.hide();
+        state.all=state.all.filter(x=>x.id!==id);state.docs.delete(id);state.docsLoaded.delete(id);
+        populateFilters();applyFilters();
+        toast(`Bien eliminado: ${ref}. Quedó registrado en el historial.`);
+    }
     async function openDocument(id, replaceId=null) { if(!canEdit())return toast('No tienes permiso de edición para cargar documentos.','warning'); try{await loadDocuments(id);}catch(e){return toast(e.message,'danger');} const previous=(state.docs.get(id)||[]).find(d=>d.id===replaceId);if(replaceId&&!previous)return toast('No se encontró el documento que deseas reemplazar.','danger');if(previous&&!confirm(`¿Reemplazar ${previous.nombre_original}? El documento actual se conservará hasta que el nuevo PDF quede guardado y auditado correctamente.`))return;state.editingId=id; state.replacingDocId=replaceId; state.uploading=false; $('mb-doc-file').value=''; $('mb-doc-error').classList.add('d-none');$('mb-upload-state').classList.add('d-none'); $('mb-doc-type').value=previous?.tipo_documento||'Resguardo'; bootstrap.Modal.getOrCreateInstance($('mb-doc-modal')).show(); }
     function documentRecord(doc) {
         const keys=['id','tipo_documento','nombre_original','storage_path','mime_type','tamano_bytes','sha256','version','uploader_email','created_at','created_by'];
@@ -921,6 +973,7 @@
         if(!details)return '<span class="text-muted">—</span>';
         if(details.mode==='diff'&&Array.isArray(details.changes)&&details.changes.length)return `<div class="vstack gap-1">${details.changes.map(change=>`<div><span class="text-muted">${esc(String(change.field||'Campo').replace(/_/g,' '))}:</span> <span class="text-danger text-decoration-line-through">${esc(change.old??'—')}</span> <i class="fas fa-arrow-right mx-1 text-muted"></i><span class="text-success fw-semibold">${esc(change.new??'—')}</span></div>`).join('')}</div>`;
         const file=historyFile(details);
+        if(action==='ELIMINAR')return `<span class="text-danger text-decoration-line-through">${esc(details.bien||'Bien')}</span> <i class="fas fa-arrow-right mx-1"></i><span class="text-muted">Eliminado del inventario</span>${details.resguardo?`<div class="text-muted">Resguardo ${esc(details.resguardo)}${details.area?` · ${esc(details.area)}`:''}</div>`:''}${details.documentos_desligados?`<div class="text-muted">${esc(details.documentos_desligados)} PDF(s) desligado(s); se conservan</div>`:''}`;
         if(action==='AGREGAR_DOCUMENTO')return `<span class="text-muted">—</span> <i class="fas fa-arrow-right mx-1"></i><span class="text-success fw-semibold">${esc(file)}</span>`;
         if(action==='ELIMINAR_DOCUMENTO')return `<span class="text-danger text-decoration-line-through">${esc(file)}</span> <i class="fas fa-arrow-right mx-1"></i><span class="text-muted">Eliminado</span>`;
         if(details.anterior!==undefined||details.nuevo!==undefined)return `<span class="text-danger text-decoration-line-through">${esc(details.anterior??'—')}</span> <i class="fas fa-arrow-right mx-1"></i><span class="text-success fw-semibold">${esc(details.nuevo??file)}</span>`;
@@ -955,7 +1008,7 @@
     function exportCSV() { const headers=['familia','descripcion','numero_serie','numero_control','cantidad','area_responsable','numero_economico','resguardo_folio','fecha_resguardo','responsable','vehiculo_ubicacion','observaciones'];const quote=v=>`"${String(v??'').replace(/"/g,'""')}"`;const csv='\uFEFF'+[headers.join(','),...state.filtered.map(r=>headers.map(h=>quote(r[h])).join(','))].join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=`muebles_bienes_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(a.href); }
     function toast(message,type='success'){const id=`mbt-${Date.now()}`;$('mb-toast')?.insertAdjacentHTML('beforeend',`<div id="${id}" class="toast show text-bg-${type} border-0"><div class="d-flex"><div class="toast-body">${esc(message)}</div><button class="btn-close btn-close-white m-auto me-2" onclick="this.closest('.toast').remove()"></button></div></div>`);setTimeout(()=>$(`${id}`)?.remove(),4500);}
 
-    window.mueblesBienesModule={init:()=>load(),reload:()=>load(true),setView,openDetail,openForm,openDocument,chooseQuickDocument,openPDF,openDocuments,deleteDocument,reclassifyDocument,reassignDocument,previewDocuments,selectPreview,schedulePreviewClose,cancelPreviewClose,closePreview,openViewer,viewerPage,viewerZoom,viewerFit,viewerFitPage,viewerReset,viewerOpenTab,viewerDownload,openRecentHistory,exportCSV,bulkImportDocuments};
+    window.mueblesBienesModule={init:()=>load(),reload:()=>load(true),setView,openDetail,openForm,deleteBien,openDocument,chooseQuickDocument,openPDF,openDocuments,deleteDocument,reclassifyDocument,reassignDocument,previewDocuments,selectPreview,schedulePreviewClose,cancelPreviewClose,closePreview,openViewer,viewerPage,viewerZoom,viewerFit,viewerFitPage,viewerReset,viewerOpenTab,viewerDownload,openRecentHistory,exportCSV,bulkImportDocuments};
     ensureUI();
     if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',activateOnEntry,{once:true});
     else queueMicrotask(activateOnEntry);

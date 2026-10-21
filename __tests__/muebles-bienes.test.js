@@ -27,7 +27,7 @@ describe('modulo Muebles y Bienes', () => {
     expect(moduleSource).toContain(".from('muebles_bienes')");
   });
   test('inicia el inventario al entrar directamente por hash o restaurar la sección activa', () => {
-    expect(html).toContain('js/muebles-bienes.js?v=7');
+    expect(html).toContain('js/muebles-bienes.js?v=8');
     expect(moduleSource).toContain("document.addEventListener('DOMContentLoaded',activateOnEntry,{once:true})");
     const start=moduleSource.indexOf('function activateOnEntry()');
     const end=moduleSource.indexOf('function populateFilters()',start);
@@ -953,5 +953,69 @@ describe('modulo Muebles y Bienes', () => {
     expect(toasts.at(-1).message).toContain('2 relación(es)');
     expect(toasts.at(-1).message).toContain('1 quedaron pendientes');
     expect(controls['mb-import-files'].value).toBe('');
+  });
+  describe('eliminar un bien', () => {
+    const start = moduleSource.indexOf('async function deleteBien(id) {');
+    const end = moduleSource.indexOf('async function openDocument(', start);
+    function montar({ deleteRows = [{ id: 'b1' }], historyError = null, admin = true } = {}) {
+      const calls = [], toasts = [];
+      const row = { id: 'b1', familia: 'Mobiliario Dir. Opn.', numero_serie: '123', resguardo_folio: '123', area_responsable: 'Opn', _search: 'x' };
+      const state = { all: [row, { id: 'b2' }], docs: new Map([['b1', [{ id: 'd1' }]]]), docsLoaded: new Set(['b1']) };
+      const tabla = name => ({
+        delete() { calls.push([name, 'delete']); return this; },
+        eq(col, val) { calls.push([name, 'eq', col, val]); return this; },
+        async select() { return { data: deleteRows, error: null }; },
+        async insert(payload) { calls.push([name, 'insert', payload]); return { error: name === 'change_history' ? historyError : null }; },
+      });
+      const sb = { from: tabla, auth: { getUser: async () => ({ data: { user: { id: 'u1', email: 'admin@aifa' } }, error: null }) } };
+      const deleteBien = new Function('deps', `
+        const state=deps.state, toast=deps.toast, canDelete=deps.canDelete, confirm=deps.confirm, window=deps.window;
+        const referenciaBien=b=>b.familia+' — Serie '+b.numero_serie, $=()=>null, bootstrap={Modal:{getInstance:()=>null}};
+        const populateFilters=()=>{}, applyFilters=()=>{}, load=async()=>{}, console={error(){}};
+        async function insertDocumentHistory(sb,user,action,bienId,details){const r=await sb.from('change_history').insert({user_id:user.id,action_type:action,entity_type:'Muebles y Bienes',record_id:bienId,details});if(r.error)throw new Error('No se pudo registrar la auditoría: '+r.error.message);}
+        ${moduleSource.slice(start, end)}
+        return deleteBien;
+      `)({ state, toast: (m, t) => toasts.push({ m, t }), canDelete: () => admin, confirm: () => true, window: { ensureSupabaseClient: async () => sb } });
+      return { deleteBien, state, calls, toasts };
+    }
+
+    test('borra el bien y deja la eliminación en el historial con lo que había', async () => {
+      const { deleteBien, state, calls, toasts } = montar();
+      await deleteBien('b1');
+      expect(calls).toContainEqual(['muebles_bienes', 'delete']);
+      const log = calls.find(c => c[0] === 'change_history')[2];
+      expect(log.action_type).toBe('ELIMINAR');
+      expect(log.entity_type).toBe('Muebles y Bienes');
+      expect(log.details.resguardo).toBe('123');
+      expect(log.details.documentos_desligados).toBe(1);
+      expect(log.details.registro).not.toHaveProperty('_search');
+      expect(state.all.map(r => r.id)).toEqual(['b2']);
+      expect(toasts.at(-1).m).toContain('historial');
+    });
+
+    test('si la base no borró nada (RLS), no lo da por eliminado ni escribe historial', async () => {
+      const { deleteBien, state, calls, toasts } = montar({ deleteRows: [] });
+      await deleteBien('b1');
+      expect(calls.some(c => c[0] === 'change_history')).toBe(false);
+      expect(state.all).toHaveLength(2);
+      expect(toasts.at(-1).t).toBe('danger');
+    });
+
+    test('si el historial falla, restaura el bien y sus PDFs', async () => {
+      const { deleteBien, state, calls, toasts } = montar({ historyError: { message: 'sin permiso' } });
+      await deleteBien('b1');
+      const restaurado = calls.find(c => c[0] === 'muebles_bienes' && c[1] === 'insert');
+      expect(restaurado[2]).toMatchObject({ id: 'b1', resguardo_folio: '123' });
+      expect(calls).toContainEqual(['muebles_bienes_documentos', 'insert', [{ bien_id: 'b1', documento_id: 'd1' }]]);
+      expect(state.all).toHaveLength(2);
+      expect(toasts.at(-1).m).toContain('Se restauró');
+    });
+
+    test('sólo administradores, y el historial lo muestra como eliminación', () => {
+      expect(moduleSource).toContain("const canDelete = () => window.dataManager?.sectionLevel?.(SECTION) === 'admin'");
+      expect(moduleSource).toContain("ELIMINAR:'Bien eliminado'");
+      expect(moduleSource).toContain("if(action==='ELIMINAR')return");
+      expect(moduleSource).toContain('id="mb-delete-detail"');
+    });
   });
 });
