@@ -107,7 +107,7 @@
             cifras,
             anioAnterior: {
                 pax: oficial ? oficial.pax : tercia(paxAntes, 'pax').total,
-                carga: oficial ? oficial.ton : C.toneladas(cargaAntes).enteras.total
+                carga: oficial ? (oficial.tonExacta ?? oficial.ton) : C.toneladas(cargaAntes).enteras.total
             }
         };
     }
