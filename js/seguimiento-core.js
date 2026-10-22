@@ -239,8 +239,12 @@
         if (!meses || !t.fecha_limite) return null;
         const limite = sumarMeses(t.fecha_limite, meses);
         const duracion = t.fecha_inicio ? diasEntre(t.fecha_inicio, t.fecha_limite) : null;
+        // Las subtareas con fecha se mueven igual que la tarea: conservan su
+        // distancia en días a la fecha límite.
         const checklist = Array.isArray(t.checklist)
-            ? t.checklist.map(i => ({ id: i.id, texto: i.texto, hecho: false }))
+            ? t.checklist.map(i => Object.assign({ id: i.id, texto: i.texto, hecho: false },
+                i.fecha_inicio ? { fecha_inicio: sumarDias(limite, -diasEntre(i.fecha_inicio, t.fecha_limite)) } : {},
+                i.fecha ? { fecha: sumarDias(limite, -diasEntre(i.fecha, t.fecha_limite)) } : {}))
             : [];
         return {
             titulo: t.titulo,
@@ -413,6 +417,145 @@
         return { hechos, total: items.length, pct: items.length ? Math.round(hechos * 100 / items.length) : 0 };
     }
 
+    /* ---------- Subtareas con fecha ----------
+       Una subtarea ocupa un tramo del periodo de la tarea: del día de inicio
+       (fecha_inicio, opcional) al día en que debe quedar (fecha). Si sólo trae
+       fecha, es de un solo día. Juntas reparten el periodo de la tarea: del
+       inicio (o de la primera subtarea) a la fecha límite. */
+
+    /** Primer día de la subtarea (su inicio o, si es de un día, su fecha). */
+    const inicioSubtarea = i => (i && (i.fecha_inicio || i.fecha)) || null;
+
+    /** Días que dura la subtarea, contando ambos extremos (0 sin fecha). */
+    function diasSubtarea(i) {
+        if (!i || !i.fecha) return 0;
+        return diasEntre(inicioSubtarea(i), i.fecha) + 1;
+    }
+
+    /** Subtareas que tienen fecha, en orden de inicio. */
+    function subtareasConFecha(t) {
+        const items = Array.isArray(t && t.checklist) ? t.checklist : [];
+        const clave = i => inicioSubtarea(i) + '|' + i.fecha;
+        return items.filter(i => i && i.fecha).slice().sort((a, b) => clave(a) < clave(b) ? -1 : clave(a) > clave(b) ? 1 : 0);
+    }
+
+    /** Periodo que cubre la tarea con sus subtareas: { inicio, fin } o null sin fechas. */
+    function periodoTarea(t) {
+        const subs = subtareasConFecha(t);
+        const ultimo = subs.reduce((m, i) => (!m || i.fecha > m ? i.fecha : m), null);
+        const inicio = t.fecha_inicio || (subs.length ? inicioSubtarea(subs[0]) : null) || t.fecha_limite || null;
+        const fin = t.fecha_limite || ultimo || inicio;
+        if (!inicio || !fin) return null;
+        return inicio <= fin ? { inicio, fin } : { inicio: fin, fin: inicio };
+    }
+
+    /** ¿La subtarea empieza antes del inicio o termina después de la fecha límite de la tarea? */
+    function subtareaFueraDePeriodo(item, t) {
+        if (!item || !item.fecha) return false;
+        if (t.fecha_inicio && inicioSubtarea(item) < t.fecha_inicio) return true;
+        return Boolean(t.fecha_limite && item.fecha > t.fecha_limite);
+    }
+
+    /** Fechas propuestas para la siguiente subtarea: el día después de la
+        última, o el inicio de la tarea. { inicio: '', fin: '' } si ya no cabe. */
+    function sugerirFechasSubtarea(t) {
+        const ultimo = subtareasConFecha(t).reduce((m, i) => (!m || i.fecha > m ? i.fecha : m), null);
+        const propuesta = ultimo ? sumarDias(ultimo, 1) : (t.fecha_inicio || '');
+        if (!propuesta || (t.fecha_limite && propuesta > t.fecha_limite)) return { inicio: '', fin: '' };
+        return { inicio: propuesta, fin: propuesta };
+    }
+
+    /** Cambia el inicio o el fin de una subtarea y deja el par en orden: sin
+        fin se toma el inicio (un día); si el inicio queda después del fin, se
+        mueve el otro extremo. Devuelve la subtarea nueva. */
+    function ajustarFechasSubtarea(item, campo, valor) {
+        // Borrar el fin de una de un solo día le quita la fecha; de un tramo, la deja en su inicio.
+        let ini = campo === 'inicio' ? (valor || '') : (campo === 'fin' && !valor ? (item.fecha_inicio || '') : (item.fecha_inicio || item.fecha || ''));
+        let fin = campo === 'fin' ? (valor || '') : (item.fecha || '');
+        if (ini && !fin) fin = ini;
+        if (!ini && fin) ini = fin;
+        if (ini && fin && ini > fin) { if (campo === 'inicio') fin = ini; else ini = fin; }
+        const sigue = Object.assign({}, item);
+        delete sigue.fecha_inicio; delete sigue.fecha;
+        if (fin) sigue.fecha = fin;
+        if (ini && fin && ini !== fin) sigue.fecha_inicio = ini;
+        return sigue;
+    }
+
+    /** Da fechas a las subtareas que no las tienen: reparte el periodo en
+        tramos seguidos, uno por subtarea, que juntos lo cubren completo (6
+        subtareas en 6 días = una por día; 3 en 6 días = dos días cada una).
+        Las que ya tienen fecha no se tocan. Devuelve una lista nueva. */
+    function repartirSubtareas(items, inicio, fin) {
+        const lista = Array.isArray(items) ? items : [];
+        if (!inicio || !fin || fin < inicio) return lista.slice();
+        const sinFecha = lista.filter(i => i && !i.fecha);
+        const n = sinFecha.length;
+        const dias = diasEntre(inicio, fin) + 1;
+        const tramos = new Map(sinFecha.map((item, k) => {
+            const desde = Math.floor(k * dias / n);
+            const hasta = Math.max(desde, Math.floor((k + 1) * dias / n) - 1);
+            return [item, { ini: sumarDias(inicio, desde), fin: sumarDias(inicio, hasta) }];
+        }));
+        return lista.map(i => {
+            if (!tramos.has(i)) return i;
+            const r = tramos.get(i);
+            return Object.assign({}, i, r.ini !== r.fin ? { fecha_inicio: r.ini } : {}, { fecha: r.fin });
+        });
+    }
+
+    /** Días del periodo de la tarea que ya tienen al menos una subtarea. */
+    function diasCubiertos(t) {
+        const p = periodoTarea(t);
+        if (!p) return { cubiertos: 0, total: 0 };
+        const total = diasEntre(p.inicio, p.fin) + 1;
+        const dias = new Set();
+        subtareasConFecha(t).forEach(i => {
+            for (let d = inicioSubtarea(i); d <= i.fecha; d = sumarDias(d, 1)) if (d >= p.inicio && d <= p.fin) dias.add(d);
+        });
+        return { cubiertos: dias.size, total };
+    }
+
+    /* ---------- Tareas duplicadas ----------
+       Antes de crear una tarea se compara su nombre con las tareas abiertas.
+       «igual»: el mismo nombre sin importar mayúsculas, acentos, signos ni
+       palabras de relleno.
+       «parecida»: comparten casi todas sus palabras importantes (las de, la,
+       para… no cuentan). Las cerradas no cuentan: renovar lo ya completado no
+       es duplicar. */
+    const PALABRAS_VACIAS = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'lo', 'y', 'e', 'o', 'u', 'a', 'al', 'en', 'para', 'por', 'con', 'sin', 'un', 'una', 'unos', 'unas', 'que', 'se', 'ante', 'bajo', 'desde', 'hacia', 'hasta', 'sobre', 'entre', 'tras', 'segun', 'contra']);
+    // Los puntos se quitan (I.F.T. = IFT); los demás signos separan palabras.
+    const claveTitulo = titulo => normalizar(titulo).replace(/\./g, '').replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const palabrasTitulo = titulo => new Set(claveTitulo(titulo).split(' ').filter(w => w && !PALABRAS_VACIAS.has(w)));
+
+    /** Tareas abiertas que podrían ser la misma que «nueva»: [{ tarea, tipo, parecido, mismaSubdireccion }],
+        primero las iguales y las de la misma subdirección. */
+    function posiblesDuplicadas(nueva, tareas) {
+        const clave = claveTitulo(nueva && nueva.titulo);
+        if (!clave) return [];
+        const propias = palabrasTitulo(nueva.titulo);
+        return (Array.isArray(tareas) ? tareas : [])
+            .filter(t => t && t.id !== nueva.id && estaAbierta(t))
+            .map(t => {
+                const mismaSubdireccion = Boolean(nueva.subdireccion) && t.subdireccion === nueva.subdireccion;
+                const otras = palabrasTitulo(t.titulo);
+                const comunes = [...propias].filter(w => otras.has(w)).length;
+                const union = new Set([...propias, ...otras]).size;
+                // Igual también si sólo cambian las palabras de relleno («de la», «para»…).
+                const mismasPalabras = propias.size > 0 && comunes === propias.size && comunes === otras.size;
+                if (claveTitulo(t.titulo) === clave || mismasPalabras) return { tarea: t, tipo: 'igual', parecido: 1, mismaSubdireccion };
+                const parecido = union ? comunes / union : 0;
+                return comunes >= 2 && parecido >= 0.7 ? { tarea: t, tipo: 'parecida', parecido, mismaSubdireccion } : null;
+            })
+            .filter(Boolean)
+            .sort((a, b) => (a.tipo === 'igual' ? 0 : 1) - (b.tipo === 'igual' ? 0 : 1)
+                || Number(b.mismaSubdireccion) - Number(a.mismaSubdireccion) || b.parecido - a.parecido)
+            .slice(0, 5);
+    }
+
+    /** Una igual en la misma subdirección no se crea: es la misma tarea. */
+    const bloqueaDuplicado = candidatas => (candidatas || []).some(c => c.tipo === 'igual' && c.mismaSubdireccion);
+
     /* ---------- Personas ---------- */
 
     const PARTICULAS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e']);
@@ -533,6 +676,9 @@
         PERSONALIZADA, MAX_MESES, mesesRecurrencia, textoCada, nombreRecurrencia, recurrenciaDeMeses,
         normalizar, folio, filtrar, ordenar, agrupar,
         estadisticas, estadisticasPorSubdireccion, avanceChecklist,
+        subtareasConFecha, periodoTarea, subtareaFueraDePeriodo, sugerirFechasSubtarea, repartirSubtareas,
+        inicioSubtarea, diasSubtarea, ajustarFechasSubtarea, diasCubiertos,
+        posiblesDuplicadas, bloqueaDuplicado,
         iniciales, colorDeNombre, telefonoWhatsApp, mensajeWhatsApp, urlWhatsApp,
         idCorto, etiquetasDeTexto, cambios, etiquetaValor, MESES_LARGOS,
     });

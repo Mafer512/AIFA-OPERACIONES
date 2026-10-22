@@ -186,6 +186,48 @@ test('la captura rápida guarda la tarea en la subdirección del grupo', async (
     expect(db.seguimiento_actividad.some(a => a.tarea_id === nueva.id && a.accion === 'creo')).toBe(true);
 });
 
+test('no deja crear una tarea igual a otra abierta de la misma subdirección', async () => {
+    const antes = db.seguimiento_tareas.length;
+    const input = document.querySelector('#seg-body input[data-add="SSA"]');
+    input.value = 'REVISAR  programa de seguridad.';   // mismo nombre, otra forma de escribirlo
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await esperar();
+    const modal = document.getElementById('seg-modal');
+    expect(modal.hidden).toBe(false);
+    expect(modal.textContent).toContain('Esta tarea ya existe');
+    expect(modal.querySelector('.seg-dup-item').textContent).toContain('Revisar programa de seguridad');
+    // Igual en la misma subdirección: no hay opción de crearla de todos modos.
+    expect(modal.querySelector('[data-dup="crear"]')).toBeNull();
+    modal.querySelector('[data-dup="cancelar"]').click();
+    await esperar();
+    expect(modal.hidden).toBe(true);
+    expect(db.seguimiento_tareas.length).toBe(antes);
+    input.value = '';
+});
+
+test('una parecida se avisa mientras se escribe y se puede crear si es otra', async () => {
+    document.getElementById('seg-btn-nueva').click();
+    await esperar();
+    const ti = document.getElementById('seg-dr-titulo');
+    ti.value = 'Revisar el programa de seguridad aeroportuaria';
+    ti.dispatchEvent(new Event('input', { bubbles: true }));
+    const enVivo = document.getElementById('seg-dr-dup');
+    expect(enVivo.hidden).toBe(false);
+    expect(enVivo.textContent).toContain('Revisar programa de seguridad');
+    document.querySelector('#seg-drawer [data-dr="subdireccion"]').click();
+    [...document.querySelectorAll('#seg-menu .seg-menu-item')].find(b => b.textContent.includes('Aviación')).click();
+    const antes = db.seguimiento_tareas.length;
+    document.querySelector('#seg-drawer [data-dr="crear"]').click();
+    await esperar();
+    const modal = document.getElementById('seg-modal');
+    expect(modal.textContent).toContain('Puede que esta tarea ya exista');
+    expect(db.seguimiento_tareas.length).toBe(antes);
+    modal.querySelector('[data-dup="crear"]').click();
+    await esperar();
+    expect(db.seguimiento_tareas.find(t => t.titulo === 'Revisar el programa de seguridad aeroportuaria')).toMatchObject({ subdireccion: 'SSA' });
+    document.querySelector('#seg-drawer [data-dr="cerrar"]').click();
+});
+
 test('completar una renovación anual programa la siguiente', async () => {
     fila('a2').querySelector('[data-accion="completar"]').click();
     await esperar(12);
@@ -232,6 +274,99 @@ test('el panel de detalle abre con sus comentarios', async () => {
     expect(panel.textContent).toContain('Ya se pidió cotización');
     document.querySelector('#seg-drawer [data-dr="cerrar"]').click();
     expect(panel.classList.contains('is-open')).toBe(false);
+});
+
+test('las subtareas llevan su inicio y su fin y en el cronograma se ven dentro del total', async () => {
+    fila('a1').click();
+    await esperar();
+    // Sin inicio en la tarea, el panel explica que primero va el periodo.
+    expect(document.querySelector('#seg-ck .seg-ck-plan').textContent).toContain('Periodo de la tarea');
+    const agregar = (texto, ini, fin, conBoton) => {
+        document.getElementById('seg-ck-nueva-ini').value = ini;
+        document.getElementById('seg-ck-nueva-fin').value = fin;
+        const input = document.getElementById('seg-ck-nuevo');
+        input.value = texto;
+        if (conBoton) document.querySelector('#seg-ck [data-ck-accion="agregar"]').click();
+        else input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    };
+    agregar('Levantamiento en sitio', enDias(-6), enDias(-5));
+    agregar('Instalar soporte', enDias(-4), enDias(-4), true);
+    await esperar();
+    const guardada = db.seguimiento_tareas.find(t => t.id === 'a1').checklist;
+    expect(guardada.map(i => [i.texto, i.fecha_inicio || null, i.fecha])).toEqual([
+        ['Levantamiento en sitio', enDias(-6), enDias(-5)], ['Instalar soporte', null, enDias(-4)],
+    ]);
+    // La siguiente propone el día después de la última.
+    expect(document.getElementById('seg-ck-nueva-ini').value).toBe(enDias(-3));
+    expect(document.getElementById('seg-ck-nueva-fin').value).toBe(enDias(-3));
+    // Cada subtarea muestra claramente su Inicio y su Fin, y cuánto dura.
+    const primera = document.querySelector('#seg-ck [data-ck]');
+    expect(primera.querySelector('input[data-ck-accion="inicio"]').value).toBe(enDias(-6));
+    expect(primera.querySelector('input[data-ck-accion="fin"]').value).toBe(enDias(-5));
+    expect(primera.textContent).toContain('Inicio');
+    expect(primera.textContent).toContain('Fin');
+    expect(primera.querySelector('.seg-ck-dur').textContent).toBe('2 días');
+    // La línea de tiempo del periodo muestra un tramo por subtarea.
+    expect(document.querySelectorAll('#seg-ck .seg-ck-tramo')).toHaveLength(2);
+
+    // Mover el fin antes del inicio arrastra el inicio: nunca quedan al revés.
+    const fin = primera.querySelector('input[data-ck-accion="fin"]');
+    fin.value = enDias(-7);
+    fin.dispatchEvent(new Event('change', { bubbles: true }));
+    await esperar();
+    expect(db.seguimiento_tareas.find(t => t.id === 'a1').checklist[0]).toMatchObject({ fecha: enDias(-7) });
+    expect(db.seguimiento_tareas.find(t => t.id === 'a1').checklist[0]).not.toHaveProperty('fecha_inicio');
+    const ini = document.querySelector('#seg-ck [data-ck] input[data-ck-accion="inicio"]');
+    ini.value = enDias(-6);
+    ini.dispatchEvent(new Event('change', { bubbles: true }));
+    await esperar();
+    expect(db.seguimiento_tareas.find(t => t.id === 'a1').checklist[0]).toMatchObject({ fecha: enDias(-6) });
+    const fin2 = document.querySelector('#seg-ck [data-ck] input[data-ck-accion="fin"]');
+    fin2.value = enDias(-5);
+    fin2.dispatchEvent(new Event('change', { bubbles: true }));
+    await esperar();
+    expect(db.seguimiento_tareas.find(t => t.id === 'a1').checklist[0]).toMatchObject({ fecha_inicio: enDias(-6), fecha: enDias(-5) });
+    document.querySelector('#seg-drawer [data-dr="cerrar"]').click();
+
+    document.querySelector('[data-vista="cronograma"]').click();
+    await esperar();
+    const barra = document.querySelector('#seg-body .seg-gantt-bar[data-id="a1"]');
+    expect(barra.classList.contains('is-total')).toBe(true);
+    const subs = [...document.querySelectorAll('#seg-body .seg-gantt-row.is-sub')];
+    expect(subs.map(r => r.querySelector('.seg-titulo').textContent)).toEqual(['Levantamiento en sitio', 'Instalar soporte']);
+    expect(subs[0].querySelector('.seg-gantt-sub').classList.contains('is-atrasada')).toBe(true);
+    // El tramo de dos días ocupa el doble que el de uno.
+    const ancho = r => parseFloat(r.querySelector('.seg-gantt-sub').style.width);
+    expect(ancho(subs[0]) / ancho(subs[1])).toBeCloseTo(2, 5);
+    expect(subs[0].querySelector('.seg-meta').textContent).toContain('→');
+    // Se pueden ocultar para ver sólo el total.
+    document.querySelector('#seg-body [data-accion="gantt-subs"]').click();
+    await esperar();
+    expect(document.querySelectorAll('#seg-body .seg-gantt-row.is-sub')).toHaveLength(0);
+    document.querySelector('[data-vista="lista"]').click();
+    await esperar();
+});
+
+test('la guía completa explica cómo organizar la tarea y lleva a crear una', async () => {
+    document.getElementById('seg-btn-guia').click();
+    const modal = document.getElementById('seg-modal');
+    expect(modal.hidden).toBe(false);
+    const texto = modal.textContent;
+    ['Antes de capturar', 'Escribe un nombre', 'Divide el trabajo en subtareas', 'Captúrala, paso a paso', 'Durante el seguimiento', 'Al terminar']
+        .forEach(t => expect(texto).toContain(t));
+    expect(modal.querySelectorAll('.seg-gc-ejemplo .seg-ck-tramo')).toHaveLength(4);
+    modal.querySelector('[data-m="nueva"]').click();
+    await esperar();
+    expect(modal.hidden).toBe(true);
+    expect(document.getElementById('seg-drawer').classList.contains('is-open')).toBe(true);
+    // Desde la guía rápida del panel también se llega.
+    const enlace = document.querySelector('#seg-drawer [data-dr="guia-completa"]');
+    if (enlace) {
+        enlace.click();
+        expect(modal.hidden).toBe(false);
+        modal.querySelector('[data-m="cerrar"]').click();
+    }
+    document.querySelector('#seg-drawer [data-dr="cerrar"]').click();
 });
 
 test('crear desde el panel exige subdirección', async () => {
