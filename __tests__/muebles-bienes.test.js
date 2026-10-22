@@ -27,7 +27,7 @@ describe('modulo Muebles y Bienes', () => {
     expect(moduleSource).toContain(".from('muebles_bienes')");
   });
   test('inicia el inventario al entrar directamente por hash o restaurar la sección activa', () => {
-    expect(html).toContain('js/muebles-bienes.js?v=4');
+    expect(html).toContain('js/muebles-bienes.js?v=8');
     expect(moduleSource).toContain("document.addEventListener('DOMContentLoaded',activateOnEntry,{once:true})");
     const start=moduleSource.indexOf('function activateOnEntry()');
     const end=moduleSource.indexOf('function populateFilters()',start);
@@ -57,8 +57,21 @@ describe('modulo Muebles y Bienes', () => {
     expect(filter).not.toMatch(/\.from\s*\(|await|ensureSupabaseClient/);
     expect(moduleSource).toContain('requestAnimationFrame(applyFilters)');
   });
-  test('valida PDF privado y límite de 10 MB', () => {
-    expect(moduleSource).toContain("const MAX_PDF = 10 * 1024 * 1024");
+  test('si Supabase sigue en 10 MB, el error dice qué migración falta', () => {
+    const start = moduleSource.indexOf('function uploadErrorMessage(');
+    const end = moduleSource.indexOf('function validateFile(', start);
+    const uploadErrorMessage = new Function(`${moduleSource.slice(start, end)}; return uploadErrorMessage;`)();
+    expect(uploadErrorMessage({ statusCode: '413', message: 'The object exceeded the maximum allowed size' })).toContain('067_muebles_bienes_25mb.sql');
+    expect(uploadErrorMessage({ code: '23514', message: 'new row violates check constraint "muebles_bienes_documentos_archivos_tamano_bytes_check"' })).toContain('067_muebles_bienes_25mb.sql');
+    expect(uploadErrorMessage({ message: 'otro error' })).toBe('otro error');
+    expect(moduleSource).toContain('let message=uploadErrorMessage(e);');
+    const sql = fs.readFileSync(path.join(root, 'supabase', 'migrations', '067_muebles_bienes_25mb.sql'), 'utf8');
+    expect(sql).toContain('SET file_size_limit = 26214400');
+    expect(sql).toContain('CHECK (tamano_bytes > 0 AND tamano_bytes <= 26214400)');
+  });
+
+  test('valida PDF privado y límite de 25 MB', () => {
+    expect(moduleSource).toContain("const MAX_PDF = 25 * 1024 * 1024");
     expect(moduleSource).toContain("mime!=='application/pdf'");
     expect(moduleSource).toContain("String.fromCharCode(...bytes)==='%PDF-'");
     expect(moduleSource).toContain('window.pdfjsLib.getDocument({data:new Uint8Array(await file.arrayBuffer()),stopAtErrors:true})');
@@ -761,14 +774,14 @@ describe('modulo Muebles y Bienes', () => {
   test('rechaza archivos inválidos y conserva nombres largos o especiales de forma segura', () => {
     const validationStart = moduleSource.indexOf('function validateFile(');
     const validationEnd = moduleSource.indexOf('async function validateReadablePdf(', validationStart);
-    const validateFile = new Function('MAX_PDF', `${moduleSource.slice(validationStart, validationEnd)}; return validateFile;`)(10 * 1024 * 1024);
+    const validateFile = new Function('MAX_PDF', `${moduleSource.slice(validationStart, validationEnd)}; return validateFile;`)(25 * 1024 * 1024);
     expect(() => validateFile({ name: 'válido.pdf', type: 'application/pdf', size: 100 })).not.toThrow();
     expect(() => validateFile({ name: 'sin-mime.pdf', type: '', size: 100 })).not.toThrow();
     expect(() => validateFile({ name: 'binario.pdf', type: 'application/octet-stream', size: 100 })).not.toThrow();
     expect(() => validateFile({ name: 'renombrado.pdf', type: 'text/plain', size: 100 })).toThrow('PDF válido');
     expect(() => validateFile({ name: 'documento.txt', type: 'application/pdf', size: 100 })).toThrow('extensión .pdf');
     expect(() => validateFile({ name: 'vacío.pdf', type: 'application/pdf', size: 0 })).toThrow('vacío');
-    expect(() => validateFile({ name: 'grande.pdf', type: 'application/pdf', size: 10 * 1024 * 1024 + 1 })).toThrow('10 MB');
+    expect(() => validateFile({ name: 'grande.pdf', type: 'application/pdf', size: 25 * 1024 * 1024 + 1 })).toThrow('25 MB');
 
     const safeStart = moduleSource.indexOf('function safePath(');
     const safeEnd = moduleSource.indexOf('function setUploadState(', safeStart);
@@ -882,6 +895,7 @@ describe('modulo Muebles y Bienes', () => {
       const existingTargetLinks=deps.existingTargetLinks, rollbackBulkImport=deps.rollbackBulkImport;
       const insertDocumentHistory=deps.insertDocumentHistory, referenciaBien=deps.referenciaBien;
       const safePath=value=>String(value), BUCKET='muebles-bienes-documentos';
+      const uploadErrorMessage=error=>error?.message||'Error desconocido al cargar el PDF.';
       const window=deps.window, toast=deps.toast, load=deps.load, console=deps.console, state=deps.state;
       ${moduleSource.slice(start, end)}
       return bulkImportDocuments;
@@ -939,5 +953,69 @@ describe('modulo Muebles y Bienes', () => {
     expect(toasts.at(-1).message).toContain('2 relación(es)');
     expect(toasts.at(-1).message).toContain('1 quedaron pendientes');
     expect(controls['mb-import-files'].value).toBe('');
+  });
+  describe('eliminar un bien', () => {
+    const start = moduleSource.indexOf('async function deleteBien(id) {');
+    const end = moduleSource.indexOf('async function openDocument(', start);
+    function montar({ deleteRows = [{ id: 'b1' }], historyError = null, admin = true } = {}) {
+      const calls = [], toasts = [];
+      const row = { id: 'b1', familia: 'Mobiliario Dir. Opn.', numero_serie: '123', resguardo_folio: '123', area_responsable: 'Opn', _search: 'x' };
+      const state = { all: [row, { id: 'b2' }], docs: new Map([['b1', [{ id: 'd1' }]]]), docsLoaded: new Set(['b1']) };
+      const tabla = name => ({
+        delete() { calls.push([name, 'delete']); return this; },
+        eq(col, val) { calls.push([name, 'eq', col, val]); return this; },
+        async select() { return { data: deleteRows, error: null }; },
+        async insert(payload) { calls.push([name, 'insert', payload]); return { error: name === 'change_history' ? historyError : null }; },
+      });
+      const sb = { from: tabla, auth: { getUser: async () => ({ data: { user: { id: 'u1', email: 'admin@aifa' } }, error: null }) } };
+      const deleteBien = new Function('deps', `
+        const state=deps.state, toast=deps.toast, canDelete=deps.canDelete, confirm=deps.confirm, window=deps.window;
+        const referenciaBien=b=>b.familia+' — Serie '+b.numero_serie, $=()=>null, bootstrap={Modal:{getInstance:()=>null}};
+        const populateFilters=()=>{}, applyFilters=()=>{}, load=async()=>{}, console={error(){}};
+        async function insertDocumentHistory(sb,user,action,bienId,details){const r=await sb.from('change_history').insert({user_id:user.id,action_type:action,entity_type:'Muebles y Bienes',record_id:bienId,details});if(r.error)throw new Error('No se pudo registrar la auditoría: '+r.error.message);}
+        ${moduleSource.slice(start, end)}
+        return deleteBien;
+      `)({ state, toast: (m, t) => toasts.push({ m, t }), canDelete: () => admin, confirm: () => true, window: { ensureSupabaseClient: async () => sb } });
+      return { deleteBien, state, calls, toasts };
+    }
+
+    test('borra el bien y deja la eliminación en el historial con lo que había', async () => {
+      const { deleteBien, state, calls, toasts } = montar();
+      await deleteBien('b1');
+      expect(calls).toContainEqual(['muebles_bienes', 'delete']);
+      const log = calls.find(c => c[0] === 'change_history')[2];
+      expect(log.action_type).toBe('ELIMINAR');
+      expect(log.entity_type).toBe('Muebles y Bienes');
+      expect(log.details.resguardo).toBe('123');
+      expect(log.details.documentos_desligados).toBe(1);
+      expect(log.details.registro).not.toHaveProperty('_search');
+      expect(state.all.map(r => r.id)).toEqual(['b2']);
+      expect(toasts.at(-1).m).toContain('historial');
+    });
+
+    test('si la base no borró nada (RLS), no lo da por eliminado ni escribe historial', async () => {
+      const { deleteBien, state, calls, toasts } = montar({ deleteRows: [] });
+      await deleteBien('b1');
+      expect(calls.some(c => c[0] === 'change_history')).toBe(false);
+      expect(state.all).toHaveLength(2);
+      expect(toasts.at(-1).t).toBe('danger');
+    });
+
+    test('si el historial falla, restaura el bien y sus PDFs', async () => {
+      const { deleteBien, state, calls, toasts } = montar({ historyError: { message: 'sin permiso' } });
+      await deleteBien('b1');
+      const restaurado = calls.find(c => c[0] === 'muebles_bienes' && c[1] === 'insert');
+      expect(restaurado[2]).toMatchObject({ id: 'b1', resguardo_folio: '123' });
+      expect(calls).toContainEqual(['muebles_bienes_documentos', 'insert', [{ bien_id: 'b1', documento_id: 'd1' }]]);
+      expect(state.all).toHaveLength(2);
+      expect(toasts.at(-1).m).toContain('Se restauró');
+    });
+
+    test('sólo administradores, y el historial lo muestra como eliminación', () => {
+      expect(moduleSource).toContain("const canDelete = () => window.dataManager?.sectionLevel?.(SECTION) === 'admin'");
+      expect(moduleSource).toContain("ELIMINAR:'Bien eliminado'");
+      expect(moduleSource).toContain("if(action==='ELIMINAR')return");
+      expect(moduleSource).toContain('id="mb-delete-detail"');
+    });
   });
 });
