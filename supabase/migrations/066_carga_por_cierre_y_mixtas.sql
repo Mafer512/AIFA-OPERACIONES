@@ -12,11 +12,11 @@
 --   1. Si el manifiesto se cerró con la clasificación congelada
 --      (cierre_es_carga_reportado), ésa manda, como en el oficio a la
 --      Subsecretaría y el mensaje del SWEAR. Sin ella, la regla de siempre.
---   2. Mixtas: la carga de una aerolínea de pasajeros (VOLARIS, MEXICANA,
---      CONVIASA, AEROMÉXICO, VIVA AEROBUS, COPA AIRLINES, GLOBAL CROSSING
---      AIRLINES) suma sus kilos a Carga pero no cuenta como operación: el vuelo
---      ya está en su manifiesto de pasajeros. Es la misma lista con la que el
---      REPORTE CARGA del libro da sus operaciones (769 al 20/10/2026).
+--   2. Mixtas: la carga de una aerolínea de pasajeros (AEROMÉXICO, CONVIASA,
+--      MEXICANA, VIVA AEROBUS y VOLARIS, las mismas del oficio de carga) suma
+--      sus kilos a Carga pero no cuenta como operación: el vuelo ya está en su
+--      manifiesto de pasajeros. Con ella el REPORTE CARGA del libro da sus 769
+--      operaciones al 20/10/2026. Copa (Copa Cargo) sí es operación de carga.
 --   3. La aerolínea reportada al cerrar (cierre_aerolinea_reportada) se usa
 --      para reconocer la mixta; COPA CARGO no es mixta aunque comparta "CM".
 -- No toca la maestra (hasta el corte), ni tablas, ni los manifiestos.
@@ -31,8 +31,8 @@ PARALLEL SAFE
 SET search_path = pg_catalog, pg_temp
 AS $fn$
     SELECT coalesce(public._aifa_norm_texto(p_nombre) = ANY (ARRAY(SELECT public._aifa_norm_texto(x) FROM unnest(ARRAY[
-        'VOLARIS', 'MEXICANA', 'MEXICANA DE AVIACIÓN', 'CONVIASA', 'AEROMÉXICO', 'AEROMEXICO',
-        'VIVA AEROBUS', 'VIVA', 'COPA AIRLINES', 'GLOBAL CROSSING AIRLINES'
+        'AEROMÉXICO', 'AEROMEXICO', 'AEROMÉXICO CONNECT', 'AEROLITORAL', 'CONVIASA',
+        'MEXICANA', 'MEXICANA DE AVIACIÓN', 'VIVA AEROBUS', 'VIVA', 'VOLARIS'
     ]) x)), false)
 $fn$;
 COMMENT ON FUNCTION public.aifa_aerolinea_mixta(text) IS

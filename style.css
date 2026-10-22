@@ -18210,21 +18210,14 @@ body.dark-mode .conci-manifest-toolbar #badge-conci-manifiestos-count {
    display: none !important;
 }
 
-/* Por ahora el Cierre de Subsecretaría y la alerta de 30 h no se usan desde
-   la pantalla: sus botones, fichas y el candado por fila siguen en la página
-   y sus scripts cargados, solo OCULTOS. El !important gana a los scripts, que
-   los muestran quitando d-none. Para volver a usarlos basta quitar esta regla.
-   Mientras tanto, el mensaje para WhatsApp cuenta lo capturado como cerrado
-   (js/conci-mensaje-envio.js). */
-#btn-conci-cierre-subsecretaria,
-#btn-conci-corregir-cerrado,
-#btn-conci-solicitudes-pendientes,
+/* El Cierre de Subsecretaría vuelve a usarse desde la pantalla (22/10/2026):
+   el sistema es la fuente del cierre y del mensaje del SWEAR; sus botones,
+   fichas y el candado por fila los muestra su script según el privilegio.
+   La alerta de 30 h sigue sin usarse: su botón e interruptor siguen en la
+   página y su script cargado, solo OCULTOS (el !important gana al script, que
+   los muestra quitando d-none). Para volver a usarla basta quitar esta regla. */
 #btn-conci-alerta30h-pendientes,
-#conci-alerta30h-toggle-wrap,
-#mf-cierre-card-fijo,
-#mf-cierre-card-previo,
-#mf-cierre-card-total,
-.conci-cierre-corregir-row {
+#conci-alerta30h-toggle-wrap {
    display: none !important;
 }
 

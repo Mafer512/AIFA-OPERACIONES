@@ -23,7 +23,7 @@ describe('066_carga_por_cierre_y_mixtas.sql', () => {
 
   test('la carga de una aerolínea de pasajeros no es operación', () => {
     expect(nueva).toMatch(/AND NOT \(p_fuente = 'CONCILIACION' AND cl\.motivo LIKE '%\\_carga'\s+AND public\.aifa_aerolinea_mixta\(coalesce\(s\.aerolinea_reportada, a\.nombre, s\.aerolinea_texto\)\)\)\)\s+AS es_operacion/);
-    for (const a of ['VOLARIS', 'MEXICANA', 'CONVIASA', 'AEROMÉXICO', 'VIVA AEROBUS', 'COPA AIRLINES', 'GLOBAL CROSSING AIRLINES']) {
+    for (const a of ['AEROMÉXICO', 'CONVIASA', 'MEXICANA', 'VIVA AEROBUS', 'VOLARIS']) {
       expect(sql).toContain(`'${a}'`);
     }
     expect(sql).not.toMatch(/'COPA CARGO'\s*[,\]]/);   // Copa Cargo sí es operación
