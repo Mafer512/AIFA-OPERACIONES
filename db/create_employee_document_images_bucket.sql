@@ -20,23 +20,16 @@ ON CONFLICT (id) DO UPDATE SET
   file_size_limit    = EXCLUDED.file_size_limit,
   allowed_mime_types = EXCLUDED.allowed_mime_types;
 
-CREATE OR REPLACE FUNCTION public.is_colab_editor()
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT COALESCE((
-    SELECT lower(replace(trim(role), ' ', '_')) IN ('admin', 'superadmin', 'colab_editor')
-    FROM public.user_roles
-    WHERE user_id = auth.uid()
-    LIMIT 1
-  ), false);
-$$;
-
-REVOKE EXECUTE ON FUNCTION public.is_colab_editor() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.is_colab_editor() TO authenticated;
+-- Quién es editor lo decide public.is_colab_editor(), definida SOLO en
+-- db/fix_rls_colaboradores_edicion.sql. Aquí no se redefine: hacerlo
+-- regresaba la versión vieja (sólo user_roles, LIMIT 1) y dejaba sin permiso
+-- a editores reales al guardar INE, TIA o licencia.
+DO $$
+BEGIN
+  IF to_regprocedure('public.is_colab_editor()') IS NULL THEN
+    RAISE EXCEPTION 'Falta public.is_colab_editor(). Corre antes db/fix_rls_colaboradores_edicion.sql.';
+  END IF;
+END $$;
 
 DROP POLICY IF EXISTS "employee_document_images_select" ON storage.objects;
 DROP POLICY IF EXISTS "employee_document_images_insert" ON storage.objects;

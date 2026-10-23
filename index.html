@@ -2054,6 +2054,9 @@ FF
                                             <a class="menu-item si-link si-link--l2" href="#" data-section="conciliacion" data-sub-tab="tab-conci-estadistica">
                                                 <i class="fas fa-chart-line si-ico"></i><span class="si-txt">Estadística</span>
                                             </a>
+                                            <a class="menu-item si-link si-link--l2" href="#" data-section="ssim-slots">
+                                                <i class="fas fa-file-export si-ico"></i><span class="si-txt">Solicitud de Slots → SSIM</span>
+                                            </a>
                                             <a class="menu-item si-link si-link--l2" href="#" data-section="portal-digitalizacion">
                                                 <i class="fas fa-cloud-upload-alt si-ico"></i><span class="si-txt">Portal Digital</span>
                                             </a>
@@ -7830,9 +7833,13 @@ FF
                         .colab-cv-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
                         .colab-cv-empty { color: var(--col-muted); font-size: .85rem; font-style: italic; }
 
-                        /* --- DASHBOARD DE ESTADÍSTICAS --- */
+                        /* --- DASHBOARD DE ESTADÍSTICAS (vista ejecutiva) ---
+                           Pensado para leerse de arriba hacia abajo: primero el panorama
+                           (ocupación, ausencias, vencimientos, dónde está la gente), luego
+                           los indicadores de plantilla y al final el desglose fino. */
                         .cd-dash {
                             padding: 1.25rem 1.5rem;
+                            container-type: inline-size;
                         }
                         .cd-loading {
                             display: flex;
@@ -7840,141 +7847,421 @@ FF
                             justify-content: center;
                             padding: 3rem 2rem;
                         }
-                        .cd-dash-header {
-                            display: flex;
-                            align-items: baseline;
-                            gap: 1rem;
-                            margin-bottom: 1.2rem;
-                            flex-wrap: wrap;
+
+                        /* Panorama ejecutivo */
+                        .cd-exec {
+                            position: relative;
+                            overflow: hidden;
+                            background: linear-gradient(120deg, #0a1940 0%, #0f2d6b 52%, #1450c4 115%);
+                            border-radius: 22px;
+                            padding: 1.45rem 1.6rem 1.3rem;
+                            margin-bottom: 1.4rem;
+                            color: #fff;
+                            box-shadow: 0 18px 44px -14px rgba(10,25,64,.55);
                         }
-                        .cd-dash-title {
-                            font-size: 1rem;
-                            font-weight: 700;
+                        .cd-exec::before {
+                            content: '';
+                            position: absolute;
+                            inset: 0;
+                            background:
+                                radial-gradient(ellipse 45% 70% at 92% 0%, rgba(96,165,250,.32) 0%, transparent 62%),
+                                radial-gradient(ellipse 30% 60% at 0% 100%, rgba(200,150,14,.18) 0%, transparent 60%),
+                                linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px) 0 0 / 28px 28px,
+                                linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px) 0 0 / 28px 28px;
+                            pointer-events: none;
+                        }
+                        .cd-exec-top {
+                            position: relative; z-index: 1;
+                            display: flex; flex-wrap: wrap; gap: 1rem;
+                            align-items: flex-start; justify-content: space-between;
+                        }
+                        .cd-exec-eyebrow {
+                            display: flex; align-items: center; gap: .5rem;
+                            font-size: .68rem; font-weight: 800;
+                            letter-spacing: .12em; text-transform: uppercase;
+                            color: #f9d976;
+                        }
+                        .cd-exec-title {
+                            margin: .3rem 0 .2rem;
+                            font-size: 1.5rem; font-weight: 800;
+                            letter-spacing: -.01em; color: #fff;
+                        }
+                        .cd-exec-sub { margin: 0; font-size: .8rem; color: rgba(255,255,255,.62); }
+                        .cd-exec-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+                        .cd-exec-btn {
+                            display: inline-flex; align-items: center; gap: .45rem;
+                            padding: .5rem .9rem;
+                            border-radius: 11px;
+                            border: 1px solid rgba(255,255,255,.22);
+                            background: rgba(255,255,255,.09);
+                            color: #fff;
+                            font-size: .78rem; font-weight: 700;
+                            cursor: pointer;
+                            backdrop-filter: blur(6px);
+                            transition: background .16s ease, transform .16s ease, border-color .16s ease;
+                        }
+                        .cd-exec-btn i { color: var(--bc, #93c5fd); }
+                        .cd-exec-btn:hover { background: rgba(255,255,255,.18); border-color: rgba(255,255,255,.4); transform: translateY(-1px); }
+                        .cd-exec-btn:focus-visible { outline: 2px solid #f9d976; outline-offset: 2px; }
+                        .cd-exec-btn.primary { background: #fff; color: #0d2152; border-color: #fff; }
+                        .cd-exec-btn.primary i { color: #1558d6; }
+                        .cd-exec-btn.primary:hover { background: #eaf1ff; }
+
+                        .cd-exec-pulse {
+                            position: relative; z-index: 1;
+                            display: grid;
+                            grid-template-columns: repeat(4, minmax(0, 1fr));
+                            gap: .75rem;
+                            margin-top: 1.25rem;
+                        }
+                        .cd-pulse {
+                            display: flex; align-items: center; gap: .85rem;
+                            width: 100%; min-width: 0;
+                            padding: .85rem 1rem;
+                            border-radius: 15px;
+                            border: 1px solid rgba(255,255,255,.14);
+                            background: rgba(255,255,255,.075);
+                            color: #fff; font: inherit; text-align: left;
+                            cursor: pointer;
+                            transition: background .16s ease, transform .16s ease, border-color .16s ease;
+                        }
+                        .cd-pulse:hover { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.3); transform: translateY(-2px); }
+                        .cd-pulse:focus-visible { outline: 2px solid #f9d976; outline-offset: 2px; }
+                        .cd-pulse-ico {
+                            width: 2.8rem; height: 2.8rem; flex-shrink: 0;
+                            display: grid; place-items: center;
+                            border-radius: 13px;
+                            background: rgba(255,255,255,.1);
+                            color: var(--pc, #93c5fd);
+                            font-size: 1.1rem;
+                        }
+                        .cd-pulse-ring {
+                            --p: 0; --rc: #4ade80;
+                            position: relative;
+                            width: 3.2rem; height: 3.2rem; flex-shrink: 0;
+                            display: grid; place-items: center;
+                            font-size: .76rem; font-weight: 800;
+                        }
+                        .cd-pulse-ring::before {
+                            content: '';
+                            position: absolute; inset: 0;
+                            border-radius: 50%;
+                            background: conic-gradient(var(--rc) calc(var(--p) * 1%), rgba(255,255,255,.15) 0);
+                            -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+                                    mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+                        }
+                        .cd-pulse-body { display: flex; flex-direction: column; min-width: 0; }
+                        .cd-pulse-label {
+                            font-size: .64rem; font-weight: 800;
+                            letter-spacing: .09em; text-transform: uppercase;
+                            color: rgba(255,255,255,.58);
+                        }
+                        .cd-pulse-val {
+                            font-size: 1.45rem; font-weight: 800; line-height: 1.15;
+                            font-variant-numeric: tabular-nums;
+                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                        }
+                        .cd-pulse-val small { font-size: .74rem; font-weight: 600; color: rgba(255,255,255,.7); margin-left: .3rem; }
+                        .cd-pulse-val.is-text { font-size: .95rem; line-height: 1.25; padding: .15rem 0 .1rem; white-space: normal;
+                            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+                        .cd-pulse-note {
+                            font-size: .72rem; color: rgba(255,255,255,.7);
+                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                        }
+                        .cd-pulse-note b { color: #fff; }
+                        .cd-pulse.is-alert { border-color: rgba(252,211,77,.45); }
+                        .cd-pulse.is-alert .cd-pulse-ico { background: rgba(252,211,77,.18); }
+
+                        /* Encabezados de sección */
+                        .cd-section-h {
+                            display: flex; align-items: center; flex-wrap: wrap;
+                            gap: .35rem .75rem;
+                            margin: 1.5rem 0 .75rem;
+                        }
+                        .cd-section-h h4 {
+                            display: flex; align-items: center; gap: .55rem;
+                            margin: 0;
+                            font-size: .8rem; font-weight: 800;
+                            letter-spacing: .1em; text-transform: uppercase;
                             color: var(--col-navy);
                         }
-                        .cd-dash-sub { font-size: .8rem; }
+                        .cd-section-h h4::before {
+                            content: '';
+                            width: 4px; height: 1.05rem; border-radius: 3px;
+                            background: linear-gradient(#1558d6, #c8960e);
+                        }
+                        .cd-section-h span { font-size: .75rem; color: var(--col-muted); }
+                        .cd-section-h::after {
+                            content: '';
+                            flex: 1 1 60px; height: 1px;
+                            background: linear-gradient(90deg, #d8dfec, transparent);
+                        }
 
                         /* KPIs */
+                        /* Ocho tarjetas en una sola línea cuando hay espacio, 4×2 si no,
+                           2×4 en teléfono: nunca una tarjeta huérfana en su renglón. */
                         .cd-kpi-row {
-                            display: flex;
-                            gap: .75rem;
-                            margin-bottom: 1.25rem;
-                            flex-wrap: wrap;
+                            display: grid;
+                            grid-template-columns: repeat(4, minmax(0, 1fr));
+                            gap: .8rem;
+                            margin-bottom: .25rem;
                         }
+                        @container (min-width: 1180px) {
+                            .cd-kpi-row { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+                        }
+                        @container (max-width: 560px) {
+                            .cd-kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+                        }
+                        .cd-kpi {
+                            --kc: #1558d6; --kbg: #e8f0fe;
+                            position: relative;
+                            display: flex; flex-direction: column; align-items: flex-start; gap: .7rem;
+                            min-width: 0;
+                            padding: 1rem 1rem .95rem;
+                            background: #fff;
+                            border: 1px solid #e3e8f2;
+                            border-radius: 16px;
+                            overflow: hidden;
+                            box-shadow: 0 1px 2px rgba(13,33,82,.04), 0 6px 16px -6px rgba(13,33,82,.08);
+                        }
+                        .cd-kpi::before {
+                            content: '';
+                            position: absolute; left: 0; right: 0; top: 0; height: 3px;
+                            background: var(--kc);
+                            opacity: .85;
+                        }
+                        .cd-kpi::after {
+                            content: '';
+                            position: absolute; right: -30px; top: -30px;
+                            width: 90px; height: 90px; border-radius: 50%;
+                            background: var(--kbg); opacity: .55;
+                            pointer-events: none;
+                        }
+                        .cd-kpi > * { position: relative; z-index: 1; }
+                        .cd-kpi > div:not(.cd-kpi-icon) { display: flex; flex-direction: column; min-width: 0; width: 100%; flex: 1; }
                         /* Cada tarjeta del resumen abre justo lo que cuenta: las de personas
                            listan a esas personas, y las de categorías listan las categorías
                            para poder entrar a cualquiera. */
-                        .cd-kpi[data-kpi] { cursor: pointer; transition: transform .13s ease, box-shadow .16s ease, border-color .16s ease; }
-                        .cd-kpi[data-kpi]:hover { transform: translateY(-2px); border-color: #1558d6; box-shadow: 0 8px 20px rgba(21,88,214,.14); }
-                        .cd-kpi[data-kpi]:focus-visible { outline: 2px solid #1558d6; outline-offset: 2px; }
+                        .cd-kpi[data-kpi] { cursor: pointer; transition: transform .15s ease, box-shadow .18s ease, border-color .18s ease; }
+                        .cd-kpi[data-kpi]:hover {
+                            transform: translateY(-3px);
+                            border-color: var(--kc);
+                            box-shadow: 0 14px 28px -12px color-mix(in srgb, var(--kc) 45%, transparent);
+                        }
+                        .cd-kpi[data-kpi]:focus-visible { outline: 2px solid var(--kc); outline-offset: 2px; }
                         .cd-kpi[data-kpi] .cd-kpi-go {
-                            margin-left: auto; align-self: flex-start; font-size: .72rem; color: #b7c2d4;
-                            opacity: 0; transition: opacity .16s ease, color .16s ease;
+                            position: absolute; top: .7rem; right: .75rem;
+                            font-size: .7rem; color: var(--kc);
+                            opacity: 0; transition: opacity .16s ease, transform .16s ease;
                         }
-                        .cd-kpi[data-kpi]:hover .cd-kpi-go { opacity: 1; color: #1558d6; }
+                        .cd-kpi[data-kpi]:hover .cd-kpi-go { opacity: 1; transform: translateX(2px); }
                         .cd-kpi-pct.cd-kpi-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
-                        .cd-kpi-pct.cd-kpi-link:hover { color: #1558d6; }
-                        .cd-kpi {
-                            flex: 1 1 130px;
-                            display: flex;
-                            align-items: center;
-                            gap: .75rem;
-                            background: #fff;
-                            border: 1.5px solid #dde3ef;
-                            border-radius: 12px;
-                            padding: .85rem 1rem;
-                            min-width: 120px;
-                        }
+                        .cd-kpi-pct.cd-kpi-link:hover { filter: brightness(.8); }
                         .cd-kpi-icon {
-                            width: 2.4rem; height: 2.4rem;
-                            border-radius: 10px;
-                            display: flex; align-items: center; justify-content: center;
-                            font-size: 1.1rem;
-                            flex-shrink: 0;
+                            width: 2.5rem; height: 2.5rem; flex-shrink: 0;
+                            display: grid; place-items: center;
+                            border-radius: 12px;
+                            background: var(--kbg); color: var(--kc);
+                            font-size: 1.05rem;
                         }
-                        .cd-kpi-total .cd-kpi-icon { background: #e8f0fe; color: #1558d6; }
-                        .cd-kpi-vac   .cd-kpi-icon { background: #fdeee0; color: #b3541e; }
-                        .cd-kpi-vac   .cd-kpi-pct  { color: #b3541e; }
-                        .cd-kpi-masc  .cd-kpi-icon { background: #e3f2fd; color: #1565c0; }
-                        .cd-kpi-fem   .cd-kpi-icon { background: #fce4ec; color: #c2185b; }
-                        .cd-kpi-dir   .cd-kpi-icon { background: #e8f5e9; color: #2e7d32; }
-                        .cd-kpi-sub   .cd-kpi-icon { background: #fff3e0; color: #e65100; }
-                        .cd-kpi-prof  .cd-kpi-icon { background: #f3e5f5; color: #7b1fa2; }
-                        .cd-kpi-ger   .cd-kpi-icon { background: #e3f2fd; color: #0277bd; }
+                        .cd-kpi-total { --kc: #1558d6; --kbg: #e6efff; }
+                        .cd-kpi-vac   { --kc: #c2410c; --kbg: #ffedd5; }
+                        .cd-kpi-masc  { --kc: #2563eb; --kbg: #dbeafe; }
+                        .cd-kpi-fem   { --kc: #db2777; --kbg: #fce7f3; }
+                        .cd-kpi-dir   { --kc: #15803d; --kbg: #dcfce7; }
+                        .cd-kpi-sub   { --kc: #ea580c; --kbg: #ffedd5; }
+                        .cd-kpi-prof  { --kc: #7c3aed; --kbg: #ede9fe; }
+                        .cd-kpi-ger   { --kc: #0e7490; --kbg: #cffafe; }
                         .cd-kpi-val {
-                            font-size: 1.6rem;
-                            font-weight: 800;
+                            font-size: 1.9rem; font-weight: 800; line-height: 1;
+                            letter-spacing: -.02em;
+                            font-variant-numeric: tabular-nums;
                             color: var(--col-navy);
-                            line-height: 1.1;
                         }
                         .cd-kpi-label {
-                            font-size: .7rem;
-                            text-transform: uppercase;
-                            letter-spacing: .04em;
+                            order: 1;
+                            margin-top: .35rem;
+                            font-size: .66rem; font-weight: 800;
+                            letter-spacing: .07em; text-transform: uppercase;
                             color: var(--col-muted);
-                            font-weight: 600;
                         }
                         .cd-kpi-pct {
-                            font-size: .72rem; font-weight: 700; line-height: 1;
-                            margin-top: .08rem; margin-bottom: .1rem;
+                            order: 2;
+                            margin-top: .2rem;
+                            font-size: .7rem; font-weight: 700; line-height: 1.2;
+                            color: var(--kc);
                         }
-                        .cd-kpi-total .cd-kpi-pct { color: #1558d6; }
-                        .cd-kpi-masc .cd-kpi-pct { color: #1565c0; }
-                        .cd-kpi-fem  .cd-kpi-pct { color: #c2185b; }
+                        .cd-kpi-pct:empty { display: none; }
+                        .cd-kpi-meter {
+                            order: 3;
+                            display: block;
+                            height: 5px; margin-top: .45rem;
+                            border-radius: 5px;
+                            background: var(--kbg);
+                            overflow: hidden;
+                        }
+                        .cd-kpi-meter > span {
+                            display: block; height: 100%; width: 0;
+                            border-radius: inherit;
+                            background: var(--kc);
+                            transition: width .8s cubic-bezier(.4,0,.2,1);
+                        }
 
                         /* Tablas de desglose */
                         .cd-tables-row {
                             display: grid;
-                            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-                            gap: .85rem;
+                            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                            gap: 1rem;
                         }
 
                         /* Fila de gráficas */
                         .cd-charts-row {
                             display: grid;
-                            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-                            gap: .85rem;
+                            grid-template-columns: repeat(2, minmax(0, 1fr));
+                            gap: 1rem;
                             margin-bottom: 1.15rem;
                         }
-                        .cd-chart-card {
-                            background: #fff;
-                            border: 1.5px solid #dde3ef;
-                            border-radius: 12px;
-                            overflow: hidden;
+                        .cd-charts-row.cd-charts-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+                        @media (max-width: 1100px) {
+                            .cd-charts-row.cd-charts-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
                         }
-                        .cd-chart-title {
-                            background: var(--col-navy);
-                            color: #fff;
-                            font-size: .73rem;
-                            font-weight: 700;
-                            text-transform: uppercase;
-                            letter-spacing: .05em;
-                            padding: .45rem .85rem;
+                        @media (max-width: 900px) {
+                            .cd-charts-row, .cd-charts-row.cd-charts-3 { grid-template-columns: 1fr; }
+                        }
+                        .cd-chart-card,
+                        .cd-table-card {
+                            display: flex; flex-direction: column;
+                            min-width: 0;
+                            background: #fff;
+                            border: 1px solid #e3e8f2;
+                            border-radius: 16px;
+                            overflow: hidden;
+                            box-shadow: 0 1px 2px rgba(13,33,82,.04), 0 8px 20px -10px rgba(13,33,82,.1);
+                        }
+                        .cd-chart-title,
+                        .cd-table-title {
+                            display: flex; align-items: center; gap: .6rem;
+                            padding: .8rem 1.05rem .7rem;
+                            border-bottom: 1px solid #eef1f7;
+                            background: transparent;
+                            color: var(--col-navy);
+                            font-size: .76rem; font-weight: 800;
+                            letter-spacing: .06em; text-transform: uppercase;
+                        }
+                        .cd-chart-title > i,
+                        .cd-table-title > i {
+                            width: 1.85rem; height: 1.85rem; flex-shrink: 0;
+                            display: inline-grid; place-items: center;
+                            margin: 0 !important;
+                            border-radius: 9px;
+                            background: color-mix(in srgb, var(--ic, #1558d6) 12%, #fff);
+                            color: var(--ic, #1558d6);
+                            font-size: .78rem;
+                        }
+                        .cd-tables-row > .cd-table-card:nth-child(1) { --ic: #7c3aed; }
+                        .cd-tables-row > .cd-table-card:nth-child(2) { --ic: #15803d; }
+                        .cd-tables-row > .cd-table-card:nth-child(3) { --ic: #ea580c; }
+                        .cd-tables-row > .cd-table-card:nth-child(4) { --ic: #0e7490; }
+                        .cd-tables-row > .cd-table-card:nth-child(5) { --ic: #0f766e; }
+                        .cd-tables-row > .cd-table-card:nth-child(6) { --ic: #1558d6; }
+                        .cd-chart-hint {
+                            margin-left: auto;
+                            font-size: .68rem; font-weight: 600;
+                            letter-spacing: 0; text-transform: none;
+                            color: var(--col-muted);
                         }
                         .cd-chart-body {
-                            padding: .75rem 1rem;
-                            display: flex;
-                            align-items: center;
+                            flex: 1;
+                            position: relative;
+                            display: flex; align-items: center; justify-content: center;
+                            min-height: 280px;
+                            padding: .9rem 1.1rem 1rem;
+                        }
+                        .cd-chart-body--list { align-items: stretch; padding: .55rem .6rem .4rem; }
+
+                        /* Ranking (subdirecciones y gerencias) */
+                        .cd-rank { --rc: #1558d6; width: 100%; display: flex; flex-direction: column; gap: .1rem; }
+                        .cd-rank-row {
+                            display: flex; align-items: center; gap: .7rem;
+                            width: 100%;
+                            padding: .42rem .55rem;
+                            border: 0; border-radius: 10px;
+                            background: transparent;
+                            font: inherit; text-align: left; color: inherit;
+                            cursor: pointer;
+                            transition: background .14s ease;
+                        }
+                        .cd-rank-row:hover { background: color-mix(in srgb, var(--rc) 7%, #fff); }
+                        .cd-rank-row:focus-visible { outline: 2px solid var(--rc); outline-offset: -2px; }
+                        .cd-rank-pos {
+                            width: 1.55rem; height: 1.55rem; flex-shrink: 0;
+                            display: grid; place-items: center;
+                            border-radius: 8px;
+                            background: #f1f4f9; color: #64748b;
+                            font-size: .7rem; font-weight: 800;
+                        }
+                        .cd-rank-row:nth-child(-n+3) .cd-rank-pos { background: color-mix(in srgb, var(--rc) 14%, #fff); color: var(--rc); }
+                        .cd-rank-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .28rem; }
+                        .cd-rank-top { display: flex; align-items: baseline; gap: .6rem; }
+                        .cd-rank-name {
+                            flex: 1; min-width: 0;
+                            font-size: .8rem; font-weight: 600; color: var(--col-text);
+                            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                        }
+                        .cd-rank-num { flex-shrink: 0; font-size: .85rem; font-weight: 800; color: var(--col-navy); font-variant-numeric: tabular-nums; }
+                        .cd-rank-num small { margin-left: .35rem; font-size: .68rem; font-weight: 700; color: var(--col-muted); }
+                        .cd-rank-track { display: block; height: 7px; border-radius: 7px; background: #eef2f8; overflow: hidden; }
+                        .cd-rank-fill {
+                            display: block; height: 100%; width: 0;
+                            border-radius: inherit;
+                            background: linear-gradient(90deg, color-mix(in srgb, var(--rc) 60%, #fff), var(--rc));
+                            transition: width .8s cubic-bezier(.4,0,.2,1);
+                        }
+                        .cd-card-more {
+                            display: flex; align-items: center; justify-content: center; gap: .45rem;
+                            padding: .6rem 1rem;
+                            border: 0; border-top: 1px solid #eef1f7;
+                            background: #fafbfe;
+                            color: #1558d6;
+                            font-size: .74rem; font-weight: 700;
+                            cursor: pointer;
+                            transition: background .14s ease;
+                        }
+                        .cd-card-more:hover { background: #eef4ff; }
+                        .cd-card-more i { font-size: .68rem; transition: transform .14s ease; }
+                        .cd-card-more:hover i { transform: translateX(3px); }
+
+                        /* Donas con leyenda propia */
+                        .cd-donut {
+                            width: 100%;
+                            display: grid;
+                            grid-template-columns: minmax(170px, 210px) minmax(0, 340px);
                             justify-content: center;
-                            min-height: 260px;
+                            gap: 1.6rem;
+                            align-items: center;
                         }
-                        .cd-table-card {
-                            background: #fff;
-                            border: 1.5px solid #dde3ef;
-                            border-radius: 12px;
-                            overflow: hidden;
+                        .cd-donut-canvas { position: relative; height: 210px; color: #0d2152; }
+                        .cd-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .1rem; min-width: 0; max-height: 250px; overflow-y: auto; }
+                        .cd-legend li {
+                            display: flex; align-items: center; gap: .55rem;
+                            padding: .32rem .5rem;
+                            border-radius: 8px;
+                            font-size: .78rem;
+                            cursor: pointer;
+                            transition: background .14s ease;
                         }
-                        .cd-table-title {
-                            background: var(--col-navy);
-                            color: #fff;
-                            font-size: .73rem;
-                            font-weight: 700;
-                            text-transform: uppercase;
-                            letter-spacing: .05em;
-                            padding: .45rem .85rem;
+                        .cd-legend li:hover, .cd-legend li:focus-visible { background: #f1f5fb; outline: none; }
+                        .cd-legend-dot { width: .7rem; height: .7rem; border-radius: 4px; flex-shrink: 0; }
+                        .cd-legend-name { flex: 1; min-width: 0; color: var(--col-text); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                        .cd-legend-num { font-weight: 800; color: var(--col-navy); font-variant-numeric: tabular-nums; }
+                        .cd-legend-pct { min-width: 2.6rem; text-align: right; font-size: .7rem; font-weight: 700; color: var(--col-muted); font-variant-numeric: tabular-nums; }
+                        @media (max-width: 560px) {
+                            .cd-donut { grid-template-columns: 1fr; }
+                            .cd-donut-canvas { height: 190px; }
                         }
+
                         .cd-table-body {
-                            max-height: 260px;
+                            max-height: 270px;
                             overflow-y: auto;
                         }
                         .cd-tbl-loading {
@@ -7986,26 +8273,67 @@ FF
                         .cd-tbl-row {
                             display: flex;
                             align-items: center;
-                            gap: .5rem;
-                            padding: .32rem .85rem;
-                            border-bottom: 1px solid #f0f2f7;
+                            gap: .6rem;
+                            padding: .4rem 1rem;
+                            border-bottom: 1px solid #f2f4f9;
                             font-size: .8rem;
                         }
                         .cd-tbl-row:last-child { border-bottom: none; }
                         .cd-tbl-row:hover { background: #f5f7ff; }
-                        .cd-tbl-name { flex: 1; color: var(--col-text); font-weight: 500; }
+                        .cd-tbl-name { flex: 1; min-width: 0; color: var(--col-text); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
                         .cd-tbl-bar-wrap {
-                            width: 70px; height: 6px;
-                            background: #eef0f7;
-                            border-radius: 3px;
+                            width: 76px; height: 6px; flex-shrink: 0;
+                            background: #eef1f7;
+                            border-radius: 6px;
                             overflow: hidden;
                         }
-                        .cd-tbl-bar { height: 100%; border-radius: 3px; background: #1558d6; }
+                        .cd-tbl-bar { display: block; height: 100%; border-radius: 6px; background: #1558d6; }
                         .cd-tbl-count {
                             min-width: 2rem; text-align: right;
-                            font-weight: 700; color: var(--col-navy);
-                            font-size: .78rem;
+                            font-weight: 800; color: var(--col-navy);
+                            font-size: .8rem;
+                            font-variant-numeric: tabular-nums;
                         }
+
+                        @container (max-width: 1050px) {
+                            .cd-exec-pulse { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+                        }
+                        @container (max-width: 560px) {
+                            .cd-exec { padding: 1.15rem 1rem; border-radius: 18px; }
+                            .cd-exec-pulse { grid-template-columns: 1fr; }
+                            .cd-exec-title { font-size: 1.25rem; }
+                        }
+                        @media (max-width: 560px) {
+                            .cd-dash { padding: 1rem .25rem; }
+                        }
+
+                        /* Modo oscuro */
+                        body.dark-mode .cd-kpi,
+                        body.dark-mode .cd-chart-card,
+                        body.dark-mode .cd-table-card { background: #111827; border-color: #1f2937; box-shadow: none; }
+                        body.dark-mode .cd-kpi-val,
+                        body.dark-mode .cd-rank-num,
+                        body.dark-mode .cd-legend-num,
+                        body.dark-mode .cd-tbl-count,
+                        body.dark-mode .cd-chart-title,
+                        body.dark-mode .cd-table-title,
+                        body.dark-mode .cd-section-h h4 { color: #e5e7eb; }
+                        body.dark-mode .cd-rank-name,
+                        body.dark-mode .cd-legend-name,
+                        body.dark-mode .cd-tbl-name { color: #cbd5e1; }
+                        body.dark-mode .cd-chart-title,
+                        body.dark-mode .cd-table-title,
+                        body.dark-mode .cd-tbl-row,
+                        body.dark-mode .cd-card-more { border-color: #1f2937; }
+                        body.dark-mode .cd-card-more { background: #0f172a; color: #93c5fd; }
+                        body.dark-mode .cd-rank-track,
+                        body.dark-mode .cd-tbl-bar-wrap,
+                        body.dark-mode .cd-rank-pos { background: #1f2937; }
+                        body.dark-mode .cd-rank-row:hover,
+                        body.dark-mode .cd-legend li:hover,
+                        body.dark-mode .cd-tbl-row:hover { background: #1e293b; }
+                        body.dark-mode .cd-donut-canvas { color: #e5e7eb; }
+                        body.dark-mode .cd-kpi::after { opacity: .12; }
 
                         /* ---------- PRÓXIMOS CUMPLEAÑOS ---------- */
                         /* -- Sección Amonestaciones -- */
@@ -8451,8 +8779,9 @@ FF
                         .bday-btn-email:disabled { opacity: .6; cursor: wait; }
                         /* Fila clickeable en tabla de profesión */
                         .cd-tbl-row.clickable { cursor: pointer; }
-                        .cd-tbl-row.clickable:hover { background: #ede7f6; }
-                        .cd-tbl-name.clickable-label { color: #5e35b1; text-decoration: underline dotted; }
+                        .cd-tbl-row.clickable:hover { background: color-mix(in srgb, var(--ic, #1558d6) 7%, #fff); }
+                        .cd-tbl-row.clickable:hover .cd-tbl-name { color: var(--ic, #1558d6); }
+                        .cd-tbl-name.clickable-label { color: var(--col-text); }
                         /* Buscador dentro de la card */
                         .cd-tbl-search-wrap {
                             padding: .4rem .7rem;
@@ -8464,7 +8793,7 @@ FF
                             padding: .28rem .55rem; font-size: .78rem; outline: none;
                             background: #fff; color: var(--col-text);
                         }
-                        .cd-tbl-search-inp:focus { border-color: #7b1fa2; }
+                        .cd-tbl-search-inp:focus { border-color: #7c3aed; box-shadow: 0 0 0 3px rgba(124,58,237,.12); }
                         /* Modal de drill-down genérico por grupo */
                         #colab-grupo-modal-backdrop {
                             display: none; position: fixed; inset: 0;
@@ -10663,23 +10992,66 @@ FF
                                 <!-- Contenido del dashboard (se llena con JS) -->
                                 <div class="d-none" id="cd-content">
 
-                                    <!-- Título -->
-                                    <div class="cd-dash-header">
-                                        <span class="cd-dash-title"><i class="fas fa-chart-bar me-2"></i>Resumen del Directorio</span>
-                                        <span class="cd-dash-sub text-muted">Selecciona o busca un colaborador para ver su ficha completa</span>
-                                        <button class="btn btn-sm btn-outline-primary ms-auto" onclick="colabAbrirTabla()" title="Ver lista completa de colaboradores">
-                                            <i class="fas fa-table me-1"></i> Tabla completa
-                                        </button>
-                                        <button class="btn-vac-global ms-1" onclick="vacCalAbrir()" title="Ver las vacaciones del personal">
-                                            <i class="fas fa-umbrella-beach me-1"></i> Vacaciones
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-warning ms-1" onclick="cursosCalAbrir()" title="Ver calendario de vencimientos de cursos recurrentes">
-                                            <i class="fas fa-calendar-exclamation me-1"></i> Vencimientos
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-info ms-1" onclick="cursosAgendaAbrir()" title="Agendar cursos y asistentes">
-                                            <i class="fas fa-calendar-check me-1"></i> Agenda Cursos
-                                        </button>
-                                    </div>
+                                    <!-- Panorama ejecutivo: lo que un directivo necesita leer primero -->
+                                    <section class="cd-exec" aria-label="Panorama ejecutivo del directorio">
+                                        <div class="cd-exec-top">
+                                            <div class="cd-exec-titles">
+                                                <div class="cd-exec-eyebrow"><i class="fas fa-plane-departure" aria-hidden="true"></i><span id="cd-exec-fecha">Corte al día</span></div>
+                                                <h3 class="cd-exec-title">Resumen del Directorio</h3>
+                                                <p class="cd-exec-sub">La plantilla de un vistazo. Toca cualquier indicador para ver a las personas que cuenta.</p>
+                                            </div>
+                                            <div class="cd-exec-actions">
+                                                <button type="button" class="cd-exec-btn primary" onclick="colabAbrirTabla()" title="Ver lista completa de colaboradores">
+                                                    <i class="fas fa-table" aria-hidden="true"></i> Tabla completa
+                                                </button>
+                                                <button type="button" class="cd-exec-btn" style="--bc:#7dd3fc" onclick="vacCalAbrir()" title="Ver las vacaciones del personal">
+                                                    <i class="fas fa-umbrella-beach" aria-hidden="true"></i> Vacaciones
+                                                </button>
+                                                <button type="button" class="cd-exec-btn" style="--bc:#fcd34d" onclick="cursosCalAbrir()" title="Ver calendario de vencimientos de cursos recurrentes">
+                                                    <i class="fas fa-calendar-xmark" aria-hidden="true"></i> Vencimientos
+                                                </button>
+                                                <button type="button" class="cd-exec-btn" style="--bc:#86efac" onclick="cursosAgendaAbrir()" title="Agendar cursos y asistentes">
+                                                    <i class="fas fa-calendar-check" aria-hidden="true"></i> Agenda Cursos
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="cd-exec-pulse">
+                                            <button type="button" class="cd-pulse" id="cd-pulse-ocup" title="Ver qué plazas están vacías y en qué área">
+                                                <span class="cd-pulse-ring" id="cd-pulse-ring"><span id="cd-pulse-ocup-pct">—</span></span>
+                                                <span class="cd-pulse-body">
+                                                    <span class="cd-pulse-label">Ocupación de plazas</span>
+                                                    <span class="cd-pulse-val" id="cd-pulse-ocup-val">—</span>
+                                                    <span class="cd-pulse-note" id="cd-pulse-ocup-note">&nbsp;</span>
+                                                </span>
+                                            </button>
+                                            <button type="button" class="cd-pulse" id="cd-pulse-vac" style="--pc:#7dd3fc" title="Ver quién está fuera hoy">
+                                                <span class="cd-pulse-ico"><i class="fas fa-umbrella-beach" aria-hidden="true"></i></span>
+                                                <span class="cd-pulse-body">
+                                                    <span class="cd-pulse-label">Fuera hoy</span>
+                                                    <span class="cd-pulse-val" id="cd-pulse-vac-val">—</span>
+                                                    <span class="cd-pulse-note" id="cd-pulse-vac-note">&nbsp;</span>
+                                                </span>
+                                            </button>
+                                            <button type="button" class="cd-pulse" id="cd-pulse-cursos" style="--pc:#fcd34d" onclick="cursosCalAbrir()" title="Ver el calendario de vencimientos">
+                                                <span class="cd-pulse-ico"><i class="fas fa-hourglass-half" aria-hidden="true"></i></span>
+                                                <span class="cd-pulse-body">
+                                                    <span class="cd-pulse-label">Cursos por vencer</span>
+                                                    <span class="cd-pulse-val" id="cd-pulse-cursos-val">—</span>
+                                                    <span class="cd-pulse-note" id="cd-pulse-cursos-note">Próximos 30 días</span>
+                                                </span>
+                                            </button>
+                                            <button type="button" class="cd-pulse" id="cd-pulse-area" style="--pc:#c4b5fd" title="Ver al personal de esta subdirección">
+                                                <span class="cd-pulse-ico"><i class="fas fa-ranking-star" aria-hidden="true"></i></span>
+                                                <span class="cd-pulse-body">
+                                                    <span class="cd-pulse-label">Mayor plantilla</span>
+                                                    <span class="cd-pulse-val is-text" id="cd-pulse-area-val">—</span>
+                                                    <span class="cd-pulse-note" id="cd-pulse-area-note">&nbsp;</span>
+                                                </span>
+                                            </button>
+                                        </div>
+                                    </section>
+
+                                    <div class="cd-section-h"><h4>Indicadores de plantilla</h4><span>Sólo personal activo de la Dirección</span></div>
 
                                     <!-- Fila KPIs -->
                                     <div class="cd-kpi-row">
@@ -10707,6 +11079,7 @@ FF
                                                 <div class="cd-kpi-val" id="cd-kpi-masc"></div>
                                                 <div class="cd-kpi-pct" id="cd-kpi-masc-pct"></div>
                                                 <div class="cd-kpi-label">Hombres</div>
+                                                <span class="cd-kpi-meter"><span id="cd-kpi-masc-bar"></span></span>
                                             </div>
                                             <i class="fas fa-arrow-right cd-kpi-go" aria-hidden="true"></i>
                                         </div>
@@ -10716,6 +11089,7 @@ FF
                                                 <div class="cd-kpi-val" id="cd-kpi-fem"></div>
                                                 <div class="cd-kpi-pct" id="cd-kpi-fem-pct"></div>
                                                 <div class="cd-kpi-label">Mujeres</div>
+                                                <span class="cd-kpi-meter"><span id="cd-kpi-fem-bar"></span></span>
                                             </div>
                                             <i class="fas fa-arrow-right cd-kpi-go" aria-hidden="true"></i>
                                         </div>
@@ -10754,22 +11128,39 @@ FF
                                     </div>
 
                                     <!-- Fila de gráficas -->
+                                    <div class="cd-section-h"><h4>Estructura organizacional</h4><span>Dónde está la gente · toca un renglón para ver al personal</span></div>
                                     <div class="cd-charts-row" id="cd-charts-row">
                                         <div class="cd-chart-card">
-                                            <div class="cd-chart-title"><i class="fas fa-building me-1"></i> Por Dirección</div>
-                                            <div class="cd-chart-body"><canvas id="cd-chart-dir" height="180"></canvas></div>
+                                            <div class="cd-chart-title"><i class="fas fa-sitemap" style="--ic:#1558d6"></i> Subdirecciones <span class="cd-chart-hint">Top 8 por plantilla</span></div>
+                                            <div class="cd-chart-body cd-chart-body--list"><div class="cd-rank" id="cd-chart-subdir"></div></div>
+                                            <button type="button" class="cd-card-more" onclick="colabKpiFiltro('subdireccion')">
+                                                <span id="cd-more-subdir">Ver todas las subdirecciones</span> <i class="fas fa-arrow-right" aria-hidden="true"></i>
+                                            </button>
                                         </div>
                                         <div class="cd-chart-card">
-                                            <div class="cd-chart-title"><i class="fas fa-sitemap me-1"></i> Top Subdirecciones</div>
-                                            <div class="cd-chart-body"><canvas id="cd-chart-subdir" height="260"></canvas></div>
+                                            <div class="cd-chart-title"><i class="fas fa-user-tie" style="--ic:#0e7490"></i> Gerencias <span class="cd-chart-hint">Top 8 por plantilla</span></div>
+                                            <div class="cd-chart-body cd-chart-body--list"><div class="cd-rank" id="cd-chart-ger"></div></div>
+                                            <button type="button" class="cd-card-more" onclick="colabKpiFiltro('gerencia')">
+                                                <span id="cd-more-ger">Ver todas las gerencias</span> <i class="fas fa-arrow-right" aria-hidden="true"></i>
+                                            </button>
                                         </div>
                                         <div class="cd-chart-card">
-                                            <div class="cd-chart-title"><i class="fas fa-user-tie me-1"></i> Top Gerencias</div>
-                                            <div class="cd-chart-body"><canvas id="cd-chart-ger" height="260"></canvas></div>
+                                            <div class="cd-chart-title"><i class="fas fa-layer-group" style="--ic:#7c3aed"></i> Por nivel <span class="cd-chart-hint">Composición jerárquica</span></div>
+                                            <div class="cd-chart-body">
+                                                <div class="cd-donut">
+                                                    <div class="cd-donut-canvas"><canvas id="cd-chart-nivel"></canvas></div>
+                                                    <ul class="cd-legend" id="cd-legend-nivel"></ul>
+                                                </div>
+                                            </div>
                                         </div>
                                         <div class="cd-chart-card">
-                                            <div class="cd-chart-title"><i class="fas fa-layer-group me-1"></i> Por Nivel</div>
-                                            <div class="cd-chart-body"><canvas id="cd-chart-nivel" height="180"></canvas></div>
+                                            <div class="cd-chart-title"><i class="fas fa-building" style="--ic:#15803d"></i> Por dirección <span class="cd-chart-hint">Adscripción</span></div>
+                                            <div class="cd-chart-body">
+                                                <div class="cd-donut">
+                                                    <div class="cd-donut-canvas"><canvas id="cd-chart-dir"></canvas></div>
+                                                    <ul class="cd-legend" id="cd-legend-dir"></ul>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -10781,7 +11172,7 @@ FF
                                             <span class="cd-amonest-badge" id="cd-amonest-total-badge"></span>
                                             <span class="cd-amonest-sub">Amonestaciones acumuladas por &aacute;rea &middot; click para ver colaboradores</span>
                                         </div>
-                                        <div class="cd-charts-row">
+                                        <div class="cd-charts-row cd-charts-3">
                                             <div class="cd-chart-card">
                                                 <div class="cd-chart-title"><i class="fas fa-sitemap me-1"></i> Amonest. por Subdirección</div>
                                                 <div class="cd-chart-body" style="min-height:0;align-items:flex-start"><div id="cd-chart-amonest-subdir" class="am-chart-host"></div></div>
@@ -10798,6 +11189,7 @@ FF
                                     </div>
 
                                     <!-- Fila de tablas -->
+                                    <div class="cd-section-h"><h4>Desglose detallado</h4><span>Todas las categorías · toca un renglón para ver a las personas</span></div>
                                     <div class="cd-tables-row">
 
                                         <!-- Profesión -->
@@ -13686,6 +14078,28 @@ FF
                             colabRenderDashboard();
                         }
 
+                        /* Vencimientos de cursos del panorama: una consulta que se reusa
+                           unos minutos para no golpear Supabase cada vez que se pinta. */
+                        let _cdCursosCache = null;
+                        function cdCursosRecurrentes() {
+                            if (_cdCursosCache && Date.now() - _cdCursosCache.t < 5 * 60 * 1000) return _cdCursosCache.promise;
+                            const promise = (async () => {
+                                let sb = window.supabaseClient;
+                                if (!sb && typeof window.ensureSupabaseClient === 'function') sb = await window.ensureSupabaseClient();
+                                if (!sb) throw new Error('Supabase no disponible');
+                                const { data, error } = await sb
+                                    .from('colab_cursos')
+                                    .select('num_empleado, es_recurrente, frecuencia_dias, fecha_realizacion')
+                                    .eq('es_recurrente', true)
+                                    .not('fecha_realizacion', 'is', null);
+                                if (error) throw error;
+                                return data || [];
+                            })();
+                            _cdCursosCache = { t: Date.now(), promise };
+                            promise.catch(() => { _cdCursosCache = null; });
+                            return promise;
+                        }
+
                         /* -- Dashboard de estadísticas -- */
                         function colabRenderDashboard() {
                             // Si los datos aún no están, arrancar la carga y volver a intentar al terminar
@@ -13793,7 +14207,87 @@ FF
                                     ? 'No cuentan en el total'
                                     : 'Sin plazas por cubrir';
                             }
-                            
+
+                            const setBar = (id, pct) => { const el = document.getElementById(id); if (el) requestAnimationFrame(() => { el.style.width = pct + '%'; }); };
+                            setBar('cd-kpi-masc-bar', mascPct);
+                            setBar('cd-kpi-fem-bar', femPct);
+
+                            /* ---------- PANORAMA EJECUTIVO ----------
+                               Cuatro lecturas que un directivo pide antes que cualquier
+                               gráfica: qué tan cubierta está la plantilla, quién falta hoy,
+                               qué capacitación está por vencer y dónde se concentra la gente. */
+                            (function renderPanorama() {
+                                const fmt = n => Number(n || 0).toLocaleString('es-MX');
+                                const hoy = new Date();
+                                const fechaEl = document.getElementById('cd-exec-fecha');
+                                if (fechaEl) {
+                                    fechaEl.textContent = 'Corte al ' + hoy.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                                }
+
+                                // 1. Ocupación: personas activas contra plazas totales (activas + vacantes).
+                                const plazas = total + vacantes;
+                                const ocup = plazas > 0 ? Math.round(total / plazas * 100) : 0;
+                                const ring = document.getElementById('cd-pulse-ring');
+                                if (ring) {
+                                    ring.style.setProperty('--p', ocup);
+                                    ring.style.setProperty('--rc', ocup >= 95 ? '#4ade80' : ocup >= 85 ? '#facc15' : '#f87171');
+                                }
+                                setKpi('cd-pulse-ocup-pct', plazas ? ocup + '%' : '—');
+                                const ocupVal = document.getElementById('cd-pulse-ocup-val');
+                                if (ocupVal) ocupVal.innerHTML = `${fmt(total)}<small>de ${fmt(plazas)} plazas</small>`;
+                                const ocupNote = document.getElementById('cd-pulse-ocup-note');
+                                if (ocupNote) ocupNote.innerHTML = vacantes > 0
+                                    ? `<b>${fmt(vacantes)}</b> ${vacantes === 1 ? 'plaza' : 'plazas'} por cubrir`
+                                    : 'Plantilla completa';
+                                const ocupBtn = document.getElementById('cd-pulse-ocup');
+                                if (ocupBtn) ocupBtn.onclick = () => window.colabKpiFiltro && window.colabKpiFiltro('vacantes');
+
+                                // 2. Fuera hoy: periodos vigentes (vacaciones o permiso) que tocan el día de hoy.
+                                const hoyISO = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+                                const fuera = data.filter(r => (Array.isArray(r.vacaciones) ? r.vacaciones : []).some(v =>
+                                    v && v.estado !== 'cancelado' && v.fecha_inicio && v.fecha_fin
+                                    && v.fecha_inicio <= hoyISO && v.fecha_fin >= hoyISO
+                                    && _vacDiasDe(v).includes(hoyISO)));
+                                const fueraPct = total > 0 ? Math.round(fuera.length / total * 100) : 0;
+                                const vacVal = document.getElementById('cd-pulse-vac-val');
+                                if (vacVal) vacVal.innerHTML = `${fmt(fuera.length)}<small>${fuera.length === 1 ? 'persona' : 'personas'}</small>`;
+                                setKpi('cd-pulse-vac-note', fuera.length
+                                    ? `${fueraPct}% de la plantilla · vacaciones o permiso`
+                                    : 'Toda la plantilla en servicio');
+                                const vacBtn = document.getElementById('cd-pulse-vac');
+                                if (vacBtn) vacBtn.onclick = () => fuera.length
+                                    ? _abrirGrupoModalPersonas('Fuera hoy por vacaciones o permiso', 'fas fa-umbrella-beach', fuera)
+                                    : vacCalAbrir();
+
+                                // 3. Mayor plantilla: la subdirección que concentra más gente.
+                                const top = bySubDir.find(([k]) => k !== '(Sin dato)');
+                                const areaVal = document.getElementById('cd-pulse-area-val');
+                                const areaBtn = document.getElementById('cd-pulse-area');
+                                if (top && areaVal) {
+                                    areaVal.textContent = top[0].replace(/^Subdirecci[oó]n (de |del |de la )?/i, '');
+                                    areaVal.title = top[0];
+                                    setKpi('cd-pulse-area-note', `${fmt(top[1])} personas · ${total ? Math.round(top[1] / total * 100) : 0}% del total`);
+                                    if (areaBtn) areaBtn.onclick = () => colabAbrirGrupoModal('subdireccion', top[0]);
+                                }
+
+                                // 4. Cursos por vencer en los próximos 30 días (llega después, sin frenar lo demás).
+                                const cursosBtn = document.getElementById('cd-pulse-cursos');
+                                const nums = new Set(data.map(r => String(gc(r, 'num') ?? '').trim()).filter(Boolean));
+                                cdCursosRecurrentes().then(cursos => {
+                                    const porVencer = cursos.filter(c => nums.has(String(c.num_empleado ?? '').trim()) && ccStatus(c) === 'warning');
+                                    const personas = new Set(porVencer.map(c => String(c.num_empleado).trim())).size;
+                                    const cVal = document.getElementById('cd-pulse-cursos-val');
+                                    if (cVal) cVal.innerHTML = `${fmt(porVencer.length)}<small>${porVencer.length === 1 ? 'curso' : 'cursos'}</small>`;
+                                    setKpi('cd-pulse-cursos-note', porVencer.length
+                                        ? `${fmt(personas)} ${personas === 1 ? 'persona' : 'personas'} · próximos 30 días`
+                                        : 'Nada vence en 30 días');
+                                    if (cursosBtn) cursosBtn.classList.toggle('is-alert', porVencer.length > 0);
+                                }).catch(err => {
+                                    console.warn('[Colaboradores] Panorama: no se pudieron contar los cursos por vencer:', err?.message || err);
+                                    setKpi('cd-pulse-cursos-note', 'Abrir calendario de vencimientos');
+                                });
+                            })();
+
                             /* ---------- LAS TARJETAS DEL RESUMEN, COMO FILTROS ----------
                                Cada una abre lo que cuenta: las de personas listan a esas personas,
                                y las de categorías (direcciones, subdirecciones, profesiones,
@@ -13869,11 +14363,11 @@ FF
 
                             // Colores de barra por tabla
                             const barColors = {
-                                'cd-tbl-profesion':    '#7b1fa2',
-                                'cd-tbl-direccion':    '#2e7d32',
-                                'cd-tbl-subdir':       '#e65100',
-                                'cd-tbl-gerencia':     '#0277bd',
-                                'cd-tbl-coordinacion': '#00695c',
+                                'cd-tbl-profesion':    '#7c3aed',
+                                'cd-tbl-direccion':    '#15803d',
+                                'cd-tbl-subdir':       '#ea580c',
+                                'cd-tbl-gerencia':     '#0e7490',
+                                'cd-tbl-coordinacion': '#0f766e',
                                 'cd-tbl-nivel':        '#1558d6',
                             };
 
@@ -13925,7 +14419,7 @@ FF
                                     const esc  = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                                     return `<div class="cd-tbl-row clickable" onclick="colabAbrirGrupoModal('profesion','${esc}')">
                                         <span class="cd-tbl-name clickable-label" title="${safe}">${name}</span>
-                                        <span class="cd-tbl-bar-wrap"><span class="cd-tbl-bar" style="width:${pct}%;background:#7b1fa2"></span></span>
+                                        <span class="cd-tbl-bar-wrap"><span class="cd-tbl-bar" style="width:${pct}%;background:#7c3aed"></span></span>
                                         <span class="cd-tbl-count">${count}</span>
                                     </div>`;
                                 }).join('') || '<div class="cd-tbl-loading">Sin datos</div>';
@@ -14057,14 +14551,9 @@ FF
                                 }
 
                                 const PALETTE_RING = [
-                                    '#1558d6','#2e7d32','#e65100','#7b1fa2',
-                                    '#0277bd','#00695c','#c62828','#f57f17',
-                                    '#4527a0','#0d47a1','#1b5e20','#bf360c'
-                                ];
-                                const PALETTE_BAR = [
-                                    '#1558d6','#1976d2','#1e88e5','#42a5f5',
-                                    '#64b5f6','#90caf9','#bbdefb','#e3f2fd',
-                                    '#0d47a1','#1565c0'
+                                    '#1558d6','#16a34a','#ea580c','#7c3aed',
+                                    '#0891b2','#db2777','#ca8a04','#0f766e',
+                                    '#4f46e5','#dc2626','#65a30d','#9333ea'
                                 ];
 
                                 function destroyChart(id) {
@@ -14072,156 +14561,119 @@ FF
                                     if (existing) existing.destroy();
                                 }
 
-                                // Partir etiqueta larga en 2 líneas (Chart.js acepta arrays)
-                                function wrapLabel(s, maxLen) {
-                                    maxLen = maxLen || 20;
-                                    if (s.length <= maxLen) return s;
-                                    const cut = s.lastIndexOf(' ', maxLen);
-                                    return cut > 0 ? [s.slice(0, cut), s.slice(cut + 1)] : [s.slice(0, maxLen), s.slice(maxLen)];
-                                }
+                                const escH = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                                const sinDato = ([k]) => k !== '(Sin dato)';
 
-                                // Datalabels: porcentaje en donuts
-                                const doughnutDatalabels = {
-                                    display: function(ctx) {
-                                        return ctx.dataset.data[ctx.dataIndex] / ctx.chart.data.datasets[0].data.reduce((a,b) => a+b, 0) >= 0.03;
-                                    },
-                                    formatter: function(value, ctx) {
-                                        const total = ctx.chart.data.datasets[0].data.reduce((a,b) => a+b, 0);
-                                        return Math.round(value / total * 100) + '%';
-                                    },
-                                    color: '#fff',
-                                    font: { size: 11, weight: '700' },
-                                    textShadowBlur: 4,
-                                    textShadowColor: 'rgba(0,0,0,0.5)'
-                                };
-
-                                // Datalabels: porcentaje en barras horizontales
-                                function barDatalabels(dataArr, color) {
-                                    const tot = dataArr.reduce((a, [,v]) => a + v, 0);
-                                    return {
-                                        anchor: 'end', align: 'right', clamp: true,
-                                        font: { size: 10, weight: '700' },
-                                        color: color,
-                                        formatter: function(value) {
-                                            return value + ' (' + Math.round(value / tot * 100) + '%)';
-                                        }
+                                /* Ranking con nombres completos: se lee mejor que una barra de
+                                   Chart.js con la etiqueta recortada, y cada renglón abre a su gente. */
+                                function renderRank(hostId, rows, colKey, color, moreId, plural) {
+                                    const host = document.getElementById(hostId);
+                                    if (!host) return;
+                                    const all = rows.filter(sinDato);
+                                    const top = all.slice(0, 8);
+                                    host.style.setProperty('--rc', color);
+                                    const more = document.getElementById(moreId);
+                                    if (more) more.textContent = `Ver las ${all.length} ${plural}`;
+                                    if (!top.length) { host.innerHTML = '<div class="cd-tbl-loading">Sin datos</div>'; return; }
+                                    const peak = top[0][1];
+                                    host.innerHTML = top.map(([name, n], i) => {
+                                        const exacto = total ? n / total * 100 : 0;
+                                        const share = n > 0 && exacto < 1 ? '<1' : Math.round(exacto);
+                                        const w = Math.max(2, Math.round(n / peak * 100));
+                                        return `<button type="button" class="cd-rank-row" data-grp="${escH(name)}" title="Ver al personal de ${escH(name)}">
+                                            <span class="cd-rank-pos">${i + 1}</span>
+                                            <span class="cd-rank-main">
+                                                <span class="cd-rank-top"><span class="cd-rank-name">${escH(name)}</span><span class="cd-rank-num">${n.toLocaleString('es-MX')}<small>${share}%</small></span></span>
+                                                <span class="cd-rank-track"><span class="cd-rank-fill" data-w="${w}"></span></span>
+                                            </span>
+                                        </button>`;
+                                    }).join('');
+                                    // Las barras crecen al aparecer: el ojo lee el orden antes que el número.
+                                    requestAnimationFrame(() => host.querySelectorAll('.cd-rank-fill').forEach(f => { f.style.width = f.dataset.w + '%'; }));
+                                    host.onclick = ev => {
+                                        const b = ev.target.closest('.cd-rank-row');
+                                        if (b) colabAbrirGrupoModal(colKey, b.dataset.grp);
                                     };
                                 }
 
-                                // Opciones comunes para barras horizontales
-                                function barOpts(data, datalabelsColor) {
-                                    return {
-                                        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-                                        layout: { padding: { right: 80, left: 4 } },
-                                        plugins: {
-                                            legend: { display: false },
-                                            datalabels: barDatalabels(data, datalabelsColor)
-                                        },
-                                        scales: {
-                                            x: { display: false },
-                                            y: {
-                                                ticks: {
-                                                    font: { size: 9.5 },
-                                                    padding: 10,
-                                                    autoSkip: false,
-                                                    callback: function(val) {
-                                                        return wrapLabel(String(this.getLabelForValue(val) || ''), 22);
-                                                    }
-                                                },
-                                                afterFit: function(scale) { scale.width = Math.max(scale.width, 160); }
-                                            }
+                                /* Dona con el total al centro y leyenda propia (nombre, número y %),
+                                   enlazada con la gráfica: pasar el cursor resalta el segmento. */
+                                function renderDonut(canvasId, legendId, rows, colKey, maxItems) {
+                                    const canvas = document.getElementById(canvasId);
+                                    const legend = document.getElementById(legendId);
+                                    const data = rows.filter(sinDato).slice(0, maxItems);
+                                    if (!canvas || !data.length) return;
+                                    destroyChart(canvasId);
+                                    const sum = data.reduce((a, [, v]) => a + v, 0);
+                                    const colors = data.map((_, i) => PALETTE_RING[i % PALETTE_RING.length]);
+                                    const centro = {
+                                        id: 'cdCentro',
+                                        afterDraw(chart) {
+                                            const { ctx, chartArea: { left, right, top, bottom } } = chart;
+                                            const x = (left + right) / 2, y = (top + bottom) / 2;
+                                            const color = getComputedStyle(chart.canvas.parentNode).color || '#0d2152';
+                                            ctx.save();
+                                            ctx.textAlign = 'center';
+                                            ctx.textBaseline = 'middle';
+                                            ctx.fillStyle = color;
+                                            ctx.font = '800 26px system-ui, -apple-system, "Segoe UI", sans-serif';
+                                            ctx.fillText(sum.toLocaleString('es-MX'), x, y - 7);
+                                            ctx.globalAlpha = .6;
+                                            ctx.font = '700 10px system-ui, -apple-system, "Segoe UI", sans-serif';
+                                            ctx.fillText('PERSONAS', x, y + 15);
+                                            ctx.restore();
                                         }
+                                    };
+                                    const chart = new Chart(canvas, {
+                                        type: 'doughnut',
+                                        data: {
+                                            labels: data.map(([k]) => k),
+                                            datasets: [{ data: data.map(([, v]) => v), backgroundColor: colors, borderWidth: 2, borderColor: document.body.classList.contains('dark-mode') ? '#111827' : '#fff', hoverOffset: 8, borderRadius: 3 }]
+                                        },
+                                        options: {
+                                            responsive: true, maintainAspectRatio: false,
+                                            cutout: '70%',
+                                            layout: { padding: 8 },
+                                            onClick: function(e, els) { if (els.length) colabAbrirGrupoModal(colKey, data[els[0].index][0]); },
+                                            onHover:  function(e, els) { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
+                                            plugins: {
+                                                legend: { display: false },
+                                                datalabels: { display: false },
+                                                tooltip: { callbacks: { label: ctx => ` ${ctx.parsed} personas (${Math.round(ctx.parsed / sum * 100)}%) · clic para ver` } }
+                                            }
+                                        },
+                                        plugins: [centro]
+                                    });
+                                    if (!legend) return;
+                                    legend.innerHTML = data.map(([name, n], i) => `
+                                        <li tabindex="0" role="button" data-i="${i}" title="Ver al personal de ${escH(name)}">
+                                            <span class="cd-legend-dot" style="background:${colors[i]}"></span>
+                                            <span class="cd-legend-name">${escH(name)}</span>
+                                            <span class="cd-legend-num">${n.toLocaleString('es-MX')}</span>
+                                            <span class="cd-legend-pct">${sum ? (n / sum * 100 < 1 && n > 0 ? '<1' : Math.round(n / sum * 100)) : 0}%</span>
+                                        </li>`).join('');
+                                    const activar = i => {
+                                        const act = i == null ? [] : [{ datasetIndex: 0, index: i }];
+                                        chart.setActiveElements(act);
+                                        chart.tooltip.setActiveElements(act, { x: 0, y: 0 });
+                                        chart.update();
+                                    };
+                                    legend.onmouseover = ev => { const li = ev.target.closest('li[data-i]'); if (li) activar(+li.dataset.i); };
+                                    legend.onmouseleave = () => activar(null);
+                                    legend.onclick = ev => { const li = ev.target.closest('li[data-i]'); if (li) colabAbrirGrupoModal(colKey, data[+li.dataset.i][0]); };
+                                    legend.onkeydown = ev => {
+                                        if (ev.key !== 'Enter' && ev.key !== ' ') return;
+                                        const li = ev.target.closest('li[data-i]');
+                                        if (!li) return;
+                                        ev.preventDefault();
+                                        colabAbrirGrupoModal(colKey, data[+li.dataset.i][0]);
                                     };
                                 }
 
-                                // 1. Dirección : Doughnut
-                                (function() {
-                                    const data = byDir.slice(0, 8).filter(([k]) => k !== '(Sin dato)');
-                                    if (!data.length) return;
-                                    destroyChart('cd-chart-dir');
-                                    new Chart(document.getElementById('cd-chart-dir'), {
-                                        type: 'doughnut',
-                                        data: {
-                                            labels: data.map(([k]) => k),
-                                            datasets: [{ data: data.map(([,v]) => v), backgroundColor: PALETTE_RING, borderWidth: 2, borderColor: '#fff' }]
-                                        },
-                                        options: {
-                                            responsive: true, maintainAspectRatio: false,
-                                            cutout: '55%',
-                                            onClick: function(e, els) { if (els.length) colabAbrirGrupoModal('direccion', data[els[0].index][0]); },
-                                            onHover:  function(e, els) { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
-                                            plugins: {
-                                                legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 13, padding: 14 } },
-                                                tooltip: { callbacks: { label: ctx => { const t = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); return ` ${ctx.label}: ${ctx.parsed} (${Math.round(ctx.parsed/t*100)}%) — click para ver`; } } },
-                                                datalabels: doughnutDatalabels
-                                            }
-                                        }
-                                    });
-                                })();
-
-                                // 2. Subdirección · Horizontal Bar (top 8)
-                                (function() {
-                                    const data = bySubDir.slice(0, 8).filter(([k]) => k !== '(Sin dato)');
-                                    if (!data.length) return;
-                                    destroyChart('cd-chart-subdir');
-                                    const opts = barOpts(data, '#1558d6');
-                                    opts.plugins.tooltip = { callbacks: { title: ctx => bySubDir[ctx[0].dataIndex]?.[0] || ctx[0].label } };
-                                    opts.onClick = function(e, els) { if (els.length) colabAbrirGrupoModal('subdireccion', data[els[0].index][0]); };
-                                    opts.onHover  = function(e, els) { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; };
-                                    new Chart(document.getElementById('cd-chart-subdir'), {
-                                        type: 'bar',
-                                        data: {
-                                            labels: data.map(([k]) => k),
-                                            datasets: [{ label: 'Colaboradores', data: data.map(([,v]) => v), backgroundColor: PALETTE_BAR.slice(0, data.length), borderRadius: 6, barThickness: 18, borderSkipped: false }]
-                                        },
-                                        options: opts
-                                    });
-                                })();
-
-                                // 3. Gerencia — Horizontal Bar (top 8)
-                                (function() {
-                                    const data = byGer.slice(0, 8).filter(([k]) => k !== '(Sin dato)');
-                                    if (!data.length) return;
-                                    destroyChart('cd-chart-ger');
-                                    const gerColors = ['#0277bd','#0288d1','#039be5','#29b6f6','#4fc3f7','#81d4fa','#b3e5fc','#e1f5fe'];
-                                    const opts = barOpts(data, '#0277bd');
-                                    opts.plugins.tooltip = { callbacks: { title: ctx => byGer[ctx[0].dataIndex]?.[0] || ctx[0].label } };
-                                    opts.onClick = function(e, els) { if (els.length) colabAbrirGrupoModal('gerencia', data[els[0].index][0]); };
-                                    opts.onHover  = function(e, els) { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; };
-                                    new Chart(document.getElementById('cd-chart-ger'), {
-                                        type: 'bar',
-                                        data: {
-                                            labels: data.map(([k]) => k),
-                                            datasets: [{ label: 'Colaboradores', data: data.map(([,v]) => v), backgroundColor: gerColors.slice(0, data.length), borderRadius: 6, barThickness: 18, borderSkipped: false }]
-                                        },
-                                        options: opts
-                                    });
-                                })();
-
-                                // 4. Nivel — Doughnut
-                                (function() {
-                                    const data = byNivel.slice(0, 10).filter(([k]) => k !== '(Sin dato)');
-                                    if (!data.length) return;
-                                    destroyChart('cd-chart-nivel');
-                                    new Chart(document.getElementById('cd-chart-nivel'), {
-                                        type: 'doughnut',
-                                        data: {
-                                            labels: data.map(([k]) => k),
-                                            datasets: [{ data: data.map(([,v]) => v), backgroundColor: PALETTE_RING, borderWidth: 2, borderColor: '#fff' }]
-                                        },
-                                        options: {
-                                            responsive: true, maintainAspectRatio: false,
-                                            cutout: '50%',
-                                            onClick: function(e, els) { if (els.length) colabAbrirGrupoModal('nivel', data[els[0].index][0]); },
-                                            onHover:  function(e, els) { e.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
-                                            plugins: {
-                                                legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 13, padding: 14 } },
-                                                tooltip: { callbacks: { label: ctx => { const t = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); return ` ${ctx.label}: ${ctx.parsed} (${Math.round(ctx.parsed/t*100)}%) — click para ver`; } } },
-                                                datalabels: doughnutDatalabels
-                                            }
-                                        }
-                                    });
-                                })();
+                                renderRank('cd-chart-subdir', bySubDir, 'subdireccion', '#1558d6', 'cd-more-subdir', 'subdirecciones');
+                                renderRank('cd-chart-ger',    byGer,    'gerencia',     '#0e7490', 'cd-more-ger',    'gerencias');
+                                renderDonut('cd-chart-nivel', 'cd-legend-nivel', byNivel, 'nivel',     12);
+                                renderDonut('cd-chart-dir',   'cd-legend-dir',   byDir,   'direccion', 8);
 
                                 /* -- Gráficas de Comportamiento Disciplinario -- */
                                 (function() {
@@ -26609,6 +27061,13 @@ FF
                      posiciones) y no se toca desde aquí. -->
                 <div id="aviacion-general-section" class="content-section"></div>
                 <!-- /aviacion-general-section -->
+
+                <!-- ═══ Solicitud de Slots → SSIM ═══
+                     Captura de la hoja "Solicitud de Horarios (Slots)" del COyH y
+                     conversión a IATA SSIM Cap. 7. Vacía a propósito: la arma
+                     js/ssim-slots/panel.js la primera vez que se entra. -->
+                <div id="ssim-slots-section" class="content-section"></div>
+                <!-- /ssim-slots-section -->
 
                 <!-- ═══ Reportes (Carga / Pasajeros) ═══
                      Página propia, hermana de Conciliación y no una vista dentro de
@@ -41341,7 +41800,7 @@ FF
     <!-- Capa única de totales (oficial hasta el corte, detalle después): ver el archivo -->
     <script src="js/totales-service.js?v=20261019-sin-sesion" defer></script>
     <script src="js/manifiestos-avisos.js?v=20261019-sin-sesion" defer></script>
-    <script src="script.js?v=20261019-sin-sesion" defer></script>
+    <script src="script.js?v=20261021-roles-sin-sesion" defer></script>
     <!-- Campos de fecha en dd/mm/aaaa sin importar el idioma del navegador. -->
     <script src="js/fecha-ddmm.js?v=20260912-fecha-1" defer></script>
     <!-- Botón y menú de usuario del encabezado de inicio. -->
@@ -42807,6 +43266,12 @@ FF
 <script src="js/aviacion-general/vista-importacion.js?v=20261009-v1" defer></script>
 <script src="js/aviacion-general/vista-validacion.js?v=20261009-v1" defer></script>
 <script src="js/aviacion-general/vista-auditoria.js?v=20261009-v1" defer></script>
+
+<!-- Solicitud de Slots → SSIM: core.js convierte (sin DOM, probado en
+     __tests__/ssim-slots-core.test.js); panel.js arma la sección al entrar. -->
+<link rel="stylesheet" href="js/ssim-slots/ssim-slots.css?v=20261015-v1">
+<script src="js/ssim-slots/core.js?v=20261015-v1" defer></script>
+<script src="js/ssim-slots/panel.js?v=20261015-v1" defer></script>
 
 <!-- Navegación inline del picker de fecha en Itinerario -->
 <script>
