@@ -1,0 +1,212 @@
+/* Estilos del módulo "Solicitud de Slots → SSIM".
+ *
+ * Todo vive bajo #ssim-slots-section: el portal comparte hojas enormes entre
+ * decenas de módulos y un selector suelto termina pegándole a otra pantalla.
+ * La tabla imita la hoja del COyH (encabezados agrupados, Llega/Sale) para que
+ * capturar sea copiar lo que se ve en el papel.
+ */
+
+#ssim-slots-section {
+    --ss-azul: #1e3a8a;
+    --ss-azul-2: #1d4ed8;
+    --ss-tinta: #0f172a;
+    --ss-gris: #64748b;
+    --ss-linea: #e2e8f0;
+    --ss-fondo: #f8fafc;
+    --ss-n: #16a34a;
+    --ss-d: #dc2626;
+    --ss-c: #2563eb;
+    --ss-r: #7c3aed;
+}
+
+/* ── Encabezado ─────────────────────────────────────────────────────────── */
+
+#ssim-slots-section .ss-header {
+    background: linear-gradient(135deg, #0b1f4d 0%, #1e3a8a 55%, #1d4ed8 100%);
+    color: #fff;
+    border-radius: 1rem;
+    padding: 1.1rem 1.35rem;
+    margin-bottom: .9rem;
+    box-shadow: 0 18px 38px -22px rgba(15, 23, 42, .85);
+}
+#ssim-slots-section .ss-header h2 { font-size: 1.25rem; font-weight: 800; margin: 0; letter-spacing: -.01em; }
+#ssim-slots-section .ss-eyebrow { font-size: .68rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: #93c5fd; }
+#ssim-slots-section .ss-sub { font-size: .82rem; color: rgba(255, 255, 255, .8); margin: .15rem 0 0; max-width: 60ch; }
+#ssim-slots-section .ss-solicitudes { min-width: min(100%, 360px); }
+#ssim-slots-section .ss-solicitudes label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #bfdbfe; }
+
+/* ── Barra y tarjetas ───────────────────────────────────────────────────── */
+
+#ssim-slots-section .ss-barra {
+    background: #fff;
+    border: 1px solid var(--ss-linea);
+    border-radius: .8rem;
+    padding: .55rem .75rem;
+    margin-bottom: .9rem;
+}
+#ssim-slots-section .ss-sep { width: 1px; height: 22px; background: var(--ss-linea); margin: 0 .25rem; }
+#ssim-slots-section .ss-card {
+    background: #fff;
+    border: 1px solid var(--ss-linea);
+    border-radius: .9rem;
+    padding: .9rem 1rem;
+    margin-bottom: .9rem;
+    box-shadow: 0 10px 28px -24px rgba(15, 23, 42, .6);
+}
+#ssim-slots-section .ss-card-title {
+    font-weight: 800; font-size: .72rem; letter-spacing: .07em; text-transform: uppercase; color: #475569; margin-bottom: .6rem;
+}
+#ssim-slots-section .ss-card label { font-size: .7rem; font-weight: 700; color: var(--ss-gris); margin-bottom: .15rem; }
+#ssim-slots-section .ss-subtitulo { font-size: .74rem; font-weight: 700; color: var(--ss-tinta); margin-bottom: .35rem; }
+#ssim-slots-section .ss-utc {
+    background: #dbeafe; color: var(--ss-azul); border-radius: 999px; padding: .05rem .45rem; font-size: .64rem; margin-left: .3rem;
+}
+#ssim-slots-section .ss-leyenda { font-size: .72rem; color: var(--ss-gris); display: flex; align-items: center; gap: .3rem; flex-wrap: wrap; }
+#ssim-slots-section .ss-leyenda .ss-mov { margin-left: .45rem; }
+
+/* ── Insignias de movimiento ────────────────────────────────────────────── */
+
+#ssim-slots-section .ss-mov {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.35rem; height: 1.35rem; border-radius: .35rem; font-weight: 800; font-size: .72rem; color: #fff;
+}
+#ssim-slots-section .ss-mov-N { background: var(--ss-n); }
+#ssim-slots-section .ss-mov-D { background: var(--ss-d); }
+#ssim-slots-section .ss-mov-C { background: var(--ss-c); }
+#ssim-slots-section .ss-mov-R { background: var(--ss-r); }
+
+/* ── Tabla de captura ───────────────────────────────────────────────────── */
+
+#ssim-slots-section .ss-tabla-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: .6rem; }
+#ssim-slots-section .ss-tabla { border-collapse: separate; border-spacing: 0; width: 100%; font-size: .8rem; }
+#ssim-slots-section .ss-tabla thead th {
+    background: var(--ss-azul);
+    color: #fff;
+    font-size: .66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    text-align: center;
+    padding: .35rem .3rem;
+    border-right: 1px solid rgba(255, 255, 255, .15);
+    border-bottom: 1px solid rgba(255, 255, 255, .15);
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+}
+#ssim-slots-section .ss-tabla thead tr:nth-child(2) th { background: #2b4aa0; top: 1.9rem; }
+#ssim-slots-section .ss-tabla tbody td {
+    padding: .2rem .15rem;
+    border-bottom: 1px solid var(--ss-linea);
+    vertical-align: middle;
+    text-align: center;
+    background: #fff;
+}
+#ssim-slots-section .ss-tabla tbody tr:nth-child(even) td { background: var(--ss-fondo); }
+#ssim-slots-section .ss-col-n { width: 2rem; color: var(--ss-gris); font-weight: 700; font-size: .7rem; }
+#ssim-slots-section .ss-col-acc { width: 3.6rem; white-space: nowrap; }
+
+#ssim-slots-section .ss-in {
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: .35rem;
+    background: transparent;
+    padding: .25rem .3rem;
+    font-size: .8rem;
+    text-align: center;
+    color: var(--ss-tinta);
+    font-variant-numeric: tabular-nums;
+}
+#ssim-slots-section .ss-in:hover { border-color: var(--ss-linea); background: #fff; }
+#ssim-slots-section .ss-in:focus { outline: none; border-color: var(--ss-azul-2); background: #fff; box-shadow: 0 0 0 3px rgba(29, 78, 216, .15); }
+#ssim-slots-section .ss-in-mov { width: 3rem; font-weight: 800; cursor: pointer; }
+#ssim-slots-section .ss-mov-sel-N { color: var(--ss-n); }
+#ssim-slots-section .ss-mov-sel-D { color: var(--ss-d); }
+#ssim-slots-section .ss-mov-sel-C { color: var(--ss-c); }
+#ssim-slots-section .ss-mov-sel-R { color: var(--ss-r); }
+#ssim-slots-section .ss-in-linea { width: 3rem; text-transform: uppercase; }
+#ssim-slots-section .ss-in-vuelo { width: 4.2rem; }
+#ssim-slots-section .ss-in-equipo { width: 4.3rem; text-transform: uppercase; }
+#ssim-slots-section .ss-in-hora { width: 3.7rem; }
+#ssim-slots-section .ss-in-est { width: 3.4rem; text-transform: uppercase; }
+#ssim-slots-section .ss-in-fecha { width: 5.6rem; }
+#ssim-slots-section .ss-in-tipo { width: 2.2rem; text-transform: uppercase; }
+#ssim-slots-section .ss-in-slot { width: 5rem; }
+#ssim-slots-section .ss-in-obs { width: 11rem; text-align: left; }
+
+#ssim-slots-section .ss-dias { display: inline-flex; gap: 2px; }
+#ssim-slots-section .ss-dia {
+    width: 1.45rem; height: 1.6rem; border-radius: .3rem; border: 1px solid #cbd5e1; background: #fff;
+    color: #cbd5e1; font-size: .72rem; font-weight: 800; padding: 0; line-height: 1;
+}
+#ssim-slots-section .ss-dia:hover { border-color: var(--ss-azul-2); color: var(--ss-azul-2); }
+#ssim-slots-section .ss-dia.on { background: var(--ss-azul-2); border-color: var(--ss-azul-2); color: #fff; }
+
+#ssim-slots-section .ss-acc {
+    border: 0; background: transparent; color: #94a3b8; width: 1.6rem; height: 1.6rem; border-radius: .35rem;
+}
+#ssim-slots-section .ss-acc:hover { background: #e2e8f0; color: var(--ss-tinta); }
+#ssim-slots-section .ss-acc[data-accion="borrar"]:hover { background: #fee2e2; color: var(--ss-d); }
+
+#ssim-slots-section tr.ss-fila-error td:first-child { box-shadow: inset 4px 0 0 var(--ss-d); color: var(--ss-d); }
+#ssim-slots-section tr.ss-fila-aviso td:first-child { box-shadow: inset 4px 0 0 #f59e0b; color: #b45309; }
+#ssim-slots-section tr.ss-fila-foco td { background: #fef9c3 !important; transition: background .3s; }
+
+/* ── Conversión ─────────────────────────────────────────────────────────── */
+
+#ssim-slots-section .ss-mini { width: 100%; font-size: .8rem; }
+#ssim-slots-section .ss-mini td { padding: .2rem .25rem; border-bottom: 1px solid var(--ss-linea); }
+#ssim-slots-section .ss-mini tr.ss-falta td { background: #fef2f2; }
+#ssim-slots-section .ss-in-min { max-width: 6rem; }
+#ssim-slots-section .ss-fuente {
+    font-size: .64rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border-radius: 999px; padding: .1rem .5rem;
+}
+#ssim-slots-section .ss-fuente-capturado { background: #dcfce7; color: #166534; }
+#ssim-slots-section .ss-fuente-recordado { background: #e0f2fe; color: #075985; }
+#ssim-slots-section .ss-fuente-referencia,
+#ssim-slots-section .ss-fuente-tabla { background: #f1f5f9; color: #475569; }
+#ssim-slots-section .ss-fuente-falta { background: #fee2e2; color: #991b1b; }
+
+/* ── Revisión ───────────────────────────────────────────────────────────── */
+
+#ssim-slots-section .ss-hallazgos { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow: auto; }
+#ssim-slots-section .ss-h {
+    display: flex; gap: .5rem; align-items: baseline; padding: .4rem .55rem; border-radius: .5rem; font-size: .8rem; margin-bottom: .3rem;
+}
+#ssim-slots-section .ss-h-error { background: #fef2f2; color: #7f1d1d; }
+#ssim-slots-section .ss-h-error i { color: var(--ss-d); }
+#ssim-slots-section .ss-h-aviso { background: #fffbeb; color: #78350f; }
+#ssim-slots-section .ss-h-aviso i { color: #d97706; }
+#ssim-slots-section .ss-h-fila {
+    border: 0; background: rgba(15, 23, 42, .08); color: inherit; font-weight: 700; font-size: .7rem; border-radius: .3rem; padding: .05rem .4rem; white-space: nowrap;
+}
+#ssim-slots-section .ss-h-fila:hover { background: rgba(15, 23, 42, .16); }
+#ssim-slots-section .ss-ok { background: #f0fdf4; color: #14532d; border-radius: .6rem; padding: .7rem .8rem; font-size: .82rem; }
+#ssim-slots-section .ss-ok i { color: var(--ss-n); margin-right: .4rem; }
+#ssim-slots-section .ss-vacio { color: var(--ss-gris); text-align: center; padding: 1.4rem .5rem; font-size: .84rem; }
+#ssim-slots-section .ss-vacio i { display: block; font-size: 1.5rem; margin-bottom: .4rem; opacity: .5; }
+
+/* ── Resultado ──────────────────────────────────────────────────────────── */
+
+#ssim-slots-section .ss-tabs { border-bottom: 1px solid var(--ss-linea); gap: .25rem; }
+#ssim-slots-section .ss-tabs .nav-link {
+    border: 0; border-bottom: 3px solid transparent; color: var(--ss-gris); font-weight: 700; font-size: .8rem; padding: .45rem .7rem; background: transparent;
+}
+#ssim-slots-section .ss-tabs .nav-link.active { color: var(--ss-azul); border-bottom-color: var(--ss-azul-2); }
+#ssim-slots-section .ss-res { width: 100%; font-size: .8rem; border-collapse: collapse; }
+#ssim-slots-section .ss-res th {
+    font-size: .66rem; text-transform: uppercase; letter-spacing: .04em; color: var(--ss-gris);
+    border-bottom: 2px solid var(--ss-linea); padding: .35rem .4rem; white-space: nowrap; text-align: left;
+}
+#ssim-slots-section .ss-res td { border-bottom: 1px solid var(--ss-linea); padding: .3rem .4rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#ssim-slots-section .ss-res sup { color: var(--ss-d); font-weight: 800; }
+#ssim-slots-section .ss-res-fechas { max-width: 520px; }
+#ssim-slots-section .ss-pre {
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: .72rem; line-height: 1.35; background: #0f172a; color: #e2e8f0; border-radius: .6rem; padding: .7rem .8rem;
+    max-height: 420px; overflow: auto; white-space: pre; margin: 0;
+}
+#ssim-slots-section .ss-regla { color: #64748b; }
+
+/* El marcador "HHMM" sólo orienta: en la columna que no aplica al renglón no debe parecer un dato. */
+#ssim-slots-section .ss-in::placeholder { color: #d6dde6; }

@@ -6,24 +6,15 @@
 
 BEGIN;
 
--- Helper: normaliza y valida el rol del usuario autenticado.
-CREATE OR REPLACE FUNCTION public.is_colab_editor()
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-    SELECT COALESCE((
-        SELECT lower(replace(trim(role), ' ', '_')) IN ('admin', 'superadmin', 'colab_editor')
-        FROM public.user_roles
-        WHERE user_id = auth.uid()
-        LIMIT 1
-    ), false);
-$$;
-
-REVOKE EXECUTE ON FUNCTION public.is_colab_editor() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.is_colab_editor() TO authenticated;
+-- Helper: public.is_colab_editor() vive SOLO en db/fix_rls_colaboradores_edicion.sql.
+-- Aquí no se redefine: hacerlo regresaba la versión vieja (sólo user_roles,
+-- LIMIT 1) y dejaba sin permiso a editores reales.
+DO $$
+BEGIN
+    IF to_regprocedure('public.is_colab_editor()') IS NULL THEN
+        RAISE EXCEPTION 'Falta public.is_colab_editor(). Corre antes db/fix_rls_colaboradores_edicion.sql.';
+    END IF;
+END $$;
 
 -- agenda_2026: lectura para usuarios autenticados; escritura solo colab_editor.
 ALTER TABLE public.agenda_2026 ENABLE ROW LEVEL SECURITY;

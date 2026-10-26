@@ -35344,6 +35344,7 @@ async function _conciSaveBulkEdits() {
         { key: 'parte-operaciones',    label: 'Parte de Operaciones',    icon: 'file-invoice',      group: 'Operaciones' },
         { key: 'analisis-operaciones', label: 'Análisis de Operaciones', icon: 'chart-pie',         group: 'Operaciones' },
         { key: 'conciliacion',         label: 'Conciliación',            icon: 'tasks',             group: 'Operaciones' },
+        { key: 'ssim-slots',           label: 'Solicitud de Slots → SSIM', icon: 'file-export',     group: 'Operaciones' },
         { key: 'aviacion-general',     label: 'Aviación General · FBO',  icon: 'paper-plane',       group: 'Operaciones' },
         { key: 'puntualidad-agosto',   label: 'Puntualidad',             icon: 'clock',             group: 'Operaciones' },
         { key: 'demoras',              label: 'Demoras',                 icon: 'clock',             group: 'Operaciones' },
@@ -35408,7 +35409,7 @@ async function _conciSaveBulkEdits() {
                 'operaciones-totales', 'inicio', 'frecuencias-semana',
                 'itinerario-mensual', 'puntualidad-agosto', 'demoras',
                 'aerolineas', 'parte-operaciones',
-                'analisis-operaciones', 'conciliacion',
+                'analisis-operaciones', 'conciliacion', 'ssim-slots',
                 'historia', 'email-analisis', 'fids', 'portal-digitalizacion',
                 // GOPA
                 'abordadores-mecanicos', 'biblioteca',
@@ -35771,6 +35772,26 @@ async function _conciSaveBulkEdits() {
         if (profileKey === 'all') auSelectAllViews(shortId, true);
     };
 
+    /* El panel guarda rol y permisos en user_roles, pero el inicio de sesión
+       (getOperacionesAccess) los toma de usuarios_aplicaciones de OPERACIONES y
+       sólo cae a user_roles si esa fila no existe. Sin copiar el cambio allá,
+       volver admin a alguien o darle Colaboradores no llegaba nunca a su sesión.
+       Se copia lo que quedó en user_roles, que es lo que el panel muestra. */
+    async function auSincronizarOperaciones(userId) {
+        const { data: ur, error } = await window.supabaseClient
+            .from('user_roles').select('role, permissions').eq('user_id', userId).maybeSingle();
+        if (error) throw error;
+        if (!ur?.role) return;
+        const { error: syncError } = await window.supabaseClient.rpc('admin_assign_operaciones_access', {
+            p_user_id: userId,
+            p_role: ur.role,
+            p_permissions: ur.permissions || {}
+        });
+        if (syncError) {
+            throw new Error(`Se guardó en el panel, pero no en el acceso a OPERACIONES (${syncError.message}). El usuario no verá el cambio hasta corregirlo.`);
+        }
+    }
+
     window.auSaveViews = async function (userId, shortId) {
         const secBoxes = document.querySelectorAll(`.auv-sec-${shortId}`);
         const selectedRaw = Array.from(secBoxes).filter(c => c.checked).map(c => c.value);
@@ -35802,6 +35823,7 @@ async function _conciSaveBulkEdits() {
                 .rpc('admin_update_user_permissions', { p_user_id: userId, p_permissions: perms });
             if (error) throw error;
             if (!res || res.ok === false) throw new Error(res?.error || 'No se pudo guardar (revisa permisos / re-ejecuta rbac_roles_v2.sql).');
+            await auSincronizarOperaciones(userId);
             // Actualizar caché local
             const u = _auRows.find(x => x.user_id === userId);
             if (u) u.permissions = perms;
@@ -35844,6 +35866,7 @@ async function _conciSaveBulkEdits() {
             if (savedRole !== newRole) {
                 throw new Error(`La BD devolvió rol "${savedRole}" en lugar de "${newRole}" — verifica permisos RLS.`);
             }
+            await auSincronizarOperaciones(userId);
 
             // Actualizar caché local con el rol confirmado
             const u = _auRows.find(x => x.user_id === userId);
@@ -35943,6 +35966,7 @@ async function _conciSaveBulkEdits() {
                 .rpc('admin_update_user_permissions', { p_user_id: userId, p_permissions: perms });
             if (error) throw error;
             if (!res || res.ok === false) throw new Error(res?.error || 'No se pudo guardar (revisa permisos / re-ejecuta rbac_roles_v2.sql).');
+            await auSincronizarOperaciones(userId);
             const u = _auRows.find(x => x.user_id === userId);
             if (u) u.permissions = perms;
             const panel = document.getElementById(`au-panel-${shortId}`);
@@ -35967,6 +35991,8 @@ async function _conciSaveBulkEdits() {
                 .rpc('admin_update_user_permissions', { p_user_id: userId, p_permissions: perms });
             if (error) throw error;
             if (!res || res.ok === false) throw new Error(res?.error || 'No se pudo actualizar (revisa permisos / re-ejecuta rbac_roles_v2.sql).');
+            // La baja también se lee al iniciar sesión desde OPERACIONES.
+            await auSincronizarOperaciones(userId);
             const row = _auRows.find(x => x.user_id === userId);
             if (row) row.permissions = perms;
             if (st) st.innerHTML = newEstado === 'INACTIVO'
