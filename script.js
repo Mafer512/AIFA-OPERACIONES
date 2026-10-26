@@ -24791,7 +24791,9 @@ function _conciInformativoTd(tr, row, editable) {
     const cerrado = !!row && row.cierre_id !== undefined && row.cierre_id !== null;
     if (!editable) {
         box.disabled = true;
-        td.title = box.checked ? 'Vuelo informativo: no cuenta en ninguna suma.' : 'Sin permiso de captura.';
+        td.title = box.checked
+            ? 'Vuelo informativo: no cuenta en ninguna suma.'
+            : 'Sólo editor, admin o superadmin marcan vuelos informativos.';
     } else if (cerrado) {
         // Un manifiesto cerrado sólo cambia por corrección autorizada.
         box.dataset.cerrado = '1';
@@ -24809,6 +24811,11 @@ async function _conciCambiarInformativo(box) {
     if (!tr) return;
     const marcado = box.checked;
     const id = String(tr.dataset.rowId || '').trim();
+    if (!_conciCanCurrentUserManage()) {
+        box.checked = !marcado;
+        alert('Sólo editor, admin o superadmin pueden marcar un vuelo como informativo.');
+        return;
+    }
     if (box.dataset.cerrado === '1') {
         box.checked = !marcado;
         if (window.conciCierreSubsecretaria?.abrirModalCorreccion) {
@@ -25299,6 +25306,8 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     // Display columns: hide the internal marker columns
     const displayCols = (columns || (data.length ? Object.keys(data[0]) : [])).filter(c => !['_fuente', '_isPax', '_validado_itinerario', '_validado_por_itinerario', 'id', 'Año', 'Mes', 'Día'].includes(c));
     const showRowActions = _conciCanCurrentUserEdit();
+    // Marcar un vuelo como informativo lo saca de los totales: editor, admin y superadmin.
+    const puedeInformativo = _conciCanCurrentUserManage();
     _conciRenderColumnVisibilityMenu(displayCols);
 
     // Detect semantic columns for smart city-name display in routing/origen cell
@@ -25820,7 +25829,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
             _conciRenderDescuadreTua(tr, row);
 
             // Casilla INFORMATIVO (070): fila gris y fuera de toda suma.
-            tr.appendChild(_conciInformativoTd(tr, row, showRowActions));
+            tr.appendChild(_conciInformativoTd(tr, row, puedeInformativo));
 
             // ── Celda de validación Itinerario ─────────────────────────────────
             {
@@ -34506,7 +34515,7 @@ function _conciAddBlankRow() {
     });
     // Casilla INFORMATIVO: se puede marcar ya guardada la fila (pide el id).
     if (headerRow.querySelector('th.conci-informativo-col')) {
-        tr.appendChild(_conciInformativoTd(tr, null, true));
+        tr.appendChild(_conciInformativoTd(tr, null, _conciCanCurrentUserManage()));
     }
     // Celda de validación "Itinerario": las filas de datos la llevan siempre y
     // no es editable. Sin ella la fila nueva quedaba corrida una columna

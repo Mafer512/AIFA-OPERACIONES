@@ -28,7 +28,8 @@
  * Se usan DOS privilegios granulares independientes (misma arquitectura
  * JSONB que ya usa section_levels): permissions.conciliacion_cierra_subsecretaria
  * (realizar el corte diario) y permissions.conciliacion_autoriza_correccion
- * (resolver correcciones sobre manifiestos ya cerrados) — admin/superadmin
+ * (resolver correcciones sobre manifiestos ya cerrados) — editor (071),
+ * admin y superadmin
  * tienen ambos implícitos; cualquier otro usuario puede recibir uno, el
  * otro, o ninguno, sin volverse admin de todo el sistema. Quien NO tiene el
  * segundo puede igualmente levantar una SOLICITUD de corrección; queda
@@ -83,15 +84,20 @@
     let _cargandoLote = false;       // evita pedir el mismo resumen dos veces a la vez
 
     /* ── Privilegios (solo UX — la BD vuelve a exigirlos siempre) ── */
-    function _conciEsAdminGlobal() {
+    // Editor, admin y superadmin (071): cierran el día y resuelven
+    // correcciones. Al editor se le respeta además el nivel de Conciliación.
+    function _conciEsEditorOMas() {
         const role = (typeof window._conciCurrentUserRole === 'function') ? window._conciCurrentUserRole() : '';
-        return role === 'admin' || role === 'superadmin';
+        if (role === 'admin' || role === 'superadmin') return true;
+        return role === 'editor'
+            && typeof window._conciCanCurrentUserManage === 'function'
+            && window._conciCanCurrentUserManage();
     }
 
-    // Puede realizar el Cierre de Subsecretaría: admin/superadmin, o
+    // Puede realizar el Cierre de Subsecretaría: editor/admin/superadmin, o
     // permissions.conciliacion_cierra_subsecretaria = true.
     function puedeCerrar() {
-        if (_conciEsAdminGlobal()) return true;
+        if (_conciEsEditorOMas()) return true;
         try {
             return window.dataManager?.permissions?.conciliacion_cierra_subsecretaria === true;
         } catch (_) {
@@ -100,12 +106,12 @@
     }
 
     // Puede aplicar/resolver correcciones sobre manifiestos cerrados:
-    // admin/superadmin, o permissions.conciliacion_autoriza_correccion = true.
+    // editor/admin/superadmin, o permissions.conciliacion_autoriza_correccion = true.
     // Privilegio distinto de puedeCerrar(): cerrar el día es una acción
     // rutinaria; autorizar una corrección retroactiva a un informe ya
     // oficial es más sensible y puede recaer en otra persona.
     function puedeAutorizarCorreccion() {
-        if (_conciEsAdminGlobal()) return true;
+        if (_conciEsEditorOMas()) return true;
         try {
             return window.dataManager?.permissions?.conciliacion_autoriza_correccion === true;
         } catch (_) {
