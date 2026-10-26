@@ -21808,6 +21808,7 @@ function _conciUpdateResumen(data, columns) {
     const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
     const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
     for (const r of (data || [])) {
+        if (_conciEsInformativo(r)) continue;   // no cuenta en ninguna suma (070)
         const f = String(r && r._fuente || '');
         if (f === 'Manifiestos + Vuelos') empate++;
         else if (f === 'Solo Manifiestos') soloManifiesto++;
@@ -23548,9 +23549,12 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
     // exactamente por la misma ruta que su descarga individual.
     if (kind === 'total') {
         const wbTotal = new ExcelJS.Workbook();
-        const conPax = await _conciExportToExcel('pax', wbTotal);
-        const conCarga = await _conciExportToExcel('carga', wbTotal);
-        if (!conPax && !conCarga) {
+        const conPax = await _conciExportToExcel('pax', wbTotal, { sinHojaInformativos: true });
+        const conCarga = await _conciExportToExcel('carga', wbTotal, { sinHojaInformativos: true });
+        // Los vuelos INFORMATIVOS (070), aparte y al final del libro.
+        const infPax = await _conciExportToExcel('pax', wbTotal, { soloInformativos: true, sheetName: 'INFORMATIVOS Pasajeros' });
+        const infCarga = await _conciExportToExcel('carga', wbTotal, { soloInformativos: true, sheetName: 'INFORMATIVOS Carga' });
+        if (!conPax && !conCarga && !infPax && !infCarga) {
             alert('No hay datos cargados para exportar.');
             return;
         }
@@ -23612,10 +23616,26 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
         const v = String(_conciExportGetField(r, ['HR. DE RECEPCIÓN']) ?? '').trim();
         return v !== '' && !/^(null|undefined|sin registro|-|—|–)$/i.test(v);
     };
-    const dataRows = (isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga))
-        .filter(r => !targetWb || _conciRecibido(r));
+    // Sólo vuelos recibidos en el libro Total; la hoja de INFORMATIVOS hereda
+    // el criterio de la hoja que la pidió.
+    const soloRecibidos = opts.soloRecibidos ?? !!targetWb;
+    const delTipo = (isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga))
+        .filter(r => !soloRecibidos || _conciRecibido(r));
+    // Vuelos INFORMATIVOS (070): no van en la hoja de datos; van en su propia
+    // hoja, con el mismo formato, al final del libro. "Por capturista" no suma
+    // nada: ahí cada quien conserva todo lo que capturó (incluirInformativos).
+    const dataRows = opts.incluirInformativos
+        ? delTipo
+        : delTipo.filter(r => _conciEsInformativo(r) === !!opts.soloInformativos);
+    const hojaInformativos = (wbDestino) => (opts.incluirInformativos || opts.soloInformativos
+        || opts.sinHojaInformativos || !delTipo.some(_conciEsInformativo))
+        ? false
+        : _conciExportToExcel(kind, wbDestino, {
+            ...opts, rows, soloRecibidos, soloInformativos: true,
+            sheetName: targetWb ? `INFORMATIVOS ${isCarga ? 'Carga' : 'Pasajeros'}` : 'INFORMATIVOS',
+        });
     if (!dataRows.length) {
-        if (targetWb) return false;
+        if (targetWb) return hojaInformativos(targetWb);
         // Decía "en la vista actual", lo que daba a entender que respeta los
         // filtros de la tabla. No los respeta: exporta el día completo.
         alert(isTotal ? 'No hay datos cargados para exportar.' : `No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
@@ -23773,6 +23793,7 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
     ws.columns.forEach((col, i) => { col.width = Math.min(46, Math.max(11, maxLen[i] + 2)); });
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
 
+    await hojaInformativos(wb);
     if (targetWb) return true;
     const buf = await wb.xlsx.writeBuffer();
     const stamp = new Date().toISOString().slice(0, 10);
@@ -23843,7 +23864,7 @@ async function _conciExportPorCapturistaFormato(kind) {
         const sheetName = sheetNameFor(nombre);
         // Con targetWb, _conciExportToExcel deja solo lo recibido (HR. DE
         // RECEPCIÓN con valor) del tipo pedido; sin nada, no agrega la hoja.
-        const agregada = await _conciExportToExcel(kind, wb, { rows: grupos.get(nombre), sheetName, vueloCompleto: true });
+        const agregada = await _conciExportToExcel(kind, wb, { rows: grupos.get(nombre), sheetName, vueloCompleto: true, incluirInformativos: true });
         if (agregada) {
             usedSheetNames.add(sheetName.toUpperCase());
             hojas++;
@@ -24698,6 +24719,7 @@ function _conciReadLiveTableRow(tr) {
             : (td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || td.textContent || ''));
     });
     row._fuente = tr.dataset.rowFuente || '';
+    row.INFORMATIVO = tr.classList.contains('conci-row-informativo');
     return row;
 }
 
@@ -24748,6 +24770,102 @@ function _conciUpdateSummaryLiveCell(td, value) {
     _conciRefreshSummaryCardsLive();
 }
 
+// ── Vuelos INFORMATIVOS (migración 070) ─────────────────────────────────────
+// Casilla después de "Hora y Fecha Generación". El vuelo se sigue registrando
+// igual, pero marcado no cuenta en ninguna suma: aquí (tarjetas y Excel) y en
+// el servidor (oficio, mensaje del SWEAR, lote del cierre, Inicio, Numeralia).
+// No es una celda de captura (no lleva data-col): se guarda sola, al marcarla,
+// y nunca viaja en el autoguardado de la fila.
+function _conciEsInformativo(row) {
+    return !!row && (row.INFORMATIVO === true || row.INFORMATIVO === 'true');
+}
+
+function _conciInformativoTd(tr, row, editable) {
+    const td = document.createElement('td');
+    td.className = 'conci-cell conci-informativo-cell text-center';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'form-check-input conci-informativo-check';
+    box.checked = _conciEsInformativo(row);
+    box.setAttribute('aria-label', 'Vuelo informativo');
+    const cerrado = !!row && row.cierre_id !== undefined && row.cierre_id !== null;
+    if (!editable) {
+        box.disabled = true;
+        td.title = box.checked ? 'Vuelo informativo: no cuenta en ninguna suma.' : 'Sin permiso de captura.';
+    } else if (cerrado) {
+        // Un manifiesto cerrado sólo cambia por corrección autorizada.
+        box.dataset.cerrado = '1';
+        td.title = 'Manifiesto cerrado: el cambio se hace como corrección autorizada.';
+    } else {
+        td.title = 'Vuelo informativo: marcado, no cuenta en ninguna suma.';
+    }
+    td.appendChild(box);
+    tr.classList.toggle('conci-row-informativo', box.checked);
+    return td;
+}
+
+async function _conciCambiarInformativo(box) {
+    const tr = box.closest('tr');
+    if (!tr) return;
+    const marcado = box.checked;
+    const id = String(tr.dataset.rowId || '').trim();
+    if (box.dataset.cerrado === '1') {
+        box.checked = !marcado;
+        if (window.conciCierreSubsecretaria?.abrirModalCorreccion) {
+            window.conciCierreSubsecretaria.abrirModalCorreccion({ manifiestoId: id, campo: 'INFORMATIVO', valor: marcado });
+        }
+        return;
+    }
+    if (!id) {
+        box.checked = !marcado;
+        alert('Primero captura el manifiesto; ya guardado se puede marcar como informativo.');
+        return;
+    }
+    const client = window.supabaseClient;
+    if (!client) { box.checked = !marcado; return; }
+    box.disabled = true;
+    try {
+        const { data, error } = await client
+            .from('Conciliación Manifiestos')
+            .update({ INFORMATIVO: marcado })
+            .eq('id', id)
+            .select('INFORMATIVO, "CAPTURÓ"')
+            .maybeSingle();
+        if (error) throw error;
+        if (!data) throw new Error('El manifiesto ya no existe o no tienes permiso para modificarlo.');
+        tr.classList.toggle('conci-row-informativo', marcado);
+        const idx = Number(tr.dataset.rowIndex);
+        const row = Number.isInteger(idx) ? _conciManifestosAllData[idx] : null;
+        if (row) row.INFORMATIVO = marcado;
+        // El trigger de 054 anota en CAPTURÓ a quien marcó la casilla.
+        const capturoTd = tr.querySelector('td[data-col="CAPTURÓ"]');
+        if (capturoTd && data['CAPTURÓ'] && !capturoTd.dataset.dirty) {
+            _conciRenderCapturoCell(capturoTd, data['CAPTURÓ']);
+            capturoTd.dataset.origRaw = String(data['CAPTURÓ']);
+            if (row) row['CAPTURÓ'] = data['CAPTURÓ'];
+        }
+        _conciRefreshSummaryCardsLive();
+        if (typeof window._conciNotificarManifiestosCambiaron === 'function') window._conciNotificarManifiestosCambiaron();
+    } catch (err) {
+        box.checked = !marcado;
+        const msg = String(err?.message || err);
+        alert(/INFORMATIVO/.test(msg) && /column|columna/i.test(msg)
+            ? 'Falta correr la migración 070 (columna INFORMATIVO) en Supabase.'
+            : 'No se pudo guardar la marca de informativo: ' + msg);
+    } finally {
+        if (!box.dataset.cerrado) box.disabled = false;
+    }
+}
+
+function _conciBindInformativo(tbody) {
+    if (!tbody || tbody.dataset.conciInformativoBound) return;
+    tbody.dataset.conciInformativoBound = '1';
+    tbody.addEventListener('change', (ev) => {
+        const box = ev.target.closest?.('input.conci-informativo-check');
+        if (box) _conciCambiarInformativo(box);
+    });
+}
+
 // Recalcula de forma independiente pasajeros y carga: una fila puede contener
 // PAX y también kilogramos de carga/equipaje.
 function _updateManifiestosSummaryStrip(data, columns) {
@@ -24767,6 +24885,7 @@ function _updateManifiestosSummaryStrip(data, columns) {
     let paxOps = 0, totalPax = 0, cargoOps = 0, kgsCarga = 0;
     let kgsCapturados = false;
     for (const row of rows) {
+        if (_conciEsInformativo(row)) continue;   // no cuenta en ninguna suma (070)
         const isCargoByType = _conciRowIsCargo(row, optypeCol, airlineCol);
         const paxValue = totalPaxCol ? _conciSummaryNumber(row[totalPaxCol]) : 0;
         const kgs = _conciSummaryCargoKgs(row, cargoCols);
@@ -25172,6 +25291,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     const thead = table.querySelector('thead');
     const tbody = table.querySelector('tbody');
     _conciBindRowActions();
+    _conciBindInformativo(tbody);
     thead.innerHTML = '';
     tbody.innerHTML = '';
     _conciManifestosAllData = data; // Guarda referencia para las listas de valores de filtros desplegables
@@ -25251,6 +25371,13 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         th.appendChild(thInner);
         trHead.appendChild(th);
     });
+    // Columna "Informativo" (070), después de "Hora y Fecha Generación". Sin
+    // data-conci-column-key: no es una columna de captura (ver _conciInformativoTd).
+    const infTh = document.createElement('th');
+    infTh.className = 'text-nowrap conci-th conci-informativo-col';
+    infTh.title = 'Vuelo informativo: se registra, pero marcado no cuenta en ninguna suma';
+    infTh.textContent = 'INFORMATIVO';
+    trHead.appendChild(infTh);
     // Columna “Itinerario”: indica si el vuelo fue validado en la pestaña de Itinerario de Vuelos
     const itTh = document.createElement('th');
     itTh.className = 'text-nowrap conci-th conci-it-val-col';
@@ -25691,6 +25818,9 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
             // Recalcula las formulas tanto al cargar como durante la captura.
             _conciRefreshCalculatedCellsForRow(tr);
             _conciRenderDescuadreTua(tr, row);
+
+            // Casilla INFORMATIVO (070): fila gris y fuera de toda suma.
+            tr.appendChild(_conciInformativoTd(tr, row, showRowActions));
 
             // ── Celda de validación Itinerario ─────────────────────────────────
             {
@@ -34374,6 +34504,10 @@ function _conciAddBlankRow() {
         }
         td.textContent = '';        tr.appendChild(td);
     });
+    // Casilla INFORMATIVO: se puede marcar ya guardada la fila (pide el id).
+    if (headerRow.querySelector('th.conci-informativo-col')) {
+        tr.appendChild(_conciInformativoTd(tr, null, true));
+    }
     // Celda de validación "Itinerario": las filas de datos la llevan siempre y
     // no es editable. Sin ella la fila nueva quedaba corrida una columna
     // respecto al resto de la tabla.

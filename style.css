@@ -17818,6 +17818,32 @@ body.dark-mode #table-conci-manifiestos tr.conci-row-overcapacity>td {
    background: rgba(211, 47, 47, .22) !important;
 }
 
+/* Vuelo INFORMATIVO (casilla, migración 070): toda la fila en gris; se
+   registra, pero no cuenta en ninguna suma. Pesa más que el tono, el
+   sobrecupo y la celda con dato; la celda en edición conserva su estilo. */
+#table-conci-manifiestos tbody tr.conci-row-informativo>td,
+#table-conci-manifiestos tbody tr.conci-row-informativo>td.conci-cell-con-dato:not(.conci-cell-active):not(.conci-cell-remote-editing):not(.conci-cell-estela),
+#conci-manifiestos-scroll.is-scrolling #table-conci-manifiestos tbody tr.conci-row-informativo:hover>td.conci-cell-con-dato:not(.conci-cell-active):not(.conci-cell-remote-editing):not(.conci-cell-estela) {
+   background-color: #d5d8dc !important;
+   color: #6c757d !important;
+}
+body.dark-mode #table-conci-manifiestos tbody tr.conci-row-informativo>td,
+body.dark-mode #table-conci-manifiestos tbody tr.conci-row-informativo>td.conci-cell-con-dato:not(.conci-cell-active):not(.conci-cell-remote-editing):not(.conci-cell-estela) {
+   background-color: #3a3f44 !important;
+   color: #9aa1a8 !important;
+}
+#table-conci-manifiestos td.conci-informativo-cell {
+   vertical-align: middle;
+}
+#table-conci-manifiestos td.conci-informativo-cell .conci-informativo-check {
+   float: none;
+   margin: 0;
+   cursor: pointer;
+}
+#table-conci-manifiestos td.conci-informativo-cell .conci-informativo-check:disabled {
+   cursor: not-allowed;
+}
+
 /* Sin capturar del día previo, anexado a la vista de un solo día. El sobrecupo
    conserva su barra roja: va después y pesa más. */
 #table-conci-manifiestos tr.conci-row-dia-previo:not(.conci-row-overcapacity)>td:first-child {

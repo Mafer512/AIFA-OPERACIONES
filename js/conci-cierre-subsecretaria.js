@@ -58,8 +58,12 @@
         'KGS. DE CARGA NACIONAL', 'KGS. DE CARGA INTERNACIONAL', 'KG DE CARGA TOTAL',
         'KGS. DE CARGA EN TRANSITO', 'CORREO',
         'PUNTUALIDAD / CANCELACIÓN', 'DEMORA +- 15 MIN.', 'CÓDIGO DEMORA', 'OBSERVACIONES',
-        'CAPTURÓ', 'CAPACIDAD MÁXIMA', 'FACTOR DE OCUPACIÓN', 'EVIDENCIA', 'Hora y Fecha Generación'
+        'CAPTURÓ', 'CAPACIDAD MÁXIMA', 'FACTOR DE OCUPACIÓN', 'EVIDENCIA', 'Hora y Fecha Generación',
+        'INFORMATIVO'
     ];
+    // Casilla de vuelo informativo (070): sí/no en vez de texto libre. Marcarla
+    // saca el vuelo completo de los totales; desmarcarla lo regresa.
+    const CAMPO_INFORMATIVO = 'INFORMATIVO';
     // Debe coincidir EXACTAMENTE con _conci_campos_numericos_cierre() del SQL
     // (hay una prueba que lo verifica). Son los campos que MUEVEN TOTALES.
     // Ojo: TODA corrección autorizada genera un evento del ledger, numérica o
@@ -468,6 +472,10 @@
                     <div class="mb-2">
                         <label class="form-label small fw-semibold">Nuevo valor</label>
                         <input type="text" class="form-control" id="conci-corr-valor-nuevo">
+                        <select class="form-select d-none" id="conci-corr-valor-informativo">
+                            <option value="true">Sí, es informativo (no cuenta en ninguna suma)</option>
+                            <option value="false">No, cuenta normal</option>
+                        </select>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small fw-semibold">Motivo de la corrección</label>
@@ -490,6 +498,7 @@
         sel.innerHTML = CAMPOS_EDITABLES.map(c =>
             `<option value="${esc(c)}">${esc(c)}${CAMPOS_NUMERICOS.has(c) ? ' (mueve totales)' : ''}</option>`
         ).join('');
+        sel.addEventListener('change', () => alternarValorInformativo(modal));
         modal.querySelector('#conci-corr-confirmar').addEventListener('click', ejecutarCorreccion);
         modal.addEventListener('hidden.bs.modal', () => {
             modal.querySelector('#conci-corr-valor-nuevo').value = '';
@@ -505,7 +514,10 @@
         const msgEl = modal.querySelector('#conci-corr-msg');
         const manifiestoId = Number(modal.querySelector('#conci-corr-manifiesto-id').value);
         const campo = modal.querySelector('#conci-corr-campo').value;
-        const valorNuevo = modal.querySelector('#conci-corr-valor-nuevo').value;
+        const esInformativo = campo === CAMPO_INFORMATIVO;
+        const valorNuevo = esInformativo
+            ? modal.querySelector('#conci-corr-valor-informativo').value
+            : modal.querySelector('#conci-corr-valor-nuevo').value;
         const motivo = modal.querySelector('#conci-corr-motivo').value.trim();
         const requierePassword = puedeAutorizarCorreccion(); // se aplicará de inmediato: escribe datos
         const pwEl = modal.querySelector('#conci-corr-password');
@@ -533,7 +545,11 @@
             if (error) throw error;
 
             const dif = data?.diferencia;
-            const difTxt = (dif === null || dif === undefined)
+            const difTxt = esInformativo
+                ? (valorNuevo === 'true'
+                    ? 'el vuelo sale de los totales en el siguiente informe'
+                    : 'el vuelo vuelve a contar en el siguiente informe')
+                : (dif === null || dif === undefined)
                 ? 'sin efecto sobre los totales; la reclasificación sí se reflejará en el siguiente informe'
                 : `ajuste ${dif > 0 ? '+' : ''}${dif}`;
             if (data.estado === 'aplicada') {
@@ -558,13 +574,27 @@
         }
     }
 
-    function abrirModalCorreccion({ manifiestoId = '' } = {}) {
+    // El valor de INFORMATIVO se elige con sí/no; los demás campos, con texto.
+    function alternarValorInformativo(modal) {
+        const esInformativo = modal.querySelector('#conci-corr-campo').value === CAMPO_INFORMATIVO;
+        modal.querySelector('#conci-corr-valor-nuevo').classList.toggle('d-none', esInformativo);
+        modal.querySelector('#conci-corr-valor-informativo').classList.toggle('d-none', !esInformativo);
+    }
+
+    // campo/valor: la casilla INFORMATIVO de una fila cerrada abre el modal ya
+    // con el campo y el valor que se quiso marcar.
+    function abrirModalCorreccion({ manifiestoId = '', campo = '', valor } = {}) {
         if (!puedeSolicitarCorreccion()) {
             alert('No tienes permiso de captura en Manifiestos.');
             return;
         }
         const modal = modalCorreccionEl();
         modal.querySelector('#conci-corr-manifiesto-id').value = manifiestoId || '';
+        if (campo && CAMPOS_EDITABLES.includes(campo)) modal.querySelector('#conci-corr-campo').value = campo;
+        if (campo === CAMPO_INFORMATIVO && typeof valor === 'boolean') {
+            modal.querySelector('#conci-corr-valor-informativo').value = String(valor);
+        }
+        alternarValorInformativo(modal);
         const privilegiado = puedeAutorizarCorreccion();
         modal.querySelector('#conci-corr-password-grp').classList.toggle('d-none', !privilegiado);
         modal.querySelector('#conci-corr-confirmar').textContent = privilegiado ? 'Aplicar corrección' : 'Enviar solicitud';

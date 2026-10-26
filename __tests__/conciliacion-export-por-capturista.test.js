@@ -76,7 +76,8 @@ describe('Exportar por capturista', () => {
     expect(exportar).toMatch(/\(targetWb && Array\.isArray\(opts\.rows\)\) \? opts\.rows : _conciGetExportRows\(\)/);
     expect(exportar).toMatch(/wb\.addWorksheet\(\(targetWb && opts\.sheetName\) \|\| sheetLabel,/);
     // Con targetWb solo entra lo ya recibido (capturado).
-    expect(exportar).toMatch(/\.filter\(r => !targetWb \|\| _conciRecibido\(r\)\)/);
+    expect(exportar).toMatch(/const soloRecibidos = opts\.soloRecibidos \?\? !!targetWb;/);
+    expect(exportar).toMatch(/\.filter\(r => !soloRecibidos \|\| _conciRecibido\(r\)\)/);
     // Sin tipo sigue el formato anterior (botón de la ventana "Manifiestos capturados").
     const principal = extraer('async function _conciExportPorCapturista(kind)', 'window.conciExportPorCapturista');
     expect(principal).toMatch(/if \(kind === 'pax' \|\| kind === 'carga'\) return _conciExportPorCapturistaFormato\(kind\);/);

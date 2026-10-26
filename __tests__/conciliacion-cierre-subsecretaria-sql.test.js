@@ -987,13 +987,19 @@ describe('Campos que mueven totales: ni de más ni de menos', () => {
       return (bloque.match(/'[^']+'/g) || []).map((s) => s.slice(1, -1)).sort();
     };
     expect(extraerJs('CAMPOS_NUMERICOS')).toEqual(extraer('_conci_campos_numericos_cierre'));
-    // La whitelist vigente es la de 055: la de 053 + "KGS. DE CARGA EN TRANSITO".
+    // 055 = la whitelist de 053 + "KGS. DE CARGA EN TRANSITO".
     const sql055 = leer('supabase/migrations/055_conciliacion_manifiestos_carga_en_transito.sql');
     const cuerpo055 = sql055.match(/CREATE OR REPLACE FUNCTION public\._conci_campos_editables_cierre[\s\S]*?^\$\$;/m)[0];
     const editables055 = (cuerpo055.match(/SELECT ARRAY\[([\s\S]*?)\]::text\[\]/)[1].match(/'[^']+'/g) || [])
       .map((s) => s.slice(1, -1)).sort();
-    expect(extraerJs('CAMPOS_EDITABLES')).toEqual(editables055);
     expect(editables055).toEqual([...extraer('_conci_campos_editables_cierre'), 'KGS. DE CARGA EN TRANSITO'].sort());
+    // Y la vigente hoy es la de 070: la de 055 + la casilla "INFORMATIVO".
+    const sql070 = leer('supabase/migrations/070_conciliacion_informativo.sql');
+    const cuerpo070 = sql070.match(/CREATE OR REPLACE FUNCTION public\._conci_campos_editables_cierre[\s\S]*?^\$\$;/m)[0];
+    const editables070 = (cuerpo070.match(/SELECT ARRAY\[([\s\S]*?)\]::text\[\]/)[1].match(/'[^']+'/g) || [])
+      .map((s) => s.slice(1, -1)).sort();
+    expect(editables070).toEqual([...editables055, 'INFORMATIVO'].sort());
+    expect(extraerJs('CAMPOS_EDITABLES')).toEqual(editables070);
   });
 
   test('queda advertido por escrito que las claves de totales no se suman entre sí', () => {
