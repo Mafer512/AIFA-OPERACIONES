@@ -768,4 +768,49 @@ describe('corrección de un manifiesto cerrado', () => {
     expect(falso.llamadas.signIn).toHaveLength(0);
     expect(modal.querySelector('#conci-corr-msg').textContent).toMatch(/solicitud enviada/i);
   });
+
+  test('sin valor nuevo no se envía nada: una corrección vacía no dice qué corregir', async () => {
+    const falso = await abrirCorreccion({ rol: 'capturista', permisos: {} });
+    const modal = document.getElementById('modal-conci-correccion-cerrado');
+    modal.querySelector('#conci-corr-campo').value = 'TOTAL PAX';
+    modal.querySelector('#conci-corr-valor-nuevo').value = '   ';
+    modal.querySelector('#conci-corr-motivo').value = 'Conteo corregido';
+    modal.querySelector('#conci-corr-confirmar').click();
+    await esperar();
+
+    expect(falso.llamadas.rpc.some(r => r.nombre === 'conciliacion_solicitar_correccion')).toBe(false);
+    expect(modal.querySelector('#conci-corr-msg').textContent).toMatch(/nuevo valor/i);
+  });
+
+  test('el error de la RPC se muestra tal cual en el modal', async () => {
+    configurarUsuario({ rol: 'capturista', permisos: {}, nivelSeccion: 'capture' });
+    const falso = crearClienteFalso({
+      rpcRespuestas: {
+        conciliacion_solicitar_correccion: {
+          data: null,
+          error: { code: '23505', message: 'Ya existe una solicitud pendiente para el campo TOTAL PAX de este manifiesto.' },
+        },
+        conciliacion_solicitudes_pendientes: { data: [], error: null },
+      },
+    });
+    window.supabaseClient = falso.cliente;
+    cargarModulo();
+    window.conciCierreSubsecretaria.abrirModalCorreccion({ manifiestoId: '100043' });
+    const modal = document.getElementById('modal-conci-correccion-cerrado');
+    modal.querySelector('#conci-corr-campo').value = 'TOTAL PAX';
+    modal.querySelector('#conci-corr-valor-nuevo').value = '180';
+    modal.querySelector('#conci-corr-motivo').value = 'Conteo corregido';
+    modal.querySelector('#conci-corr-confirmar').click();
+    await esperar();
+    await esperar();
+
+    const envio = falso.llamadas.rpc.find(r => r.nombre === 'conciliacion_solicitar_correccion');
+    expect(envio.params).toEqual({
+      p_manifiesto_id: 100043,
+      p_campo: 'TOTAL PAX',
+      p_valor_nuevo: '180',
+      p_motivo: 'Conteo corregido',
+    });
+    expect(modal.querySelector('#conci-corr-msg').textContent).toMatch(/Ya existe una solicitud pendiente/);
+  });
 });

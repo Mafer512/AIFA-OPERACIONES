@@ -25650,6 +25650,12 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
             tr.dataset.rowId = _rowId;
             tr.dataset.rowFuente = _rowFuente;
             tr.dataset.rowIndex = String(idx);
+            // Cerrado por Cierre de Subsecretaría: solo lectura en la tabla (ver
+            // _conciErrorManifiestoCerrado). Se cambia por corrección autorizada.
+            if (row.cierre_id !== undefined && row.cierre_id !== null) {
+                tr.dataset.conciCerrado = '1';
+                tr.classList.add('conci-row-cerrada');
+            }
             if (row._conci_vuelo_id !== undefined && row._conci_vuelo_id !== null) {
                 tr.dataset.conciVueloId = String(row._conci_vuelo_id);
                 tr.dataset.conciVueloDireccion = String(row._conci_vuelo_direccion || '');
@@ -30087,6 +30093,10 @@ function _conciStageCellDraft(td, rawValue) {
 function _conciQueueAutoSave(tr) {
     if (!tr || !tr.isConnected || !_conciEditMode || !_conciCanCurrentUserEdit()) return;
     if (tr.dataset.conciDescartada === '1') return;
+    if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) {
+        _conciBloquearFilaCerrada(tr);
+        return;
+    }
     // Una captura nueva estrena la espera: el retraso acumulado castigaba a los
     // intentos anteriores, no a este. Sin esto, una fila que fallo mientras se
     // completaba arrastraba su penalizacion hasta cuando ya estaba lista.
@@ -30434,12 +30444,20 @@ function _conciRestaurarBorradores() {
     if (!tabla) return 0;
     const { datos } = _conciBorradoresPendientes();
     let repuestas = 0;
+    let deCerradas = 0;
     Object.keys(datos).forEach(clave => {
         if (!clave.startsWith('id:')) return;
         const rowId = clave.slice(3);
         const tr = [...tabla.querySelectorAll('tbody tr[data-row-id]')]
             .find(fila => String(fila.dataset.rowId || '') === rowId);
         if (!tr) return;
+        // Un borrador sobre un manifiesto ya cerrado no se repone: la base lo
+        // rechazaría en cada carga de la página, para siempre.
+        if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) {
+            deCerradas += Object.keys(datos[clave]?.celdas || {}).length;
+            delete datos[clave];
+            return;
+        }
         const entrada = datos[clave];
         let algunaRepuesta = false;
         Object.keys(entrada.celdas || {}).forEach(col => {
@@ -30469,6 +30487,13 @@ function _conciRestaurarBorradores() {
         }
     });
     _conciBorradoresEscribir(datos);
+    if (deCerradas && typeof showNotification === 'function') {
+        showNotification(
+            `Se descartaron ${deCerradas === 1 ? '1 captura sin guardar' : `${deCerradas} capturas sin guardar`} sobre manifiestos `
+            + 'ya cerrados por Cierre de Subsecretaría. Para cambiarlos usa el candado de la fila (solicitar corrección).',
+            'warning'
+        );
+    }
     // Las filas nuevas necesitan volver a existir antes de poder rellenarlas.
     repuestas += _conciRestaurarFilasNuevas(datos);
     _conciActualizarIndicadorBorradores();
@@ -30869,6 +30894,16 @@ function _conciAplicarPendienteRemoto(reg) {
         return;
     }
     const tr = td.closest('tr');
+    if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) {
+        if (typeof showNotification === 'function') {
+            showNotification(
+                `El manifiesto ${tr.dataset.rowId || ''} ya está cerrado por Cierre de Subsecretaría: esta captura no se puede aplicar en la tabla. `
+                + 'Usa el candado de la fila (solicitar corrección) o descártala.',
+                'warning'
+            );
+        }
+        return;
+    }
     _conciStageCellDraft(td, String(reg.valor ?? ''));
     td.textContent = _conciTextoVisibleDeCelda(td, String(reg.valor ?? ''));
     _conciQueueAutoSave(tr);
@@ -31449,6 +31484,7 @@ function _conciEscribirFilaAlCerrar(tr, url, apikey) {
     // Sin id y sin nombre propio no hay contra que escribir: eso ya solo le pasa
     // a las filas de antes de este mecanismo, y para esas queda la cola.
     if (!rowId && !uuid) return false;
+    if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) return false;
     const celdas = _conciCeldasPendientesDeFila(tr);
     if (!celdas.length) return false;
     const payload = {};
@@ -31499,6 +31535,7 @@ function _conciEnviarPendientesAlCerrar() {
     if (_conciColaDisponible === false) return;
     const filas = [];
     tabla.querySelectorAll('tbody tr').forEach(tr => {
+        if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) return;
         const rowId = String(tr.dataset.rowId || '').trim()
             || `nueva:${_conciLiveClientId}:${tr.rowIndex}`;
         _conciCeldasPendientesDeFila(tr).forEach(c => {
@@ -31802,6 +31839,8 @@ function _conciFilasReescribibles() {
         && tr.dataset.conciNew !== '1'
         && tr.dataset.rowFuente !== 'Solo Vuelos'
         && !!String(tr.dataset.rowId || '').trim()
+        // Un manifiesto cerrado sólo cambia por corrección autorizada.
+        && !(typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr))
     );
 }
 
@@ -31967,6 +32006,8 @@ function _conciActivateCellEditor(td) {
         if (rowIdFoco) _conciBroadcastFoco(rowIdFoco, td.dataset.col || '');
     }
 
+    // Manifiesto cerrado: se navega por él, pero no se abre editor.
+    if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(td.closest('tr'))) return;
     const col = td.dataset.col || '';
     if (_conciIsProtectedEditColumn(col) || _conciIsCalculatedColumn(col)) return;
     if (_conciIsPassengerColumn(col) && _conciRowElementIsCargo(td)) return;
@@ -33041,6 +33082,107 @@ function _conciErrorEsperaCorreccion(error) {
     return String(error?.code || '') === 'CONCI_CAPTURA_NO_ACEPTADA';
 }
 
+// Un manifiesto que ya entró a un Cierre de Subsecretaría no se edita desde la
+// tabla: el trigger de la base (migración 053) rechaza cualquier UPDATE directo
+// con 42501, y sólo la corrección autorizada (conciliacion_solicitar_correccion,
+// el candado de la fila) puede cambiarlo. Ese rechazo es DEFINITIVO. Tratarlo
+// como un error pasajero —reintento, cola del servidor, borrador local— hacía
+// que cada pestaña con esa captura golpeara la base cada pocos segundos, para
+// siempre, y que la volviera a mandar en cada carga de la página.
+//
+// Se reconoce por el texto del trigger y no sólo por el código: 42501 también
+// es el de un permiso de RLS que tarda en refrescar, y ése sí se reintenta.
+function _conciErrorManifiestoCerrado(error) {
+    if (!error) return false;
+    const code = String(error.code || '');
+    if (code === 'CONCI_MANIFIESTO_CERRADO') return true;
+    if (code !== '42501') return false;
+    const texto = [error.message, error.details, error.hint].filter(Boolean).join(' ');
+    return /cerrado por Cierre de Subsecretar/i.test(texto);
+}
+
+// Identidades ("id:N" / "uuid:…") que la base ya confirmó como cerradas en esta
+// sesión. Sobrevive a los repintados del tbody, cuyos nodos nuevos no traen la
+// marca de la fila vieja.
+const _conciFilasCerradas = new Set();
+
+function _conciFilaEstaCerrada(tr) {
+    if (!tr || !tr.dataset) return false;
+    if (tr.dataset.conciCerrado === '1') return true;
+    const rowId = String(tr.dataset.rowId || '').trim();
+    if (rowId && _conciFilasCerradas.has(`id:${rowId}`)) return true;
+    const uuid = String(tr.dataset.clienteUuid || '').trim();
+    return !!uuid && _conciFilasCerradas.has(`uuid:${uuid}`);
+}
+
+// Deja la fila en solo lectura y descarta lo capturado sobre ella en los tres
+// sitios desde donde se reenviaría solo: la pantalla (celdas sucias que el
+// reintento recoge), el borrador local y la cola del servidor. Lo que el
+// usuario quería cambiar se le dice en el aviso; el camino para cambiarlo es la
+// corrección autorizada, nunca este autoguardado.
+function _conciBloquearFilaCerrada(tr, error) {
+    if (!tr) return;
+    const rowId = String(tr.dataset.rowId || '').trim();
+    const uuid = String(tr.dataset.clienteUuid || '').trim();
+    const idEnError = (String(error?.message || '').match(/Manifiesto\s+(\d+)\s+cerrado/i) || [])[1] || '';
+    if (rowId) _conciFilasCerradas.add(`id:${rowId}`);
+    if (uuid) _conciFilasCerradas.add(`uuid:${uuid}`);
+    if (idEnError) _conciFilasCerradas.add(`id:${idEnError}`);
+    tr.dataset.conciCerrado = '1';
+    if (tr._conciAutoSaveTimer) {
+        clearTimeout(tr._conciAutoSaveTimer);
+        tr._conciAutoSaveTimer = null;
+    }
+    tr._conciAutoSaveQueued = false;
+
+    const cells = [...tr.querySelectorAll('td[data-col]')];
+    const descartadas = [];
+    cells.forEach(td => {
+        if (td.dataset.dirty !== '1') return;
+        descartadas.push(td.dataset.col);
+        const esRuta = typeof _conciIsRoutingColumn === 'function' && _conciIsRoutingColumn(td.dataset.col);
+        const original = _conciNormalizeEditableCellText(
+            td.dataset.origRaw !== undefined
+                ? td.dataset.origRaw
+                : (esRuta ? (td.dataset.routeRaw ?? td.dataset.raw) : td.dataset.raw)
+        );
+        // DESTINO / ORIGEN se pinta con la ciudad resuelta, no con la ruta: se
+        // repone el dato y el texto lo corrige el siguiente refresco.
+        if (esRuta) {
+            td.dataset.routeRaw = original;
+        } else {
+            td.dataset.raw = original;
+            td.textContent = typeof _conciTextoVisibleDeCelda === 'function'
+                ? _conciTextoVisibleDeCelda(td, original)
+                : original;
+        }
+        delete td.dataset.pendingRaw;
+        td.removeAttribute('data-dirty');
+        td.classList.remove('conci-cell-borrador');
+        td.removeAttribute('title');
+    });
+    tr.removeAttribute('data-dirty');
+    tr.classList.remove('table-secondary', 'table-warning');
+    tr.classList.add('conci-row-cerrada');
+    tr.title = 'Manifiesto cerrado por Cierre de Subsecretaría: solo lectura. '
+        + 'Para cambiarlo usa el candado de la fila (corrección autorizada).';
+
+    if (typeof _conciBorradorOlvidarFila === 'function') _conciBorradorOlvidarFila(tr);
+    if (typeof _conciDesencolarPendientesDeFila === 'function') {
+        _conciDesencolarPendientesDeFila(tr, cells.map(td => td.dataset.col));
+    }
+    if (typeof _conciRefreshCalculatedCellsForRow === 'function') _conciRefreshCalculatedCellsForRow(tr);
+    if (typeof _conciActualizarBotonGuardarTodo === 'function') _conciActualizarBotonGuardarTodo();
+    if (descartadas.length && typeof showNotification === 'function') {
+        const id = rowId || idEnError;
+        showNotification(
+            `El manifiesto${id ? ` ${id}` : ''} ya está cerrado por Cierre de Subsecretaría y no se edita en la tabla. `
+            + `No se guardó: ${descartadas.join(', ')}. Para cambiarlo usa el candado de la fila (solicitar corrección).`,
+            'warning'
+        );
+    }
+}
+
 // Lo que la celda manda es SIEMPRE texto ("1.50", "07", "+15"); lo que Postgres
 // devuelve de una columna numérica es el número ya normalizado (1.5, 7, 15).
 // Comparar esos dos como cadenas daba "no coincide" en un guardado que sí se
@@ -33839,6 +33981,11 @@ async function _conciAutoSaveRow(tr, options = {}) {
     if (!_conciCanCurrentUserEdit()) return _conciAnotar(tr, 'omitida', 'sin permiso de captura');
     // La fila se descarto mientras esto esperaba su turno: no debe crearse.
     if (tr.dataset.conciDescartada === '1') return _conciAnotar(tr, 'omitida', 'la fila se descartó');
+    // Manifiesto cerrado: la base lo rechazaría siempre. Ni se intenta.
+    if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) {
+        _conciBloquearFilaCerrada(tr);
+        return;
+    }
     // Un solo escritor por FILA, no por nodo del DOM. El candado vive en
     // _conciEscriturasEnVuelo, indexado por la identidad estable de la fila, así
     // que sobrevive a los repintados: una escritura lanzada por un <tr> anterior
@@ -34062,6 +34209,12 @@ async function _conciAutoSaveRow(tr, options = {}) {
                     columnasDeCaptura: identidadCapturada,
                 });
                 if (!result.ok) {
+                    // El vuelo ya tiene manifiesto y está cerrado: rechazo
+                    // definitivo, sin reintento ni cola.
+                    if (typeof _conciErrorManifiestoCerrado === 'function' && _conciErrorManifiestoCerrado(result.error)) {
+                        _conciBloquearFilaCerrada(tr, result.error);
+                        return;
+                    }
                     // Si la base alcanzó a crear el registro, esta fila ya tiene
                     // id: lo que falta se completará con UPDATE, no insertándola
                     // otra vez (ver _conciAdoptarFilaPersistida).
@@ -34161,6 +34314,12 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 return;
             }
             if (!result.ok) {
+                // Manifiesto cerrado por Cierre de Subsecretaría: rechazo
+                // definitivo. Reintentarlo o encolarlo sólo repite el error.
+                if (typeof _conciErrorManifiestoCerrado === 'function' && _conciErrorManifiestoCerrado(result.error)) {
+                    _conciBloquearFilaCerrada(tr, result.error);
+                    return;
+                }
                 // Igual que arriba: si el registro llegó a crearse, se adopta su
                 // id para que el reintento actualice en vez de duplicar la fila.
                 _conciAdoptarFilaPersistida(tr, result);
@@ -34644,6 +34803,12 @@ async function _conciSaveBulkEdits() {
                 .filter(Boolean),
         ]));
         dirtyRows.forEach(tr => {
+            // Cerrado: la base lo rechazaría y el guardado quedaría "parcial"
+            // para siempre. Se descarta igual que en el autoguardado.
+            if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) {
+                _conciBloquearFilaCerrada(tr);
+                return;
+            }
             const rowId = String(tr.dataset.rowId || '').trim();
             const isNewRow = tr.dataset.conciNew === '1';
             const changedPayload = {};
