@@ -10,6 +10,7 @@
 /* Piezas que solo existen para esta vista. */
 .dg-barra[hidden],
 .dg-barra-estado[hidden],
+.dg-operaciones[hidden],
 .ndw-card-cat,
 .ndw-card-unidad,
 .ndw-resumen-cabeza,
@@ -46,7 +47,10 @@
    --dg-general: #4ade80;
 }
 
-/* ── Fuera de esta vista: Subdirecciones y opciones de menú que no usa ── */
+/* ── Fuera de esta vista: Subdirecciones, los accesos Comparativa Histórica y
+   Conciliación, y opciones de menú que no usa ── */
+:root body.rol-director-general #sidebar-nav > .si-quick--hist,
+:root body.rol-director-general #sidebar-nav > .si-quick--conci,
 :root body.rol-director-general #sidebar-nav > .si-sep,
 :root body.rol-director-general #sidebar-nav > .si-section-lbl,
 :root body.rol-director-general #sidebar-nav > .si-group,
@@ -588,6 +592,34 @@
 :root body.rol-director-general .dg-barra-estado--error { color: #b91c1c; }
 :root body.rol-director-general.dark-mode .dg-barra-estado--error { color: #fca5a5; }
 
+/* ── Operaciones Totales: el acordeón de esa pantalla, a todo lo ancho debajo
+   de los accesos, con un encabezado como el de "Resumen operativo". ── */
+:root body.rol-director-general .dg-operaciones {
+   flex: 0 0 100%;
+   min-width: 0;
+   margin-top: 1.5rem;
+}
+
+:root body.rol-director-general .dg-operaciones-cabeza {
+   display: flex;
+   align-items: baseline;
+   justify-content: space-between;
+   gap: 1rem;
+   margin: 0 0 .8rem;
+}
+
+:root body.rol-director-general .dg-operaciones-titulo {
+   margin: 0;
+   color: var(--dg-ink);
+   font-size: 1rem;
+   font-weight: 700;
+}
+
+:root body.rol-director-general .dg-operaciones-nota {
+   color: var(--dg-muted);
+   font-size: .78rem;
+}
+
 /* ── Pantallas medianas y teléfono ── */
 @media (max-width: 991.98px) {
    :root body.rol-director-general.navdeck-mode .si-nav { padding: 1rem !important; }
@@ -598,7 +630,8 @@
 @media (max-width: 575.98px) {
    :root body.rol-director-general .ndw-view-toggle { max-width: 100%; overflow-x: auto; flex-wrap: nowrap !important; scrollbar-width: none; }
    :root body.rol-director-general .ndw-view-btn { flex: 0 0 auto; }
-   :root body.rol-director-general .ndw-resumen-cabeza { flex-direction: column; gap: .15rem; }
+   :root body.rol-director-general .ndw-resumen-cabeza,
+   :root body.rol-director-general .dg-operaciones-cabeza { flex-direction: column; gap: .15rem; }
 }
 
 /* ── Ventana "Informe oficial": antes de descargar se elige la fecha de corte
