@@ -6344,6 +6344,10 @@ FF
                                 {label:'Tránsito',    data:sorted.map(function(a){return a.tras;}), backgroundColor:'#f59e0bcc', borderRadius:0}
                             ]},
                             options:{
+                                // El tema global (manifiestos-analisis.js) desactiva la proporción;
+                                // sin ella el canvas toma la altura de su tarjeta, que lo incluye
+                                // a él más título y leyenda, y crece sin fin.
+                                maintainAspectRatio:true,
                                 indexAxis:'y',
                                 plugins:{
                                     legend:{display:false},
@@ -6396,6 +6400,7 @@ FF
                                     borderSkipped:false
                                 }]},
                                 options:{
+                                    maintainAspectRatio:true, // misma razón que la gráfica A
                                     plugins:{
                                         legend:{display:false},
                                         tooltip:{callbacks:{
