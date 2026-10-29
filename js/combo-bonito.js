@@ -54,6 +54,9 @@
 .cb-op.cb-sel{font-weight:600}
 .cb-op.cb-act{background:var(--cb-suave,#eaf6ef)}
 .cb-op.cb-especial{color:#6b7280;font-style:italic}
+.cb-op.cb-accion{color:var(--cb-acento,#1e8a4c);font-weight:700;border-bottom:1px dashed #e3e8ef;border-radius:.45rem .45rem 0 0;margin-bottom:.15rem}
+.cb-op.cb-accion::before{content:'✎';flex:none;width:.85rem;text-align:center}
+.cb-op.cb-accion .cb-check{display:none}
 .cb-op mark{padding:0;background:#fff1a8;border-radius:2px;color:inherit}
 .cb-op .cb-txt{white-space:normal}
 .cb-vacia{padding:1.2rem .8rem;text-align:center;color:#8a94a6}
@@ -235,10 +238,12 @@ body.dark-mode .cb-op mark{background:#5c4d0f}
             const items = [];
             const renglon = (op) => {
                 const p = partir(op.text);
-                if (q && !normalize(op.text).includes(q) && !normalize(op.parentNode.label || '').includes(q)) return '';
-                const especial = !op.value || op.value.startsWith('__');
+                // data-cb-siempre: una acción ("Otra…, escribir") que se ve aunque se busque.
+                const siempre = op.dataset && op.dataset.cbSiempre !== undefined;
+                if (q && !siempre && !normalize(op.text).includes(q) && !normalize(op.parentNode.label || '').includes(q)) return '';
+                const especial = !siempre && (!op.value || op.value.startsWith('__'));
                 const idx = items.push(op) - 1;
-                return '<div class="cb-op' + (op.value === sel.value ? ' cb-sel' : '') + (especial ? ' cb-especial' : '')
+                return '<div class="cb-op' + (op.value === sel.value ? ' cb-sel' : '') + (especial ? ' cb-especial' : '') + (siempre ? ' cb-accion' : '')
                     + '" role="option" data-i="' + idx + '">' + ICONO.check + '<span class="cb-txt">'
                     + resaltar(p.txt, q) + '</span>' + (p.tag ? '<span class="cb-tag">' + esc(p.tag) + '</span>' : '') + '</div>';
             };
@@ -254,7 +259,9 @@ body.dark-mode .cb-op mark{background:#5c4d0f}
             estado.items = items;
             lista.innerHTML = html || '<div class="cb-vacia">Sin coincidencias</div>';
             const actual = items.findIndex(o => o.value === sel.value);
-            mover(q ? items.findIndex(o => o.value) : actual, true);
+            // Al buscar, el cursor va a la primera coincidencia real, no a la acción fija.
+            const primera = items.findIndex(o => o.value && !(o.dataset && o.dataset.cbSiempre !== undefined));
+            mover(q ? (primera >= 0 ? primera : items.findIndex(o => o.value)) : actual, true);
         };
 
         function mover(i, centrar) {
@@ -274,6 +281,8 @@ body.dark-mode .cb-op mark{background:#5c4d0f}
             cerrar();
             btn.focus();
             if (op.value === sel.value) return;
+            // Quien eligió "Otra… (escribir)" después de buscar, ya escribió la respuesta.
+            sel.dataset.cbBuscado = buscar && op.dataset && op.dataset.cbSiempre !== undefined ? buscar.value : '';
             sel.value = op.value;
             sel.dispatchEvent(new Event('change', { bubbles: true }));
             pintarBoton();

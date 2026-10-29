@@ -258,6 +258,8 @@ describe('el banner de inicio', () => {
       ${extraer('const NDW_CARD_DEFS = [', '];\n')}
       ${extraer('function ndwFormatValue(', '\n}\n')}
       ${extraer('let NDW_VIEW_STATE = ', ';\n')}
+      ${extraer('function ndwPeriodoFechas(', '\n}\n')}
+      ${extraer('async function ndwLoadPeriodo(', '\n}\n')}
       ${modo ? `NDW_VIEW_STATE.mode = '${modo}';` : ''}
       ${script.slice(script.indexOf('/* ── Semana del banner'), script.indexOf('async function ndwLoadCurrentManifestDay('))}
       ${extraer('function renderNavdeckWeeklyBanner(', '\n}\n')}
@@ -277,8 +279,8 @@ describe('el banner de inicio', () => {
     expect(banner.querySelectorAll('.ndw-view-toggle')).toHaveLength(1);
     expect(banner.querySelector('.ndw-hero-welcome')).toBeNull();
     const botones = [...banner.querySelectorAll('[data-ndw-mode]')];
-    expect(botones.map((b) => b.dataset.ndwMode)).toEqual(['current', 'weekly', 'monthly', 'annual', 'historic']);
-    expect(botones.map((b) => b.textContent.trim())).toEqual(['Día', 'Semana', 'Mes', 'Año', 'Histórico total']);
+    expect(botones.map((b) => b.dataset.ndwMode)).toEqual(['current', 'weekly', 'monthly', 'annual', 'historic', 'period']);
+    expect(botones.map((b) => b.textContent.trim())).toEqual(['Día', 'Semana', 'Mes', 'Año', 'Histórico total', 'Periodo']);
     expect(css).toMatch(/body\.navdeck-mode \.ndw-hero-main > \.ndw-view-toggle \{\s*align-self: flex-start;\s*margin-left: 0;/);
     expect(banner.querySelector('.ndw-hero-card .ndw-hero-title').textContent).toBe('7 al 13 de septiembre de 2026');
     const tarjetas = banner.querySelectorAll('.ndw-card');
@@ -404,10 +406,11 @@ describe('el banner de inicio', () => {
       const { banner } = montarBanner();
       const titulo = () => banner.querySelector('.ndw-hero-title').textContent;
       const regresar = () => banner.querySelector('[data-ndw-reset]');
-      // Va al final del selector de vista, después de Histórico total.
+      // Va al final del selector de vista, después de Histórico total y Periodo.
       const selector = banner.querySelector('.ndw-view-toggle');
       expect(selector.lastElementChild).toBe(regresar());
-      expect(regresar().previousElementSibling.previousElementSibling.dataset.ndwMode).toBe('historic');
+      expect(regresar().previousElementSibling.previousElementSibling.dataset.ndwMode).toBe('period');
+      expect(regresar().previousElementSibling.previousElementSibling.previousElementSibling.dataset.ndwMode).toBe('historic');
       expect(regresar().getAttribute('aria-label')).toBe('Regresar al periodo actual');
 
       // Semana: otra semana y otro mes, y de vuelta a la del último día capturado.
@@ -441,6 +444,71 @@ describe('el banner de inicio', () => {
       regresar().click();
       expect(titulo()).toBe('Lunes 14 de septiembre de 2026');
     } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('Periodo: dos fechas y las tarjetas suman ese rango con la capa unificada', async () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-09-15T12:00:00'));
+    const getTotales = jest.fn(async ({ desde, hasta }) => ({
+      leyenda: LEYENDA,
+      total: {
+        comercial: { operaciones: desde === '2026-08-01' ? 5147 : 1200, pasajeros: desde === '2026-08-01' ? 730001 : 150000 },
+        carga: { operaciones: 300, toneladas: 9876.54 },
+        general: { operaciones: 80, pasajeros: 410 },
+      },
+      _rango: `${desde}|${hasta}`,
+    }));
+    window.TotalesService = { getTotales };
+    try {
+      const { banner } = montarBanner({ modo: 'period' });
+      const titulo = () => banner.querySelector('.ndw-hero-title').textContent;
+      const valores = () => [...banner.querySelectorAll('.ndw-card-value')].map((v) => v.textContent);
+
+      // Por omisión, del 1 del mes en curso a ayer; mientras calcula, "—".
+      expect(titulo()).toBe('1 de septiembre de 2026 al 14 de septiembre de 2026');
+      expect(getTotales).toHaveBeenLastCalledWith({ desde: '2026-09-01', hasta: '2026-09-14', granularidad: 'total' });
+      expect(valores()).toEqual(['—', '—', '—', '—', '—', '—']);
+      await Promise.resolve(); await Promise.resolve();
+      expect(valores()).toEqual(['1,200', '150,000', '300', '9,876.54', '80', '410']);
+      expect([...banner.querySelectorAll('.ndw-card-sub')].every((s) => s.textContent === 'Total del periodo')).toBe(true);
+
+      // Cambiar las fechas recalcula: agosto completo da lo mismo que la tarjeta Mes.
+      const cambiar = (campo, valor) => {
+        const input = banner.querySelector(`[data-ndw-periodo="${campo}"]`);
+        input.value = valor;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      cambiar('desde', '2026-08-01');
+      cambiar('hasta', '2026-08-31');
+      expect(getTotales).toHaveBeenLastCalledWith({ desde: '2026-08-01', hasta: '2026-08-31', granularidad: 'total' });
+      await Promise.resolve(); await Promise.resolve();
+      expect(titulo()).toBe('1 de agosto de 2026 al 31 de agosto de 2026');
+      expect(valores().slice(0, 2)).toEqual(['5,147', '730,001']);
+
+      // Actualizar cifras: vuelve a pedir el mismo rango aunque ya estaba calculado.
+      const antes = getTotales.mock.calls.length;
+      const actualizar = banner.querySelector('[data-ndw-periodo-refresh]');
+      expect(actualizar.textContent).toBe('Actualizar cifras');
+      actualizar.click();
+      expect(getTotales.mock.calls.length).toBe(antes + 1);
+      expect(getTotales).toHaveBeenLastCalledWith({ desde: '2026-08-01', hasta: '2026-08-31', granularidad: 'total' });
+      expect(banner.querySelector('[data-ndw-periodo-refresh]').disabled).toBe(true);
+      await Promise.resolve(); await Promise.resolve();
+      expect(banner.querySelector('[data-ndw-periodo-refresh]').disabled).toBe(false);
+      expect(valores().slice(0, 2)).toEqual(['5,147', '730,001']);
+
+      // Fechas al revés: no calcula y lo dice.
+      const llamadas = getTotales.mock.calls.length;
+      cambiar('desde', '2026-09-10');
+      cambiar('hasta', '2026-09-01');
+      expect(titulo()).toBe('Revisa las fechas');
+      expect(banner.querySelector('.ndw-fuente').textContent).toMatch(/no puede ser posterior/);
+      expect(getTotales.mock.calls.length).toBe(llamadas);
+    } finally {
+      delete window.TotalesService;
+      delete window._ndwPeriodo;
       jest.useRealTimers();
     }
   });

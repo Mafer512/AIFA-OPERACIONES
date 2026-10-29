@@ -130,16 +130,20 @@ describe('el marcado', () => {
     expect(modal).toMatch(/id="btn-conci-msg-copiar"[^>]*>\s*<i class="fas fa-copy[^>]*><\/i>Copiar mensaje/);
   });
 
-  test('el Cierre de Subsecretaría y la alerta de 30 h se ocultan, no se eliminan', () => {
+  test('el Cierre de Subsecretaría se usa desde la pantalla; la alerta de 30 h sigue oculta, no eliminada', () => {
     const css = fs.readFileSync(path.join(raiz, 'style.css'), 'utf8').replace(/\r\n/g, '\n');
-    const ids = ['btn-conci-cierre-subsecretaria', 'btn-conci-corregir-cerrado', 'btn-conci-solicitudes-pendientes',
-      'btn-conci-alerta30h-pendientes', 'conci-alerta30h-toggle-wrap', 'mf-cierre-card-fijo', 'mf-cierre-card-previo',
-      'mf-cierre-card-total'];
-    ids.forEach(id => expect(html).toContain(`id="${id}"`));
+    const cierre = ['btn-conci-cierre-subsecretaria', 'btn-conci-corregir-cerrado', 'btn-conci-solicitudes-pendientes',
+      'mf-cierre-card-fijo', 'mf-cierre-card-previo', 'mf-cierre-card-total'];
+    const alerta = ['btn-conci-alerta30h-pendientes', 'conci-alerta30h-toggle-wrap'];
+    [...cierre, ...alerta].forEach(id => expect(html).toContain(`id="${id}"`));
     expect(html).toMatch(/<script src="js\/conci-cierre-subsecretaria\.js\?v=[^"]+" defer><\/script>/);
     expect(html).toMatch(/<script src="js\/conci-alerta-30h\.js\?v=[^"]+" defer><\/script>/);
-    const regla = css.match(/#btn-conci-cierre-subsecretaria,[^{]*\{[^}]*\}/)[0];
-    [...ids.map(id => `#${id}`), '.conci-cierre-corregir-row'].forEach(sel => expect(regla).toContain(sel));
+    // Ninguna regla de CSS oculta ya el cierre (lo muestra su script según el privilegio).
+    const ocultas = [...css.matchAll(/([^{}]+)\{[^}]*display:\s*none\s*!important;?[^}]*\}/g)].map(m => m[1]).join(',');
+    cierre.forEach(id => expect(ocultas).not.toContain(`#${id}`));
+    expect(ocultas).not.toContain('.conci-cierre-corregir-row');
+    const regla = css.match(/#btn-conci-alerta30h-pendientes,[^{]*\{[^}]*\}/)[0];
+    alerta.forEach(id => expect(regla).toContain(`#${id}`));
     expect(regla).toMatch(/display: none !important;/);
   });
 

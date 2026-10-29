@@ -348,8 +348,9 @@
         // Los acumulados parten del saldo oficial (js/conci-saldos-oficio.js):
         // se calcula también la columna de su fecha para saber cuánto le falta
         // a la base, y esa diferencia se aplica a las dos columnas del oficio.
+        // Hay varios saldos; cada columna usa el suyo (ConciSaldosOficio.vigente).
         const saldos = window.ConciSaldosOficio && window.ConciSaldosOficio.pasajeros ? window.ConciSaldosOficio : null;
-        if (saldos) cierres.saldo = saldos.fecha;
+        if (saldos) for (const s of cortesDeSaldo(saldos)) cierres[`saldo ${s.fecha}`] = s.fecha;
 
         // Subsecretaría: por columna, LLEGADA/SALIDA × NACIONAL/INTERNACIONAL
         // en cada alcance.
@@ -536,24 +537,43 @@
      * columna auxiliar del saldo.
      */
     function aplicarSaldos(sub, cierres, saldos) {
-        for (const alcance of ['mes', 'anio', 'historico']) {
-            const oficial = saldos.pasajeros[alcance];
-            const base = totalesSub(sub.saldo[alcance]);
-            const dif = {
-                NACIONAL: { pax: oficial.pax.nacional - base.nacional.pax, ops: oficial.ops.nacional - base.nacional.ops },
-                INTERNACIONAL: { pax: oficial.pax.internacional - base.internacional.pax, ops: oficial.ops.internacional - base.internacional.ops }
-            };
-            for (const clave of ['anterior', 'actual']) {
-                if (!saldos.aplica(alcance, cierres[clave])) continue;
+        // Las diferencias se calculan antes de tocar ninguna columna.
+        const ajustes = ['anterior', 'actual'].map(clave => {
+            const s = saldoDe(saldos, cierres[clave]);
+            return { clave, s, dif: Object.fromEntries(ALCANCES_SALDO.filter(a => s.pasajeros[a]).map(alcance => {
+                const oficial = s.pasajeros[alcance];
+                const base = totalesSub(sub[`saldo ${s.fecha}`][alcance]);
+                return [alcance, {
+                    NACIONAL: { pax: oficial.pax.nacional - base.nacional.pax, ops: oficial.ops.nacional - base.nacional.ops },
+                    INTERNACIONAL: { pax: oficial.pax.internacional - base.internacional.pax, ops: oficial.ops.internacional - base.internacional.ops }
+                }];
+            })) };
+        });
+        for (const { clave, s, dif } of ajustes) {
+            for (const alcance of Object.keys(dif)) {
+                if (!saldos.aplica(alcance, cierres[clave], s.fecha)) continue;
                 for (const lado of ['NACIONAL', 'INTERNACIONAL']) {
-                    sub[clave][alcance].LLEGADA[lado].pax += dif[lado].pax;
-                    sub[clave][alcance].LLEGADA[lado].ops += dif[lado].ops;
+                    sub[clave][alcance].LLEGADA[lado].pax += dif[alcance][lado].pax;
+                    sub[clave][alcance].LLEGADA[lado].ops += dif[alcance][lado].ops;
                 }
             }
         }
-        delete sub.saldo;
-        delete cierres.saldo;
+        for (const s of cortesDeSaldo(saldos)) {
+            delete sub[`saldo ${s.fecha}`];
+            delete cierres[`saldo ${s.fecha}`];
+        }
     }
+
+    // Saldos de ConciSaldosOficio: la lista y el que usa un corte (con uno
+    // solo, como antes de haber varios, ése).
+    function cortesDeSaldo(saldos) {
+        return Array.isArray(saldos.cortes) && saldos.cortes.length ? saldos.cortes : [saldos];
+    }
+    function saldoDe(saldos, corteIso) {
+        return typeof saldos.vigente === 'function' ? saldos.vigente(corteIso) : cortesDeSaldo(saldos)[0];
+    }
+    // El día sólo lo trae el oficio de esa misma fecha (el dato tal como se envió).
+    const ALCANCES_SALDO = ['dia', 'mes', 'anio', 'historico'];
 
     /* ── render ─────────────────────────────────────────────────────────── */
 

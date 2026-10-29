@@ -59,7 +59,7 @@
         cargado: false, cargando: null, errorCarga: null,
         vista: 'lista', agrupar: 'subdireccion', orden: { campo: 'fecha_limite', asc: true },
         filtros: { texto: '', subdirecciones: [], estatus: [], prioridades: [], tipos: [], responsable: '', situacion: '', verCerradas: false },
-        colapsados: [], cal: null, gantt: { escala: 'semanas', inicio: null },
+        colapsados: [], cal: null, gantt: { escala: 'semanas', inicio: null, cerradas: new Set() },
         dr: null, drTimers: {}, menu: null, canal: null, enVivo: null, pintando: 0, sucio: false,
         arrastrando: null, gruposPintados: new Map(),
     };
@@ -215,6 +215,7 @@
               '</div>' +
               '<div class="seg-head-actions">' +
                 '<span class="seg-live" id="seg-live"' + tip('Actualización en vivo', 'Lo que cambien los demás aparece aquí sin recargar la página.', { ico: 'tower-broadcast' }) + '><span class="seg-dot"></span><span>Conectando…</span></span>' +
+                '<button type="button" class="seg-btn" id="seg-btn-guia"' + tip('Guía', 'Cómo organizar tu información y dar de alta una tarea.', { ico: 'book-open' }) + '><i class="fas fa-book-open"></i>Guía</button>' +
                 '<button type="button" class="seg-btn" id="seg-btn-resumen"' + tip('Descargar resumen', 'Reporte ejecutivo en PDF o la tabla completa en Excel.', { ico: 'download' }) + '><i class="fas fa-download"></i>Descargar resumen</button>' +
                 '<button type="button" class="seg-btn" id="seg-btn-acceso" hidden' + tip('Quién puede ver Seguimiento', 'Agrega o quita cuentas y elige su rol.', { ico: 'user-lock' }) + '><i class="fas fa-user-plus"></i>Acceso</button>' +
                 '<button type="button" class="seg-btn seg-btn-primary" id="seg-btn-nueva"' + tip('Nueva tarea', 'Registra una orden, renovación, certificado o pendiente.', { kbd: 'N', ico: 'plus' }) + '><i class="fas fa-plus"></i>Nueva tarea</button>' +
@@ -494,9 +495,103 @@
         return errTxt(e);
     }
 
+    /* ---------- Que no se dupliquen las tareas ----------
+       Cada tarea nueva se compara con las abiertas antes de guardarse. Se leen
+       de la base en ese momento (no sólo de lo que hay en pantalla) para que
+       cuente también lo que otra persona acaba de crear. Una igual en la misma
+       subdirección no se crea; una parecida, o igual en otra subdirección, se
+       avisa y se puede crear de todos modos. */
+    let resolverDuplicado = null;
+
+    async function tareasParaComparar() {
+        try {
+            const c = await sb();
+            const { data, error } = await c.from('seguimiento_tareas').select('id, folio, titulo, subdireccion, estatus, fecha_limite, responsable');
+            if (error || !Array.isArray(data)) return state.tareas;
+            const vistas = new Set(data.map(t => t.id));
+            return data.concat(state.tareas.filter(t => !vistas.has(t.id)));
+        } catch (_) {
+            return state.tareas;
+        }
+    }
+
+    function htmlCandidata(c) {
+        const t = c.tarea;
+        const est = C.EST[t.estatus] || C.ESTATUS[0];
+        const sd = C.SUBDIR[t.subdireccion];
+        return '<button type="button" class="seg-dup-item" data-dup="abrir" data-dup-id="' + esc(t.id) + '">' +
+            '<span class="seg-dup-folio">' + esc(C.folio(t.folio)) + '</span>' +
+            '<span class="seg-dup-txt"><b>' + esc(t.titulo) + '</b><small>' + esc(est.nombre) +
+                (sd ? ' · ' + esc(sd.corto) : '') + (t.fecha_limite ? ' · vence ' + esc(C.fechaCorta(t.fecha_limite)) : '') +
+                (t.responsable ? ' · ' + esc(t.responsable) : '') + '</small></span>' +
+            '<span class="seg-dup-tipo is-' + c.tipo + '">' + (c.tipo === 'igual' ? 'Igual' : 'Parecida') + '</span>' +
+            '<i class="fas fa-arrow-up-right-from-square"></i></button>';
+    }
+
+    /** Pregunta qué hacer con las posibles duplicadas: 'abrir:<id>', 'crear' o 'cancelar'. */
+    function preguntarDuplicado(candidatas) {
+        const bloquea = C.bloqueaDuplicado(candidatas);
+        const m = $('seg-modal');
+        if (!m) return Promise.resolve(bloquea ? 'cancelar' : 'crear');
+        if (resolverDuplicado) terminarDuplicado('cancelar');
+        m.hidden = false;
+        m.innerHTML = '<div class="seg-modal-box seg-dup-box" role="dialog" aria-modal="true" aria-labelledby="seg-dup-t">' +
+            '<div class="seg-modal-head"><i class="fas fa-clone" style="color:' + (bloquea ? 'var(--seg-danger)' : '#d97706') + '"></i>' +
+            '<h3 id="seg-dup-t">' + (bloquea ? 'Esta tarea ya existe' : 'Puede que esta tarea ya exista') + '</h3>' +
+            '<button type="button" class="seg-icon-btn" data-m="cerrar" aria-label="Cerrar"><i class="fas fa-xmark"></i></button></div>' +
+            '<div class="seg-modal-body"><p class="seg-dup-p">' + (bloquea
+                ? 'Hay una tarea abierta con el mismo nombre en la misma subdirección. Para no duplicarla, ábrela y dale seguimiento ahí. Si de verdad es otra, cámbiale el nombre para distinguirla.'
+                : 'Encontramos tareas abiertas con un nombre igual o muy parecido. Revisa si es la misma antes de crear otra.') + '</p>' +
+            '<div class="seg-dup-lista">' + candidatas.map(htmlCandidata).join('') + '</div></div>' +
+            '<div class="seg-dup-foot">' +
+              '<button type="button" class="seg-btn" data-dup="cancelar">' + (bloquea ? 'Cambiar el nombre' : 'Cancelar') + '</button>' +
+              (bloquea ? '' : '<button type="button" class="seg-btn seg-btn-primary" data-dup="crear"><i class="fas fa-plus"></i>Es otra, crearla</button>') +
+            '</div></div>';
+        setTimeout(() => m.querySelector('[data-dup="abrir"]')?.focus(), 30);
+        return new Promise(res => { resolverDuplicado = res; });
+    }
+
+    function terminarDuplicado(decision) {
+        const r = resolverDuplicado;
+        resolverDuplicado = null;
+        const m = $('seg-modal');
+        if (m) { m.hidden = true; m.innerHTML = ''; }
+        if (r) r(decision);
+    }
+
+    /** true si se puede crear; si no, ya avisó o abrió la existente. */
+    async function revisarDuplicado(datos) {
+        const candidatas = C.posiblesDuplicadas(datos, await tareasParaComparar());
+        if (!candidatas.length) return true;
+        const decision = await preguntarDuplicado(candidatas);
+        if (decision === 'crear' && !C.bloqueaDuplicado(candidatas)) return true;
+        if (decision && decision.startsWith('abrir:')) {
+            const id = decision.slice(6);
+            if (buscar(id)) abrirTarea(id); else toast('La tarea existe, pero no está en tu vista actual (revisa los filtros).', 'info');
+        }
+        return false;
+    }
+
+    /** Aviso en vivo mientras se escribe el nombre de una tarea nueva. */
+    function pintarDuplicadoEnVivo() {
+        const dr = state.dr;
+        const el = $('seg-dr-dup');
+        if (!dr || dr.modo !== 'crear' || !el) return;
+        const candidatas = C.posiblesDuplicadas(dr.t, state.tareas);
+        if (!candidatas.length) { el.hidden = true; el.innerHTML = ''; return; }
+        const bloquea = C.bloqueaDuplicado(candidatas);
+        el.hidden = false;
+        el.className = 'seg-dr-dup' + (bloquea ? ' is-bloquea' : '');
+        el.innerHTML = '<div class="seg-dr-dup-h"><i class="fas fa-clone"></i>' +
+            (bloquea ? 'Ya existe una tarea abierta con este nombre en esta subdirección' : plural(candidatas.length, 'tarea abierta se parece', 'tareas abiertas se parecen') + ' a esta') + '</div>' +
+            candidatas.slice(0, 3).map(htmlCandidata).join('');
+    }
+
     async function crearEnBase(datos, opts) {
         const o = opts || {};
         if (!puedeEditar()) { toast('Tu acceso a Seguimiento es de solo consulta.', 'error'); return null; }
+        // La siguiente de una renovación lleva el mismo nombre a propósito: la anterior ya se cerró.
+        if (!o.origen && !(await revisarDuplicado(datos))) return null;
         const u = usuario();
         const fila = limpiarFila(Object.assign({}, datos, { creado_por: u.nombre, creado_por_email: u.email, actualizado_por: u.nombre }));
         delete fila.id; delete fila.folio;
@@ -1129,11 +1224,14 @@
         const fondo = '<div class="seg-gantt-cols" style="' + plantilla + '">' + cols.map(c => '<div' + (c.finde ? ' class="is-finde"' : '') + '></div>').join('') + '</div>';
         const hoyPos = C.diasEntre(inicio, h);
         const lineaHoy = (hoyPos >= 0 && hoyPos < dias) ? (etq) => '<div class="seg-gantt-hoy' + (etq ? ' is-label' : '') + '" style="left:' + ((hoyPos + 0.5) / dias * 100).toFixed(3) + '%"></div>' : () => '';
+        // El periodo de cada tarea incluye sus subtareas con fecha: si no trae
+        // inicio, arranca en la primera subtarea.
         const enRango = visibles().filter(t => {
             if (!t.fecha_limite) return false;
-            const ini = t.fecha_inicio || t.fecha_limite;
-            return ini <= fin && t.fecha_limite >= inicio;
+            const p = C.periodoTarea(t);
+            return p.inicio <= fin && p.fin >= inicio;
         });
+        const columna = iso => C.diasEntre(inicio, iso);
         const sinFecha = visibles().filter(t => !t.fecha_limite).length;
         let filas = '';
         C.SUBDIRECCIONES.forEach(sd => {
@@ -1141,22 +1239,53 @@
             if (!lista.length) return;
             filas += '<div class="seg-gantt-row is-grupo"><div class="seg-gantt-label"><span class="seg-group-pill" style="--c:' + sd.color + ';font-size:.72rem;padding:3px 9px"><i class="fas fa-' + sd.icono + '"></i>' + esc(sd.corto) + '</span><span class="seg-group-n">' + lista.length + '</span></div><div class="seg-gantt-track">' + fondo + lineaHoy(false) + '</div></div>';
             lista.forEach(t => {
-                const ini = t.fecha_inicio || t.fecha_limite;
-                const s = Math.max(0, C.diasEntre(inicio, ini));
-                const e = Math.min(dias - 1, C.diasEntre(inicio, t.fecha_limite));
+                const periodo = C.periodoTarea(t);
+                const subs = C.subtareasConFecha(t);
+                const ck = C.avanceChecklist(t);
+                const s = Math.max(0, columna(periodo.inicio));
+                const e = Math.min(dias - 1, columna(t.fecha_limite));
                 const sit = C.situacion(t, h);
                 const est = C.EST[t.estatus] || C.ESTATUS[0];
-                const hito = !t.fecha_inicio || t.fecha_inicio === t.fecha_limite;
+                const hito = periodo.inicio === t.fecha_limite;
                 const left = (s / dias * 100).toFixed(3);
                 const width = ((e - s + 1) / dias * 100).toFixed(3);
                 const estilo = hito ? 'left:calc(' + ((e + 0.5) / dias * 100).toFixed(3) + '% - 8px)' : 'left:' + left + '%;width:' + width + '%';
-                filas += '<div class="seg-gantt-row"><div class="seg-gantt-label" data-id="' + t.id + '">' + avatar(t.responsable, true) +
-                    '<div style="min-width:0"><div class="seg-titulo">' + esc(t.titulo) + '</div><div class="seg-meta">' + C.folio(t.folio) + ' · ' + C.fechaCorta(t.fecha_limite) + '</div></div></div>' +
+                const abierta = subs.length && !g.cerradas.has(t.id);
+                // Con subtareas fechadas la barra es el total: se rellena con lo
+                // que ya está hecho y debajo va cada subtarea en su día.
+                const total = subs.length && !hito;
+                const caret = subs.length
+                    ? '<button type="button" class="seg-gantt-caret' + (abierta ? ' is-open' : '') + '" data-accion="gantt-subs"' +
+                        tip(abierta ? 'Ocultar subtareas' : 'Ver subtareas', plural(subs.length, 'subtarea con fecha', 'subtareas con fecha')) + ' aria-expanded="' + Boolean(abierta) + '" aria-label="Subtareas"><i class="fas fa-chevron-right"></i></button>'
+                    : '';
+                filas += '<div class="seg-gantt-row' + (subs.length ? ' has-subs' : '') + '"><div class="seg-gantt-label" data-id="' + t.id + '">' + caret + avatar(t.responsable, true) +
+                    '<div style="min-width:0"><div class="seg-titulo">' + esc(t.titulo) + '</div><div class="seg-meta">' + C.folio(t.folio) + ' · ' + C.fechaCorta(t.fecha_limite) +
+                    (ck.total ? ' · ' + ck.hechos + '/' + ck.total + ' subtareas' : '') + '</div></div></div>' +
                     '<div class="seg-gantt-track">' + fondo + lineaHoy(false) +
-                    '<div class="seg-gantt-bar' + (hito ? ' is-hito' : '') + (sit === 'vencida' ? ' is-vencida' : '') + '" data-id="' + t.id + '" style="--c:' + est.color + ';' + estilo + '"' +
-                    tip(t.titulo, (t.fecha_inicio ? C.fechaCorta(t.fecha_inicio) + ' → ' : 'Fecha límite: ') + C.fechaCorta(t.fecha_limite) + ' · ' + est.nombre +
+                    '<div class="seg-gantt-bar' + (hito ? ' is-hito' : '') + (total ? ' is-total' : '') + (sit === 'vencida' ? ' is-vencida' : '') + '" data-id="' + t.id + '" style="--c:' + est.color + ';' + estilo + (total ? ';--avance:' + ck.pct + '%' : '') + '"' +
+                    tip(t.titulo, C.fechaCorta(periodo.inicio) + (hito ? '' : ' → ' + C.fechaCorta(t.fecha_limite)) + ' · ' + est.nombre +
+                        (ck.total ? ' · ' + ck.hechos + ' de ' + ck.total + ' subtareas' : '') +
                         (sit === 'vencida' ? ' · vencida' : '') + (t.responsable ? ' · ' + t.responsable : ''), { c: est.color }) + '>' +
-                    (hito ? '' : esc(t.titulo)) + '</div></div></div>';
+                    (hito ? '' : '<span class="seg-gantt-bar-txt">' + esc(t.titulo) + (total ? ' · ' + ck.pct + '%' : '') + '</span>') + '</div></div></div>';
+                if (!abierta) return;
+                subs.forEach(i => {
+                    const atrasada = !i.hecho && i.fecha < h;
+                    const fuera = C.subtareaFueraDePeriodo(i, t);
+                    const ini = C.inicioSubtarea(i);
+                    const c0 = Math.max(0, columna(ini));
+                    const c1 = Math.min(dias - 1, columna(i.fecha));
+                    const rangoTxt = ini === i.fecha ? C.fechaLarga(i.fecha) : C.fechaCorta(ini) + ' → ' + C.fechaCorta(i.fecha) + ' (' + C.diasSubtarea(i) + ' días)';
+                    const bloque = c1 >= c0   // también si el tramo empieza o termina fuera de lo que se ve
+                        ? '<div class="seg-gantt-sub' + (i.hecho ? ' is-done' : atrasada ? ' is-atrasada' : '') + '" data-id="' + t.id + '" style="--c:' + est.color + ';left:' + (c0 / dias * 100).toFixed(3) + '%;width:' + ((c1 - c0 + 1) / dias * 100).toFixed(3) + '%"' +
+                            tip(i.texto, rangoTxt + ' · ' + (i.hecho ? 'hecha' : atrasada ? 'atrasada' : 'pendiente') + (fuera ? ' · fuera del periodo de la tarea' : ''), { c: i.hecho ? '#16a34a' : atrasada ? '#dc2626' : est.color }) +
+                            '>' + (i.hecho ? '<i class="fas fa-check"></i>' : '') + '</div>'
+                        : '';
+                    filas += '<div class="seg-gantt-row is-sub"><div class="seg-gantt-label" data-id="' + t.id + '">' +
+                        '<span class="seg-gantt-sub-check' + (i.hecho ? ' is-done' : '') + '"><i class="fas fa-' + (i.hecho ? 'check' : 'circle') + '"></i></span>' +
+                        '<div style="min-width:0"><div class="seg-titulo' + (i.hecho ? ' is-hecha' : '') + '">' + esc(i.texto) + '</div>' +
+                        '<div class="seg-meta' + (atrasada ? ' is-atrasada' : '') + '">' + (ini === i.fecha ? C.fechaCorta(i.fecha) : C.fechaCorta(ini) + ' → ' + C.fechaCorta(i.fecha)) + (atrasada ? ' · atrasada' : '') + (fuera ? ' · fuera del periodo' : '') + '</div></div></div>' +
+                        '<div class="seg-gantt-track">' + fondo + lineaHoy(false) + bloque + '</div></div>';
+                });
             });
         });
         const cab = '<div class="seg-cal-head">' +
@@ -1167,7 +1296,7 @@
             '<div style="display:flex;gap:4px;margin-left:8px">' +
               '<button type="button" class="seg-tool' + (semanas ? ' is-on' : '') + '" data-accion="gantt-escala" data-escala="semanas">6 semanas</button>' +
               '<button type="button" class="seg-tool' + (!semanas ? ' is-on' : '') + '" data-accion="gantt-escala" data-escala="meses">6 meses</button></div>' +
-            '<span class="seg-cal-nota">' + (sinFecha ? plural(sinFecha, 'tarea sin fecha no aparece', 'tareas sin fecha no aparecen') + ' · ' : '') + 'Barra: de inicio a fecha límite · rombo: sólo fecha límite</span></div>';
+            '<span class="seg-cal-nota">' + (sinFecha ? plural(sinFecha, 'tarea sin fecha no aparece', 'tareas sin fecha no aparecen') + ' · ' : '') + 'Barra: de inicio a fecha límite · rombo: sólo fecha límite · debajo: cada subtarea en su tramo</span></div>';
         if (!filas) {
             return '<div class="seg-gantt">' + cab + '<div class="seg-vacio-mini" style="padding:40px">No hay tareas con fecha en este periodo.</div></div>';
         }
@@ -1535,6 +1664,100 @@
             '<div class="seg-campos">' + cuerpo + '</div></section>';
     }
 
+    /* ==========================================================================
+       Guía completa: cómo organizar la información y dar de alta una tarea.
+       Para quien empieza a usar el módulo. Se abre desde «Guía» arriba o
+       desde la guía rápida del panel.
+       ========================================================================== */
+    function htmlEjemploGuia() {
+        // Ejemplo fijo (22 al 27 de octubre) con las mismas piezas del panel.
+        const dias = ['22', '23', '24', '25', '26', '27'];
+        const tramos = [
+            ['Levantamiento en sitio', 0, 1, true],
+            ['Desmontar y revisar cableado', 1, 2, true],
+            ['Instalar soporte nuevo', 3, 2, false],
+            ['Pruebas y acta de entrega', 5, 1, false],
+        ];
+        const pct = n => (n / dias.length * 100).toFixed(2) + '%';
+        return '<div class="seg-gc-ejemplo">' +
+            '<div class="seg-gc-ej-h"><b>Mantenimiento de antena VHF</b><span>Inicio 22 oct → Fecha límite 27 oct · 6 días</span></div>' +
+            '<div class="seg-ck-linea"><div class="seg-ck-regla" style="grid-template-columns:repeat(6,minmax(0,1fr))">' + dias.map(d => '<span>' + d + '</span>').join('') + '</div>' +
+            '<div class="seg-ck-carriles">' + tramos.map(([txt, ini, n, hecha]) =>
+                '<div class="seg-ck-carril"><span class="seg-ck-tramo' + (hecha ? ' is-done' : '') + '" style="left:' + pct(ini) + ';width:' + pct(n) + '">' + esc(txt) + '</span></div>').join('') +
+            '</div></div>' +
+            '<ol class="seg-gc-ej-lista">' + tramos.map(([txt, ini, n]) =>
+                '<li><b>' + esc(txt) + '</b><span>' + (n === 1 ? dias[ini] + ' oct · 1 día' : dias[ini] + ' → ' + dias[ini + n - 1] + ' oct · ' + n + ' días') + '</span></li>').join('') + '</ol>' +
+            '</div>';
+    }
+
+    function abrirGuiaCompleta() {
+        const m = $('seg-modal');
+        if (!m) return;
+        if (resolverDuplicado) terminarDuplicado('cancelar');
+        const tarjeta = (ico, titulo, txt, ej) => '<div class="seg-gc-card"><span class="seg-gc-ico"><i class="fas fa-' + ico + '"></i></span><div><b>' + titulo + '</b><p>' + txt + '</p>' + (ej ? '<small>' + ej + '</small>' : '') + '</div></div>';
+        const seccion = (n, titulo, cuerpo) => '<section class="seg-gc-sec"><h4><span>' + n + '</span>' + titulo + '</h4>' + cuerpo + '</section>';
+        m.hidden = false;
+        m.innerHTML = '<div class="seg-modal-box seg-gc-box" role="dialog" aria-modal="true" aria-labelledby="seg-gc-t">' +
+            '<div class="seg-modal-head"><i class="fas fa-book-open" style="color:var(--seg-accent)"></i><h3 id="seg-gc-t">Guía: cómo organizar y dar de alta una tarea</h3>' +
+              '<button type="button" class="seg-icon-btn" data-m="cerrar" aria-label="Cerrar"><i class="fas fa-xmark"></i></button></div>' +
+            '<div class="seg-modal-body seg-gc">' +
+              '<p class="seg-gc-intro">Una tarea es algo que alguien tiene que cumplir para una fecha. Bien capturada, cualquiera puede ver <b>qué falta, quién lo atiende y si va a tiempo</b>, sin tener que preguntar.</p>' +
+
+              seccion(1, 'Antes de capturar, junta esta información',
+                '<div class="seg-gc-grid">' +
+                  tarjeta('bullseye', '¿Qué hay que lograr?', 'El resultado, en una frase que empiece con verbo.', 'Ej. «Renovar licencia de radio ante el IFT»') +
+                  tarjeta('sitemap', '¿A quién le toca?', 'La subdirección (obligatoria) y, si lo sabes, el responsable y su WhatsApp.', 'Para mandarle recordatorios con un clic.') +
+                  tarjeta('calendar-days', '¿Para cuándo?', 'El inicio y la fecha límite. Si se renueva, cada cuánto se repite.', 'Licencias, certificados y contratos.') +
+                  tarjeta('list-check', '¿Cómo se va a hacer?', 'Los pasos para lograrlo. Cada paso será una subtarea con su inicio y su fin.', 'Ej. levantamiento, instalación, pruebas.') +
+                  tarjeta('paperclip', '¿Con qué se comprueba?', 'El oficio, acta, fotos o PDF que demuestran que se cumplió.', 'Se suben como evidencia.') +
+                '</div>') +
+
+              seccion(2, 'Escribe un nombre que se entienda solo',
+                '<div class="seg-gc-dos">' +
+                  '<div class="seg-gc-si"><b><i class="fas fa-circle-check"></i>Así sí</b><ul><li>Renovar licencia de radio ante el IFT</li><li>Instalar antena VHF en la torre norte</li><li>Entregar informe mensual de fauna a la AFAC</li></ul></div>' +
+                  '<div class="seg-gc-no"><b><i class="fas fa-circle-xmark"></i>Así no</b><ul><li>«Licencia» <small>no dice qué hay que hacer</small></li><li>«Pendiente de Luis» <small>el responsable va en su campo</small></li><li>«URGENTE antena» <small>la urgencia va en Prioridad</small></li></ul></div>' +
+                '</div>' +
+                '<p class="seg-gc-nota"><i class="fas fa-clone"></i>Si al escribir el nombre el sistema te avisa que <b>ya existe una igual</b>, ábrela y dale seguimiento ahí: no la dupliques.</p>') +
+
+              seccion(3, 'Divide el trabajo en subtareas con fechas',
+                '<p>El <b>periodo de la tarea</b> va de su <b>Inicio</b> a su <b>Fecha límite</b>. Cada subtarea ocupa un tramo de ese periodo: ponle su <b>Inicio</b> y su <b>Fin</b>. Si dura un solo día, las dos fechas son la misma.</p>' +
+                htmlEjemploGuia() +
+                '<ul class="seg-gc-tips">' +
+                  '<li><i class="fas fa-wand-magic-sparkles"></i>¿No sabes cómo repartirlas? Captúralas sin fecha y usa <b>«Repartir en el periodo»</b>: el sistema divide los días parejo, un tramo por subtarea.</li>' +
+                  '<li><i class="fas fa-square-check"></i>Palomea cada subtarea al terminarla: en el cronograma la barra de la tarea se va llenando sola.</li>' +
+                  '<li><i class="fas fa-triangle-exclamation"></i>Si una subtarea se sale del periodo se marca en ámbar: ajusta su fecha o la de la tarea.</li>' +
+                '</ul>') +
+
+              seccion(4, 'Captúrala, paso a paso',
+                '<ol class="seg-gc-pasos">' +
+                  '<li><b>Nueva tarea</b> (arriba a la derecha, o la tecla <kbd>N</kbd>).</li>' +
+                  '<li><b>¿Qué hay que hacer?</b> Nombre, tipo (orden, renovación, certificado…), prioridad y, si hace falta, la descripción completa.</li>' +
+                  '<li><b>¿A quién le toca?</b> Subdirección, gerencia, responsable y su WhatsApp.</li>' +
+                  '<li><b>¿Para cuándo?</b> Inicio y fecha límite; si se repite, cada cuánto; y con cuántos días de anticipación avisar.</li>' +
+                  '<li><b>Seguimiento:</b> el estatus con el que arranca, la referencia (oficio, minuta o acuerdo) y etiquetas para encontrarla.</li>' +
+                  '<li><b>Subtareas y evidencias:</b> los pasos con su inicio y fin, y los PDF o fotos que ya tengas.</li>' +
+                  '<li><b>Crear tarea.</b> Todo lo demás se guarda solo conforme lo cambias.</li>' +
+                '</ol>') +
+
+              seccion(5, 'Durante el seguimiento',
+                '<ul class="seg-gc-tips">' +
+                  '<li><i class="fas fa-circle-half-stroke"></i>Mueve el <b>estatus</b> conforme avance: Pendiente → En proceso → En revisión → Completada. Si algo la frena, ponla en <b>Detenida</b> y explica por qué en los comentarios.</li>' +
+                  '<li><i class="far fa-comments"></i>Deja en <b>comentarios</b> los acuerdos y avances: quedan con fecha y autor.</li>' +
+                  '<li><i class="fab fa-whatsapp"></i>Con <b>Recordar</b> le mandas al responsable un WhatsApp con lo que falta.</li>' +
+                  '<li><i class="fas fa-chart-gantt"></i>En <b>Cronograma</b> ves todas las tareas en el tiempo, con sus subtareas debajo.</li>' +
+                '</ul>') +
+
+              seccion(6, 'Al terminar',
+                '<ul class="seg-gc-tips">' +
+                  '<li><i class="fas fa-check"></i>Palomea <b>Hecha</b> y sube la evidencia de que se cumplió.</li>' +
+                  '<li><i class="fas fa-repeat"></i>Si se repite, la siguiente se programa sola, con sus subtareas recorridas a las nuevas fechas.</li>' +
+                '</ul>') +
+            '</div>' +
+            '<div class="seg-dup-foot"><button type="button" class="seg-btn" data-m="cerrar">Cerrar</button>' +
+              (puedeEditar() ? '<button type="button" class="seg-btn seg-btn-primary" data-m="nueva"><i class="fas fa-plus"></i>Crear una tarea</button>' : '') + '</div>' +
+            '</div>';
+    }
+
     function htmlGuia() {
         return '<div class="seg-guia" id="seg-guia">' +
             '<div class="seg-guia-h"><i class="fas fa-lightbulb"></i>Guía rápida de llenado' +
@@ -1543,11 +1766,13 @@
               '<li><b>Escribe qué hay que hacer.</b> Corto y claro, por ejemplo: «Renovar licencia de radio ante el IFT».</li>' +
               '<li><b>Elige la subdirección</b> a la que le toca. Si sabes quién lo atiende, asígnalo y pon su WhatsApp para poder recordarle.</li>' +
               '<li><b>Pon la fecha límite.</b> Si se renueva (licencias, certificados, contratos), elige cada cuánto se repite: al completarla se programa sola la siguiente.</li>' +
-              '<li><b>Lo demás es opcional.</b> Si son varios pasos, agrégalos como subtareas. Puedes adjuntar PDF o fotos como evidencia desde ahora.</li>' +
+              '<li><b>Si son varios pasos, agrégalos como subtareas</b>, cada una con su <b>Inicio</b> y su <b>Fin</b> dentro del periodo de la tarea. Así se ven en el cronograma.</li>' +
+              '<li><b>Lo demás es opcional.</b> Puedes adjuntar PDF o fotos como evidencia desde ahora.</li>' +
               '<li><b>Cuando se cumpla, palomea la casilla</b> de la tarea (columna «Hecha»). Si se repite, la siguiente se programa sola.</li>' +
             '</ol>' +
             '<div class="seg-guia-ley"><span><b class="seg-req">*</b> Obligatorio</span><span><span class="seg-badge-rec">Recomendado</span> Conviene llenarlo</span>' +
-              '<span><span class="seg-opc">opcional</span> Puede quedar vacío</span></div>' +
+              '<span><span class="seg-opc">opcional</span> Puede quedar vacío</span>' +
+              '<button type="button" class="seg-link seg-guia-mas" data-dr="guia-completa"><i class="fas fa-book-open"></i>Ver la guía completa</button></div>' +
             '</div>';
     }
 
@@ -1634,7 +1859,7 @@
             ' placeholder="' + (creando ? 'Ej. Renovar licencia de radio ante el IFT' : 'Nombre de la tarea') + '"' + dis + '>' + esc(t.titulo) + '</textarea>';
 
         const paso1 = (creando
-                ? campo('Nombre de la tarea', 'pen', tituloCtl, { req: true, full: true, id: 'titulo', falta: marcadas.includes('titulo') })
+                ? campo('Nombre de la tarea', 'pen', tituloCtl + '<div class="seg-dr-dup" id="seg-dr-dup" hidden></div>', { req: true, full: true, id: 'titulo', falta: marcadas.includes('titulo') })
                 : '') +
             campo('Tipo', 'shapes', ctlMenu('tipo', '<i class="fas fa-' + tipo.icono + '"></i>' + esc(tipo.nombre), dis)) +
             campo('Prioridad', 'flag', ctlMenu('prioridad', '<i class="fas fa-flag" style="color:' + prio.color + '"></i>' + esc(prio.nombre), dis)) +
@@ -1707,7 +1932,7 @@
               '<button type="button" class="seg-btn seg-btn-primary" data-dr="crear"><i class="fas fa-check"></i>Crear tarea</button>' +
             '</div>';
         autoAltura($('seg-dr-titulo'));
-        if (creando) pintarFalta();
+        if (creando) { pintarFalta(); pintarDuplicadoEnVivo(); }
         else pintarTab();
     }
 
@@ -1717,15 +1942,120 @@
         ta.style.height = ta.scrollHeight + 'px';
     }
 
+    /* Subtareas con su tramo de fechas. Arriba va el periodo de la tarea con
+       una línea de tiempo que muestra qué parte cubre cada subtarea; cada
+       subtarea dice claramente su Inicio y su Fin; y abajo se agrega la
+       siguiente con sus fechas ya propuestas. */
+    const rangoSubtarea = i => {
+        const ini = C.inicioSubtarea(i);
+        if (!i.fecha) return '';
+        return ini === i.fecha ? C.fechaCorta(i.fecha) : C.fechaCorta(ini) + ' → ' + C.fechaCorta(i.fecha);
+    };
+    const textoDias = n => n === 1 ? '1 día' : n + ' días';
+
+    function htmlPlanSubtareas(t, ed) {
+        const p = C.periodoTarea(t);
+        if (!t.fecha_limite || !p) {
+            return '<div class="seg-ck-plan is-vacio"><i class="fas fa-calendar-plus"></i><div><b>Primero define el periodo de la tarea</b>' +
+                '<small>Pon el <b>Inicio</b> y la <b>Fecha límite</b> en el paso 3 «¿Para cuándo?». Después, cada subtarea toma un tramo de ese periodo.</small></div>' +
+                (ed ? '<button type="button" class="seg-btn seg-btn-sm" data-ck-accion="ir-fechas"><i class="fas fa-arrow-up"></i>Poner fechas</button>' : '') + '</div>';
+        }
+        const h = hoy();
+        const dias = C.diasEntre(p.inicio, p.fin) + 1;
+        const cob = C.diasCubiertos(t);
+        const subs = C.subtareasConFecha(t);
+        const pct = n => (n / dias * 100).toFixed(3) + '%';
+        // Hasta un mes se ve día por día; más largo, sólo inicio y fin.
+        const diaXdia = dias <= 31;
+        const regla = diaXdia
+            ? '<div class="seg-ck-regla" style="grid-template-columns:repeat(' + dias + ',minmax(0,1fr))">' +
+                Array.from({ length: dias }, (_, k) => {
+                    const iso = C.sumarDias(p.inicio, k);
+                    const dw = C.deISO(iso).getDay();
+                    return '<span class="' + (dw === 0 || dw === 6 ? 'is-finde' : '') + (iso === h ? ' is-hoy' : '') + '">' + C.deISO(iso).getDate() + '</span>';
+                }).join('') + '</div>'
+            : '<div class="seg-ck-regla is-corta"><span>' + esc(C.fechaCorta(p.inicio)) + '</span><span>' + esc(C.fechaCorta(p.fin)) + '</span></div>';
+        const hoyPos = C.diasEntre(p.inicio, h);
+        const lineaHoy = hoyPos >= 0 && hoyPos < dias ? '<span class="seg-ck-hoy" style="left:calc(' + pct(hoyPos + 0.5) + ' - 1px)"></span>' : '';
+        const carriles = subs.map(i => {
+            const ini = C.inicioSubtarea(i);
+            const s0 = Math.max(0, C.diasEntre(p.inicio, ini));
+            const e0 = Math.min(dias - 1, C.diasEntre(p.inicio, i.fecha));
+            if (e0 < s0) return '';
+            const atrasada = !i.hecho && i.fecha < h;
+            const fuera = C.subtareaFueraDePeriodo(i, t);
+            return '<div class="seg-ck-carril"><span class="seg-ck-tramo' + (i.hecho ? ' is-done' : atrasada ? ' is-atrasada' : '') + (fuera ? ' is-fuera' : '') + '"' +
+                ' style="left:' + pct(s0) + ';width:' + pct(e0 - s0 + 1) + '"' +
+                tip(i.texto, rangoSubtarea(i) + ' · ' + textoDias(C.diasSubtarea(i)) + ' · ' + (i.hecho ? 'hecha' : atrasada ? 'atrasada' : 'pendiente'), { c: i.hecho ? '#16a34a' : atrasada ? '#dc2626' : '' }) +
+                '>' + esc(i.texto) + '</span></div>';
+        }).join('');
+        return '<div class="seg-ck-plan">' +
+            '<div class="seg-ck-plan-h"><i class="fas fa-calendar-week"></i><div><b>Periodo de la tarea</b>' +
+              '<small>' + esc(C.fechaCorta(p.inicio)) + ' → ' + esc(C.fechaCorta(p.fin)) + ' · ' + textoDias(dias) + '</small></div>' +
+              '<span class="seg-ck-cob' + (cob.cubiertos >= cob.total ? ' is-ok' : '') + '">' + cob.cubiertos + ' de ' + textoDias(cob.total) + ' con subtarea</span></div>' +
+            '<div class="seg-ck-linea">' + regla + '<div class="seg-ck-carriles">' + lineaHoy +
+              (carriles || '<div class="seg-ck-carril-vacio">Las subtareas con fecha aparecen aquí, cada una en su tramo.</div>') + '</div></div>' +
+            '</div>';
+    }
+
     function htmlChecklist(t, ed) {
         const items = Array.isArray(t.checklist) ? t.checklist : [];
-        return items.map(i => '<div class="seg-ck-item' + (i.hecho ? ' is-done' : '') + '" data-ck="' + esc(i.id) + '">' +
-            '<input type="checkbox" ' + (i.hecho ? 'checked ' : '') + 'data-ck-accion="marcar" aria-label="Hecho"' + (ed ? '' : ' disabled') + '>' +
-            '<input type="text" value="' + esc(i.texto) + '" data-ck-accion="texto" maxlength="300" aria-label="Subtarea"' + (ed ? '' : ' disabled') + '>' +
-            (ed ? '<button type="button" class="seg-icon-btn" data-ck-accion="borrar"' + tip('Quitar subtarea') + ' aria-label="Quitar subtarea"><i class="fas fa-xmark"></i></button>' : '') +
-            '</div>').join('') +
-            (ed ? '<div class="seg-ck-new"><i class="fas fa-plus"></i><input type="text" id="seg-ck-nuevo" maxlength="300" placeholder="Agregar subtarea y Enter" aria-label="Nueva subtarea"></div>'
+        const rango = (t.fecha_inicio ? ' min="' + esc(t.fecha_inicio) + '"' : '') + (t.fecha_limite ? ' max="' + esc(t.fecha_limite) + '"' : '');
+        const fecha = (valor, attrs) => '<span class="seg-ck-fecha"><input type="date" value="' + esc(valor || '') + '"' + rango + attrs + '></span>';
+        const parFechas = (ini, fin, attrsIni, attrsFin, extra) => '<div class="seg-ck-fechas">' +
+            '<div class="seg-ck-f"><span class="seg-ck-f-lbl"><i class="fas fa-play"></i>Inicio</span>' + fecha(ini, attrsIni) + '</div>' +
+            '<i class="fas fa-arrow-right-long seg-ck-flecha" aria-hidden="true"></i>' +
+            '<div class="seg-ck-f"><span class="seg-ck-f-lbl"><i class="fas fa-flag-checkered"></i>Fin</span>' + fecha(fin, attrsFin) + '</div>' + (extra || '') + '</div>';
+        const sinFecha = items.filter(i => !i.fecha).length;
+        const puedeRepartir = ed && sinFecha && t.fecha_inicio && t.fecha_limite && t.fecha_inicio <= t.fecha_limite;
+        const nSinFecha = plural(sinFecha, 'subtarea sin fecha', 'subtareas sin fecha');
+        const sug = C.sugerirFechasSubtarea(t);
+        const filas = items.map((i, k) => {
+            const fuera = C.subtareaFueraDePeriodo(i, t);
+            const dur = C.diasSubtarea(i);
+            const etiqueta = i.fecha
+                ? '<span class="seg-ck-dur' + (fuera ? ' is-fuera' : '') + '">' + (fuera ? '<i class="fas fa-triangle-exclamation"></i>Fuera del periodo · ' : '') + textoDias(dur) + '</span>'
+                : '<span class="seg-ck-dur is-sin">Sin fecha</span>';
+            return '<div class="seg-ck-item' + (i.hecho ? ' is-done' : '') + (fuera ? ' is-fuera' : '') + '" data-ck="' + esc(i.id) + '">' +
+                '<div class="seg-ck-fila">' +
+                  '<input type="checkbox" ' + (i.hecho ? 'checked ' : '') + 'data-ck-accion="marcar" aria-label="Hecho"' + (ed ? '' : ' disabled') + '>' +
+                  '<span class="seg-ck-num">' + (k + 1) + '</span>' +
+                  '<input type="text" value="' + esc(i.texto) + '" data-ck-accion="texto" maxlength="300" aria-label="Subtarea"' + (ed ? '' : ' disabled') + '>' +
+                  (ed ? '<button type="button" class="seg-icon-btn" data-ck-accion="borrar"' + tip('Quitar subtarea') + ' aria-label="Quitar subtarea"><i class="fas fa-xmark"></i></button>' : '') +
+                '</div>' +
+                (ed ? parFechas(C.inicioSubtarea(i), i.fecha, ' data-ck-accion="inicio" aria-label="Inicio de la subtarea"', ' data-ck-accion="fin" aria-label="Fin de la subtarea"', etiqueta)
+                    : '<div class="seg-ck-fechas is-lectura"><i class="far fa-calendar"></i>' + (i.fecha ? esc(rangoSubtarea(i)) + ' · ' + textoDias(dur) : 'Sin fecha') + '</div>') +
+                '</div>';
+        }).join('');
+        return htmlPlanSubtareas(t, ed) +
+            (filas ? '<div class="seg-ck-lista">' + filas + '</div>' : '') +
+            (ed ? '<div class="seg-ck-new">' +
+                    '<div class="seg-ck-new-h"><i class="fas fa-plus"></i>Nueva subtarea</div>' +
+                    '<input type="text" class="seg-ck-new-txt" id="seg-ck-nuevo" maxlength="300" placeholder="¿Qué paso sigue? Ej. Levantamiento en sitio" aria-label="Nueva subtarea">' +
+                    parFechas(sug.inicio, sug.fin, ' id="seg-ck-nueva-ini" aria-label="Inicio de la nueva subtarea"', ' id="seg-ck-nueva-fin" aria-label="Fin de la nueva subtarea"',
+                        '<button type="button" class="seg-btn seg-btn-sm seg-btn-primary seg-ck-add" data-ck-accion="agregar"><i class="fas fa-plus"></i>Agregar</button>') +
+                    '<div class="seg-ck-new-ayuda">' + (sug.inicio ? 'Te propusimos el día siguiente a la última subtarea. Cámbialo si dura más de un día.' : 'Las fechas son opcionales; si las pones, la subtarea aparece en el cronograma.') + ' También puedes agregarla con Enter.</div>' +
+                  '</div>' +
+                  (puedeRepartir ? '<button type="button" class="seg-ck-repartir" data-ck-accion="repartir"' +
+                      tip('Repartir en el periodo', 'Les pone fechas a las ' + nSinFecha + ': divide el periodo del ' + C.fechaCorta(t.fecha_inicio) + ' al ' + C.fechaCorta(t.fecha_limite) + ' en tramos seguidos, uno por subtarea.', { ico: 'calendar-days' }) +
+                      '><i class="fas fa-wand-magic-sparkles"></i>Repartir ' + nSinFecha + ' en el periodo</button>' : '')
                 : (items.length ? '' : '<div class="seg-vacio-mini" style="text-align:left;padding:4px 0">Sin subtareas.</div>'));
+    }
+
+    /** Agrega la subtarea del renglón «Nueva subtarea» con sus fechas. */
+    function agregarSubtarea() {
+        const input = $('seg-ck-nuevo');
+        const texto = input ? input.value.trim() : '';
+        if (!texto) { if (input) input.focus(); return; }
+        const ini = ($('seg-ck-nueva-ini') || {}).value || '';
+        const fin = ($('seg-ck-nueva-fin') || {}).value || '';
+        let item = { id: C.idCorto(), texto, hecho: false };
+        if (ini || fin) {
+            item = C.ajustarFechasSubtarea(item, 'inicio', ini || fin);
+            item = C.ajustarFechasSubtarea(item, 'fin', fin || ini);
+        }
+        const t = tareaDelPanel();
+        guardarChecklist((t.checklist || []).concat(item), true);
     }
 
     const htmlZonaArchivos = (txt) => '<div class="seg-drop" data-dr="subir" id="seg-drop" role="button" tabindex="0">' +
@@ -2048,7 +2378,8 @@
             gerencia: t.gerencia || '', prioridad: t.prioridad, responsable: t.responsable || '', responsable_num: t.responsable_num || null,
             responsable_tel: t.responsable_tel || '', fecha_inicio: t.fecha_inicio, fecha_limite: t.fecha_limite,
             recurrencia: t.recurrencia, aviso_dias: t.aviso_dias, referencia: t.referencia || '', etiquetas: (t.etiquetas || []).slice(),
-            checklist: (t.checklist || []).map(i => ({ id: C.idCorto(), texto: i.texto, hecho: false })),
+            checklist: (t.checklist || []).map(i => Object.assign({ id: C.idCorto(), texto: i.texto, hecho: false },
+                i.fecha_inicio ? { fecha_inicio: i.fecha_inicio } : {}, i.fecha ? { fecha: i.fecha } : {})),
         });
     }
 
@@ -2257,6 +2588,7 @@
        ========================================================================== */
     function conectarEsqueleto() {
         $('seg-btn-nueva').addEventListener('click', () => nuevaTarea());
+        $('seg-btn-guia').addEventListener('click', abrirGuiaCompleta);
         $('seg-btn-acceso').addEventListener('click', abrirAcceso);
         $('seg-btn-resumen').addEventListener('click', e => abrirMenu(e.currentTarget, {
             titulo: 'Descargar resumen', ancho: 250,
@@ -2416,6 +2748,11 @@
                 return;
             }
             case 'gantt-hoy': state.gantt.inicio = null; renderTodo(); return;
+            case 'gantt-subs':
+                if (!id) return;
+                if (state.gantt.cerradas.has(id)) state.gantt.cerradas.delete(id); else state.gantt.cerradas.add(id);
+                renderTodo();
+                return;
             case 'gantt-escala': state.gantt.escala = el.dataset.escala; state.gantt.inicio = null; guardarPrefs(); renderTodo(); return;
             case 'sd': state.filtros.subdirecciones = [el.dataset.sd]; state.vista = 'lista'; guardarPrefs(); renderTodo(); window.scrollTo({ top: 0, behavior: 'smooth' }); return;
             case 'quitar-filtros': limpiarFiltros(); return;
@@ -2429,10 +2766,27 @@
         $('seg-drawer-bd').addEventListener('click', () => cerrarDrawer());
         const d = $('seg-drawer');
         d.addEventListener('click', e => {
-            const b = e.target.closest('[data-dr], [data-ck-accion="borrar"], [data-ev], [data-ev-borrar], [data-coment-borrar]');
+            const dupEnVivo = e.target.closest('#seg-dr-dup [data-dup-id]');
+            if (dupEnVivo) { abrirTarea(dupEnVivo.dataset.dupId); return; }
+            const b = e.target.closest('[data-dr], [data-ck-accion="borrar"], [data-ck-accion="repartir"], [data-ck-accion="agregar"], [data-ck-accion="ir-fechas"], [data-ev], [data-ev-borrar], [data-coment-borrar]');
             if (!b) return;
             if (b.dataset.evBorrar != null) { e.stopPropagation(); borrarEvidencia(+b.dataset.evBorrar); return; }
             if (b.dataset.comentBorrar) { borrarComentario(b.dataset.comentBorrar); return; }
+            if (b.dataset.ckAccion === 'agregar') { agregarSubtarea(); return; }
+            if (b.dataset.ckAccion === 'ir-fechas') {
+                const campo = document.querySelector('#seg-drawer [data-campo="fecha_inicio"]');
+                const visible = campo && (campo.closest('.fecha-ddmm')?.querySelector('.fecha-ddmm-texto') || campo);
+                if (visible) {
+                    if (typeof visible.scrollIntoView === 'function') visible.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    visible.focus();
+                }
+                return;
+            }
+            if (b.dataset.ckAccion === 'repartir') {
+                const t = tareaDelPanel();
+                guardarChecklist(C.repartirSubtareas(t.checklist || [], t.fecha_inicio, t.fecha_limite));
+                return;
+            }
             if (b.dataset.ckAccion === 'borrar') {
                 const t = tareaDelPanel();
                 const cid = b.closest('[data-ck]').dataset.ck;
@@ -2449,6 +2803,7 @@
                 if (state.dr && state.dr.modo === 'crear') {
                     state.dr.t.titulo = e.target.value;
                     pintarFalta();
+                    pintarDuplicadoEnVivo();
                     if (e.target.value.trim()) e.target.closest('.seg-campo')?.classList.remove('is-falta');
                 }
             }
@@ -2465,6 +2820,19 @@
                 return;
             }
             if (c === 'etiquetas') { guardarTexto(c, el.value, true); return; }
+            if (el.dataset.ckAccion === 'inicio' || el.dataset.ckAccion === 'fin') {
+                const t = tareaDelPanel();
+                const cid = el.closest('[data-ck]').dataset.ck;
+                guardarChecklist((t.checklist || []).map(i => i.id !== cid ? i : C.ajustarFechasSubtarea(i, el.dataset.ckAccion, el.value)));
+                return;
+            }
+            // En la subtarea nueva el fin acompaña al inicio para que nunca quede antes.
+            if (el.id === 'seg-ck-nueva-ini' || el.id === 'seg-ck-nueva-fin') {
+                const ini = $('seg-ck-nueva-ini'), fin = $('seg-ck-nueva-fin');
+                if (el === ini && ini.value && (!fin.value || fin.value < ini.value)) fin.value = ini.value;
+                if (el === fin && fin.value && ini.value > fin.value) ini.value = fin.value;
+                return;
+            }
             if (el.dataset.ckAccion === 'marcar' || el.dataset.ckAccion === 'texto') {
                 const t = tareaDelPanel();
                 const cid = el.closest('[data-ck]').dataset.ck;
@@ -2479,10 +2847,7 @@
         d.addEventListener('keydown', e => {
             if (e.target.id === 'seg-ck-nuevo' && e.key === 'Enter') {
                 e.preventDefault();
-                const texto = e.target.value.trim();
-                if (!texto) return;
-                const t = tareaDelPanel();
-                guardarChecklist((t.checklist || []).concat({ id: C.idCorto(), texto, hecho: false }), true);
+                agregarSubtarea();
                 return;
             }
             if (e.target.id === 'seg-dr-titulo' && e.key === 'Enter') {
@@ -2506,6 +2871,10 @@
         $('seg-file').addEventListener('change', e => { recibirArchivos(e.target.files); e.target.value = ''; });
 
         $('seg-modal').addEventListener('click', e => {
+            const dup = e.target.closest('[data-dup]');
+            if (dup) { terminarDuplicado(dup.dataset.dup === 'abrir' ? 'abrir:' + dup.dataset.dupId : dup.dataset.dup); return; }
+            if (resolverDuplicado && (e.target === e.currentTarget || e.target.closest('[data-m="cerrar"]'))) { terminarDuplicado('cancelar'); return; }
+            if (e.target.closest('[data-m="nueva"]')) { e.currentTarget.hidden = true; e.currentTarget.innerHTML = ''; nuevaTarea(); return; }
             if (e.target === e.currentTarget || e.target.closest('[data-m="cerrar"]')) { e.currentTarget.hidden = true; e.currentTarget.innerHTML = ''; return; }
             if (e.target.closest('[data-m="agregar"]')) { agregarAcceso(); return; }
             const q = e.target.closest('[data-acc-quitar]');
@@ -2576,6 +2945,7 @@
                 document.querySelectorAll('#seg-drawer .seg-tab').forEach(b => b.classList.toggle('is-active', b.dataset.tab === dr.tab));
                 pintarTab();
                 return;
+            case 'guia-completa': abrirGuiaCompleta(); return;
             case 'guia': {
                 const visible = Boolean($('seg-guia'));
                 dr.guia = !visible;
@@ -2753,7 +3123,7 @@
         if (e.key === 'Escape') {
             if (state.menu) { cerrarMenu(); e.preventDefault(); return; }
             const m = $('seg-modal');
-            if (m && !m.hidden) { m.hidden = true; m.innerHTML = ''; return; }
+            if (m && !m.hidden) { if (resolverDuplicado) terminarDuplicado('cancelar'); else { m.hidden = true; m.innerHTML = ''; } return; }
             if (state.dr) {
                 // Con un comentario o descripción a medio escribir, Esc sólo sale del campo.
                 const a = document.activeElement;

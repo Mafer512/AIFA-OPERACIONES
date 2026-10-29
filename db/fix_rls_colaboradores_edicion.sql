@@ -32,6 +32,16 @@ ORDER BY cmd, policyname;
 -- Se compara el rol sin espacios, guiones ni mayúsculas, así que da igual si
 -- está escrito 'Superadmin', 'super admin', 'SUPER_ADMIN' o 'Colab Editor'.
 -- Y basta con que UNA de las filas del usuario tenga un rol con permiso.
+--
+-- El rol se busca en los dos lugares de donde la aplicación lo toma:
+--   · usuarios_aplicaciones (rol en el aplicativo OPERACIONES, acceso ACTIVO):
+--     es lo que lee el inicio de sesión y lo que habilita "Editar" en la ficha.
+--   · user_roles (rol global), para administradores de todo el sistema.
+-- Si sólo se miraba user_roles, quien era editor en OPERACIONES veía el botón
+-- de guardar y la base le respondía "sin permiso" (fotos, INE, licencia…).
+--
+-- Esta es la ÚNICA definición de la función: los scripts de buckets la exigen
+-- en lugar de redefinirla, para que correrlos no regrese la versión vieja.
 CREATE OR REPLACE FUNCTION public.is_colab_editor()
 RETURNS boolean
 LANGUAGE sql
@@ -44,6 +54,22 @@ AS $$
         FROM public.user_roles
         WHERE user_id = auth.uid()
           AND regexp_replace(lower(coalesce(role, '')), '[^a-z0-9]', '', 'g') IN (
+              'admin',
+              'superadmin',
+              'colabeditor',
+              'colabed',
+              'colaboradoreditor',
+              'colaboradored',
+              'colaboradoredit'
+          )
+    ) OR EXISTS (
+        SELECT 1
+        FROM public.usuarios_aplicaciones ua
+        JOIN public.aplicaciones app ON app.id = ua.aplicacion_id
+        WHERE ua.usuario_id = auth.uid()
+          AND ua.estado = 'ACTIVO'
+          AND app.clave = 'OPERACIONES'
+          AND regexp_replace(lower(coalesce(ua.rol, '')), '[^a-z0-9]', '', 'g') IN (
               'admin',
               'superadmin',
               'colabeditor',
@@ -91,12 +117,20 @@ CREATE POLICY "agenda_2026_delete_colab_editor"
     USING (public.is_colab_editor());
 
 -- ── 4. Comprobación ─────────────────────────────────────────────────────────
--- (a) Tu rol tal como está guardado y cómo queda al normalizarlo.
-SELECT user_id,
-       role                                                    AS rol_guardado,
-       regexp_replace(lower(coalesce(role, '')), '[^a-z0-9]', '', 'g') AS rol_normalizado
-FROM public.user_roles
-WHERE user_id = auth.uid();
+-- (a) Tu rol tal como está guardado y cómo queda al normalizarlo, en los dos
+--     lugares. En el SQL Editor no hay sesión: cambia el correo por el tuyo.
+SELECT 'user_roles' AS origen, u.email, ur.role AS rol_guardado,
+       regexp_replace(lower(coalesce(ur.role, '')), '[^a-z0-9]', '', 'g') AS rol_normalizado
+FROM auth.users u
+JOIN public.user_roles ur ON ur.user_id = u.id
+WHERE u.email = 'tu_correo@ejemplo.com'
+UNION ALL
+SELECT 'usuarios_aplicaciones (' || ua.estado || ')', u.email, ua.rol,
+       regexp_replace(lower(coalesce(ua.rol, '')), '[^a-z0-9]', '', 'g')
+FROM auth.users u
+JOIN public.usuarios_aplicaciones ua ON ua.usuario_id = u.id
+JOIN public.aplicaciones app ON app.id = ua.aplicacion_id AND app.clave = 'OPERACIONES'
+WHERE u.email = 'tu_correo@ejemplo.com';
 
 -- (b) Con esto en true, la aplicación ya puede escribir. En el SQL Editor
 --     auth.uid() suele venir vacío (no hay sesión de usuario), así que lo

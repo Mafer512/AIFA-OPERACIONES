@@ -141,3 +141,31 @@ describe('Conciliación con vuelos pero sin ningún manifiesto', () => {
     expect(rows).toHaveLength(0);
   });
 });
+
+// El vuelo de la captura: slot el 10/10 a las 21:50, operó pasada la
+// medianoche y se capturó con FECHA 11/10. Salía dos veces: el manifiesto y
+// la fila "sin capturar" del itinerario.
+describe('Manifiesto con FECHA del día siguiente a su slot', () => {
+  const MAS = {
+    id: 22001, Status: 'Take off',
+    '[Dep] Airline code': 'M7', '[Dep] Flight Designator': 'M7 6810',
+    '[Dep] SOBT': '10OCT 21:50', '[Dep] AOBT': '11OCT 00:20', '[Dep] Service Type': 'F',
+    Routing: 'NLU-LAX', 'Aircraft type': '333', Registration: 'EIMAF',
+  };
+  const manifiesto = (fecha, slot) => ({
+    ...Object.fromEntries(_CONCI_OUTPUT_COLUMNS.map(c => [c, ''])),
+    'TIPO DE MANIFIESTO': 'SALIDA', AEROLINEA: 'M7', '# DE VUELO': 'M7 6810',
+    FECHA: fecha, 'SLOT ASIGNADO': slot, RUTA: 'NLU-LAX',
+  });
+
+  test('se cruza por el SLOT ASIGNADO y no deja la fila "sin capturar"', () => {
+    const { rows } = _conciBuildEnriched([manifiesto('11/10/2026', '10/10/2026 21:50')], [MAS], []);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]['MATRÍCULA']).toBe('EIMAF');
+  });
+
+  test('un slot a más de un día de la FECHA no cruza otro día', () => {
+    const { rows } = _conciBuildEnriched([manifiesto('13/10/2026', '10/10/2026 21:50')], [MAS], []);
+    expect(rows).toHaveLength(2);
+  });
+});

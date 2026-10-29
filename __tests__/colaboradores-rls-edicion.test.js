@@ -36,6 +36,31 @@ describe('el script que corrige el permiso de edición', () => {
         expect(cuerpo).not.toMatch(/LIMIT 1/);
     });
 
+    test('lee el rol de OPERACIONES, que es de donde la aplicación lo toma', () => {
+        // El inicio de sesión toma el rol de usuarios_aplicaciones; si la base
+        // sólo miraba user_roles, un editor veía "Guardar" y Storage le
+        // respondía "sin permiso" al subir INE, TIA o licencia.
+        const cuerpo = sql.slice(sql.indexOf('CREATE OR REPLACE FUNCTION'), sql.indexOf('REVOKE EXECUTE'));
+        expect(cuerpo).toContain('FROM public.usuarios_aplicaciones ua');
+        expect(cuerpo).toContain("app.clave = 'OPERACIONES'");
+        expect(cuerpo).toContain("ua.estado = 'ACTIVO'");
+        expect(cuerpo).toMatch(/regexp_replace\(lower\(coalesce\(ua\.rol, ''\)\), '\[\^a-z0-9\]', '', 'g'\)/);
+        expect(cuerpo).toContain('FROM public.user_roles');
+    });
+
+    test('ningún otro script redefine la función con la versión vieja', () => {
+        // Correr un script de bucket después de la corrección la deshacía.
+        for (const archivo of [
+            'db/create_employee_document_images_bucket.sql',
+            'db/create_employee_photos_bucket.sql',
+            'db/colab_editor_only_policies.sql',
+        ]) {
+            const otro = fs.readFileSync(path.join(raiz, archivo), 'utf8');
+            expect(otro).not.toMatch(/CREATE OR REPLACE FUNCTION public\.is_colab_editor/);
+            expect(otro).toContain("to_regprocedure('public.is_colab_editor()')");
+        }
+    });
+
     test('deja las cuatro políticas y no duplica las viejas', () => {
         for (const politica of [
             'agenda_2026_select_authenticated',

@@ -4159,6 +4159,8 @@ async function bindSupabaseAuthSessionBridge() {
                     // Si el inicio consultó antes de recuperar la sesión,
                     // reintentar al quedar autenticado, fuera del callback de auth.
                     setTimeout(() => {
+                        // Los avisos no se pidieron sin sesión: volver a pedirlos.
+                        window._ndwAvisosPedidos = false;
                         const days = window._ndwCurrentManifestDays || {};
                         Object.keys(days).forEach((date) => {
                             if (days[date].status === 'error') delete days[date];
@@ -11407,7 +11409,36 @@ function ndwFormatValue(value, metric) {
 }
 
 /* ── NDW shared view state ── */
-let NDW_VIEW_STATE = { mode: 'current', date: null, year: null, monthIdx: null, monthTouched: false, weekStart: null };
+let NDW_VIEW_STATE = { mode: 'current', date: null, year: null, monthIdx: null, monthTouched: false, weekStart: null,
+    periodoDesde: null, periodoHasta: null };
+
+/* Periodo: dos fechas libres. Por omisión, del 1 del mes en curso a ayer. */
+function ndwPeriodoFechas() {
+    const hasta = NDW_VIEW_STATE.periodoHasta || ndwPreviousDay();
+    const desde = NDW_VIEW_STATE.periodoDesde || `${hasta.slice(0, 8)}01`;
+    return { desde, hasta };
+}
+
+/* Total del periodo con la capa unificada (TotalesService.getTotales): los
+   meses completos hasta el corte oficial salen de la cifra oficial y los días
+   sueltos del detalle diario. Así un mes completo da lo mismo que la tarjeta
+   Mes. window._ndwPeriodo = { clave, status, total, leyenda }. */
+async function ndwLoadPeriodo(desde, hasta) {
+    const clave = `${desde}|${hasta}`;
+    if (window._ndwPeriodo?.clave === clave && window._ndwPeriodo.status !== 'error') return;
+    const entrada = window._ndwPeriodo = { clave, status: 'loading', total: null, leyenda: '' };
+    try {
+        if (!window.TotalesService) throw new Error('No se cargó js/totales-service.js');
+        const r = await window.TotalesService.getTotales({ desde, hasta, granularidad: 'total' });
+        if (window._ndwPeriodo !== entrada) return;
+        Object.assign(entrada, { status: 'ready', total: r.total, leyenda: r.leyenda || '' });
+    } catch (error) {
+        if (window._ndwPeriodo !== entrada) return;
+        entrada.status = 'error';
+        console.warn('[Inicio Periodo] No se pudo calcular el periodo:', error);
+    }
+    renderNavdeckWeeklyBanner();
+}
 
 function ndwGetAvailableYears() {
     // Los años salen de los totales unificados; mientras llegan, del catálogo
@@ -11827,6 +11858,12 @@ function renderNavdeckWeeklyBanner() {
             semana.estado = 'loading';
         }
 
+        /* ── periodo libre: se calcula al cambiar cualquiera de las dos fechas ── */
+        const periodo = mode === 'period' ? ndwPeriodoFechas() : null;
+        if (periodo && periodo.desde <= periodo.hasta) ndwLoadPeriodo(periodo.desde, periodo.hasta);
+        const periodoCalculo = periodo && window._ndwPeriodo?.clave === `${periodo.desde}|${periodo.hasta}`
+            ? window._ndwPeriodo : null;
+
         /* ── hero content per mode ── */
         let heroIcon, heroKicker, heroTitle, periodPickerHtml = '';
 
@@ -11919,6 +11956,31 @@ function renderNavdeckWeeklyBanner() {
                 <div class="ndw-period-picker ndw-period-picker--compact"><div class="ndw-period-group">${yearChipsHtml}</div></div>
                 <p class="ndw-tap-hint" aria-label="Las tarjetas son interactivas"><i class="fas fa-hand-pointer" aria-hidden="true"></i><span>Toca una tarjeta para ver el histórico anual</span></p>`;
 
+        } else if (mode === 'period') {
+            /* Periodo: dos fechas libres; las tarjetas suman ese rango. */
+            heroIcon   = 'fas fa-calendar-days';
+            heroKicker = 'Periodo';
+            const valido = periodo.desde <= periodo.hasta;
+            const fechaLarga = (iso) => {
+                const f = parseIsoDay(iso);
+                return `${f.getDate()} de ${_MONTH_NAMES_ES[f.getMonth()]} de ${f.getFullYear()}`;
+            };
+            heroTitle = !valido ? 'Revisa las fechas'
+                : periodo.desde === periodo.hasta ? fechaLarga(periodo.desde)
+                : `${fechaLarga(periodo.desde)} al ${fechaLarga(periodo.hasta)}`;
+            const hoyIso = ndwIsoDay(_now.getFullYear(), _now.getMonth(), _now.getDate());
+            const estadoPeriodo = !valido ? 'La fecha inicial no puede ser posterior a la final.'
+                : periodoCalculo?.status === 'error' ? 'No fue posible calcular el periodo. Intenta de nuevo.'
+                : periodoCalculo?.status === 'ready' ? (periodoCalculo.leyenda || '')
+                : 'Calculando el periodo…';
+            periodPickerHtml = `
+                <div class="ndw-current-picker ndw-periodo-picker">
+                    <label>Desde <input type="date" data-ndw-periodo="desde" value="${periodo.desde}" min="2022-01-01" max="${hoyIso}"></label>
+                    <label>Hasta <input type="date" data-ndw-periodo="hasta" value="${periodo.hasta}" min="2022-01-01" max="${hoyIso}"></label>
+                    <button type="button" data-ndw-periodo-refresh${periodoCalculo?.status === 'loading' ? ' disabled' : ''}>Actualizar cifras</button>
+                </div>
+                <p class="ndw-tap-hint ndw-fuente" aria-live="polite">${escapeHTML(estadoPeriodo)}</p>`;
+
         } else { /* historic */
             heroIcon   = 'fas fa-history';
             heroKicker = 'Acumulado histórico';
@@ -11931,13 +11993,14 @@ function renderNavdeckWeeklyBanner() {
 
         /* ── de dónde salen las cifras y avisos del periodo ── */
         const periodoAvisos = mode === 'current' ? [currentDateKey, currentDateKey]
+            : mode === 'period' ? [periodo.desde, periodo.hasta]
             : mode === 'weekly' ? [semana.tramo.inicio, semana.tramo.fin]
             : mode === 'monthly' ? ndwMonthBounds(selYear, selMonthIdx)
             : mode === 'annual' ? [`${selYear}-01-01`, `${selYear}-12-31`]
             : [`${availableYears[0] || currentYear}-01-01`, `${availableYears[availableYears.length - 1] || currentYear}-12-31`];
         if (mode === 'weekly') {
             periodPickerHtml += `<p class="ndw-tap-hint ndw-fuente">${escapeHTML(NDW_DETALLE_AYUDA)}</p>`;
-        } else if (mode !== 'current') {
+        } else if (mode !== 'current' && mode !== 'period') {
             periodPickerHtml += totalesInicio?.status === 'error'
                 ? '<p class="ndw-tap-hint" aria-live="polite">No fue posible consultar los totales. Intenta más tarde.</p>'
                 : `<p class="ndw-tap-hint ndw-fuente">${escapeHTML(totalesInicio?.leyenda || 'Consultando totales…')}</p>`;
@@ -11955,12 +12018,13 @@ function renderNavdeckWeeklyBanner() {
                 <button type="button" class="ndw-view-btn${mode === 'monthly' ? ' is-active' : ''}" data-ndw-mode="monthly" aria-pressed="${mode === 'monthly'}">Mes</button>
                 <button type="button" class="ndw-view-btn${mode === 'annual'  ? ' is-active' : ''}" data-ndw-mode="annual"  aria-pressed="${mode === 'annual'}">Año</button>
                 <button type="button" class="ndw-view-btn${mode === 'historic' ? ' is-active' : ''}" data-ndw-mode="historic" aria-pressed="${mode === 'historic'}">Histórico total</button>
+                <button type="button" class="ndw-view-btn${mode === 'period' ? ' is-active' : ''}" data-ndw-mode="period" aria-pressed="${mode === 'period'}">Periodo</button>
                 <span class="ndw-view-sep" aria-hidden="true"></span>
                 <button type="button" class="ndw-view-btn ndw-view-reset" data-ndw-reset title="Regresar al periodo actual" aria-label="Regresar al periodo actual"><i class="fas fa-rotate-right" aria-hidden="true"></i></button>
             </div>`;
 
         /* ── card values per mode ── */
-        const cardPeriodo = { current: 'Total del día', weekly: 'Total de la semana', monthly: 'Total del mes', annual: 'Total del año', historic: 'Total histórico' }[mode] || 'Total histórico';
+        const cardPeriodo = { current: 'Total del día', weekly: 'Total de la semana', monthly: 'Total del mes', annual: 'Total del año', historic: 'Total histórico', period: 'Total del periodo' }[mode] || 'Total histórico';
         // Categoría y unidad de cada tarjeta. Solo se ven en la vista de
         // Dirección General (director-general.css); para los demás, ocultas.
         const cardCategoria = { comercial: 'Comercial', carga: 'Carga', general: 'Aviación general' };
@@ -11974,6 +12038,10 @@ function renderNavdeckWeeklyBanner() {
             if (mode === 'weekly') {
                 if (semana.estado !== 'ready') return null;
                 return semana.dias.reduce((acc, d) => acc + getWeeklyValue(d, def.cat, def.metric), 0);
+            }
+            if (mode === 'period') {
+                // Periodo: total de la capa unificada para el rango elegido.
+                return periodoCalculo?.status === 'ready' ? Number(periodoCalculo.total?.[def.cat]?.[def.metric]) || 0 : null;
             }
             if (totalesInicio?.status !== 'ready') return null;
             if (mode === 'monthly') return ndwGetMonthlyVal(def.cat, def.metric, selYear, selMonthIdx);
@@ -12042,11 +12110,40 @@ function renderNavdeckWeeklyBanner() {
         if (!container._ndwWired) {
             container._ndwWired = true;
             container.addEventListener('change', (ev) => {
+                const campoPeriodo = ev.target.closest?.('[data-ndw-periodo]');
+                if (campoPeriodo) {
+                    if (!campoPeriodo.value) return;
+                    if (campoPeriodo.dataset.ndwPeriodo === 'desde') NDW_VIEW_STATE.periodoDesde = campoPeriodo.value;
+                    else NDW_VIEW_STATE.periodoHasta = campoPeriodo.value;
+                    renderNavdeckWeeklyBanner();
+                    return;
+                }
                 if (!ev.target.matches('[data-ndw-date]') || !ev.target.value) return;
                 NDW_VIEW_STATE.date = ev.target.value;
                 renderNavdeckWeeklyBanner();
             });
             container.addEventListener('click', (ev) => {
+                /* Periodo: vuelve a pedir las cifras del rango. Primero con lo que
+                   ya hay y, al terminar el refresco de los resúmenes en el
+                   servidor, otra vez con lo recién capturado. */
+                const refrescarPeriodo = ev.target.closest('[data-ndw-periodo-refresh]');
+                if (refrescarPeriodo) {
+                    if (refrescarPeriodo.disabled) return;
+                    const recalcular = () => {
+                        window.TotalesService?.invalidar?.();
+                        if (window._ndwTotales?.status !== 'loading') window._ndwTotales = null;
+                        window._ndwDetalle = {};
+                        window._ndwPeriodo = null;
+                        renderNavdeckWeeklyBanner();
+                    };
+                    recalcular();
+                    if (typeof ndwRefreshManifestSummary === 'function') {
+                        ndwRefreshManifestSummary(true).then((actualizado) => {
+                            if (actualizado && NDW_VIEW_STATE.mode === 'period') recalcular();
+                        });
+                    }
+                    return;
+                }
                 if (ev.target.closest('[data-ndw-refresh]')) {
                     // Los totales y el detalle por año se vuelven a pedir al cambiar de vista.
                     window.TotalesService?.invalidar?.();
@@ -12064,6 +12161,8 @@ function renderNavdeckWeeklyBanner() {
                     NDW_VIEW_STATE.year = null;
                     NDW_VIEW_STATE.monthIdx = null;
                     NDW_VIEW_STATE.monthTouched = false;
+                    NDW_VIEW_STATE.periodoDesde = null;
+                    NDW_VIEW_STATE.periodoHasta = null;
                     renderNavdeckWeeklyBanner();
                     return;
                 }
@@ -12124,6 +12223,8 @@ function renderNavdeckWeeklyBanner() {
                 if (!card) return;
                 const idx = Number(card.getAttribute('data-ndw-idx'));
                 if (!Number.isFinite(idx)) return;
+                // Periodo: la tarjeta ya es el total del rango; no abre otra ventana.
+                if (NDW_VIEW_STATE.mode === 'period') return;
                 if (NDW_VIEW_STATE.mode === 'weekly' || NDW_VIEW_STATE.mode === 'current') openNavdeckWeeklyDetail(idx);
                 else if (NDW_VIEW_STATE.mode === 'monthly') openNavdeckMonthlyDetail(idx);
                 else                                        openNavdeckAnnualDetail(idx);
@@ -20938,6 +21039,30 @@ function _conciBuildEnriched(manifestRows, vuelosRows, schemaRows) {
                     }
                 }
             }
+            // 1b) mismo vuelo por su SLOT ASIGNADO: el manifiesto lleva la FECHA
+            // de la operación y el itinerario la del slot. Un vuelo con slot el
+            // 10/10 a las 21:50 que operó pasada la medianoche se captura con
+            // FECHA 11/10; sin esto salía dos veces (capturado y "sin capturar").
+            // Sólo a un día de distancia de la FECHA, para no cruzar otro día.
+            if (!vRow && colm.slotAsignado && mMd !== null) {
+                const sp = _conciParseDateTimeParts(mRow[colm.slotAsignado]);
+                const sMd = sp && Number.isFinite(sp.month) && Number.isFinite(sp.day) ? sp.month * 100 + sp.day : null;
+                const dias = (md) => Date.UTC(2000, Math.floor(md / 100) - 1, md % 100) / 86400000;
+                const distancia = sMd === null ? null : Math.abs(dias(sMd) - dias(mMd));
+                if (sMd !== null && sMd !== mMd && Math.min(distancia, 366 - distancia) <= 1) {
+                    for (const d of dirs) {
+                        const ek = `${flightNum}|${d}|${sMd}`;
+                        const hit = vByKeyDate.get(ek);
+                        if (hit && !usedKeys.has(ek)) {
+                            vRow = hit;
+                            matchedDirection = d;
+                            usedKeys.add(ek);
+                            usedVuelo.add(`${vueloId.get(hit)}|${d}`);
+                            break;
+                        }
+                    }
+                }
+            }
             // 2) fallback: only vuelos with unknown date (never cross a known other day)
             if (!vRow) {
                 for (const d of dirs) {
@@ -21688,6 +21813,7 @@ function _conciUpdateResumen(data, columns) {
     const airlineCol = cols.find(c => /aerol[ií]nea|airline/i.test(c)) || null;
     const recepcionCol = cols.find(_conciIsReceptionColumn) || null;
     for (const r of (data || [])) {
+        if (_conciEsInformativo(r)) continue;   // no cuenta en ninguna suma (070)
         const f = String(r && r._fuente || '');
         if (f === 'Manifiestos + Vuelos') empate++;
         else if (f === 'Solo Manifiestos') soloManifiesto++;
@@ -23428,9 +23554,12 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
     // exactamente por la misma ruta que su descarga individual.
     if (kind === 'total') {
         const wbTotal = new ExcelJS.Workbook();
-        const conPax = await _conciExportToExcel('pax', wbTotal);
-        const conCarga = await _conciExportToExcel('carga', wbTotal);
-        if (!conPax && !conCarga) {
+        const conPax = await _conciExportToExcel('pax', wbTotal, { sinHojaInformativos: true });
+        const conCarga = await _conciExportToExcel('carga', wbTotal, { sinHojaInformativos: true });
+        // Los vuelos INFORMATIVOS (070), aparte y al final del libro.
+        const infPax = await _conciExportToExcel('pax', wbTotal, { soloInformativos: true, sheetName: 'INFORMATIVOS Pasajeros' });
+        const infCarga = await _conciExportToExcel('carga', wbTotal, { soloInformativos: true, sheetName: 'INFORMATIVOS Carga' });
+        if (!conPax && !conCarga && !infPax && !infCarga) {
             alert('No hay datos cargados para exportar.');
             return;
         }
@@ -23492,10 +23621,26 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
         const v = String(_conciExportGetField(r, ['HR. DE RECEPCIÓN']) ?? '').trim();
         return v !== '' && !/^(null|undefined|sin registro|-|—|–)$/i.test(v);
     };
-    const dataRows = (isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga))
-        .filter(r => !targetWb || _conciRecibido(r));
+    // Sólo vuelos recibidos en el libro Total; la hoja de INFORMATIVOS hereda
+    // el criterio de la hoja que la pidió.
+    const soloRecibidos = opts.soloRecibidos ?? !!targetWb;
+    const delTipo = (isTotal ? rows : rows.filter(r => _conciRowIsCargo(r, optypeCol, airlineCol) === isCarga))
+        .filter(r => !soloRecibidos || _conciRecibido(r));
+    // Vuelos INFORMATIVOS (070): no van en la hoja de datos; van en su propia
+    // hoja, con el mismo formato, al final del libro. "Por capturista" no suma
+    // nada: ahí cada quien conserva todo lo que capturó (incluirInformativos).
+    const dataRows = opts.incluirInformativos
+        ? delTipo
+        : delTipo.filter(r => _conciEsInformativo(r) === !!opts.soloInformativos);
+    const hojaInformativos = (wbDestino) => (opts.incluirInformativos || opts.soloInformativos
+        || opts.sinHojaInformativos || !delTipo.some(_conciEsInformativo))
+        ? false
+        : _conciExportToExcel(kind, wbDestino, {
+            ...opts, rows, soloRecibidos, soloInformativos: true,
+            sheetName: targetWb ? `INFORMATIVOS ${isCarga ? 'Carga' : 'Pasajeros'}` : 'INFORMATIVOS',
+        });
     if (!dataRows.length) {
-        if (targetWb) return false;
+        if (targetWb) return hojaInformativos(targetWb);
         // Decía "en la vista actual", lo que daba a entender que respeta los
         // filtros de la tabla. No los respeta: exporta el día completo.
         alert(isTotal ? 'No hay datos cargados para exportar.' : `No hay vuelos de ${isCarga ? 'carga' : 'pasajeros'} en el día cargado.`);
@@ -23551,8 +23696,11 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
                 // Como en la tabla: solo el número, como texto (conserva ceros a
                 // la izquierda). "Exportar por capturista" sigue con el vuelo completo.
                 return { value: opts.vueloCompleto ? String(rawVal || '') : _conciNumeroDeVuelo(rawVal, get(row, ['AEROLINEA', 'AEROLÍNEA'])) };
-            case 'routecity':
-                return { value: routeCity(rawVal, isArr) };
+            case 'routecity': {
+                // Como en la tabla: sin DESTINO / ORIGEN, el otro extremo de la RUTA.
+                const ruta = String(rawVal || '').trim() ? '' : String(get(row, ['RUTA']) || '').trim();
+                return { value: ruta ? _conciDestinoOrigenRuta(ruta, isArr ? 'LLEGADA' : 'SALIDA') : routeCity(rawVal, isArr) };
+            }
             case 'codecity':
                 return { value: codeCity(rawVal) };
             case 'ruta':
@@ -23650,6 +23798,7 @@ async function _conciExportToExcel(kind, targetWb, opts = {}) {
     ws.columns.forEach((col, i) => { col.width = Math.min(46, Math.max(11, maxLen[i] + 2)); });
     ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: headers.length } };
 
+    await hojaInformativos(wb);
     if (targetWb) return true;
     const buf = await wb.xlsx.writeBuffer();
     const stamp = new Date().toISOString().slice(0, 10);
@@ -23720,7 +23869,7 @@ async function _conciExportPorCapturistaFormato(kind) {
         const sheetName = sheetNameFor(nombre);
         // Con targetWb, _conciExportToExcel deja solo lo recibido (HR. DE
         // RECEPCIÓN con valor) del tipo pedido; sin nada, no agrega la hoja.
-        const agregada = await _conciExportToExcel(kind, wb, { rows: grupos.get(nombre), sheetName, vueloCompleto: true });
+        const agregada = await _conciExportToExcel(kind, wb, { rows: grupos.get(nombre), sheetName, vueloCompleto: true, incluirInformativos: true });
         if (agregada) {
             usedSheetNames.add(sheetName.toUpperCase());
             hojas++;
@@ -24575,6 +24724,7 @@ function _conciReadLiveTableRow(tr) {
             : (td.dataset.pendingRaw !== undefined ? td.dataset.pendingRaw : (td.dataset.raw || td.textContent || ''));
     });
     row._fuente = tr.dataset.rowFuente || '';
+    row.INFORMATIVO = tr.classList.contains('conci-row-informativo');
     return row;
 }
 
@@ -24625,6 +24775,109 @@ function _conciUpdateSummaryLiveCell(td, value) {
     _conciRefreshSummaryCardsLive();
 }
 
+// ── Vuelos INFORMATIVOS (migración 070) ─────────────────────────────────────
+// Casilla después de "Hora y Fecha Generación". El vuelo se sigue registrando
+// igual, pero marcado no cuenta en ninguna suma: aquí (tarjetas y Excel) y en
+// el servidor (oficio, mensaje del SWEAR, lote del cierre, Inicio, Numeralia).
+// No es una celda de captura (no lleva data-col): se guarda sola, al marcarla,
+// y nunca viaja en el autoguardado de la fila.
+function _conciEsInformativo(row) {
+    return !!row && (row.INFORMATIVO === true || row.INFORMATIVO === 'true');
+}
+
+function _conciInformativoTd(tr, row, editable) {
+    const td = document.createElement('td');
+    td.className = 'conci-cell conci-informativo-cell text-center';
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'form-check-input conci-informativo-check';
+    box.checked = _conciEsInformativo(row);
+    box.setAttribute('aria-label', 'Vuelo informativo');
+    const cerrado = !!row && row.cierre_id !== undefined && row.cierre_id !== null;
+    if (!editable) {
+        box.disabled = true;
+        td.title = box.checked
+            ? 'Vuelo informativo: no cuenta en ninguna suma.'
+            : 'Sólo editor, admin o superadmin marcan vuelos informativos.';
+    } else if (cerrado) {
+        // Un manifiesto cerrado sólo cambia por corrección autorizada.
+        box.dataset.cerrado = '1';
+        td.title = 'Manifiesto cerrado: el cambio se hace como corrección autorizada.';
+    } else {
+        td.title = 'Vuelo informativo: marcado, no cuenta en ninguna suma.';
+    }
+    td.appendChild(box);
+    tr.classList.toggle('conci-row-informativo', box.checked);
+    return td;
+}
+
+async function _conciCambiarInformativo(box) {
+    const tr = box.closest('tr');
+    if (!tr) return;
+    const marcado = box.checked;
+    const id = String(tr.dataset.rowId || '').trim();
+    if (!_conciCanCurrentUserManage()) {
+        box.checked = !marcado;
+        alert('Sólo editor, admin o superadmin pueden marcar un vuelo como informativo.');
+        return;
+    }
+    if (box.dataset.cerrado === '1') {
+        box.checked = !marcado;
+        if (window.conciCierreSubsecretaria?.abrirModalCorreccion) {
+            window.conciCierreSubsecretaria.abrirModalCorreccion({ manifiestoId: id, campo: 'INFORMATIVO', valor: marcado });
+        }
+        return;
+    }
+    if (!id) {
+        box.checked = !marcado;
+        alert('Primero captura el manifiesto; ya guardado se puede marcar como informativo.');
+        return;
+    }
+    const client = window.supabaseClient;
+    if (!client) { box.checked = !marcado; return; }
+    box.disabled = true;
+    try {
+        const { data, error } = await client
+            .from('Conciliación Manifiestos')
+            .update({ INFORMATIVO: marcado })
+            .eq('id', id)
+            .select('INFORMATIVO, "CAPTURÓ"')
+            .maybeSingle();
+        if (error) throw error;
+        if (!data) throw new Error('El manifiesto ya no existe o no tienes permiso para modificarlo.');
+        tr.classList.toggle('conci-row-informativo', marcado);
+        const idx = Number(tr.dataset.rowIndex);
+        const row = Number.isInteger(idx) ? _conciManifestosAllData[idx] : null;
+        if (row) row.INFORMATIVO = marcado;
+        // El trigger de 054 anota en CAPTURÓ a quien marcó la casilla.
+        const capturoTd = tr.querySelector('td[data-col="CAPTURÓ"]');
+        if (capturoTd && data['CAPTURÓ'] && !capturoTd.dataset.dirty) {
+            _conciRenderCapturoCell(capturoTd, data['CAPTURÓ']);
+            capturoTd.dataset.origRaw = String(data['CAPTURÓ']);
+            if (row) row['CAPTURÓ'] = data['CAPTURÓ'];
+        }
+        _conciRefreshSummaryCardsLive();
+        if (typeof window._conciNotificarManifiestosCambiaron === 'function') window._conciNotificarManifiestosCambiaron();
+    } catch (err) {
+        box.checked = !marcado;
+        const msg = String(err?.message || err);
+        alert(/INFORMATIVO/.test(msg) && /column|columna/i.test(msg)
+            ? 'Falta correr la migración 070 (columna INFORMATIVO) en Supabase.'
+            : 'No se pudo guardar la marca de informativo: ' + msg);
+    } finally {
+        if (!box.dataset.cerrado) box.disabled = false;
+    }
+}
+
+function _conciBindInformativo(tbody) {
+    if (!tbody || tbody.dataset.conciInformativoBound) return;
+    tbody.dataset.conciInformativoBound = '1';
+    tbody.addEventListener('change', (ev) => {
+        const box = ev.target.closest?.('input.conci-informativo-check');
+        if (box) _conciCambiarInformativo(box);
+    });
+}
+
 // Recalcula de forma independiente pasajeros y carga: una fila puede contener
 // PAX y también kilogramos de carga/equipaje.
 function _updateManifiestosSummaryStrip(data, columns) {
@@ -24644,6 +24897,7 @@ function _updateManifiestosSummaryStrip(data, columns) {
     let paxOps = 0, totalPax = 0, cargoOps = 0, kgsCarga = 0;
     let kgsCapturados = false;
     for (const row of rows) {
+        if (_conciEsInformativo(row)) continue;   // no cuenta en ninguna suma (070)
         const isCargoByType = _conciRowIsCargo(row, optypeCol, airlineCol);
         const paxValue = totalPaxCol ? _conciSummaryNumber(row[totalPaxCol]) : 0;
         const kgs = _conciSummaryCargoKgs(row, cargoCols);
@@ -25049,6 +25303,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     const thead = table.querySelector('thead');
     const tbody = table.querySelector('tbody');
     _conciBindRowActions();
+    _conciBindInformativo(tbody);
     thead.innerHTML = '';
     tbody.innerHTML = '';
     _conciManifestosAllData = data; // Guarda referencia para las listas de valores de filtros desplegables
@@ -25056,6 +25311,8 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
     // Display columns: hide the internal marker columns
     const displayCols = (columns || (data.length ? Object.keys(data[0]) : [])).filter(c => !['_fuente', '_isPax', '_validado_itinerario', '_validado_por_itinerario', 'id', 'Año', 'Mes', 'Día'].includes(c));
     const showRowActions = _conciCanCurrentUserEdit();
+    // Marcar un vuelo como informativo lo saca de los totales: editor, admin y superadmin.
+    const puedeInformativo = _conciCanCurrentUserManage();
     _conciRenderColumnVisibilityMenu(displayCols);
 
     // Detect semantic columns for smart city-name display in routing/origen cell
@@ -25128,6 +25385,13 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         th.appendChild(thInner);
         trHead.appendChild(th);
     });
+    // Columna "Informativo" (070), después de "Hora y Fecha Generación". Sin
+    // data-conci-column-key: no es una columna de captura (ver _conciInformativoTd).
+    const infTh = document.createElement('th');
+    infTh.className = 'text-nowrap conci-th conci-informativo-col';
+    infTh.title = 'Vuelo informativo: se registra, pero marcado no cuenta en ninguna suma';
+    infTh.textContent = 'INFORMATIVO';
+    trHead.appendChild(infTh);
     // Columna “Itinerario”: indica si el vuelo fue validado en la pestaña de Itinerario de Vuelos
     const itTh = document.createElement('th');
     itTh.className = 'text-nowrap conci-th conci-it-val-col';
@@ -25391,6 +25655,12 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
             tr.dataset.rowId = _rowId;
             tr.dataset.rowFuente = _rowFuente;
             tr.dataset.rowIndex = String(idx);
+            // Cerrado por Cierre de Subsecretaría: solo lectura en la tabla (ver
+            // _conciErrorManifiestoCerrado). Se cambia por corrección autorizada.
+            if (row.cierre_id !== undefined && row.cierre_id !== null) {
+                tr.dataset.conciCerrado = '1';
+                tr.classList.add('conci-row-cerrada');
+            }
             if (row._conci_vuelo_id !== undefined && row._conci_vuelo_id !== null) {
                 tr.dataset.conciVueloId = String(row._conci_vuelo_id);
                 tr.dataset.conciVueloDireccion = String(row._conci_vuelo_direccion || '');
@@ -25465,7 +25735,13 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
                     td.textContent = _conciAeronaveDisplay(rawStr).text;
                     _conciMarcarAeronave(td, rawStr);
                 } else if (meta.isRouting) {
-                    const shown = _conciDestinoOrigenVisible(rawStr, _tipoCol ? String(row[_tipoCol] || '') : '', iataToCity);
+                    // Sin DESTINO / ORIGEN (p. ej. la carga del libro, que trae la
+                    // RUTA): la ciudad del otro extremo de la RUTA. Sólo se muestra;
+                    // lo guardado sigue vacío hasta que alguien lo capture.
+                    const rutaRespaldo = !String(rawStr || '').trim() && _rutaCol ? String(row[_rutaCol] || '').trim() : '';
+                    const shown = rutaRespaldo
+                        ? _conciDestinoOrigenRuta(rutaRespaldo, _tipoCol ? String(row[_tipoCol] || '') : '', iataToCity)
+                        : _conciDestinoOrigenVisible(rawStr, _tipoCol ? String(row[_tipoCol] || '') : '', iataToCity);
                     td.textContent = shown;
                     td.dataset.routeRaw = rawStr;
                     td.dataset.raw = shown;
@@ -25562,6 +25838,9 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
             // Recalcula las formulas tanto al cargar como durante la captura.
             _conciRefreshCalculatedCellsForRow(tr);
             _conciRenderDescuadreTua(tr, row);
+
+            // Casilla INFORMATIVO (070): fila gris y fuera de toda suma.
+            tr.appendChild(_conciInformativoTd(tr, row, puedeInformativo));
 
             // ── Celda de validación Itinerario ─────────────────────────────────
             {
@@ -27404,6 +27683,18 @@ function _conciDestinoOrigenVisible(rawStr, tipo, iataToCity = (c => (window._ia
     const catalogCity = code ? _conciAirportStoredValue(_conciAirportCatalogByIata.get(code)) : '';
     const city = _conciCiudadBonita(catalogCity || (code ? iataToCity(code) : rawStr));
     return city || rawStr;
+}
+
+// DESTINO / ORIGEN a partir de la RUTA: el extremo que no es el AIFA. En la
+// llegada el primero (HKG-ANC-NLU → Hong Kong), en la salida el último
+// (NLU-LAX → Los Ángeles). Si ese extremo es NLU (ruta capturada al revés) se
+// toma el más cercano que no lo sea.
+function _conciDestinoOrigenRuta(rutaRaw, tipo, iataToCity) {
+    const parts = String(rutaRaw ?? '').toUpperCase().split(/[-\/]+/).map(p => p.trim()).filter(Boolean);
+    const otros = parts.filter(p => p !== 'NLU' && p !== 'MMSM');
+    if (!otros.length) return '';
+    const codigo = /lleg|arr/i.test(String(tipo || '')) ? otros[0] : otros[otros.length - 1];
+    return _conciDestinoOrigenVisible(codigo, tipo, iataToCity);
 }
 
 function _conciAirportOptionLabel(airport) {
@@ -29807,6 +30098,10 @@ function _conciStageCellDraft(td, rawValue) {
 function _conciQueueAutoSave(tr) {
     if (!tr || !tr.isConnected || !_conciEditMode || !_conciCanCurrentUserEdit()) return;
     if (tr.dataset.conciDescartada === '1') return;
+    if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) {
+        _conciBloquearFilaCerrada(tr);
+        return;
+    }
     // Una captura nueva estrena la espera: el retraso acumulado castigaba a los
     // intentos anteriores, no a este. Sin esto, una fila que fallo mientras se
     // completaba arrastraba su penalizacion hasta cuando ya estaba lista.
@@ -30154,12 +30449,20 @@ function _conciRestaurarBorradores() {
     if (!tabla) return 0;
     const { datos } = _conciBorradoresPendientes();
     let repuestas = 0;
+    let deCerradas = 0;
     Object.keys(datos).forEach(clave => {
         if (!clave.startsWith('id:')) return;
         const rowId = clave.slice(3);
         const tr = [...tabla.querySelectorAll('tbody tr[data-row-id]')]
             .find(fila => String(fila.dataset.rowId || '') === rowId);
         if (!tr) return;
+        // Un borrador sobre un manifiesto ya cerrado no se repone: la base lo
+        // rechazaría en cada carga de la página, para siempre.
+        if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) {
+            deCerradas += Object.keys(datos[clave]?.celdas || {}).length;
+            delete datos[clave];
+            return;
+        }
         const entrada = datos[clave];
         let algunaRepuesta = false;
         Object.keys(entrada.celdas || {}).forEach(col => {
@@ -30189,6 +30492,13 @@ function _conciRestaurarBorradores() {
         }
     });
     _conciBorradoresEscribir(datos);
+    if (deCerradas && typeof showNotification === 'function') {
+        showNotification(
+            `Se descartaron ${deCerradas === 1 ? '1 captura sin guardar' : `${deCerradas} capturas sin guardar`} sobre manifiestos `
+            + 'ya cerrados por Cierre de Subsecretaría. Para cambiarlos usa el candado de la fila (solicitar corrección).',
+            'warning'
+        );
+    }
     // Las filas nuevas necesitan volver a existir antes de poder rellenarlas.
     repuestas += _conciRestaurarFilasNuevas(datos);
     _conciActualizarIndicadorBorradores();
@@ -30589,6 +30899,16 @@ function _conciAplicarPendienteRemoto(reg) {
         return;
     }
     const tr = td.closest('tr');
+    if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) {
+        if (typeof showNotification === 'function') {
+            showNotification(
+                `El manifiesto ${tr.dataset.rowId || ''} ya está cerrado por Cierre de Subsecretaría: esta captura no se puede aplicar en la tabla. `
+                + 'Usa el candado de la fila (solicitar corrección) o descártala.',
+                'warning'
+            );
+        }
+        return;
+    }
     _conciStageCellDraft(td, String(reg.valor ?? ''));
     td.textContent = _conciTextoVisibleDeCelda(td, String(reg.valor ?? ''));
     _conciQueueAutoSave(tr);
@@ -31169,6 +31489,7 @@ function _conciEscribirFilaAlCerrar(tr, url, apikey) {
     // Sin id y sin nombre propio no hay contra que escribir: eso ya solo le pasa
     // a las filas de antes de este mecanismo, y para esas queda la cola.
     if (!rowId && !uuid) return false;
+    if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) return false;
     const celdas = _conciCeldasPendientesDeFila(tr);
     if (!celdas.length) return false;
     const payload = {};
@@ -31219,6 +31540,7 @@ function _conciEnviarPendientesAlCerrar() {
     if (_conciColaDisponible === false) return;
     const filas = [];
     tabla.querySelectorAll('tbody tr').forEach(tr => {
+        if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) return;
         const rowId = String(tr.dataset.rowId || '').trim()
             || `nueva:${_conciLiveClientId}:${tr.rowIndex}`;
         _conciCeldasPendientesDeFila(tr).forEach(c => {
@@ -31522,6 +31844,8 @@ function _conciFilasReescribibles() {
         && tr.dataset.conciNew !== '1'
         && tr.dataset.rowFuente !== 'Solo Vuelos'
         && !!String(tr.dataset.rowId || '').trim()
+        // Un manifiesto cerrado sólo cambia por corrección autorizada.
+        && !(typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr))
     );
 }
 
@@ -31687,6 +32011,8 @@ function _conciActivateCellEditor(td) {
         if (rowIdFoco) _conciBroadcastFoco(rowIdFoco, td.dataset.col || '');
     }
 
+    // Manifiesto cerrado: se navega por él, pero no se abre editor.
+    if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(td.closest('tr'))) return;
     const col = td.dataset.col || '';
     if (_conciIsProtectedEditColumn(col) || _conciIsCalculatedColumn(col)) return;
     if (_conciIsPassengerColumn(col) && _conciRowElementIsCargo(td)) return;
@@ -32761,6 +33087,107 @@ function _conciErrorEsperaCorreccion(error) {
     return String(error?.code || '') === 'CONCI_CAPTURA_NO_ACEPTADA';
 }
 
+// Un manifiesto que ya entró a un Cierre de Subsecretaría no se edita desde la
+// tabla: el trigger de la base (migración 053) rechaza cualquier UPDATE directo
+// con 42501, y sólo la corrección autorizada (conciliacion_solicitar_correccion,
+// el candado de la fila) puede cambiarlo. Ese rechazo es DEFINITIVO. Tratarlo
+// como un error pasajero —reintento, cola del servidor, borrador local— hacía
+// que cada pestaña con esa captura golpeara la base cada pocos segundos, para
+// siempre, y que la volviera a mandar en cada carga de la página.
+//
+// Se reconoce por el texto del trigger y no sólo por el código: 42501 también
+// es el de un permiso de RLS que tarda en refrescar, y ése sí se reintenta.
+function _conciErrorManifiestoCerrado(error) {
+    if (!error) return false;
+    const code = String(error.code || '');
+    if (code === 'CONCI_MANIFIESTO_CERRADO') return true;
+    if (code !== '42501') return false;
+    const texto = [error.message, error.details, error.hint].filter(Boolean).join(' ');
+    return /cerrado por Cierre de Subsecretar/i.test(texto);
+}
+
+// Identidades ("id:N" / "uuid:…") que la base ya confirmó como cerradas en esta
+// sesión. Sobrevive a los repintados del tbody, cuyos nodos nuevos no traen la
+// marca de la fila vieja.
+const _conciFilasCerradas = new Set();
+
+function _conciFilaEstaCerrada(tr) {
+    if (!tr || !tr.dataset) return false;
+    if (tr.dataset.conciCerrado === '1') return true;
+    const rowId = String(tr.dataset.rowId || '').trim();
+    if (rowId && _conciFilasCerradas.has(`id:${rowId}`)) return true;
+    const uuid = String(tr.dataset.clienteUuid || '').trim();
+    return !!uuid && _conciFilasCerradas.has(`uuid:${uuid}`);
+}
+
+// Deja la fila en solo lectura y descarta lo capturado sobre ella en los tres
+// sitios desde donde se reenviaría solo: la pantalla (celdas sucias que el
+// reintento recoge), el borrador local y la cola del servidor. Lo que el
+// usuario quería cambiar se le dice en el aviso; el camino para cambiarlo es la
+// corrección autorizada, nunca este autoguardado.
+function _conciBloquearFilaCerrada(tr, error) {
+    if (!tr) return;
+    const rowId = String(tr.dataset.rowId || '').trim();
+    const uuid = String(tr.dataset.clienteUuid || '').trim();
+    const idEnError = (String(error?.message || '').match(/Manifiesto\s+(\d+)\s+cerrado/i) || [])[1] || '';
+    if (rowId) _conciFilasCerradas.add(`id:${rowId}`);
+    if (uuid) _conciFilasCerradas.add(`uuid:${uuid}`);
+    if (idEnError) _conciFilasCerradas.add(`id:${idEnError}`);
+    tr.dataset.conciCerrado = '1';
+    if (tr._conciAutoSaveTimer) {
+        clearTimeout(tr._conciAutoSaveTimer);
+        tr._conciAutoSaveTimer = null;
+    }
+    tr._conciAutoSaveQueued = false;
+
+    const cells = [...tr.querySelectorAll('td[data-col]')];
+    const descartadas = [];
+    cells.forEach(td => {
+        if (td.dataset.dirty !== '1') return;
+        descartadas.push(td.dataset.col);
+        const esRuta = typeof _conciIsRoutingColumn === 'function' && _conciIsRoutingColumn(td.dataset.col);
+        const original = _conciNormalizeEditableCellText(
+            td.dataset.origRaw !== undefined
+                ? td.dataset.origRaw
+                : (esRuta ? (td.dataset.routeRaw ?? td.dataset.raw) : td.dataset.raw)
+        );
+        // DESTINO / ORIGEN se pinta con la ciudad resuelta, no con la ruta: se
+        // repone el dato y el texto lo corrige el siguiente refresco.
+        if (esRuta) {
+            td.dataset.routeRaw = original;
+        } else {
+            td.dataset.raw = original;
+            td.textContent = typeof _conciTextoVisibleDeCelda === 'function'
+                ? _conciTextoVisibleDeCelda(td, original)
+                : original;
+        }
+        delete td.dataset.pendingRaw;
+        td.removeAttribute('data-dirty');
+        td.classList.remove('conci-cell-borrador');
+        td.removeAttribute('title');
+    });
+    tr.removeAttribute('data-dirty');
+    tr.classList.remove('table-secondary', 'table-warning');
+    tr.classList.add('conci-row-cerrada');
+    tr.title = 'Manifiesto cerrado por Cierre de Subsecretaría: solo lectura. '
+        + 'Para cambiarlo usa el candado de la fila (corrección autorizada).';
+
+    if (typeof _conciBorradorOlvidarFila === 'function') _conciBorradorOlvidarFila(tr);
+    if (typeof _conciDesencolarPendientesDeFila === 'function') {
+        _conciDesencolarPendientesDeFila(tr, cells.map(td => td.dataset.col));
+    }
+    if (typeof _conciRefreshCalculatedCellsForRow === 'function') _conciRefreshCalculatedCellsForRow(tr);
+    if (typeof _conciActualizarBotonGuardarTodo === 'function') _conciActualizarBotonGuardarTodo();
+    if (descartadas.length && typeof showNotification === 'function') {
+        const id = rowId || idEnError;
+        showNotification(
+            `El manifiesto${id ? ` ${id}` : ''} ya está cerrado por Cierre de Subsecretaría y no se edita en la tabla. `
+            + `No se guardó: ${descartadas.join(', ')}. Para cambiarlo usa el candado de la fila (solicitar corrección).`,
+            'warning'
+        );
+    }
+}
+
 // Lo que la celda manda es SIEMPRE texto ("1.50", "07", "+15"); lo que Postgres
 // devuelve de una columna numérica es el número ya normalizado (1.5, 7, 15).
 // Comparar esos dos como cadenas daba "no coincide" en un guardado que sí se
@@ -33559,6 +33986,11 @@ async function _conciAutoSaveRow(tr, options = {}) {
     if (!_conciCanCurrentUserEdit()) return _conciAnotar(tr, 'omitida', 'sin permiso de captura');
     // La fila se descarto mientras esto esperaba su turno: no debe crearse.
     if (tr.dataset.conciDescartada === '1') return _conciAnotar(tr, 'omitida', 'la fila se descartó');
+    // Manifiesto cerrado: la base lo rechazaría siempre. Ni se intenta.
+    if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) {
+        _conciBloquearFilaCerrada(tr);
+        return;
+    }
     // Un solo escritor por FILA, no por nodo del DOM. El candado vive en
     // _conciEscriturasEnVuelo, indexado por la identidad estable de la fila, así
     // que sobrevive a los repintados: una escritura lanzada por un <tr> anterior
@@ -33782,6 +34214,12 @@ async function _conciAutoSaveRow(tr, options = {}) {
                     columnasDeCaptura: identidadCapturada,
                 });
                 if (!result.ok) {
+                    // El vuelo ya tiene manifiesto y está cerrado: rechazo
+                    // definitivo, sin reintento ni cola.
+                    if (typeof _conciErrorManifiestoCerrado === 'function' && _conciErrorManifiestoCerrado(result.error)) {
+                        _conciBloquearFilaCerrada(tr, result.error);
+                        return;
+                    }
                     // Si la base alcanzó a crear el registro, esta fila ya tiene
                     // id: lo que falta se completará con UPDATE, no insertándola
                     // otra vez (ver _conciAdoptarFilaPersistida).
@@ -33881,6 +34319,12 @@ async function _conciAutoSaveRow(tr, options = {}) {
                 return;
             }
             if (!result.ok) {
+                // Manifiesto cerrado por Cierre de Subsecretaría: rechazo
+                // definitivo. Reintentarlo o encolarlo sólo repite el error.
+                if (typeof _conciErrorManifiestoCerrado === 'function' && _conciErrorManifiestoCerrado(result.error)) {
+                    _conciBloquearFilaCerrada(tr, result.error);
+                    return;
+                }
                 // Igual que arriba: si el registro llegó a crearse, se adopta su
                 // id para que el reintento actualice en vez de duplicar la fila.
                 _conciAdoptarFilaPersistida(tr, result);
@@ -34233,6 +34677,10 @@ function _conciAddBlankRow() {
         }
         td.textContent = '';        tr.appendChild(td);
     });
+    // Casilla INFORMATIVO: se puede marcar ya guardada la fila (pide el id).
+    if (headerRow.querySelector('th.conci-informativo-col')) {
+        tr.appendChild(_conciInformativoTd(tr, null, _conciCanCurrentUserManage()));
+    }
     // Celda de validación "Itinerario": las filas de datos la llevan siempre y
     // no es editable. Sin ella la fila nueva quedaba corrida una columna
     // respecto al resto de la tabla.
@@ -34360,6 +34808,12 @@ async function _conciSaveBulkEdits() {
                 .filter(Boolean),
         ]));
         dirtyRows.forEach(tr => {
+            // Cerrado: la base lo rechazaría y el guardado quedaría "parcial"
+            // para siempre. Se descarta igual que en el autoguardado.
+            if (typeof _conciFilaEstaCerrada === 'function' && _conciFilaEstaCerrada(tr)) {
+                _conciBloquearFilaCerrada(tr);
+                return;
+            }
             const rowId = String(tr.dataset.rowId || '').trim();
             const isNewRow = tr.dataset.conciNew === '1';
             const changedPayload = {};
@@ -35069,6 +35523,7 @@ async function _conciSaveBulkEdits() {
         { key: 'parte-operaciones',    label: 'Parte de Operaciones',    icon: 'file-invoice',      group: 'Operaciones' },
         { key: 'analisis-operaciones', label: 'Análisis de Operaciones', icon: 'chart-pie',         group: 'Operaciones' },
         { key: 'conciliacion',         label: 'Conciliación',            icon: 'tasks',             group: 'Operaciones' },
+        { key: 'ssim-slots',           label: 'Solicitud de Slots → SSIM', icon: 'file-export',     group: 'Operaciones' },
         { key: 'aviacion-general',     label: 'Aviación General · FBO',  icon: 'paper-plane',       group: 'Operaciones' },
         { key: 'puntualidad-agosto',   label: 'Puntualidad',             icon: 'clock',             group: 'Operaciones' },
         { key: 'demoras',              label: 'Demoras',                 icon: 'clock',             group: 'Operaciones' },
@@ -35133,7 +35588,7 @@ async function _conciSaveBulkEdits() {
                 'operaciones-totales', 'inicio', 'frecuencias-semana',
                 'itinerario-mensual', 'puntualidad-agosto', 'demoras',
                 'aerolineas', 'parte-operaciones',
-                'analisis-operaciones', 'conciliacion',
+                'analisis-operaciones', 'conciliacion', 'ssim-slots',
                 'historia', 'email-analisis', 'fids', 'portal-digitalizacion',
                 // GOPA
                 'abordadores-mecanicos', 'biblioteca',
@@ -35496,6 +35951,26 @@ async function _conciSaveBulkEdits() {
         if (profileKey === 'all') auSelectAllViews(shortId, true);
     };
 
+    /* El panel guarda rol y permisos en user_roles, pero el inicio de sesión
+       (getOperacionesAccess) los toma de usuarios_aplicaciones de OPERACIONES y
+       sólo cae a user_roles si esa fila no existe. Sin copiar el cambio allá,
+       volver admin a alguien o darle Colaboradores no llegaba nunca a su sesión.
+       Se copia lo que quedó en user_roles, que es lo que el panel muestra. */
+    async function auSincronizarOperaciones(userId) {
+        const { data: ur, error } = await window.supabaseClient
+            .from('user_roles').select('role, permissions').eq('user_id', userId).maybeSingle();
+        if (error) throw error;
+        if (!ur?.role) return;
+        const { error: syncError } = await window.supabaseClient.rpc('admin_assign_operaciones_access', {
+            p_user_id: userId,
+            p_role: ur.role,
+            p_permissions: ur.permissions || {}
+        });
+        if (syncError) {
+            throw new Error(`Se guardó en el panel, pero no en el acceso a OPERACIONES (${syncError.message}). El usuario no verá el cambio hasta corregirlo.`);
+        }
+    }
+
     window.auSaveViews = async function (userId, shortId) {
         const secBoxes = document.querySelectorAll(`.auv-sec-${shortId}`);
         const selectedRaw = Array.from(secBoxes).filter(c => c.checked).map(c => c.value);
@@ -35527,6 +36002,7 @@ async function _conciSaveBulkEdits() {
                 .rpc('admin_update_user_permissions', { p_user_id: userId, p_permissions: perms });
             if (error) throw error;
             if (!res || res.ok === false) throw new Error(res?.error || 'No se pudo guardar (revisa permisos / re-ejecuta rbac_roles_v2.sql).');
+            await auSincronizarOperaciones(userId);
             // Actualizar caché local
             const u = _auRows.find(x => x.user_id === userId);
             if (u) u.permissions = perms;
@@ -35569,6 +36045,7 @@ async function _conciSaveBulkEdits() {
             if (savedRole !== newRole) {
                 throw new Error(`La BD devolvió rol "${savedRole}" en lugar de "${newRole}" — verifica permisos RLS.`);
             }
+            await auSincronizarOperaciones(userId);
 
             // Actualizar caché local con el rol confirmado
             const u = _auRows.find(x => x.user_id === userId);
@@ -35668,6 +36145,7 @@ async function _conciSaveBulkEdits() {
                 .rpc('admin_update_user_permissions', { p_user_id: userId, p_permissions: perms });
             if (error) throw error;
             if (!res || res.ok === false) throw new Error(res?.error || 'No se pudo guardar (revisa permisos / re-ejecuta rbac_roles_v2.sql).');
+            await auSincronizarOperaciones(userId);
             const u = _auRows.find(x => x.user_id === userId);
             if (u) u.permissions = perms;
             const panel = document.getElementById(`au-panel-${shortId}`);
@@ -35692,6 +36170,8 @@ async function _conciSaveBulkEdits() {
                 .rpc('admin_update_user_permissions', { p_user_id: userId, p_permissions: perms });
             if (error) throw error;
             if (!res || res.ok === false) throw new Error(res?.error || 'No se pudo actualizar (revisa permisos / re-ejecuta rbac_roles_v2.sql).');
+            // La baja también se lee al iniciar sesión desde OPERACIONES.
+            await auSincronizarOperaciones(userId);
             const row = _auRows.find(x => x.user_id === userId);
             if (row) row.permissions = perms;
             if (st) st.innerHTML = newEstado === 'INACTIVO'

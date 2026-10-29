@@ -28,13 +28,28 @@
             && iso(a.desde) <= h && iso(a.hasta) >= d);
     }
 
+    // La tabla sólo la lee 'authenticated': sin sesión la consulta viaja como
+    // anon, la base la rechaza (42501) y deja el error en el log de Postgres.
+    async function haySesion(client) {
+        if (!client.auth || typeof client.auth.getSession !== 'function') return true;
+        try {
+            const { data } = await client.auth.getSession();
+            return !!(data && data.session);
+        } catch (_) {
+            return false;
+        }
+    }
+
+    // Sin sesión o con error no se guarda la promesa: la siguiente llamada
+    // (p. ej. al iniciar sesión) vuelve a consultar.
     function cargar(forzar) {
         if (promesa && !forzar) return promesa;
-        promesa = (async () => {
+        const p = (async () => {
+            const soltar = () => { if (promesa === p) promesa = null; };
             try {
                 const client = window.supabaseClient
                     || (window.ensureSupabaseClient && await window.ensureSupabaseClient());
-                if (!client) return avisos;
+                if (!client || !(await haySesion(client))) { soltar(); return avisos; }
                 const { data, error } = await client.from('manifiestos_avisos_periodo')
                     .select('clave,texto,detalle,desde,hasta,categoria,ambitos,activo')
                     .eq('activo', true);
@@ -44,10 +59,12 @@
             } catch (error) {
                 console.info('[Avisos de manifiestos] Sin avisos de periodo:', error?.message || error);
                 avisos = [];
+                soltar();
             }
             return avisos;
         })();
-        return promesa;
+        promesa = p;
+        return p;
     }
 
     const api = {

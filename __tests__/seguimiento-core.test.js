@@ -243,3 +243,118 @@ describe('detalles', () => {
         }
     });
 });
+
+describe('subtareas con fecha', () => {
+    const conSubs = (checklist, o = {}) => tarea(Object.assign({ fecha_inicio: '2026-10-22', fecha_limite: '2026-10-27', checklist }, o));
+
+    test('repartir: una por día cuando alcanzan los días (22 al 27)', () => {
+        const items = ['a', 'b', 'c', 'd', 'e', 'f'].map(id => ({ id, texto: id, hecho: false }));
+        const r = C.repartirSubtareas(items, '2026-10-22', '2026-10-27');
+        expect(r.map(i => i.fecha)).toEqual(['2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25', '2026-10-26', '2026-10-27']);
+        expect(items[0]).not.toHaveProperty('fecha');   // no muta la lista original
+    });
+
+    test('repartir: con menos subtareas que días, tramos seguidos que cubren todo el periodo', () => {
+        const r = C.repartirSubtareas([
+            { id: 'a', texto: 'a' }, { id: 'fija', texto: 'fija', fecha: '2026-10-25' }, { id: 'b', texto: 'b' }, { id: 'c', texto: 'c' },
+        ], '2026-10-22', '2026-10-27');
+        expect(r.map(i => [C.inicioSubtarea(i), i.fecha])).toEqual([
+            ['2026-10-22', '2026-10-23'], ['2026-10-25', '2026-10-25'], ['2026-10-24', '2026-10-25'], ['2026-10-26', '2026-10-27'],
+        ]);
+        expect(r[1]).toEqual({ id: 'fija', texto: 'fija', fecha: '2026-10-25' });   // la que ya tenía fecha no se toca
+        expect(C.repartirSubtareas([{ id: 'a' }], null, '2026-10-27')[0]).not.toHaveProperty('fecha');
+        // Más subtareas que días: varias en el mismo día.
+        expect(C.repartirSubtareas([1, 2, 3].map(id => ({ id })), '2026-10-22', '2026-10-23').map(i => i.fecha))
+            .toEqual(['2026-10-22', '2026-10-22', '2026-10-23']);
+    });
+
+    test('inicio y fin de una subtarea siempre quedan en orden', () => {
+        let s = C.ajustarFechasSubtarea({ id: 'a' }, 'inicio', '2026-10-22');
+        expect(s).toEqual({ id: 'a', fecha: '2026-10-22' });                       // sin fin: un solo día
+        s = C.ajustarFechasSubtarea(s, 'fin', '2026-10-24');
+        expect(s).toEqual({ id: 'a', fecha_inicio: '2026-10-22', fecha: '2026-10-24' });
+        expect(C.diasSubtarea(s)).toBe(3);
+        expect(C.ajustarFechasSubtarea(s, 'inicio', '2026-10-26')).toEqual({ id: 'a', fecha: '2026-10-26' });   // el fin la sigue
+        expect(C.ajustarFechasSubtarea(s, 'fin', '2026-10-20')).toEqual({ id: 'a', fecha: '2026-10-20' });      // el inicio la sigue
+        expect(C.ajustarFechasSubtarea(s, 'fin', '')).toEqual({ id: 'a', fecha: '2026-10-22' });               // queda en su inicio
+        expect(C.ajustarFechasSubtarea({ id: 'a', fecha: '2026-10-22' }, 'fin', '')).toEqual({ id: 'a' });      // sin fecha
+    });
+
+    test('la siguiente subtarea propone el día después de la última, sin salirse del periodo', () => {
+        expect(C.sugerirFechasSubtarea(conSubs([]))).toEqual({ inicio: '2026-10-22', fin: '2026-10-22' });
+        expect(C.sugerirFechasSubtarea(conSubs([{ id: 'a', fecha_inicio: '2026-10-22', fecha: '2026-10-24' }, { id: 'b', fecha: '2026-10-22' }])))
+            .toEqual({ inicio: '2026-10-25', fin: '2026-10-25' });
+        expect(C.sugerirFechasSubtarea(conSubs([{ id: 'a', fecha: '2026-10-27' }]))).toEqual({ inicio: '', fin: '' });
+        expect(C.sugerirFechasSubtarea(tarea({ checklist: [] }))).toEqual({ inicio: '', fin: '' });
+        // Cuántos días del periodo ya tienen subtarea.
+        expect(C.diasCubiertos(conSubs([{ id: 'a', fecha_inicio: '2026-10-22', fecha: '2026-10-24' }, { id: 'b', fecha: '2026-10-27' }])))
+            .toEqual({ cubiertos: 4, total: 6 });
+    });
+
+    test('periodo y fuera de periodo', () => {
+        const t = conSubs([{ id: 'a', fecha: '2026-10-21' }, { id: 'b', fecha: '2026-10-24' }, { id: 'c', fecha_inicio: '2026-10-20', fecha: '2026-10-23' }]);
+        expect(C.subtareaFueraDePeriodo(t.checklist[0], t)).toBe(true);
+        expect(C.subtareaFueraDePeriodo(t.checklist[1], t)).toBe(false);
+        expect(C.subtareaFueraDePeriodo(t.checklist[2], t)).toBe(true);    // empieza antes del inicio de la tarea
+        expect(C.subtareasConFecha(t).map(i => i.id)).toEqual(['c', 'a', 'b']);
+        t.checklist.pop();
+        expect(C.subtareasConFecha(t).map(i => i.id)).toEqual(['a', 'b']);
+        // Sin inicio, el periodo arranca en la primera subtarea.
+        expect(C.periodoTarea(tarea({ fecha_limite: '2026-10-27', checklist: [{ id: 'x', fecha: '2026-10-23' }] })))
+            .toEqual({ inicio: '2026-10-23', fin: '2026-10-27' });
+        expect(C.periodoTarea(tarea({ fecha_limite: '2026-10-27' }))).toEqual({ inicio: '2026-10-27', fin: '2026-10-27' });
+    });
+
+    test('al renovarse, cada subtarea conserva su distancia a la fecha límite', () => {
+        const sig = C.siguienteOcurrencia(conSubs([
+            { id: 'a', texto: 'Revisar', hecho: true, fecha_inicio: '2026-10-22', fecha: '2026-10-23' },
+            { id: 'b', texto: 'Firmar', hecho: true, fecha: '2026-10-27' },
+            { id: 'c', texto: 'Sin día', hecho: true },
+        ], { recurrencia: 'anual' }));
+        expect(sig.fecha_limite).toBe('2027-10-27');
+        expect(sig.fecha_inicio).toBe('2027-10-22');
+        expect(sig.checklist).toEqual([
+            { id: 'a', texto: 'Revisar', hecho: false, fecha_inicio: '2027-10-22', fecha: '2027-10-23' },
+            { id: 'b', texto: 'Firmar', hecho: false, fecha: '2027-10-27' },
+            { id: 'c', texto: 'Sin día', hecho: false },
+        ]);
+    });
+});
+
+describe('tareas duplicadas', () => {
+    const abiertas = [
+        tarea({ id: 'a', folio: 1, titulo: 'Renovar licencia de radio ante el IFT', subdireccion: 'SSO', estatus: 'en_proceso' }),
+        tarea({ id: 'b', folio: 2, titulo: 'Renovar licencia radio IFT 2027', subdireccion: 'SI', estatus: 'pendiente' }),
+        tarea({ id: 'c', folio: 3, titulo: 'Renovar licencia de radio ante el IFT', subdireccion: 'SSO', estatus: 'completada' }),
+        tarea({ id: 'd', folio: 4, titulo: 'Oficio a SENEAM', subdireccion: 'SSO', estatus: 'pendiente' }),
+    ];
+
+    test('igual sin importar mayúsculas, acentos ni signos; las cerradas no cuentan', () => {
+        const r = C.posiblesDuplicadas({ titulo: '  RENOVAR licencia de radio ante el I.F.T. ', subdireccion: 'SSO' }, abiertas);
+        expect(r[0]).toMatchObject({ tipo: 'igual' });   // I.F.T. = IFT
+        expect(r[0].tarea.id).toBe('a');
+        const igual = C.posiblesDuplicadas({ titulo: 'renovar licencia de radio ante el ift', subdireccion: 'SSO' }, abiertas);
+        expect(igual[0]).toMatchObject({ tipo: 'igual', mismaSubdireccion: true });
+        expect(igual[0].tarea.id).toBe('a');
+        expect(igual.map(c => c.tarea.id)).not.toContain('c');
+        expect(C.bloqueaDuplicado(igual)).toBe(true);
+        // Sólo cambian palabras de relleno: también es igual.
+        expect(C.posiblesDuplicadas({ titulo: 'Renovar la licencia del radio IFT', subdireccion: 'SSO' }, abiertas)[0]).toMatchObject({ tipo: 'igual' });
+    });
+
+    test('igual en otra subdirección o parecida: avisa pero no bloquea', () => {
+        const otra = C.posiblesDuplicadas({ titulo: 'Renovar licencia de radio ante el IFT', subdireccion: 'SI' }, abiertas);
+        expect(otra[0]).toMatchObject({ tipo: 'igual', mismaSubdireccion: false });
+        expect(C.bloqueaDuplicado(otra)).toBe(false);
+        const parecida = C.posiblesDuplicadas({ titulo: 'Renovación: licencia radio IFT 2027', subdireccion: 'SI' }, [abiertas[1]]);
+        expect(parecida).toHaveLength(0);   // «renovacion» no es «renovar»: 3 de 5 palabras no alcanza
+        expect(C.posiblesDuplicadas({ titulo: 'Renovar la licencia del radio IFT 2027', subdireccion: 'SI' }, abiertas)[0]).toMatchObject({ tipo: 'igual', mismaSubdireccion: true });
+        expect(C.posiblesDuplicadas({ titulo: 'Renovar licencia radio IFT 2027 urgente', subdireccion: 'SI' }, abiertas)[0]).toMatchObject({ tipo: 'parecida' });
+    });
+
+    test('nombres distintos no se marcan, ni la propia tarea', () => {
+        expect(C.posiblesDuplicadas({ titulo: 'Oficio a la DGAC', subdireccion: 'SSO' }, abiertas)).toHaveLength(0);
+        expect(C.posiblesDuplicadas({ id: 'd', titulo: 'Oficio a SENEAM', subdireccion: 'SSO' }, abiertas)).toHaveLength(0);
+        expect(C.posiblesDuplicadas({ titulo: '   ', subdireccion: 'SSO' }, abiertas)).toHaveLength(0);
+    });
+});

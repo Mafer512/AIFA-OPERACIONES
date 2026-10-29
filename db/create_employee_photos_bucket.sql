@@ -26,23 +26,14 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- 2. Mantener la misma autorización del módulo: sólo Admin, Superadmin y
 -- Colab Editor pueden escribir. La función usa auth.uid(), no datos del cliente.
-CREATE OR REPLACE FUNCTION public.is_colab_editor()
-RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT COALESCE((
-    SELECT lower(replace(trim(role), ' ', '_')) IN ('admin', 'superadmin', 'colab_editor')
-    FROM public.user_roles
-    WHERE user_id = auth.uid()
-    LIMIT 1
-  ), false);
-$$;
-
-REVOKE EXECUTE ON FUNCTION public.is_colab_editor() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.is_colab_editor() TO authenticated;
+-- Está definida SOLO en db/fix_rls_colaboradores_edicion.sql; aquí no se
+-- redefine para no regresar la versión vieja (sólo user_roles, LIMIT 1).
+DO $$
+BEGIN
+  IF to_regprocedure('public.is_colab_editor()') IS NULL THEN
+    RAISE EXCEPTION 'Falta public.is_colab_editor(). Corre antes db/fix_rls_colaboradores_edicion.sql.';
+  END IF;
+END $$;
 
 -- 3. Sustituir políticas históricas. La política INSERT anterior aplicaba a
 -- PUBLIC y permitía cargas anónimas; se elimina para no degradar seguridad.
