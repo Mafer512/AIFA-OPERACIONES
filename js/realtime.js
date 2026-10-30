@@ -21,13 +21,14 @@
 //  El autoguardado no pasa por aquí: guardar, reintentar y enviar al cerrar van
 //  por PostgREST y no dependen de que haya un canal abierto.
 //
-//  Solo hay tiempo real para "Conciliación Manifiestos" y daily_operations. Un
-//  módulo sin tablas no abre canal: únicamente tiene el refresco periódico.
+//  Solo hay tiempo real para "Conciliación Manifiestos", daily_operations e
+//  informe_estadistico_refresco (supabase/migrations/072). Un módulo sin tablas
+//  no abre canal: únicamente tiene el refresco periódico.
 //
 //  API pública:
 //    window.rtManager.registrarModulo({ clave, secciones, panel, tablas,
 //        alCambiar(tabla, evento), alEntrar, alSalir, sincronizarSiempre,
-//        periodico })
+//        periodico, dispersionMs })
 //    window.rtManager.sincronizar()  — reevaluar en qué módulo se está
 //    window.rtManager.estado()       — { modulo, tablas }, para diagnóstico
 // ═══════════════════════════════════════════════════════════════════
@@ -292,6 +293,9 @@
             vigente.pendiente = true;
             return;
         }
+        // Un aviso que llega a todos a la vez no debe volverse una consulta de
+        // todos en el mismo segundo.
+        var dispersion = vigente.modulo.dispersionMs ? Math.random() * vigente.modulo.dispersionMs : 0;
         clearTimeout(vigente.timers[tabla]);
         vigente.timers[tabla] = setTimeout(function () {
             if (_vigente !== vigente) return;
@@ -300,7 +304,7 @@
             } catch (e) {
                 console.error('[RT] Error en callback de', tabla, ':', e);
             }
-        }, DEBOUNCE_MS);
+        }, DEBOUNCE_MS + dispersion);
     }
 
     function _alCambiarVisibilidad() {
@@ -345,7 +349,12 @@
         // Forzar recarga en analisis-mensual y analisis-anual
         window._monthlyDataLoaded = false;
         window._annualDataLoaded  = false;
-        if (evento === 'SYNC' || evento === 'INTERVALO') {
+        // Las cifras llevan 5 minutos de caché: sin soltarla, el aviso llegaría
+        // y la pantalla seguiría igual. El refresco periódico sí la respeta.
+        var totales = window.TotalesService;
+        if (tabla && totales && typeof totales.invalidar === 'function') totales.invalidar();
+        // daily_operations solo alimenta las tarjetas.
+        if (tabla !== 'daily_operations' || evento === 'SYNC') {
             _lazy('genYoyReload')();
             _lazy('cargoYoyReload')();
             _lazy('comHistReload')();
@@ -363,9 +372,13 @@
         });
 
         // ── YoY Aviación General, Carga e Histórica ──────────────
+        //    Sus cifras salen de una vista y una función, que Realtime no puede
+        //    escuchar. informe_estadistico_refresco es la señal: una sola fila
+        //    que se actualiza al terminar de recalcularlas, cada 10 minutos.
         rm.registrarModulo({
-            clave: 'operaciones-totales', secciones: ['operaciones-totales'], tablas: ['daily_operations'],
-            alCambiar: _recargarOperaciones, periodico: true
+            clave: 'operaciones-totales', secciones: ['operaciones-totales'],
+            tablas: ['daily_operations', 'informe_estadistico_refresco'],
+            alCambiar: _recargarOperaciones, periodico: true, dispersionMs: 20000
         });
 
         // ── Parte de operaciones (Gestión de Datos) ──────────────

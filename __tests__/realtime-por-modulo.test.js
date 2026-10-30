@@ -165,7 +165,7 @@ describe('quién recibe cambios', () => {
     expect(cliente.canales).toHaveLength(0);
   });
 
-  test('solo Conciliación Manifiestos y daily_operations abren canal', async () => {
+  test('solo se abren canales de las tablas publicadas', async () => {
     const cliente = clienteFalso();
     await arrancar(cliente);
     await iniciarSesion();
@@ -174,7 +174,18 @@ describe('quién recibe cambios', () => {
     await abrirPestana('pane-conci-comercial');
 
     const tablas = [...new Set(cliente.canales.map(c => c.tabla))].sort();
-    expect(tablas).toEqual([TABLA, 'daily_operations'].sort());
+    expect(tablas).toEqual([TABLA, 'daily_operations', 'informe_estadistico_refresco'].sort());
+  });
+
+  test('toda tabla que escucha el código queda publicada por la 072', () => {
+    const sql = fs.readFileSync(
+      path.resolve(__dirname, '..', 'supabase', 'migrations', '072_realtime_operaciones_totales.sql'), 'utf8');
+    const inicio = sql.indexOf('-- Resultado esperado:');
+    const publicadas = sql.slice(inicio, sql.indexOf('SELECT tablename', inicio));
+    const usadas = [...fuente.matchAll(/tablas: \[([^\]]+)\]/g)]
+      .flatMap(m => m[1].split(',').map(t => t.trim().replace(/'/g, '')));
+    expect(usadas.length).toBeGreaterThan(0);
+    usadas.forEach(tabla => expect(publicadas).toContain(tabla));
   });
 
   test('ya no existe la escucha sobre todo public.*', async () => {
@@ -233,7 +244,7 @@ describe('quién recibe cambios', () => {
     document.getElementById('dg-operaciones').hidden = false;
     document.body.classList.add('navdeck-mode');
     await avanzar(0);
-    expect(cliente.tablasAbiertas()).toEqual(['daily_operations']);
+    expect(cliente.tablasAbiertas()).toEqual(['daily_operations', 'informe_estadistico_refresco']);
     await avanzar(3 * 60 * 1000);
     expect(window.genYoyReload).toHaveBeenCalled();
   });
@@ -456,6 +467,69 @@ describe('robustez de los canales', () => {
     expect(cliente.canales).toHaveLength(2);
     expect(cliente.canales.some(c => c.reutilizado)).toBe(false);
     expect(cliente.canales[1].estado).toBe('abierto');
+  });
+});
+
+describe('Operaciones Totales', () => {
+  async function entrarYCalmar(cliente) {
+    await arrancar(cliente);
+    window.TotalesService = { invalidar: jest.fn() };
+    await iniciarSesion();
+    await irA('operaciones-totales');
+    await avanzar(21000);
+    window.genYoyReload.mockClear();
+    window.refreshOperationsCardsData.mockClear();
+    window.TotalesService.invalidar.mockClear();
+  }
+  const canalDe = (cliente, tabla) => cliente.abiertos().find(c => c.tabla === tabla);
+
+  afterEach(() => { delete window.TotalesService; });
+
+  test('escucha sus dos tablas', async () => {
+    const cliente = clienteFalso();
+    await entrarYCalmar(cliente);
+    expect(cliente.tablasAbiertas()).toEqual(['daily_operations', 'informe_estadistico_refresco']);
+  });
+
+  test('al terminar el refresco suelta la caché antes de volver a pedir las cifras', async () => {
+    const cliente = clienteFalso();
+    await entrarYCalmar(cliente);
+    const orden = [];
+    window.TotalesService.invalidar.mockImplementation(() => orden.push('invalidar'));
+    window.genYoyReload.mockImplementation(() => orden.push('recargar'));
+
+    canalDe(cliente, 'informe_estadistico_refresco').alCambio({ eventType: 'UPDATE' });
+    await avanzar(21000);
+    expect(orden).toEqual(['invalidar', 'recargar']);
+    expect(window.comHistReload).toHaveBeenCalled();
+  });
+
+  test('un cambio en daily_operations solo actualiza las tarjetas', async () => {
+    const cliente = clienteFalso();
+    await entrarYCalmar(cliente);
+    canalDe(cliente, 'daily_operations').alCambio({ eventType: 'INSERT' });
+    await avanzar(21000);
+    expect(window.refreshOperationsCardsData).toHaveBeenCalledTimes(1);
+    expect(window.genYoyReload).not.toHaveBeenCalled();
+  });
+
+  test('el aviso que llega a todos no se vuelve una consulta en el mismo segundo', async () => {
+    const cliente = clienteFalso();
+    await entrarYCalmar(cliente);
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
+    canalDe(cliente, 'informe_estadistico_refresco').alCambio({ eventType: 'UPDATE' });
+    await avanzar(10000);
+    expect(window.genYoyReload).not.toHaveBeenCalled();
+    await avanzar(1000);
+    expect(window.genYoyReload).toHaveBeenCalledTimes(1);
+  });
+
+  test('el refresco periódico no tira la caché', async () => {
+    const cliente = clienteFalso();
+    await entrarYCalmar(cliente);
+    await avanzar(3 * 60 * 1000);
+    expect(window.genYoyReload).toHaveBeenCalled();
+    expect(window.TotalesService.invalidar).not.toHaveBeenCalled();
   });
 });
 

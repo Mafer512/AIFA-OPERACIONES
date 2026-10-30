@@ -30,7 +30,7 @@ El sistema ya esta modularizado parcialmente por archivos JavaScript, pero conse
 - PostgREST: lectura/escritura directa desde cliente con `.from(...)`.
 - RPC: administracion de usuarios, roles, permisos, contrasenas y generadores de datos.
 - Storage: manifiestos PDF, fotos, logos, boletas y evidencias.
-- Realtime: `js/realtime.js` abre un canal solo mientras se está dentro del módulo, y únicamente para `Conciliación Manifiestos` y `daily_operations`.
+- Realtime: `js/realtime.js` abre un canal solo mientras se está dentro del módulo, y únicamente para `Conciliación Manifiestos`, `daily_operations` e `informe_estadistico_refresco`.
 - Edge Functions: alertas, recordatorios, feedback, cumpleanos y agenda.
 
 ## Modulos principales
