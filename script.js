@@ -17924,7 +17924,6 @@ document.addEventListener('DOMContentLoaded', () => {
         tabConciComercial.addEventListener('shown.bs.tab', () => {
             _conciApplyTodayFilters();
             loadConciliacionManifiestos({ autoLatestDate: true });
-            _conciInitLiveCollab();
         });
         // Hook on legacy filter changes
         ['filter-conci-manifiestos-year', 'filter-conci-manifiestos-month', 'filter-conci-manifiestos-day'].forEach(id => {
@@ -17989,6 +17988,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // renglones ya no los retiraba nadie.
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') _conciGuardarPendientesYa();
+        else _conciMaybeApplyDeferredRemoteRefresh();
     });
     if (btnConciAirlineColors) btnConciAirlineColors.addEventListener('click', _conciOpenAirlineColors);
     if (btnConciMatriculaCatalog) btnConciMatriculaCatalog.addEventListener('click', _conciOpenMatriculaCatalog);
@@ -18011,7 +18011,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('airline-catalog-updated', () => {
         _conciAirlineCatalogLoaded = false;
         _conciRenderCache.clear();
-        if (document.getElementById('table-conci-manifiestos')) {
+        if (_conciManifiestosEnPantalla()) {
             loadConciliacionManifiestos({ forceRefresh: true });
         }
     });
@@ -18019,7 +18019,7 @@ document.addEventListener('DOMContentLoaded', () => {
         _conciMatriculaCatalogLoaded = false;
         _conciMatriculaCatalogMap = new Map();
         _conciRenderCache.clear();
-        if (document.getElementById('table-conci-manifiestos')) {
+        if (_conciManifiestosEnPantalla()) {
             loadConciliacionManifiestos({ forceRefresh: true });
         }
     });
@@ -18034,6 +18034,22 @@ let _conciEditMode         = false;  // global edit mode for the whole table
 let _conciPendingAutoSaveCount = 0;  // guardados de fila en curso (no confirmados aún por Supabase)
 let _conciPendingRemoteRefresh = false; // true cuando llegó un cambio remoto pero hay un editor local abierto
 let _conciDeferredRefreshNoticeAt = 0;
+let _conciCargasEnCurso = 0;          // lecturas de la tabla todavía sin terminar
+
+// ¿Está esta persona viendo la tabla de Manifiestos ahora mismo?
+//
+// La tabla es HTML estático: que exista en el DOM no dice nada. Mirar eso hacía
+// recargar a todas las sesiones abiertas por cada guardado de cualquiera. Y quien
+// nunca entró tiene los filtros en blanco, así que su recarga se traía el año
+// completo y todos los vuelos: las lecturas lentas de producción.
+function _conciManifiestosEnPantalla() {
+    if (document.hidden) return false;
+    const body = document.body.classList;
+    if (body.contains('navdeck-mode') && !body.contains('navdeck-active')) return false;
+    if (!document.getElementById('conciliacion-section')?.classList.contains('active')) return false;
+    if (!document.getElementById('pane-conci-comercial')?.classList.contains('active')) return false;
+    return !!document.getElementById('filter-conci-fecha-desde')?.value;
+}
 
 // Una recarga de tbody nunca debe sustituir la captura local. Esto incluye no
 // sólo el input que conserva el foco, sino también celdas dirty cuyo UPDATE
@@ -18552,6 +18568,7 @@ let _conciRawCache = null; // { manifestRows, vuelosRows, ts }
 
 // Separate cache for the vuelos table (longer TTL — changes rarely during a session)
 const _CONCI_VUELOS_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const _CONCI_VUELOS_RECIENTES_MS = 30 * 1000;
 let _conciVuelosCache = null; // { key, rows, ts }
 
 // Expone invalidación de caché para que parte-ops-flights.js la llame al validar un vuelo.
@@ -19767,6 +19784,7 @@ async function _concifetchAllRows(client, tableName, options = {}) {
         allRows = allRows.concat(chunk);
         from += batch;
         if (chunk.length < batch) break;
+        if (options.seguir && !options.seguir()) break;
     }
     return { data: allRows, error: null };
 }
@@ -19869,8 +19887,8 @@ async function _conciFetchLatestVueloDateDb(client, year) {
     return { latest: { month: parts[1], day: parts[2] }, error: null };
 }
 
-async function _conciFetchVuelosForWindow(client, startDate, endDate) {
-    if (!startDate) return _concifetchAllRows(client, 'manifiestos_vuelos_editable', { batchSize: 5000 });
+async function _conciFetchVuelosForWindow(client, startDate, endDate, seguir) {
+    if (!startDate) return _concifetchAllRows(client, 'manifiestos_vuelos_editable', { batchSize: 5000, seguir });
     const low = _conciShiftIsoDate(startDate, -1);
     const high = _conciShiftIsoDate(endDate || startDate, 1);
     const filter = [
@@ -19889,6 +19907,7 @@ async function _conciFetchVuelosForWindow(client, startDate, endDate) {
         if (error) return { data: rows, error };
         rows.push(...(data || []));
         if (!data || data.length < batchSize) break;
+        if (seguir && !seguir()) break;
     }
     return { data: rows, error: null };
 }
@@ -21375,6 +21394,9 @@ async function loadConciliacionManifiestos(options = {}) {
     // persona. Un cambio de un companero no debe bloquear la pantalla: antes,
     // cada guardado ajeno tapaba la tabla con "Cargando manifiestos...".
     const cargaSilenciosa = config.fromRemoteSync === true;
+    // Lo que venga a leerse ahora ya incluye lo que estaba en espera.
+    _conciPendingRemoteRefresh = false;
+    const sigueVigente = () => requestSeq === _conciLoadRequestSeq;
     _conciSetRefreshLoading(!cargaSilenciosa);
     if (loading && !cargaSilenciosa) { loading.classList.remove('d-none'); }
     if (errorEl) errorEl.classList.add('d-none');
@@ -21382,6 +21404,7 @@ async function loadConciliacionManifiestos(options = {}) {
     // anterior: se atenúa y no se puede tocar, para no tomarlo por el resultado.
     if (!cargaSilenciosa) _conciMarcarTablaCargando(true, ventana);
 
+    _conciCargasEnCurso++;
     try {
         let client = window.supabaseClient;
         if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
@@ -21393,7 +21416,7 @@ async function loadConciliacionManifiestos(options = {}) {
         // resuelve una vez por sesión, así que sin soltarlo aquí había que
         // recargar la página para que la tabla volviera a cruzar bien los
         // vuelos.
-        if (config.forceRefresh) _conciManifestColInfo = null;
+        if (config.forceRefresh && !cargaSilenciosa) _conciManifestColInfo = null;
 
         let manifestRows;
         let vuelosRows;
@@ -21443,13 +21466,17 @@ async function loadConciliacionManifiestos(options = {}) {
         const vuelosFresh = _conciVuelosCache
             && _conciVuelosCache.key === flightCacheKey
             && (Date.now() - _conciVuelosCache.ts) < _CONCI_VUELOS_TTL_MS;
-        if (!config.forceRefresh && vuelosFresh) {
+        // El guardado de un compañero cambia manifiestos, no vuelos: en una
+        // ráfaga de capturas no hace falta volver a pedirlos en cada aviso.
+        const vuelosDeHaceUnMomento = cargaSilenciosa && vuelosFresh
+            && (Date.now() - _conciVuelosCache.ts) < _CONCI_VUELOS_RECIENTES_MS;
+        if ((!config.forceRefresh && vuelosFresh) || vuelosDeHaceUnMomento) {
             vuelosRows = _conciVuelosCache.rows;
         } else if (fallbackAllVuelos && !flightStart) {
             vuelosRows = fallbackAllVuelos;
             _conciVuelosCache = { key: flightCacheKey, rows: vuelosRows, ts: Date.now() };
         } else {
-            let vResult = await _conciFetchVuelosForWindow(client, flightStart, flightEnd);
+            let vResult = await _conciFetchVuelosForWindow(client, flightStart, flightEnd, sigueVigente);
             if (vResult.error) {
                 console.warn('[Conciliación] consulta por fecha no disponible; usando lectura completa:', vResult.error);
                 if (fallbackAllVuelos) {
@@ -21610,10 +21637,14 @@ async function loadConciliacionManifiestos(options = {}) {
         // consulta, se retira en vez de presentarla como la pedida.
         if (!cargaSilenciosa) _conciMostrarErrorDeCarga(cacheKey, ventana);
     } finally {
+        _conciCargasEnCurso--;
         if (requestSeq === _conciLoadRequestSeq) {
             _conciSetRefreshLoading(false);
             _conciMarcarTablaCargando(false);
         }
+        // Los avisos que llegaron mientras tanto se resuelven con una sola
+        // recarga, no con una por aviso encimada a esta.
+        if (!_conciCargasEnCurso) _conciMaybeApplyDeferredRemoteRefresh();
     }
 }
 
@@ -28977,6 +29008,42 @@ async function _conciReconectarLive() {
     await _conciInitLiveCollab();
 }
 
+// El canal en vivo existe solo mientras se está en Manifiestos: lo abre y lo
+// cierra js/realtime.js. El cierre tiene que soltar también lo que lo revive
+// solo —la reconexión, el latido, la vigilancia de foco y red—, o el canal
+// volvería a abrirse con la persona ya en otro módulo.
+let _conciLiveHabilitado = false;
+let _conciCierreLive = null;
+
+async function _conciEntrarModuloManifiestos() {
+    _conciLiveHabilitado = true;
+    // El nombre de este canal es uno solo para que todos coincidan, y
+    // client.channel() devuelve el que siga cerrándose si se le pide de nuevo.
+    await _conciCierreLive;
+    return _conciInitLiveCollab();
+}
+
+async function _conciSalirModuloManifiestos() {
+    _conciLiveHabilitado = false;
+    if (_conciReconexionTimer) { clearTimeout(_conciReconexionTimer); _conciReconexionTimer = null; }
+    _conciLiveReintentos = 0;
+    if (_conciLatidoTimer) { clearInterval(_conciLatidoTimer); _conciLatidoTimer = null; }
+    if (_conciFocoThrottleTimer) { clearTimeout(_conciFocoThrottleTimer); _conciFocoThrottleTimer = null; }
+    const canal = _conciLiveChannel;
+    _conciLiveChannel = null;
+    _conciLiveReady = false;
+    _conciRemotePresenceByCell = new Map();
+    _conciFocoRemotoPorCliente.clear();
+    _conciApplyRemotePresenceHighlights();
+    _conciRepintarFocos();
+    if (canal) {
+        _conciCierreLive = (async () => {
+            try { await window.supabaseClient?.removeChannel(canal); } catch (_) { /* ya estaba muerto */ }
+        })();
+        await _conciCierreLive;
+    }
+}
+
 let _conciVigilanciaLista = false;
 // Volver a la pestaña o recuperar la red son los dos momentos en que mas vale
 // la pena comprobar que el canal sigue vivo, sin esperar a la siguiente espera.
@@ -29069,7 +29136,7 @@ function _conciRevisarIdentidadVivo() {
 }
 
 async function _conciInitLiveCollab() {
-    if (_conciLiveChannel) return;
+    if (_conciLiveChannel || !_conciLiveHabilitado) return;
     let client = window.supabaseClient;
     if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
     if (!client) { setTimeout(_conciInitLiveCollab, 1500); return; }
@@ -30019,11 +30086,9 @@ function _conciHandleRemoteCellInput(payload) {
 // refresco para no interrumpir la captura en curso; se reintenta al cerrar
 // esa celda (ver _conciCommitCellRaw / _conciAutoSaveRow).
 //
-// Esto llega aunque la tabla de Conciliación Manifiestos no esté en pantalla
-// (por ejemplo, con un reporte de pasajeros o de carga abierto), así que la
-// invalidación de esos reportes va ANTES del early-return de abajo. Si no,
-// un capturista modificando en otra pestaña nunca tira la caché de quien está
-// viendo reportes, y el reporte se queda mostrando datos de antes del cambio.
+// Solo llega dentro de Manifiestos (ver js/realtime.js). La invalidación de los
+// reportes va ANTES del early-return de abajo, y además aplica a lo que se tiene
+// guardado para cuando se vuelva a abrirlos.
 function _conciHandleRemoteTableChange() {
     if (typeof _conciNotificarManifiestosCambiaron === 'function') {
         _conciNotificarManifiestosCambiaron();
@@ -30038,6 +30103,11 @@ function _conciMaybeApplyDeferredRemoteRefresh() {
     if (_conciHasPendingLocalEdits()) return;
     // El cambio ya se aplico celda por celda: recargar solo parpadearia.
     if (_conciRecargaYaCubierta()) { _conciPendingRemoteRefresh = false; return; }
+    // Sale con el pendiente puesto: quien vuelve recarga al entrar, y quien
+    // guardó una captura al salir no debe disparar una lectura desde otro módulo.
+    if (typeof _conciManifiestosEnPantalla === 'function' && !_conciManifiestosEnPantalla()) return;
+    // Hay una lectura en curso: al terminar vuelve a pasar por aquí.
+    if (typeof _conciCargasEnCurso !== 'undefined' && _conciCargasEnCurso > 0) return;
     _conciPendingRemoteRefresh = false;
     _conciRenderCache.clear();
     _conciRenderedKey = '';

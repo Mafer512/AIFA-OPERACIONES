@@ -102,14 +102,6 @@ body.dark-mode .seg-root {
 .seg-btn-wa { color: #128c4b !important; border-color: rgba(37, 211, 102, .45); background: rgba(37, 211, 102, .08); }
 .seg-btn-wa:hover { background: rgba(37, 211, 102, .16); border-color: var(--seg-wa); }
 
-.seg-live {
-    display: inline-flex; align-items: center; gap: 6px; font-size: .74rem; font-weight: 700; color: var(--seg-muted);
-    padding: 4px 10px; border-radius: 999px; background: var(--seg-surface); border: 1px solid var(--seg-border);
-}
-.seg-live .seg-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--seg-faint); }
-.seg-live.is-on { color: var(--seg-ok); }
-.seg-live.is-on .seg-dot { background: var(--seg-ok); box-shadow: 0 0 0 0 rgba(22, 163, 74, .5); animation: seg-pulse 2s infinite; }
-@keyframes seg-pulse { 0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, .45); } 70% { box-shadow: 0 0 0 7px rgba(22, 163, 74, 0); } 100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0); } }
 
 /* ---------- Indicadores ---------- */
 .seg-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }

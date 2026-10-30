@@ -172,8 +172,8 @@ describe('Reportes > Carga: la caché se tira con el evento', () => {
 
 /**
  * El listener REAL de Supabase Realtime para "Conciliación Manifiestos" está
- * registrado en js/realtime.js:
- *   rm.watch(['Conciliación Manifiestos'], _lazy('_conciHandleRemoteTableChange'));
+ * registrado en js/realtime.js, en el módulo 'conci-manifiestos', con
+ *   alCambiar: _lazy('_conciHandleRemoteTableChange')
  * y ese callback vive en script.js. Se extrae tal cual del archivo (no se
  * reimplementa) para probar el comportamiento real ante un cambio remoto,
  * sin tener que evaluar script.js completo (tiene demasiadas dependencias de

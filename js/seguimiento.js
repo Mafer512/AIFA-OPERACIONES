@@ -60,7 +60,7 @@
         vista: 'lista', agrupar: 'subdireccion', orden: { campo: 'fecha_limite', asc: true },
         filtros: { texto: '', subdirecciones: [], estatus: [], prioridades: [], tipos: [], responsable: '', situacion: '', verCerradas: false },
         colapsados: [], cal: null, gantt: { escala: 'semanas', inicio: null, cerradas: new Set() },
-        dr: null, drTimers: {}, menu: null, canal: null, enVivo: null, pintando: 0, sucio: false,
+        dr: null, drTimers: {}, menu: null, pintando: 0, sucio: false,
         arrastrando: null, gruposPintados: new Map(),
     };
 
@@ -214,7 +214,6 @@
                 '</div>' +
               '</div>' +
               '<div class="seg-head-actions">' +
-                '<span class="seg-live" id="seg-live"' + tip('Actualización en vivo', 'Lo que cambien los demás aparece aquí sin recargar la página.', { ico: 'tower-broadcast' }) + '><span class="seg-dot"></span><span>Conectando…</span></span>' +
                 '<button type="button" class="seg-btn" id="seg-btn-guia"' + tip('Guía', 'Cómo organizar tu información y dar de alta una tarea.', { ico: 'book-open' }) + '><i class="fas fa-book-open"></i>Guía</button>' +
                 '<button type="button" class="seg-btn" id="seg-btn-resumen"' + tip('Descargar resumen', 'Reporte ejecutivo en PDF o la tabla completa en Excel.', { ico: 'download' }) + '><i class="fas fa-download"></i>Descargar resumen</button>' +
                 '<button type="button" class="seg-btn" id="seg-btn-acceso" hidden' + tip('Quién puede ver Seguimiento', 'Agrega o quita cuentas y elige su rol.', { ico: 'user-lock' }) + '><i class="fas fa-user-plus"></i>Acceso</button>' +
@@ -324,7 +323,6 @@
         state.sesion = { email: '', nombre: '' };
         state.personas = []; state.personasCargadas = false;
         cerrarDrawer(true);
-        if (state.canal) { sb().then(c => c && c.removeChannel(state.canal)).catch(() => {}); state.canal = null; }
         pintarMenu();
         if ($('seg-shell')) $('seg-shell').innerHTML = '';
     }
@@ -349,7 +347,6 @@
             const ok = await cargar();
             if (!ok) { pintarPuerta('error'); return; }
             cargarPersonas();
-            suscribir();
         }
         renderTodo();
     }
@@ -428,51 +425,6 @@
         }
         state.tareas.forEach(t => agregar(t.responsable, { tel: t.responsable_tel || '' }));
         state.personas = [...mapa.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
-    }
-
-    function suscribir() {
-        if (state.canal) return;
-        sb().then(c => {
-            if (!c || typeof c.channel !== 'function' || state.canal) return;
-            state.canal = c.channel('seguimiento-' + Math.random().toString(36).slice(2, 8))
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'seguimiento_tareas' }, aplicarRemoto)
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'seguimiento_comentarios' }, p => {
-                    const cm = p.new || {};
-                    if (!cm.tarea_id) return;
-                    const dr = state.dr;
-                    if (dr && dr.id === cm.tarea_id && Array.isArray(dr.comentarios)) {
-                        if (!dr.comentarios.some(x => x.id === cm.id)) { dr.comentarios.push(cm); pintarTab(); }
-                        state.nComent.set(cm.tarea_id, dr.comentarios.length);
-                    } else {
-                        state.nComent.set(cm.tarea_id, (state.nComent.get(cm.tarea_id) || 0) + 1);
-                    }
-                    renderPronto();
-                })
-                .subscribe(estado => {
-                    state.enVivo = estado === 'SUBSCRIBED';
-                    pintarVivo();
-                });
-        }).catch(() => {});
-    }
-
-    function aplicarRemoto(p) {
-        if (p.eventType === 'DELETE') {
-            const id = p.old && p.old.id;
-            state.tareas = state.tareas.filter(t => t.id !== id);
-            if (state.dr && state.dr.id === id) cerrarDrawer(true);
-        } else if (p.new && p.new.id) {
-            const t = buscar(p.new.id);
-            if (t) Object.assign(t, p.new); else state.tareas.push(p.new);
-            pintarDrawerSi(p.new.id);
-        }
-        renderPronto();
-    }
-
-    function pintarVivo() {
-        const el = $('seg-live');
-        if (!el) return;
-        el.classList.toggle('is-on', state.enVivo === true);
-        el.lastElementChild.textContent = state.enVivo === true ? 'En vivo' : state.enVivo === false ? 'Sin tiempo real' : 'Conectando…';
     }
 
     /* ---------- Escritura ---------- */
@@ -751,7 +703,6 @@
         pintarAlerta();
         pintarHerramientas();
         pintarVista();
-        pintarVivo();
     }
 
     function pintarHerramientas() {
@@ -3149,7 +3100,11 @@
         cargarPrefs();
         new MutationObserver(() => {
             if (seccionActiva()) { if (!state.cargado || !$('seg-body')) entrar(); else if (state.sucio) renderTodo(); }
-            else if (state.dr) cerrarDrawer(true);
+            else {
+                if (state.dr) cerrarDrawer(true);
+                // Sin tiempo real: lo que cambien los demás se lee al volver.
+                state.cargado = false;
+            }
         }).observe(sec, { attributes: true, attributeFilter: ['class'] });
         document.addEventListener('keydown', atajos);
         conectarTips();
