@@ -2,8 +2,9 @@
    Vista de Dirección General
    --------------------------------------------------------------------------
    Con el rol director_general el Inicio se vuelve una vista ejecutiva: el
-   banner de cifras con sus seis tarjetas, los accesos directos de siempre y
-   dos accesos más que llaman a las MISMAS funciones de su pantalla de origen,
+   banner de cifras con sus seis tarjetas, los accesos directos de siempre
+   (menos Comparativa Histórica y Conciliación), Operaciones Totales y dos
+   accesos más que llaman a las MISMAS funciones de su pantalla de origen,
    sin salir del Inicio:
 
      · Informe oficial → InformeEstadistico.descargarPdf: el PDF de
@@ -13,6 +14,10 @@
        (#modalDgInforme).
      · SWEAR → conciMensajeEnvio.abrir, la ventana del botón SWEAR de
        Conciliación › Manifiestos (vive en <body>, se abre encima del Inicio).
+
+   Operaciones Totales va debajo de los accesos: es el acordeón de esa
+   pantalla, traído al Inicio con sus funciones (ver montarOperaciones).
+   Aquí empieza con todo cerrado y solo deja una sección abierta a la vez.
 
    No se muestran Subdirecciones ni las opciones del menú de usuario que este
    perfil no usa. Todo lo enciende la clase rol-director-general en <body>
@@ -39,6 +44,76 @@
     function montarAccesos(activo) {
         const barra = $('dg-barra');
         if (barra) barra.hidden = !activo;
+    }
+
+    /* ── Operaciones Totales en el Inicio ───────────────────────────────── */
+
+    // El acordeón de Operaciones Totales (#yoy-accordion) se trae completo al
+    // Inicio: son los mismos nodos, con sus ids y manejadores, así que cada
+    // sección carga, filtra y exporta igual que en su pantalla. Aquí van en este
+    // orden, todas cerradas, y abrir una cierra la que estuviera abierta. Al
+    // apagar la vista regresan a su lugar, a su orden y a como estaban abiertas
+    // (el acordeón guarda de dónde salió en _dgLugar mientras está aquí).
+    const ORDEN_OPERACIONES = ['yoy-sub-comercial', 'yoy-sub-carga', 'yoy-sub-general', 'yoy-sub-aerolineas'];
+
+    const cuerposDe = (acordeon) => Array.from(acordeon.querySelectorAll(':scope > .accordion-item > .accordion-collapse'));
+
+    // Abre o cierra una sección sin animación: el cuerpo y su encabezado
+    // quedan como si se hubiera tocado el encabezado.
+    function marcarAbierta(acordeon, cuerpo, abierta) {
+        cuerpo.classList.toggle('show', abierta);
+        const boton = acordeon.querySelector(`[data-bs-target="#${cuerpo.id}"]`);
+        if (boton) {
+            boton.classList.toggle('collapsed', !abierta);
+            boton.setAttribute('aria-expanded', abierta ? 'true' : 'false');
+        }
+    }
+
+    // Una sola sección abierta a la vez, solo mientras el acordeón está en el
+    // Inicio: en Operaciones Totales sigue como siempre.
+    function unaAbierta(acordeon) {
+        if (acordeon._dgUnaAbierta) return;
+        acordeon._dgUnaAbierta = true;
+        acordeon.addEventListener('show.bs.collapse', (ev) => {
+            if (!acordeon._dgLugar || !cuerposDe(acordeon).includes(ev.target)) return;
+            cuerposDe(acordeon).forEach((otro) => {
+                if (otro === ev.target || !otro.classList.contains('show')) return;
+                const Collapse = root.bootstrap && root.bootstrap.Collapse;
+                if (Collapse) Collapse.getOrCreateInstance(otro, { toggle: false }).hide();
+                else marcarAbierta(acordeon, otro, false);
+            });
+        });
+    }
+
+    function montarOperaciones(activo) {
+        const bloque = $('dg-operaciones');
+        const acordeon = $('yoy-accordion');
+        if (!bloque) return;
+        bloque.hidden = !(activo && acordeon);
+        if (!acordeon) return;
+        const lugar = acordeon._dgLugar;
+        if (activo && !lugar) {
+            const marcador = document.createComment(' #yoy-accordion está en el Inicio de Dirección General ');
+            acordeon.before(marcador);
+            const cuerpos = cuerposDe(acordeon);
+            acordeon._dgLugar = {
+                marcador,
+                orden: Array.from(acordeon.children),
+                abiertas: cuerpos.filter((cuerpo) => cuerpo.classList.contains('show'))
+            };
+            bloque.appendChild(acordeon);
+            ORDEN_OPERACIONES.forEach((id) => {
+                const seccion = $(id);
+                if (seccion && seccion.parentNode === acordeon) acordeon.appendChild(seccion);
+            });
+            cuerpos.forEach((cuerpo) => marcarAbierta(acordeon, cuerpo, false));
+            unaAbierta(acordeon);
+        } else if (!activo && lugar) {
+            lugar.marcador.replaceWith(acordeon);
+            lugar.orden.forEach((seccion) => acordeon.appendChild(seccion));
+            cuerposDe(acordeon).forEach((cuerpo) => marcarAbierta(acordeon, cuerpo, lugar.abiertas.includes(cuerpo)));
+            acordeon._dgLugar = null;
+        }
     }
 
     let avisoReloj = null;
@@ -288,6 +363,7 @@
         const activo = esDirector(rol === undefined || rol === null ? rolDeSesion() : rol);
         document.body.classList.toggle(CLASE, activo);
         montarAccesos(activo);
+        montarOperaciones(activo);
         if (activo) {
             asegurarTitulo();
             pintarIniciales();

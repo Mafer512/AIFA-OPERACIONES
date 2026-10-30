@@ -131,7 +131,7 @@
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20261012-director-general">
     <link rel="stylesheet" href="miscelanea.css?v=1">
-    <link rel="stylesheet" href="director-general.css?v=20261013-4">
+    <link rel="stylesheet" href="director-general.css?v=20261029-1">
     <link rel="icon" type="image/png" sizes="192x192" href="images/icons/aifa-app-icon-192.png?v=20251126">
     <link rel="icon" type="image/png" sizes="512x512" href="images/icons/aifa-app-icon-512.png?v=20251126">
     <link rel="apple-touch-icon" sizes="180x180" href="images/icons/aifa-app-icon-512.png?v=20251126">
@@ -1931,6 +1931,19 @@ FF
                         </div>
                         <p class="dg-barra-estado" id="dg-barra-estado" role="status" aria-live="polite" hidden></p>
                     </div>
+
+                    <!-- Vista de Dirección General: Operaciones Totales en el Inicio, debajo de los
+                         accesos. Al encender la vista, js/vista-director-general.js trae aquí el
+                         acordeón de Operaciones Totales (#yoy-accordion, con sus mismos ids y
+                         funciones) en el orden Comercial, Carga, General y Estadístico por
+                         Aerolínea, todo cerrado y con una sola sección abierta a la vez, y lo
+                         regresa a su lugar al apagarla. -->
+                    <section class="dg-operaciones" id="dg-operaciones" aria-labelledby="dg-operaciones-titulo" hidden>
+                        <div class="dg-operaciones-cabeza">
+                            <h2 class="dg-operaciones-titulo" id="dg-operaciones-titulo">Operaciones Totales</h2>
+                            <span class="dg-operaciones-nota" data-totales-leyenda></span>
+                        </div>
+                    </section>
 
                     <div class="si-sep"></div>
                     <div class="si-section-lbl">Subdirecciones</div>
@@ -6331,6 +6344,10 @@ FF
                                 {label:'Tránsito',    data:sorted.map(function(a){return a.tras;}), backgroundColor:'#f59e0bcc', borderRadius:0}
                             ]},
                             options:{
+                                // El tema global (manifiestos-analisis.js) desactiva la proporción;
+                                // sin ella el canvas toma la altura de su tarjeta, que lo incluye
+                                // a él más título y leyenda, y crece sin fin.
+                                maintainAspectRatio:true,
                                 indexAxis:'y',
                                 plugins:{
                                     legend:{display:false},
@@ -6383,6 +6400,7 @@ FF
                                     borderSkipped:false
                                 }]},
                                 options:{
+                                    maintainAspectRatio:true, // misma razón que la gráfica A
                                     plugins:{
                                         legend:{display:false},
                                         tooltip:{callbacks:{
@@ -41572,6 +41590,7 @@ FF
     <!-- Modular JS (non-invasive): delegates to existing functions in script.js -->
     <script src="js/core.js"></script>
     <script src="js/navigation.js?v=20260925-inicio-encabezado"></script>
+    <script src="js/historial-navegador.js?v=20261027"></script>
     <script src="js/inicio.js"></script>
     <script src="js/itinerario.js?v=4"></script>
     <script src="js/demoras.js"></script>
@@ -41657,11 +41676,11 @@ FF
     <script src="js/itinerario-tab.js"></script>
     <script src="js/comparativa.js"></script>
     <script src="js/insights.js"></script>
-    <script src="js/comparativa-historica.js"></script>
+    <script src="js/comparativa-historica.js?v=20261029"></script>
     <script src="js/estadistico-aerolineas-core.js?v=20260805-v1"></script>
     <script src="js/estadistico-aerolineas.js?v=20260805-v9"></script>
-    <script src="js/yoy-general.js"></script>
-    <script src="js/yoy-cargo.js"></script>
+    <script src="js/yoy-general.js?v=20261029"></script>
+    <script src="js/yoy-cargo.js?v=20261029"></script>
     <script src="js/parte-ops-flights.js?v=20260922-fecha-2"></script>
     <!-- Conciliación Board View — extraído a js/conciliacion-board.js (v=20260616m) -->
     <script src="js/conciliacion-board.js?v=20260616m" defer></script>
@@ -41805,7 +41824,7 @@ FF
     <script src="js/fecha-ddmm.js?v=20260912-fecha-1" defer></script>
     <!-- Botón y menú de usuario del encabezado de inicio. -->
     <script src="js/inicio-usuario.js?v=20261012-director-general" defer></script>
-    <script src="js/vista-director-general.js?v=20261013-4" defer></script>
+    <script src="js/vista-director-general.js?v=20261029-2" defer></script>
     <script src="js/manifiestos_pax.js?v=9999999999993" defer></script>
     <script src="js/puntualidad.js" defer></script>
     <script src="js/hvac.js?v=20260624f" defer></script>

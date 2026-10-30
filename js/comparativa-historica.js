@@ -4,6 +4,7 @@
  */
 (function() {
     let yoyChart = null;
+    let deferredRender = null; // reintento pendiente mientras el contenedor está oculto
     let dataLoaded = false;
     let opsDataCache = [];
     let monthStatusCache = {}; // { 'year_month': 'oficial'|'preliminar' }
@@ -298,8 +299,10 @@
         // (puede ser 0×0 si el tab todavía estaba oculto al llamar esta función)
         const canvasParent = canvas.parentElement;
         if (canvasParent && (canvasParent.offsetWidth === 0 || canvasParent.offsetHeight === 0)) {
-            // Diferir hasta que el contenedor sea visible
-            setTimeout(() => renderYoYChart(), 120);
+            // Diferir hasta que el contenedor sea visible. Un solo reintento
+            // pendiente: cada recarga mientras está oculto no suma otro.
+            clearTimeout(deferredRender);
+            deferredRender = setTimeout(() => renderYoYChart(), 120);
             return;
         }
 

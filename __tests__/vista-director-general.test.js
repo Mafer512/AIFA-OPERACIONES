@@ -4,7 +4,8 @@
  * Vista de Dirección General: con el rol director_general el Inicio muestra
  * solo el banner de cifras con sus tarjetas, los accesos directos de siempre
  * y dos accesos más —Resumen estadístico del periodo y SWEAR— que llaman a
- * las MISMAS funciones de su pantalla de origen. Subdirecciones queda fuera.
+ * las MISMAS funciones de su pantalla de origen, y debajo Operaciones Totales.
+ * Subdirecciones, Comparativa Histórica y Conciliación quedan fuera.
  * Para los demás roles nada cambia.
  */
 
@@ -24,6 +25,9 @@ const fuente = leer('js', 'vista-director-general.js');
 const nav = html.slice(html.indexOf('<nav class="nav flex-column si-nav" id="sidebar-nav">'),
     html.indexOf('</nav>', html.indexOf('id="sidebar-nav"')) + '</nav>'.length);
 const ventanaInforme = html.slice(html.indexOf('<div class="modal fade" id="modalDgInforme"'), html.indexOf('<!-- MODAL: MENSAJE PARA WHATSAPP'));
+// El acordeón de Operaciones Totales, dentro de su pestaña Comparativa.
+const FIN_ACORDEON = '</div><!-- /accordion -->';
+const acordeon = html.slice(html.indexOf('<div class="accordion accordion-flush" id="yoy-accordion">'), html.indexOf(FIN_ACORDEON) + FIN_ACORDEON.length);
 const $ = (id) => document.getElementById(id);
 const esperar = () => new Promise((r) => setTimeout(r, 0));
 const ordenAccesos = (raizAccesos) => [...raizAccesos.querySelectorAll(':scope > a.si-quick')].map((a) => a.dataset.section);
@@ -36,6 +40,7 @@ function montar(rol) {
         <button id="hdr-user-btn"><span class="hdr-user-icono"><i class="fas fa-user"></i></span>
             <b id="hdr-user-nombre">Jennifer Morelia Torres Neri</b></button></header>
         ${nav}
+        <div id="analisis-yoy-pane"><div class="ag-wrapper"><p data-totales-leyenda></p>${acordeon}</div></div>
         ${ventanaInforme}`;
     sessionStorage.clear();
     if (rol) sessionStorage.setItem('user_role', rol);
@@ -103,6 +108,121 @@ describe('la vista se enciende solo con el rol Director General', () => {
         // Sin pie de página.
         expect(css).not.toContain('dg-pie');
         expect(fuente).not.toContain('dg-pie');
+    });
+});
+
+describe('Operaciones Totales en el Inicio', () => {
+    const ORIGINAL = ['yoy-sub-comercial', 'yoy-sub-aerolineas', 'yoy-sub-general', 'yoy-sub-carga'];
+    const EN_INICIO = ['yoy-sub-comercial', 'yoy-sub-carga', 'yoy-sub-general', 'yoy-sub-aerolineas'];
+    const orden = () => [...$('yoy-accordion').children].map((el) => el.id);
+    const enSuPantalla = () => $('analisis-yoy-pane').querySelector('.ag-wrapper > #yoy-accordion') !== null;
+
+    test('sin el rol, el acordeón se queda en su pantalla y en su orden de siempre', () => {
+        montar('superadmin');
+        expect($('dg-operaciones').hidden).toBe(true);
+        expect(enSuPantalla()).toBe(true);
+        expect(orden()).toEqual(ORIGINAL);
+    });
+
+    test('con el rol, pasa al Inicio debajo de los accesos: Comercial, Carga, General y Estadístico por Aerolínea', () => {
+        montar('director_general');
+        expect($('dg-operaciones').hidden).toBe(false);
+        expect($('dg-operaciones').previousElementSibling.id).toBe('dg-barra');
+        expect($('dg-operaciones').querySelector('h2').textContent).toBe('Operaciones Totales');
+        expect($('dg-operaciones').querySelector('[data-totales-leyenda]')).not.toBeNull();
+        expect($('yoy-accordion').parentNode.id).toBe('dg-operaciones');
+        expect(enSuPantalla()).toBe(false);
+        expect(orden()).toEqual(EN_INICIO);
+    });
+
+    test('son los mismos nodos: lo que ya estaba enlazado sigue funcionando', () => {
+        montar('superadmin');
+        const comercial = $('yoy-sub-comercial');
+        const exportar = jest.fn();
+        $('yoy-export-btn').addEventListener('click', exportar);
+        cambiarRol('director_general');
+        expect($('yoy-sub-comercial')).toBe(comercial);
+        $('yoy-export-btn').click();
+        expect(exportar).toHaveBeenCalledTimes(1);
+        // Cada id existe una sola vez: no hay copia.
+        EN_INICIO.forEach((id) => expect(document.querySelectorAll(`#${id}`)).toHaveLength(1));
+    });
+
+    test('al salir del rol regresa a su lugar y a su orden; al volver, se trae otra vez', () => {
+        montar('director_general');
+        cambiarRol('editor');
+        expect($('dg-operaciones').hidden).toBe(true);
+        expect(enSuPantalla()).toBe(true);
+        expect(orden()).toEqual(ORIGINAL);
+        // Sin restos del marcador que guardaba el lugar.
+        expect($('analisis-yoy-pane').innerHTML).not.toContain('Inicio de Dirección General');
+
+        cambiarRol('director_general');
+        cambiarRol('director_general');
+        expect($('yoy-accordion').parentNode.id).toBe('dg-operaciones');
+        expect(orden()).toEqual(EN_INICIO);
+
+        cambiarRol(null); // cierre de sesión
+        expect(enSuPantalla()).toBe(true);
+        expect(orden()).toEqual(ORIGINAL);
+    });
+
+    const ABIERTAS_DE_SIEMPRE = ['acc-com-body', 'acc-gen-body', 'acc-cargo-body'];
+    const abiertas = () => [...document.querySelectorAll('#yoy-accordion > .accordion-item > .accordion-collapse.show')].map((c) => c.id);
+    const botonDe = (id) => document.querySelector(`[data-bs-target="#${id}"]`);
+    // Como Bootstrap: primero avisa show.bs.collapse y luego abre.
+    const abrir = (id) => {
+        $(id).dispatchEvent(new Event('show.bs.collapse', { bubbles: true }));
+        $(id).classList.add('show');
+    };
+
+    test('en el Inicio empiezan cerradas; de regreso en su pantalla quedan como estaban', () => {
+        montar('superadmin');
+        expect(abiertas()).toEqual(ABIERTAS_DE_SIEMPRE);
+
+        cambiarRol('director_general');
+        expect(abiertas()).toEqual([]);
+        ['acc-com-body', 'acc-airline-body', 'acc-gen-body', 'acc-cargo-body'].forEach((id) => {
+            expect(botonDe(id).classList.contains('collapsed')).toBe(true);
+            expect(botonDe(id).getAttribute('aria-expanded')).toBe('false');
+        });
+
+        cambiarRol('editor');
+        expect(abiertas()).toEqual(ABIERTAS_DE_SIEMPRE);
+        expect(botonDe('acc-com-body').classList.contains('collapsed')).toBe(false);
+        expect(botonDe('acc-com-body').getAttribute('aria-expanded')).toBe('true');
+        expect(botonDe('acc-airline-body').getAttribute('aria-expanded')).toBe('false');
+    });
+
+    test('en el Inicio, abrir una sección cierra la que estaba abierta', () => {
+        montar('director_general');
+        abrir('acc-com-body');
+        expect(abiertas()).toEqual(['acc-com-body']);
+        abrir('acc-cargo-body');
+        expect(abiertas()).toEqual(['acc-cargo-body']);
+        expect(botonDe('acc-com-body').getAttribute('aria-expanded')).toBe('false');
+
+        // Con Bootstrap cargado, la cierra con su propio Collapse (con animación).
+        const hide = jest.fn();
+        const getOrCreateInstance = jest.fn(() => ({ hide }));
+        window.bootstrap = { Collapse: { getOrCreateInstance } };
+        abrir('acc-airline-body');
+        expect(getOrCreateInstance).toHaveBeenCalledWith($('acc-cargo-body'), { toggle: false });
+        expect(hide).toHaveBeenCalledTimes(1);
+        delete window.bootstrap;
+    });
+
+    test('en su pantalla de siempre, abrir una sección no cierra las demás', () => {
+        montar('superadmin');
+        abrir('acc-airline-body');
+        expect(abiertas()).toEqual(['acc-com-body', 'acc-airline-body', 'acc-gen-body', 'acc-cargo-body']);
+    });
+
+    test('Comparativa Histórica y Conciliación se ocultan solo con la clase del rol', () => {
+        ['#sidebar-nav > .si-quick--hist', '#sidebar-nav > .si-quick--conci'].forEach((sel) => {
+            expect(css).toContain(`:root body.rol-director-general ${sel}`);
+        });
+        expect(css).toMatch(/\.dg-operaciones\[hidden\],[\s\S]*?display: none !important;/);
     });
 });
 

@@ -9584,6 +9584,16 @@ function resetAllCharts() {
             btn.disabled = true;
         }
 
+        // Lienzos que esta función sabe volver a crear (FASE 3).
+        const canvasIds = [
+            'commercial-ops-chart', 'commercial-pax-chart',
+            'cargo-ops-chart', 'cargo-tons-chart',
+            'general-ops-chart', 'general-pax-chart',
+            'paxArrivalsChart', 'paxDeparturesChart',
+            'cargoArrivalsChart', 'cargoDeparturesChart',
+            'delaysPieChart'
+        ];
+
         // FASE 1: DESTRUCCIÓN COMPLETA
         console.log('🗑️ FASE 1: Destrucción completa de gráficas...');
 
@@ -9595,10 +9605,14 @@ function resetAllCharts() {
             window.destroyItinerarioCharts();
         }
 
-        // Destruir todas las instancias de Chart.js globalmente
+        // Destruir las demás instancias de Chart.js que ocupen esos lienzos.
+        // Solo esas: las de otros lugares (la Comparativa de Operaciones
+        // Totales, también en el Inicio de Dirección General) no se vuelven a
+        // crear aquí y se quedaban en blanco.
         if (window.Chart && Chart.instances) {
             Object.values(Chart.instances).forEach(chart => {
-                if (chart && typeof chart.destroy === 'function') {
+                if (!chart || !chart.canvas || !canvasIds.includes(chart.canvas.id)) return;
+                if (typeof chart.destroy === 'function') {
                     try { chart.destroy(); } catch (_) { }
                 }
             });
@@ -9621,15 +9635,6 @@ function resetAllCharts() {
 
         // FASE 2: LIMPIEZA DE CANVAS
         console.log('🧹 FASE 2: Limpieza de canvas...');
-        const canvasIds = [
-            'commercial-ops-chart', 'commercial-pax-chart',
-            'cargo-ops-chart', 'cargo-tons-chart',
-            'general-ops-chart', 'general-pax-chart',
-            'paxArrivalsChart', 'paxDeparturesChart',
-            'cargoArrivalsChart', 'cargoDeparturesChart',
-            'delaysPieChart'
-        ];
-
         canvasIds.forEach(id => {
             const canvas = document.getElementById(id);
             if (canvas) {
