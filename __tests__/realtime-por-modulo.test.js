@@ -19,6 +19,7 @@ const TABLA = 'Conciliación Manifiestos';
 
 const DOM = `
   <div id="main-app" class="main-app hidden">
+    <section id="dg-operaciones" hidden></section>
     <div id="operaciones-totales-section" class="content-section"></div>
     <div id="agenda-section" class="content-section"></div>
     <div id="hvac-reportes-section" class="content-section"></div>
@@ -223,6 +224,18 @@ describe('quién recibe cambios', () => {
     document.body.classList.add('navdeck-active');
     await avanzar(0);
     expect(cliente.tablasAbiertas()).toEqual([TABLA]);
+  });
+
+  test('Dirección General ve Operaciones Totales en su Inicio: sí está dentro', async () => {
+    const cliente = clienteFalso();
+    await arrancar(cliente);
+    await iniciarSesion();
+    document.getElementById('dg-operaciones').hidden = false;
+    document.body.classList.add('navdeck-mode');
+    await avanzar(0);
+    expect(cliente.tablasAbiertas()).toEqual(['daily_operations']);
+    await avanzar(3 * 60 * 1000);
+    expect(window.genYoyReload).toHaveBeenCalled();
   });
 
   test('cerrar sesión cancela la suscripción', async () => {

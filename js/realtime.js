@@ -92,13 +92,24 @@
         return body.contains('navdeck-mode') && !body.contains('navdeck-active');
     }
 
+    // El lanzador deja una sección marcada activa, pero oculta. La excepción es
+    // Dirección General, que ve Operaciones Totales en su Inicio: su acordeón se
+    // trae al lanzador (js/vista-director-general.js).
+    function _seccionVisible() {
+        if (_enLanzador()) {
+            var bloque = document.getElementById('dg-operaciones');
+            return bloque && !bloque.hidden ? 'operaciones-totales' : null;
+        }
+        var seccion = document.querySelector('.content-section.active');
+        return seccion ? seccion.id.replace(/-section$/, '') : null;
+    }
+
     function _moduloDeseado() {
-        if (_ocultaVencida || _enLanzador()) return null;
+        if (_ocultaVencida) return null;
         var app = document.getElementById('main-app');
         if (!app || app.classList.contains('hidden')) return null;
-        var seccion = document.querySelector('.content-section.active');
-        if (!seccion) return null;
-        var clave = seccion.id.replace(/-section$/, '');
+        var clave = _seccionVisible();
+        if (!clave) return null;
         for (var i = 0; i < _modulos.length; i++) {
             var modulo = _modulos[i];
             if (modulo.secciones.indexOf(clave) === -1) continue;
