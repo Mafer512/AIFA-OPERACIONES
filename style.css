@@ -945,11 +945,6 @@ body.dark-mode .section-title small {
       0 0 0 4px rgba(0, 90, 200, 0.18),
       0 8px 32px rgba(0, 60, 140, 0.45),
       0 2px 8px rgba(0, 0, 0, 0.35);
-   animation: logo-ring-spin 12s linear infinite;
-}
-
-@keyframes logo-ring-spin {
-   to { filter: hue-rotate(360deg); }
 }
 
 .login-logo-inner {
@@ -3067,6 +3062,23 @@ body.dark-mode .h5 {
    width: auto;
    object-fit: contain;
    filter: none;
+}
+
+/* El emblema del GSD es oscuro y con mucho detalle: en círculo, un poco más
+   grande que los otros logos y con aro dorado para que se distinga sobre el
+   encabezado claro. */
+body .header img.header-logo[src*="emblema-gsd"] {
+   width: 56px;
+   height: 56px;
+   border-radius: 50%;
+   box-shadow: 0 0 0 2px #c9a24d, 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+@media (max-width: 768px) {
+   body .header img.header-logo[src*="emblema-gsd"] {
+      width: 40px;
+      height: 40px;
+   }
 }
 
 .main-title {

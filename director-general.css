@@ -56,7 +56,7 @@
 :root body.rol-director-general #admin-users-menu,
 :root body.rol-director-general #sidebar-toggler,
 :root body.rol-director-general .sidebar.nav-deck > .si-brand,
-:root body.rol-director-general .header img.header-logo[src*="emblema-aviacion"],
+:root body.rol-director-general .header img.header-logo[src*="emblema-gsd"],
 :root body.rol-director-general .ag-tb-icon,
 :root body.rol-director-general .ag-tb-hint {
    display: none !important;

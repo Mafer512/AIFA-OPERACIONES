@@ -25,7 +25,7 @@ describe('el encabezado de inicio', () => {
   test('el botón de usuario va entre el título y el emblema, con icono, nombre, rol, dirección y correo', () => {
     const titulo = encabezado.indexOf('class="main-title"');
     const usuario = encabezado.indexOf('id="hdr-user-btn"');
-    const emblema = encabezado.indexOf('emblema-aviacion.png');
+    const emblema = encabezado.indexOf('emblema-gsd.jpg');
     expect(titulo).toBeGreaterThan(-1);
     expect(usuario).toBeGreaterThan(titulo);
     expect(emblema).toBeGreaterThan(usuario);
