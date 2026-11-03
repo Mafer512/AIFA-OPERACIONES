@@ -9279,6 +9279,21 @@ FF
                             border-radius: 12px; padding: .6rem .85rem; font-size: .8rem; color: #4b5f7a;
                         }
                         #colabEditModal .ce-legend strong { color: #0b1d40; }
+                        /* No. de empleado: bloque propio, arriba de Generales */
+                        #colabEditModal .ce-num-box { border: 1px solid #dbe3f0; border-radius: 12px; background: #f7f9fd; padding: .7rem .85rem; }
+                        #colabEditModal .ce-num-head { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+                        #colabEditModal .ce-num-ico { width: 2.2rem; height: 2.2rem; flex: none; display: grid; place-items: center; border-radius: 10px; background: #e6efff; color: #1558d6; }
+                        #colabEditModal .ce-num-actual { display: flex; flex-direction: column; line-height: 1.15; }
+                        #colabEditModal .ce-num-lbl { font-size: .66rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: #64748b; }
+                        #colabEditModal .ce-num-actual b { font-size: 1.25rem; color: #0b1d40; font-variant-numeric: tabular-nums; }
+                        #colabEditModal .ce-num-form { margin-top: .7rem; padding-top: .7rem; border-top: 1px dashed #cdd7e6; }
+                        #colabEditModal .ce-num-ayuda { margin: 0 0 .55rem; font-size: .8rem; color: #475569; }
+                        #colabEditModal .ce-num-fila { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+                        #colabEditModal .ce-num-fila input { width: 160px; font-weight: 700; font-variant-numeric: tabular-nums; }
+                        #colabEditModal .ce-num-msg { margin-top: .45rem; font-size: .8rem; min-height: 1.1em; }
+                        #colabEditModal .ce-num-msg.is-error { color: #c62828; }
+                        #colabEditModal .ce-num-msg.is-ok { color: #2e7d32; }
+                        #colabEditModal .ce-num-msg.is-info { color: #1558d6; }
                         /* El estatus se lee de un vistazo: verde si sigue activo, rojo si causó
                            baja, tanto en el desplegable como en el campo ya elegido. */
                         #colabEditModal .ce-estatus option[value="Activo"] { color: #15803d; font-weight: 700; }
@@ -11801,6 +11816,38 @@ FF
                                         <div class="tab-pane fade show active" id="cedit-gen" role="tabpanel">
                                             <div class="ce-sheet">
                                                 <div class="row g-3">
+                                                    <!-- No. de empleado: se cambia aparte porque mueve todo lo que cuelga de él -->
+                                                    <div class="col-12">
+                                                        <div class="ce-num-box" id="ce-num-box">
+                                                            <div class="ce-num-head">
+                                                                <span class="ce-num-ico"><i class="fas fa-hashtag" aria-hidden="true"></i></span>
+                                                                <div class="ce-num-actual">
+                                                                    <span class="ce-num-lbl">No. de empleado</span>
+                                                                    <b id="ce-num-actual">—</b>
+                                                                </div>
+                                                                <button type="button" class="btn btn-sm btn-outline-primary ms-auto" id="ce-num-cambiar" onclick="colabNumAbrir()">
+                                                                    <i class="fas fa-pen-to-square me-1" aria-hidden="true"></i>Cambiar número
+                                                                </button>
+                                                            </div>
+                                                            <div class="ce-num-form d-none" id="ce-num-form">
+                                                                <p class="ce-num-ayuda">
+                                                                    El número se cambia <b>en todo el expediente</b>: ficha, cursos, expediente, historial,
+                                                                    portal QR, tareas de Seguimiento, foto, CV y PDFs. El cambio queda registrado en el historial.
+                                                                </p>
+                                                                <div class="ce-num-fila">
+                                                                    <label class="form-label fw-semibold small mb-0" for="ce-num-nuevo">Número nuevo</label>
+                                                                    <input type="text" class="form-control form-control-sm" id="ce-num-nuevo" maxlength="64" autocomplete="off"
+                                                                           inputmode="numeric" placeholder="Ej. 1552" oninput="colabNumValidar()"
+                                                                           onkeydown="if(event.key==='Enter'){event.preventDefault();colabNumAplicar();}">
+                                                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="colabNumCerrar()">Cancelar</button>
+                                                                    <button type="button" class="btn btn-sm btn-primary" id="ce-num-aplicar" onclick="colabNumAplicar()" disabled>
+                                                                        <i class="fas fa-check me-1" aria-hidden="true"></i>Aplicar cambio
+                                                                    </button>
+                                                                </div>
+                                                                <div class="ce-num-msg" id="ce-num-msg" aria-live="polite"></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                     <div class="col-12 col-md-6"><label class="form-label fw-semibold small">Nombre</label><input type="text" class="form-control form-control-sm" id="ce-nombre" data-field="nombre"></div>
                                                     <div class="col-12 col-md-6"><label class="form-label fw-semibold small" for="ce-puesto">Puesto</label><input type="text" class="form-control form-control-sm" id="ce-puesto" data-field="puesto"></div>
                                                     <div class="col-12 col-md-4"><label class="form-label fw-semibold small">Fecha de Ingreso</label><input type="text" class="form-control form-control-sm" id="ce-fecha-ingreso" data-field="fecha_ingreso" placeholder="DD/MM/YYYY"></div>
@@ -15356,7 +15403,7 @@ FF
                             rubrica:'Rúbrica', doc_ingreso:'Doc. Ingreso',
                             foto:'Foto de perfil', foto_ine:'INE frente', foto_ine_rev:'INE reverso',
                             foto_cred:'TIA / Credencial AIFA', foto_licencia:'Licencia de manejo (foto)', cv_url:'Currículum Vitae (CV)',
-                            estatus:'Estatus', sexo:'Sexo',
+                            estatus:'Estatus', sexo:'Sexo', num_empleado:'No. de empleado',
                         };
 
                         /* Mapeo: id-del-input ? clave-semántica */
@@ -16470,6 +16517,183 @@ FF
                             });
                         });
 
+                        /* ---------- CAMBIAR EL NÚMERO DE EMPLEADO ----------
+                           El número es la llave de todo lo del colaborador, así que no se
+                           cambia como un campo más: la base lo mueve en una sola transacción
+                           (ficha, cursos, expediente, historial, portal QR y Seguimiento, con
+                           db/colab_cambiar_num_empleado.sql) y después se renombran los
+                           archivos de Storage que se buscan por número (foto, CV y PDFs de
+                           amonestaciones y comentarios). Queda en el historial. */
+                        const COLAB_NUM_VALIDO = /^[A-Za-z0-9_-]{1,64}$/;
+
+                        function colabNumMensaje(texto, tipo) {
+                            const el = document.getElementById('ce-num-msg');
+                            if (!el) return;
+                            el.className = 'ce-num-msg' + (tipo ? ' is-' + tipo : '');
+                            el.innerHTML = texto || '';
+                        }
+
+                        window.colabNumAbrir = function() {
+                            if (!colabCurrentRow || !colabRequireEdit()) return;
+                            document.getElementById('ce-num-form')?.classList.remove('d-none');
+                            document.getElementById('ce-num-cambiar')?.classList.add('d-none');
+                            const input = document.getElementById('ce-num-nuevo');
+                            if (input) { input.value = ''; input.disabled = false; setTimeout(() => input.focus(), 30); }
+                            colabNumValidar();
+                        };
+
+                        window.colabNumCerrar = function() {
+                            document.getElementById('ce-num-form')?.classList.add('d-none');
+                            document.getElementById('ce-num-cambiar')?.classList.remove('d-none');
+                            const input = document.getElementById('ce-num-nuevo');
+                            if (input) input.value = '';
+                            colabNumMensaje('');
+                        };
+
+                        /** Revisa el número nuevo mientras se escribe. Devuelve el número si se puede usar. */
+                        window.colabNumValidar = function() {
+                            const btn = document.getElementById('ce-num-aplicar');
+                            const nuevo = String(document.getElementById('ce-num-nuevo')?.value || '').trim();
+                            const actual = String(gc(colabCurrentRow || {}, 'num') || '').trim();
+                            const fin = (msg, tipo, ok) => { colabNumMensaje(msg, tipo); if (btn) btn.disabled = !ok; return ok ? nuevo : null; };
+                            if (!nuevo) return fin('Escribe el número nuevo.', '', false);
+                            if (!COLAB_NUM_VALIDO.test(nuevo)) return fin('Sólo letras, números, guion o guion bajo, sin espacios.', 'error', false);
+                            if (nuevo === actual) return fin('Es el mismo número que ya tiene.', 'error', false);
+                            const otro = (colabCache || []).find(r => r !== colabCurrentRow && String(gc(r, 'num') || '').trim() === nuevo);
+                            if (otro) return fin(`El número <b>${colabNumEsc(nuevo)}</b> ya pertenece a <b>${colabNumEsc(val(gc(otro, 'nombre')) || 'otro colaborador')}</b>.`, 'error', false);
+                            return fin(`<i class="fas fa-circle-check me-1"></i>Disponible: pasará de <b>${colabNumEsc(actual)}</b> a <b>${colabNumEsc(nuevo)}</b>.`, 'ok', true);
+                        };
+
+                        const colabNumEsc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+                        /** Renombra en Storage lo que se busca por número. { movidos, fallidos[] } */
+                        async function colabNumMoverArchivos(sb, ant, nvo) {
+                            const res = { movidos: 0, fallidos: [] };
+                            const escRx = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            const tareas = [
+                                // [bucket, carpeta, cómo se llama el archivo con el número]
+                                ['employee-photos', '', new RegExp('^' + escRx(ant) + '\\.(jpe?g|png|webp)$', 'i')],
+                                [EMPLOYEE_DOCS_BUCKET, '', new RegExp('^' + escRx(ant) + '\\.pdf$', 'i')],
+                                [EMPLOYEE_DOCS_BUCKET, EMPLOYEE_DOCS_PREFIX.replace(/\/$/, ''), new RegExp('^' + escRx(ant) + '_\\d+\\.pdf$', 'i')],
+                                [EMPLOYEE_DOCS_BUCKET, EMPLOYEE_COMENT_PREFIX.replace(/\/$/, ''), new RegExp('^' + escRx(ant) + '_\\d+\\.pdf$', 'i')],
+                            ];
+                            for (const [bucket, carpeta, patron] of tareas) {
+                                let archivos = [];
+                                try {
+                                    const { data, error } = await sb.storage.from(bucket).list(carpeta, { search: ant, limit: 1000 });
+                                    if (error) throw error;
+                                    archivos = (data || []).filter(f => f && f.name && patron.test(f.name));
+                                } catch (e) {
+                                    res.fallidos.push(`${bucket}/${carpeta || ''}: no se pudo revisar (${e?.message || e})`);
+                                    continue;
+                                }
+                                for (const f of archivos) {
+                                    const desde = (carpeta ? carpeta + '/' : '') + f.name;
+                                    const hacia = (carpeta ? carpeta + '/' : '') + nvo + f.name.slice(ant.length);
+                                    const { error } = await sb.storage.from(bucket).move(desde, hacia);
+                                    if (error) res.fallidos.push(`${bucket}/${desde}: ${error.message}`);
+                                    else res.movidos++;
+                                }
+                            }
+                            return res;
+                        }
+
+                        window.colabNumAplicar = async function() {
+                            const c = colabCurrentRow;
+                            if (!c || !colabRequireEdit()) return;
+                            const nuevo = colabNumValidar();
+                            if (!nuevo) return;
+                            const anterior = String(gc(c, 'num') || '').trim();
+                            const nombre = val(gc(c, 'nombre')) || 'este colaborador';
+                            if (!confirm(`¿Cambiar el número de empleado de ${nombre}?\n\n${anterior}  →  ${nuevo}\n\n`
+                                + 'Se actualiza su ficha, cursos, expediente, historial, portal QR, tareas de Seguimiento, foto, CV y PDFs. '
+                                + 'El cambio queda registrado en el historial.')) return;
+
+                            const btn = document.getElementById('ce-num-aplicar');
+                            const input = document.getElementById('ce-num-nuevo');
+                            if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Cambiando…'; }
+                            if (input) input.disabled = true;
+                            colabNumMensaje('Moviendo el expediente al número nuevo…', 'info');
+                            const restaurar = () => {
+                                if (btn) btn.innerHTML = '<i class="fas fa-check me-1"></i>Aplicar cambio';
+                                if (input) input.disabled = false;
+                            };
+                            try {
+                                const sb = window.supabaseClient;
+                                if (!sb) throw new Error('Supabase no disponible');
+                                const userObj = JSON.parse(sessionStorage.getItem('user') || '{}');
+                                const userName = sessionStorage.getItem('user_fullname') || userObj.user_metadata?.full_name || userObj.email || 'Usuario';
+
+                                // 1. La base, todo junto o nada.
+                                const { data, error } = await sb.rpc('colab_cambiar_num_empleado', { p_anterior: anterior, p_nuevo: nuevo, p_usuario_nombre: userName });
+                                if (error) {
+                                    if (error.code === 'PGRST202' || /colab_cambiar_num_empleado/i.test(error.message || '') && /could not find|not find the function|schema cache/i.test(error.message || '')) {
+                                        throw new Error('Falta preparar la base: corre db/colab_cambiar_num_empleado.sql en Supabase (SQL Editor) y vuelve a intentarlo.');
+                                    }
+                                    throw new Error(error.message || String(error));
+                                }
+
+                                // 2. Los archivos que se buscan por número.
+                                const archivos = await colabNumMoverArchivos(sb, anterior, nuevo);
+
+                                // 3. Las direcciones guardadas de foto y CV apuntaban al nombre viejo.
+                                const numCol = colabCols?.num;
+                                const ajustes = {};
+                                const fotoCol = colabCols?.foto, cvCol = colabCols?.cv_url;
+                                const cambiarRuta = (url, bucket) => String(url || '').replace(
+                                    new RegExp('(/' + bucket + '/)' + anterior.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(\\.)'), '$1' + nuevo + '$2');
+                                if (fotoCol && c[fotoCol]) { const r = cambiarRuta(c[fotoCol], 'employee-photos'); if (r !== c[fotoCol]) ajustes[fotoCol] = r; }
+                                if (cvCol && c[cvCol]) { const r = cambiarRuta(c[cvCol], EMPLOYEE_DOCS_BUCKET); if (r !== c[cvCol]) ajustes[cvCol] = r; }
+                                if (numCol && Object.keys(ajustes).length) {
+                                    const safeNumCol = /[\s.]/.test(numCol) ? `"${numCol}"` : numCol;
+                                    const { error: urlErr } = await sb.from('agenda_2026').update(ajustes).eq(safeNumCol, nuevo);
+                                    if (urlErr) archivos.fallidos.push('Direcciones de foto/CV: ' + urlErr.message);
+                                }
+
+                                // 4. Historial general (Historia).
+                                window.logHistory?.('EDITAR', 'Colaboradores', nuevo, {
+                                    summary: `Cambio de No. de empleado: ${anterior} → ${nuevo} (${nombre})`,
+                                    changes: [{ campo: 'num_empleado', anterior, nuevo }],
+                                });
+
+                                // 5. Pantalla: misma fila con su número nuevo; lo demás del formulario se conserva.
+                                if (numCol) c[numCol] = nuevo;
+                                Object.assign(c, ajustes);
+                                _vacCurrentNumEmpl = nuevo;
+                                const label = document.getElementById('colab-edit-num-label');
+                                if (label) label.textContent = `No. ${nuevo} — ${nombre}`;
+                                const numActual = document.getElementById('ce-num-actual');
+                                if (numActual) numActual.textContent = nuevo;
+                                colabDirectoryUniverse = null;
+                                renderFicha(c);
+                                colabCargarHistorial(nuevo);
+
+                                const movidos = data?.movidos || {};
+                                const detalle = [
+                                    movidos.colab_cursos ? `${movidos.colab_cursos} curso(s)` : '',
+                                    movidos.colab_expediente ? `${movidos.colab_expediente} registro(s) de expediente` : '',
+                                    movidos.colab_historial ? `${movidos.colab_historial} cambio(s) del historial` : '',
+                                    movidos.seguimiento_tareas ? `${movidos.seguimiento_tareas} tarea(s) de Seguimiento` : '',
+                                    archivos.movidos ? `${archivos.movidos} archivo(s)` : '',
+                                ].filter(Boolean).join(', ');
+                                colabNumCerrar();
+                                if (archivos.fallidos.length) {
+                                    console.warn('[Colaboradores] Cambio de número: archivos sin mover', archivos.fallidos);
+                                    alert(`El número cambió a ${nuevo} y quedó en el historial, pero algunos archivos no se pudieron renombrar:\n\n- `
+                                        + archivos.fallidos.join('\n- ') + '\n\nRevisa los permisos de Storage (db/colab_editor_only_policies.sql) y vuelve a subir esos archivos si hace falta.');
+                                } else {
+                                    alert(`Listo: ${nombre} ahora es el No. ${nuevo}.` + (detalle ? `\nSe movieron ${detalle}.` : '') + '\nEl cambio quedó registrado en el historial.');
+                                }
+                            } catch (err) {
+                                console.error('[Colaboradores] Cambio de número de empleado:', err);
+                                colabNumMensaje('<i class="fas fa-circle-exclamation me-1"></i>' + colabNumEsc(err?.message || String(err)), 'error');
+                                restaurar();
+                                if (btn) btn.disabled = false;
+                                return;
+                            }
+                            restaurar();
+                        };
+
                         /* -- Abrir modal editor -- */
                         window.colabAbrirEditor = function() {
                             if (!colabCurrentRow) return;
@@ -16481,6 +16705,9 @@ FF
                             // Encabezado del modal
                             const label = document.getElementById('colab-edit-num-label');
                             if (label) label.textContent = `No. ${val(gc(c,'num')) || '—'} — ${val(gc(c,'nombre')) || '—'}`;
+                            const numActual = document.getElementById('ce-num-actual');
+                            if (numActual) numActual.textContent = val(gc(c, 'num')) || '—';
+                            colabNumCerrar();
 
                             // Foto actual
                             const fi  = document.getElementById('cedit-foto-img');
