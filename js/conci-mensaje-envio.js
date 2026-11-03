@@ -258,11 +258,11 @@
                 columnasCarga = { ...C.columnas(datos.filas[0] || {}), cierre: datos.columnas.cierre };
                 leidoEn = Date.now();
             }
-            // El mensaje es de un día completo: por omisión, el último con
-            // datos hasta ayer (el del 27 se envía el 28).
+            // Por omisión, el último CIERRE SUBSECRETARIA hasta hoy: el cierre
+            // del 26 se envía el mismo 26. Sin ninguno, la fecha de ayer.
             const ayer = hoyIso(new Date(Date.now() - 24 * 60 * 60 * 1000));
             const campo = el('conci-msg-fecha');
-            const ultimo = ultimoCierre(datos, ayer);
+            const ultimo = ultimoCierre(datos, hoy);
             if (campo && (!conservarFecha || !campo.value)) campo.value = ultimo || ayer;
             recalcular();
             estado(`${numero(datos.filas.length)} manifiestos leídos${ultimo ? ` · último día con datos: ${fechaCorta(ultimo)}` : ''}`);
