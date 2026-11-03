@@ -206,7 +206,13 @@ describe('saldo oficial del 30/09/2026 y datos enviados: todo cuadra desde el 01
     expect(S.acumuladoAnioAnterior('2025-03-01')).toMatchObject({ pax: 1071347, ton: 55328 });
     // Sin los días de ese mes no se inventa.
     expect(S.acumuladoAnioAnterior('2025-02-14')).toBeNull();
-    expect(S.acumuladoAnioAnterior('2025-11-01')).toBeNull();
+    expect(S.acumuladoAnioAnterior('2025-12-01')).toBeNull();
+    // Noviembre día por día (libros de 2025): octubre completo más sus días.
+    expect(S.acumuladoAnioAnterior('2025-11-02')).toMatchObject({ pax: 5739945 + 18495 + 21369 });
+    expect(S.acumuladoAnioAnterior('2025-11-30')).toMatchObject({ pax: 5739945 + 632853 });
+    const noviembre = mensaje('2026-11-02');
+    expect(noviembre).not.toContain('sin dato');
+    expect(noviembre).toContain('6,336,013 (⬆️ ');
     // 06/10/2026: 5,759,386 vs 5,262,647 y 320,156 t vs 299,576 t.
     const texto = mensaje('2026-10-06');
     expect(texto).toContain('5,759,386 (⬆️ 9.44%)');

@@ -198,7 +198,8 @@
     /* ── 2025 para la variación del mensaje del SWEAR ──────────────────────
        La base no tiene 2025. Fuente: "VARIACION 2025-2026..xlsx": totales
        por mes de enero a septiembre y día por día de enero, marzo y octubre
-       (pasajeros por FECHA; carga en kilos, como "Suma de Total dia").
+       (pasajeros por FECHA; carga en kilos, como "Suma de Total dia");
+       noviembre, de los libros de 2025 (ver abajo).
        El acumulado del año a una fecha es, como en el libro, la suma de los
        meses anteriores más los días del mes hasta esa fecha; la carga se
        pasa a toneladas al final y se redondea a enteras. */
@@ -227,6 +228,17 @@
             kg: [1241308.6, 1357422.3, 1144062.61, 850463, 876297.4, 1408031.6, 891139, 1172892, 1102327.13, 1170382, 936449.77,
                 1228164.85, 1183070.1, 976093.93, 1195961.76, 1417625.3, 1261250, 812523.48, 1047218.2, 1528736, 1358253.45,
                 1448745.6, 1412297.9, 1418474, 977014.18, 963321.3, 1256267, 1130138.5, 1504360.35, 1695658.8, 1307460.5]
+        },
+        // Noviembre no está en el libro de variación: sale de la hoja Data de
+        // "Aviación Comercial 2025.xlsx" (TOTAL PAX por FECHA) y de la hoja
+        // DATA de "BASE  DE CARGA 2025..xlsx" (Total dia por FECHA). Con la
+        // misma suma, octubre da exactamente los días de arriba.
+        11: {
+            pax: [18495, 21369, 21562, 19231, 21188, 21414, 21844, 18965, 22047, 22074, 19207, 20849, 22791, 23984, 21195,
+                19442, 23230, 22339, 20887, 20230, 21552, 19597, 22602, 20235, 20402, 20193, 21124, 21569, 19817, 23419],
+            kg: [1174616.8, 1160219.65, 987997, 1048050.2, 1239987.45, 1488733.6, 926788.15, 1365017.93, 1210283.5, 1380074.8,
+                1249567, 1286409.2, 1188203.8, 1261382, 1564975.38, 845832, 1384591.5, 1503025, 1568079.52, 1302330.2,
+                1289652, 1066825.6, 1401452, 1344088.2, 1144713, 1603282, 1913197.1, 1389345, 765246, 1379842.52]
         }
     });
 
