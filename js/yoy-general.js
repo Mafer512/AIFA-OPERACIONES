@@ -4,6 +4,7 @@
  */
 (function () {
     let chart = null;
+    let deferredRender = null; // reintento pendiente mientras el contenedor está oculto
     let dataLoaded = false;
     let cache = [];
     let monthStatusCache = {}; // { 'year_month': 'oficial'|'preliminar' }
@@ -102,10 +103,11 @@
         if (!groups.length) return;
         var _chartTodayYear  = new Date().getFullYear();
         var _chartTodayMonth = new Date().getMonth() + 1;
-        // Diferir si el contenedor aún no tiene dimensiones (tab oculto)
+        // Diferir si el contenedor aún no tiene dimensiones (tab oculto); un
+        // solo reintento pendiente: cada recarga mientras está oculto no suma otro.
         var _parent = canvas.parentElement;
         if (_parent && (_parent.offsetWidth === 0 || _parent.offsetHeight === 0)) {
-            setTimeout(renderChart, 120); return;
+            clearTimeout(deferredRender); deferredRender = setTimeout(renderChart, 120); return;
         }
         const datasets = sorted.map(function(yr, idx){
             const col = yearColors[yr] || yearColors['default'];

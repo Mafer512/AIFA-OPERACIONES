@@ -56,14 +56,11 @@ function _coyhInjectStyles() {
         '.coyh-drag-handle{cursor:grab;color:#94a3b8;display:inline-block;margin-right:5px;line-height:1;user-select:none;-webkit-user-select:none;vertical-align:middle}',
         '.coyh-drag-handle:hover{color:#6366f1}',
         '.coyh-drag-handle:active{cursor:grabbing}',
-        '@keyframes _coyhPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(1.45)}}',
-        '._coyh-live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;flex-shrink:0;animation:_coyhPulse 1.5s ease-in-out infinite}'
     ].join('');
     document.head.appendChild(s);
 }
 
 /* -- Estado del modal activo -------------------------------------- */
-var _coyhRealtimeChannel = null;
 var _coyhData = {
     reunionId:       null,
     sesionLabel:     '',
@@ -153,7 +150,6 @@ async function coyhAbrirAsistencia(reunionId, sesionLabel, fecha) {
         +'<option value="invitado">Solo Invitados</option>'
         +'</select>'
         +'<div id="_coyh-stats" class="d-flex align-items-center gap-2"></div>'
-        +'<span id="_coyh-live-dot" class="_coyh-live-dot ms-1" title="Conectando en tiempo real\u2026" style="background:#f59e0b"></span>'
         +'</div>'
 
         +'<div class="flex-grow-1 overflow-auto p-0"><div id="_coyh-body">'
@@ -203,7 +199,6 @@ async function coyhAbrirAsistencia(reunionId, sesionLabel, fecha) {
 
     var bsM = new bootstrap.Modal(document.getElementById('_coyh-modal'), { backdrop: true });
     document.getElementById('_coyh-modal').addEventListener('hidden.bs.modal', function() {
-        _coyhDesuscribirRealtime();
         var el = document.getElementById('_coyh-modal'); if(el) el.remove();
     });
     bsM.show();
@@ -261,78 +256,10 @@ async function _coyhCargarDatos(reunionId) {
         (rAsist.data || []).forEach(function(a){ _coyhData.asistencia[a.participante_id] = a; });
 
         _coyhRenderActivo();
-        _coyhSuscribirRealtime(reunionId);
     } catch(err) {
         console.error('[COyH] Error cargando datos:', err);
         _coyhRenderError('Error al cargar: '+(err.message||'desconocido'));
     }
-}
-
-/* -------------------------------------------------------------------
-   TIEMPO REAL (Supabase Realtime)
--------------------------------------------------------------------*/
-function _coyhSuscribirRealtime(reunionId) {
-    var sb = _coyhSB();
-    if (!sb || typeof sb.channel !== 'function') return;
-    _coyhDesuscribirRealtime();
-
-    _coyhRealtimeChannel = sb
-        .channel('coyh-live-' + reunionId)
-        .on('postgres_changes', {
-            event: '*', schema: 'public', table: 'coyh_asistencia',
-            filter: 'reunion_id=eq.' + reunionId
-        }, function(payload) {
-            var row = payload.new || payload.old;
-            if (!row || !row.participante_id) return;
-            if (payload.eventType === 'DELETE') {
-                delete _coyhData.asistencia[row.participante_id];
-            } else {
-                _coyhData.asistencia[row.participante_id] = row;
-                /* Notificar si es una firma nueva */
-                if (row.firmado) {
-                    var p = _coyhData.participantes.find(function(x){ return x.id === row.participante_id; });
-                    if (p) _coyhToast((p.nombre || 'Alguien') + ' firmó ?', 'success');
-                }
-            }
-            _coyhRenderActivo();
-        })
-        .on('postgres_changes', {
-            event: '*', schema: 'public', table: 'coyh_confirmaciones',
-            filter: 'reunion_id=eq.' + reunionId
-        }, function(payload) {
-            var row = payload.new || payload.old;
-            if (!row || !row.participante_id) return;
-            if (payload.eventType === 'DELETE') {
-                delete _coyhData.confirmaciones[row.participante_id];
-            } else {
-                _coyhData.confirmaciones[row.participante_id] = row;
-            }
-            _coyhRenderActivo();
-        })
-        .subscribe(function(status) {
-            var dot = document.getElementById('_coyh-live-dot');
-            if (!dot) return;
-            if (status === 'SUBSCRIBED') {
-                dot.style.background = '#16a34a';
-                dot.title = 'En tiempo real — conectado';
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                dot.style.background = '#dc2626';
-                dot.title = 'Error de conexión en tiempo real';
-            } else {
-                dot.style.background = '#f59e0b';
-                dot.title = 'Conectando…';
-            }
-        });
-}
-
-function _coyhDesuscribirRealtime() {
-    if (_coyhRealtimeChannel) {
-        var sb = _coyhSB();
-        try { if (sb && sb.removeChannel) sb.removeChannel(_coyhRealtimeChannel); } catch(e) {}
-        _coyhRealtimeChannel = null;
-    }
-    var dot = document.getElementById('_coyh-live-dot');
-    if (dot) { dot.style.background = '#94a3b8'; dot.style.animation = 'none'; }
 }
 
 function _coyhRenderActivo() {

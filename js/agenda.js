@@ -2013,28 +2013,3 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-/* ─── Recarga en tiempo real cuando cambia algo en agenda ──────────
-   Escucha el evento global 'rt:change' emitido por js/realtime.js
-   y recarga la vista activa sin que el usuario tenga que salir/entrar.
-─────────────────────────────────────────────────────────────────── */
-(function () {
-    const AG_TABLES = ['agenda_comites', 'agenda_reuniones', 'agenda_acuerdos'];
-
-    window.addEventListener('rt:change', function (e) {
-        if (!e.detail || AG_TABLES.indexOf(e.detail.table) === -1) return;
-
-        // Solo recargar si la sección agenda está visible
-        const agSection = document.getElementById('agenda-section');
-        if (!agSection || !agSection.classList.contains('active')) return;
-
-        // Detectar sub-vista activa
-        const activeTab = agSection.querySelector('.nav-link.active[data-ag-view]');
-        const view = activeTab ? activeTab.getAttribute('data-ag-view') : 'calendario';
-
-        if (view === 'comites')    { agLoadComites();    return; }
-        if (view === 'reuniones')  { agLoadReuniones();  return; }
-        if (view === 'acuerdos')   { agLoadAcuerdos();   return; }
-        // Por defecto recargar calendario
-        agLoadCalendario();
-    });
-})();

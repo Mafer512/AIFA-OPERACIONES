@@ -804,18 +804,6 @@
       });
     }
 
-    // ── Realtime ─────────────────────────────────────────────────────
-    async function startRealtime() {
-      try {
-        const sb = await window.ensureSupabaseClient();
-        sb.channel('fids-kiosk')
-          .on('postgres_changes',
-              { event: '*', schema: 'public', table: 'flights' },
-              () => loadData())
-          .subscribe();
-      } catch (_) {}
-    }
-
     // ── Mapa en overlay (tap row → abre mapa inline) ────────────────
     function openMapOverlay(url) {
       const ov = document.getElementById('map-frame-overlay');
@@ -840,8 +828,6 @@
       startClock();
       await loadData();
       scheduleSwitch(SWITCH_MS);
-      startRealtime();
-      // Recarga periódica como respaldo al realtime
       setInterval(loadData, REFRESH_MS);
     }
 

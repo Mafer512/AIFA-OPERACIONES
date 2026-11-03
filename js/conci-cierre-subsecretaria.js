@@ -530,6 +530,9 @@
         let password = pwEl.value;
 
         if (!manifiestoId) { msgEl.innerHTML = '<span class="text-danger">Indica el ID del manifiesto.</span>'; return; }
+        if (!campo) { msgEl.innerHTML = '<span class="text-danger">Elige el campo a corregir.</span>'; return; }
+        // Una corrección sin valor nuevo no dice qué corregir: no se envía vacía.
+        if (!String(valorNuevo ?? '').trim()) { msgEl.innerHTML = '<span class="text-danger">Indica el nuevo valor.</span>'; return; }
         if (!motivo) { msgEl.innerHTML = '<span class="text-danger">Indica el motivo de la corrección.</span>'; return; }
         if (requierePassword && !password) { msgEl.innerHTML = '<span class="text-danger">Ingresa tu contraseña.</span>'; return; }
 
