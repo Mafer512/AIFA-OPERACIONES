@@ -176,6 +176,15 @@
         oficio('2026-11-02',
             [t(20210, 18767, 1443), t(161, 149, 12), t(34287, 31633, 2654), t(269, 248, 21), t(6336013, 5987816, 348197), t(47309, 44672, 2637), t(23256561, 21898845, 1357716), t(183858, 171850, 12008)],
             [t(1827, 17, 1810), t(48, 2, 46), t(2791, 91, 2700), t(83, 12, 71), t(355872, 7430, 348442), t(13237, 2957, 10280), t(1395275, 45779, 1349496), t(45448, 4721, 40727)]),
+        // El mensaje enviado (libros de NOVIEMBRE y BASE DE CARGA). La carga
+        // nacional del día (16 t) no es la del libro ese día (27.8 t): absorbe
+        // la corrección que el libro hizo después al 01 y 02/11 (se enviaron
+        // 91 t nacionales en el mes; el libro hoy da 79.4), así que el mes queda
+        // en las 107 t del libro. El libro trae además operaciones que la base
+        // cerró con otra clasificación (Copa 902/903 capturados en el portal).
+        oficio('2026-11-03',
+            [t(21070, 19521, 1549), t(139, 129, 10), t(55357, 51154, 4203), t(408, 377, 31), t(6357083, 6007337, 349746), t(47448, 44801, 2647), t(23277631, 21918366, 1359265), t(183997, 171979, 12018)],
+            [t(1926, 16, 1910), t(58, 9, 49), t(4717, 107, 4610), t(141, 21, 120), t(357798, 7446, 350352), t(13295, 2966, 10329), t(1397201, 45795, 1351406), t(45506, 4730, 40776)]),
     ]);
 
     // Dato del día tal como se envió, cuando el libro cambió después.
