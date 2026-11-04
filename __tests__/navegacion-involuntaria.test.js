@@ -63,6 +63,7 @@ describe('el sondeo de permisos no re-navega si nada cambió', () => {
     // isSectionAllowed resuelve primero el módulo al que pertenece la sección
     // (Reportes cuenta como Conciliación).
     ${source.slice(source.indexOf('const SECCIONES_DE_MODULO'), source.indexOf('\n', source.indexOf('const SECCIONES_DE_MODULO')))}
+    ${source.slice(source.indexOf('const SECCION_SIN_MODULOS'), source.indexOf('\n', source.indexOf('const SECCION_SIN_MODULOS')))}
     ${extraer('permisoDeSeccion')}
     ${extraer('isSectionAllowed')}
     ${extraer('getDefaultAllowedSection')}
@@ -158,15 +159,31 @@ describe('el sondeo de permisos no re-navega si nada cambió', () => {
     expect(avisos[0].mensaje).toMatch(/permisos cambiaron/i);
   });
 
-  // Conciliacion es modulo base de toda sesion valida: no sale en la lista
-  // blanca y aun asi nadie puede ser sacado de ella.
-  test('a nadie se le saca de Conciliación', async () => {
+  // Conciliacion ya no es modulo base: si se la quitan a quien la tiene
+  // abierta, se le saca y se le avisa como en cualquier otro modulo.
+  test('si le quitan Conciliación estando dentro, se le saca y se le avisa', async () => {
     await api.refreshUserPermissionsFromServer();
     navegaciones.length = 0;
+    avisos.length = 0;
 
     abierta('conciliacion');
     api.setPermisos(['inicio'], 'inicio');
     respuestaDelServidor = { role: 'editor', permissions: { allowed_sections: ['inicio'] } };
+    await api.refreshUserPermissionsFromServer();
+
+    expect(navegaciones).toHaveLength(1);
+    expect(navegaciones[0].key).toBe('inicio');
+    expect(avisos).toHaveLength(1);
+  });
+
+  // Quien sigue teniendo Conciliación no es sacado de ella.
+  test('a quien conserva Conciliación no se le saca', async () => {
+    await api.refreshUserPermissionsFromServer();
+    navegaciones.length = 0;
+
+    abierta('conciliacion');
+    api.setPermisos(['inicio', 'conciliacion'], 'inicio');
+    respuestaDelServidor = { role: 'editor', permissions: { allowed_sections: ['inicio', 'conciliacion', 'bhs'] } };
     await api.refreshUserPermissionsFromServer();
 
     expect(navegaciones).toEqual([]);

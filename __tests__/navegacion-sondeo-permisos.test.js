@@ -72,10 +72,10 @@ describe('cuando los permisos cambian de verdad', () => {
     expect(cuerpo).toMatch(/showNotification\([^)]*permisos cambiaron/i);
   });
 
-  test('Conciliación no se cierra por esta vía', () => {
-    // Es una sección de acceso garantizado para quien captura; la comprobación
-    // de secciones permitidas no aplica igual.
-    expect(cuerpo).toContain("claveAbierta === 'conciliacion'");
+  test('Conciliación se cierra igual que cualquier módulo si le quitan el permiso', () => {
+    // Ya no es una sección de acceso garantizado: sólo se ve si el
+    // administrador la marcó, así que no tiene excepción en el sondeo.
+    expect(cuerpo).not.toContain("claveAbierta === 'conciliacion'");
   });
 });
 

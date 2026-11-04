@@ -38,8 +38,10 @@
 
         document.body.classList.add('viewer-restricted');
 
-        // Always include core sections accessible to all authenticated viewers
-        const alwaysVisible = ['conciliacion', 'historia', 'biblioteca'];
+        // Secciones que esta capa no oculta. Conciliación ya NO va aquí: sólo
+        // se ve si el administrador la marcó (igual que applySectionPermissions
+        // en script.js, que además oculta Historia/Biblioteca si no están marcadas).
+        const alwaysVisible = ['historia', 'biblioteca'];
         const allowed = [...new Set([...baseAllowed, ...alwaysVisible])];
         
         console.log('Applying section Permissions:', allowed);
