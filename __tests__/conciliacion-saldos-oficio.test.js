@@ -186,14 +186,15 @@ describe('saldo oficial del 30/09/2026 y datos enviados: todo cuadra desde el 01
     expect(texto).toContain('d. Operaciones: 90 (14 Nacionales, 76 Internacionales).');
   });
 
-  test('un día nuevo, después del último oficio registrado (25/10), se suma a ése', () => {
-    const filas = [...OCTUBRE, ...diaCarga('26/10/2026', [10000, 990000], [1, 30]), ...diaPax('26/10/2026', [20000, 1000], [150, 10])];
-    const texto = M.componer(M.calcular({ filas, columnas: COLUMNAS }, C.columnas(filas[0]), '2026-10-26'));
+  test('un día nuevo, después del último oficio registrado (03/11), se suma a ése', () => {
+    const filas = [...OCTUBRE, ...diaCarga('04/11/2026', [10000, 990000], [1, 30]), ...diaPax('04/11/2026', [20000, 1000], [150, 10])];
+    const texto = M.componer(M.calcular({ filas, columnas: COLUMNAS }, C.columnas(filas[0]), '2026-11-04'));
     expect(texto).toContain('a.\tPasajeros: 21,000 (20,000 Nacionales, 1,000 Internacionales).');
-    expect(texto).toContain('a. Pasajeros: 526,396 (490,448 Nacionales, 35,948 Internacionales).');      // mes: 505,396 + 21,000
-    expect(texto).toContain('a. Pasajeros: 6,176,511 (5,840,677 Nacionales, 335,834 Internacionales).');
-    expect(texto).toContain('c. Carga: 346,157 (7,116 Nacionales, 339,041 Internacionales).');           // año: 345,157 + 1,000
-    expect(texto).toContain('d. Operaciones: 12,936 (2,913 Nacionales, 10,023 Internacionales).');
+    expect(texto).toContain('a. Pasajeros: 76,357 (71,154 Nacionales, 5,203 Internacionales).');         // mes: 55,357 + 21,000
+    expect(texto).toContain('a. Pasajeros: 6,378,083 (6,027,337 Nacionales, 350,746 Internacionales).');
+    expect(texto).toContain('c. Carga: 5,717 (117 Nacionales, 5,600 Internacionales).');                 // mes: 4,717 + 1,000
+    expect(texto).toContain('c. Carga: 358,798 (7,456 Nacionales, 351,342 Internacionales).');           // año: 357,798 + 1,000
+    expect(texto).toContain('d. Operaciones: 13,326 (2,967 Nacionales, 10,359 Internacionales).');
   });
 
   test('la variación contra 2025 sale del libro "VARIACION 2025-2026", ya no "sin dato"', () => {
@@ -206,7 +207,13 @@ describe('saldo oficial del 30/09/2026 y datos enviados: todo cuadra desde el 01
     expect(S.acumuladoAnioAnterior('2025-03-01')).toMatchObject({ pax: 1071347, ton: 55328 });
     // Sin los días de ese mes no se inventa.
     expect(S.acumuladoAnioAnterior('2025-02-14')).toBeNull();
-    expect(S.acumuladoAnioAnterior('2025-11-01')).toBeNull();
+    expect(S.acumuladoAnioAnterior('2025-12-01')).toBeNull();
+    // Noviembre día por día (libros de 2025): octubre completo más sus días.
+    expect(S.acumuladoAnioAnterior('2025-11-02')).toMatchObject({ pax: 5739945 + 18495 + 21369 });
+    expect(S.acumuladoAnioAnterior('2025-11-30')).toMatchObject({ pax: 5739945 + 632853 });
+    const noviembre = mensaje('2026-11-02');
+    expect(noviembre).not.toContain('sin dato');
+    expect(noviembre).toContain('6,336,013 (⬆️ ');
     // 06/10/2026: 5,759,386 vs 5,262,647 y 320,156 t vs 299,576 t.
     const texto = mensaje('2026-10-06');
     expect(texto).toContain('5,759,386 (⬆️ 9.44%)');
@@ -231,9 +238,12 @@ describe('saldo oficial del 30/09/2026 y datos enviados: todo cuadra desde el 01
 
   test('cada oficio de octubre está registrado; una fecha usa el más reciente', () => {
     expect(S.cortes[0].fecha).toBe('2026-09-30');
-    expect(S.cortes.map(c => c.fecha).slice(1)).toEqual(Array.from({ length: 25 }, (_, i) => `2026-10-${String(i + 1).padStart(2, '0')}`));
+    expect(S.cortes.map(c => c.fecha).slice(1)).toEqual([
+      ...Array.from({ length: 31 }, (_, i) => `2026-10-${String(i + 1).padStart(2, '0')}`), '2026-11-01', '2026-11-02', '2026-11-03']);
     expect(S.vigente('2026-10-17').fecha).toBe('2026-10-17');
-    expect(S.vigente('2026-11-02').fecha).toBe('2026-10-25');
+    expect(S.vigente('2026-11-02').fecha).toBe('2026-11-02');
+    expect(S.vigente('2026-11-03').fecha).toBe('2026-11-03');
+    expect(S.vigente('2026-11-05').fecha).toBe('2026-11-03');
     expect(S.vigente('2026-08-15').fecha).toBe('2026-09-30');
   });
 
@@ -359,6 +369,64 @@ describe('saldo oficial del 30/09/2026 y datos enviados: todo cuadra desde el 01
     'c. Carga: 345,157 (7,106 Nacionales, 338,051 Internacionales).',
     'd. Operaciones: 12,905 (2,912 Nacionales, 9,993 Internacionales).',
   ];
+  // 27/10 y 02/11: los mensajes enviados, completos (libros "(02112026)").
+  const MENSAJE_2710 = `a.\tPasajeros: 24,458 (23,291 Nacionales, 1,167 Internacionales).
+b.\tOperaciones: 175 (166 Nacionales, 9 Internacionales).
+c. Carga: 1,090 (0 Nacionales, 1,090 Internacionales).
+d. Operaciones: 32 (1 Nacionales, 31 Internacionales).
+a. Pasajeros: 552,837 (515,725 Nacionales, 37,112 Internacionales).
+b. Operaciones: 4,044 (3,773 Nacionales, 271 Internacionales).
+c. Carga: 33,426 (1,012 Nacionales, 32,414 Internacionales).
+d. Operaciones: 1,054 (143 Nacionales, 911 Internacionales).
+a. Pasajeros: 6,202,952 (5,865,954 Nacionales, 336,998 Internacionales).
+b. Operaciones: 46,348 (43,788 Nacionales, 2,560 Internacionales).
+c. Carga: 347,285 (7,106 Nacionales, 340,179 Internacionales).
+d. Operaciones: 12,962 (2,914 Nacionales, 10,048 Internacionales).
+a. Pasajeros: 23,123,500 (21,776,983 Nacionales, 1,346,517 Internacionales).
+b. Operaciones: 182,897 (170,966 Nacionales, 11,931 Internacionales).
+c. Carga: 1,386,688 (45,455 Nacionales, 1,341,233 Internacionales).
+d. Operaciones: 45,173 (4,678 Nacionales, 40,495 Internacionales).
+6,202,952 (⬆️ 9.61%)
+347,285 (⬆️ 7.08%)`;
+  ENVIADOS['2026-10-27'] = MENSAJE_2710.split('\n');
+  const MENSAJE_0211 = `a.\tPasajeros: 20,210 (18,767 Nacionales, 1,443 Internacionales).
+b.\tOperaciones: 161 (149 Nacionales, 12 Internacionales).
+c. Carga: 1,827 (17 Nacionales, 1,810 Internacionales).
+d. Operaciones: 48 (2 Nacionales, 46 Internacionales).
+A. Acumulado del mes de Nov. 2026
+a. Pasajeros: 34,287 (31,633 Nacionales, 2,654 Internacionales).
+b. Operaciones: 269 (248 Nacionales, 21 Internacionales).
+c. Carga: 2,791 (91 Nacionales, 2,700 Internacionales).
+d. Operaciones: 83 (12 Nacionales, 71 Internacionales).
+a. Pasajeros: 6,336,013 (5,987,816 Nacionales, 348,197 Internacionales).
+b. Operaciones: 47,309 (44,672 Nacionales, 2,637 Internacionales).
+c. Carga: 355,872 (7,430 Nacionales, 348,442 Internacionales).
+d. Operaciones: 13,237 (2,957 Nacionales, 10,280 Internacionales).
+a. Pasajeros: 23,256,561 (21,898,845 Nacionales, 1,357,716 Internacionales).
+b. Operaciones: 183,858 (171,850 Nacionales, 12,008 Internacionales).
+c. Carga: 1,395,275 (45,779 Nacionales, 1,349,496 Internacionales).
+d. Operaciones: 45,448 (4,721 Nacionales, 40,727 Internacionales).`;
+  ENVIADOS['2026-11-02'] = MENSAJE_0211.split('\n');
+  // 03/11: la carga nacional del día (16 t) absorbe la corrección del libro al
+  // 01 y 02/11; la base, con lo cerrado ese día, daba 1,921 t (46 / 1,875).
+  const MENSAJE_0311 = `a.\tPasajeros: 21,070 (19,521 Nacionales, 1,549 Internacionales).
+b.\tOperaciones: 139 (129 Nacionales, 10 Internacionales).
+c. Carga: 1,926 (16 Nacionales, 1,910 Internacionales).
+d. Operaciones: 58 (9 Nacionales, 49 Internacionales).
+A. Acumulado del mes de Nov. 2026
+a. Pasajeros: 55,357 (51,154 Nacionales, 4,203 Internacionales).
+b. Operaciones: 408 (377 Nacionales, 31 Internacionales).
+c. Carga: 4,717 (107 Nacionales, 4,610 Internacionales).
+d. Operaciones: 141 (21 Nacionales, 120 Internacionales).
+a. Pasajeros: 6,357,083 (6,007,337 Nacionales, 349,746 Internacionales).
+b. Operaciones: 47,448 (44,801 Nacionales, 2,647 Internacionales).
+c. Carga: 357,798 (7,446 Nacionales, 350,352 Internacionales).
+d. Operaciones: 13,295 (2,966 Nacionales, 10,329 Internacionales).
+a. Pasajeros: 23,277,631 (21,918,366 Nacionales, 1,359,265 Internacionales).
+b. Operaciones: 183,997 (171,979 Nacionales, 12,018 Internacionales).
+c. Carga: 1,397,201 (45,795 Nacionales, 1,351,406 Internacionales).
+d. Operaciones: 45,506 (4,730 Nacionales, 40,776 Internacionales).`;
+  ENVIADOS['2026-11-03'] = MENSAJE_0311.split('\n');
   test.each(Object.keys(ENVIADOS))('el mensaje del %s sale igual al enviado', fecha => {
     const texto = mensajeCon([...OCTUBRE, ...BASE_HOY], fecha);
     ENVIADOS[fecha].forEach(renglon => expect(texto).toContain(renglon));

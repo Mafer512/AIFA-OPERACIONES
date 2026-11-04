@@ -317,6 +317,14 @@ describe('la ventana', () => {
     expect(document.getElementById('conci-msg-estado').textContent).toContain('último día con datos: 27/09/2026');
   });
 
+  test('si ya hay cierre de hoy, abre en hoy: el cierre del 28 se envía el 28', async () => {
+    rpc.mockImplementation(async () => ({ data: [...FILAS, manifiesto({ cierre: '2026-09-28', pax: 75 })], error: null }));
+    await api.abrir();
+    expect(document.getElementById('conci-msg-fecha').value).toBe('2026-09-28');
+    expect(texto()).toContain('\n28/09/2026\n');
+    expect(texto()).toContain('a.\tPasajeros: 75 (75 Nacionales, 0 Internacionales).');
+  });
+
   test('otra fecha se calcula sin volver a leer, y avisa si ese día no tiene cierre', async () => {
     await api.abrir();
     const fecha = document.getElementById('conci-msg-fecha');

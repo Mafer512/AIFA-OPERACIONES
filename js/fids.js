@@ -67,7 +67,6 @@
   let _fecha       = new Date().toISOString().split('T')[0];
   let _tipo        = 'llegada';
   let _clockTimer  = null;
-  let _realtimeCh  = null;
   let _editingId   = null;
   let _activeTab   = 'display';
   let _importing   = false;
@@ -98,7 +97,6 @@
     renderShell();
     await loadVuelos();
     startClock();
-    startRealtime();
   }
 
   function renderShell() {
@@ -900,16 +898,6 @@
     const update = () => { const el = document.getElementById('fids-clock'); if (el) el.textContent = nowTimeStr(); };
     update();
     _clockTimer = setInterval(update, 1000);
-  }
-
-  // ── Supabase Realtime ─────────────────────────────────────────────
-  function startRealtime() {
-    const sb = window.supabaseClient;
-    if (!sb) return;
-    if (_realtimeCh) { try { sb.removeChannel(_realtimeCh); } catch (_) {} }
-    _realtimeCh = sb.channel('fids-flights-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'flights' }, () => { loadVuelos(); })
-      .subscribe();
   }
 
   // ── Exportar init (singleton) ─────────────────────────────────────
