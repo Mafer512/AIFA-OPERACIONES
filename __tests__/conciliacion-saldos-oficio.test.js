@@ -238,10 +238,11 @@ describe('saldo oficial del 30/09/2026 y datos enviados: todo cuadra desde el 01
   test('cada oficio de octubre está registrado; una fecha usa el más reciente', () => {
     expect(S.cortes[0].fecha).toBe('2026-09-30');
     expect(S.cortes.map(c => c.fecha).slice(1)).toEqual([
-      ...Array.from({ length: 31 }, (_, i) => `2026-10-${String(i + 1).padStart(2, '0')}`), '2026-11-01', '2026-11-02']);
+      ...Array.from({ length: 31 }, (_, i) => `2026-10-${String(i + 1).padStart(2, '0')}`), '2026-11-01', '2026-11-02', '2026-11-04']);
     expect(S.vigente('2026-10-17').fecha).toBe('2026-10-17');
     expect(S.vigente('2026-11-02').fecha).toBe('2026-11-02');
-    expect(S.vigente('2026-11-05').fecha).toBe('2026-11-02');
+    expect(S.vigente('2026-11-03').fecha).toBe('2026-11-02');
+    expect(S.vigente('2026-11-05').fecha).toBe('2026-11-04');
     expect(S.vigente('2026-08-15').fecha).toBe('2026-09-30');
   });
 
@@ -405,6 +406,26 @@ b. Operaciones: 183,858 (171,850 Nacionales, 12,008 Internacionales).
 c. Carga: 1,395,275 (45,779 Nacionales, 1,349,496 Internacionales).
 d. Operaciones: 45,448 (4,721 Nacionales, 40,727 Internacionales).`;
   ENVIADOS['2026-11-02'] = MENSAJE_0211.split('\n');
+  const MENSAJE_0411 = `a.\tPasajeros: 21,268 (19,978 Nacionales, 1,290 Internacionales).
+b.\tOperaciones: 167 (159 Nacionales, 8 Internacionales).
+c. Carga: 1,549 (63 Nacionales, 1,486 Internacionales).
+d. Operaciones: 61 (10 Nacionales, 51 Internacionales).
+A. Acumulado del mes de Nov. 2026
+a. Pasajeros: 76,625 (71,132 Nacionales, 5,493 Internacionales).
+b. Operaciones: 575 (536 Nacionales, 39 Internacionales).
+c. Carga: 6,266 (170 Nacionales, 6,096 Internacionales).
+d. Operaciones: 202 (31 Nacionales, 171 Internacionales).
+a. Pasajeros: 6,378,351 (6,027,315 Nacionales, 351,036 Internacionales).
+b. Operaciones: 47,615 (44,960 Nacionales, 2,655 Internacionales).
+c. Carga: 359,347 (7,509 Nacionales, 351,838 Internacionales).
+d. Operaciones: 13,356 (2,976 Nacionales, 10,380 Internacionales).
+a. Pasajeros: 23,298,899 (21,938,344 Nacionales, 1,360,555 Internacionales).
+b. Operaciones: 184,164 (172,138 Nacionales, 12,026 Internacionales).
+c. Carga: 1,398,750 (45,858 Nacionales, 1,352,892 Internacionales).
+d. Operaciones: 45,567 (4,740 Nacionales, 40,827 Internacionales).
+6,378,351 (⬆️ 9.58%)
+359,347 (⬆️ 7.48%)`;
+  ENVIADOS['2026-11-04'] = MENSAJE_0411.split('\n');
   test.each(Object.keys(ENVIADOS))('el mensaje del %s sale igual al enviado', fecha => {
     const texto = mensajeCon([...OCTUBRE, ...BASE_HOY], fecha);
     ENVIADOS[fecha].forEach(renglon => expect(texto).toContain(renglon));
