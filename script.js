@@ -2227,6 +2227,7 @@ document.addEventListener('click', (event) => {
 // abre desde Conciliación Manifiestos: quien tiene Conciliación la ve, aunque
 // no sea un módulo que el administrador asigne por separado. Lo mismo con
 // Estadísticas de equipaje: es una página de BHS y se ve con ese módulo.
+// SETP (Supervisores de Edificio Terminal) se asigna por separado en Vistas.
 const SECCIONES_DE_MODULO = { 'conci-reportes': 'conciliacion', 'bhs-estadisticas-equipaje': 'bhs' };
 
 // Centinela de "Ninguno" en allowed_sections (ver AU_VIEWS_NONE en el panel
@@ -35601,6 +35602,7 @@ async function _conciSaveBulkEdits() {
         { key: 'email-analisis',       label: 'Análisis Correos',        icon: 'envelope',          group: 'Módulos' },
         { key: 'fids',                 label: 'FIDS',                    icon: 'tv',                group: 'Módulos' },
         { key: 'bhs',                  label: 'BHS',                     icon: 'conveyor-belt',     group: 'Módulos' },
+        { key: 'setp',                 label: 'Supervisores de Edificio Terminal', icon: 'user-tie', group: 'Módulos' },
         { key: 'ssei-derrames',        label: 'SSEI · Derrames',         icon: 'fire-extinguisher', group: 'Módulos' },
         { key: 'ssei-emergencias',     label: 'SSEI · Emergencias',      icon: 'triangle-exclamation', group: 'Módulos' },
         { key: 'personal-capacitado-prestadores', label: 'Personal capacitado', icon: 'user-graduate', group: 'Módulos' },
@@ -35659,7 +35661,7 @@ async function _conciSaveBulkEdits() {
                 // GOPA
                 'abordadores-mecanicos', 'biblioteca',
                 // GOET
-                'bhs',
+                'bhs', 'setp',
                 // GSO
                 'fauna', 'ssei-derrames', 'ssei-emergencias',
                 // GSM

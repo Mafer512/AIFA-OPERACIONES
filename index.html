@@ -2100,6 +2100,9 @@ FF
                                             <a class="menu-item si-link si-link--l2" href="#" data-section="bhs-estadisticas-equipaje">
                                                 <i class="fas fa-chart-line si-ico"></i><span class="si-txt">Estadísticas de Equipaje del BHS</span>
                                             </a>
+                                            <a class="menu-item si-link si-link--l2" href="#" data-section="setp">
+                                                <i class="fas fa-user-tie si-ico"></i><span class="si-txt">Supervisores de Edificio Terminal (SETP)</span>
+                                            </a>
                                         </div>
                                     </div>
                                 </div>
@@ -6947,6 +6950,17 @@ FF
 
                 <div id="bhs-estadisticas-equipaje-section" class="content-section">
                     <div id="bhs-baggage-stats-root"></div>
+                </div>
+
+                <!-- Supervisores de Edificio Terminal (SETP) -->
+                <div id="setp-section" class="content-section">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+                        <div>
+                            <h2 class="section-heading mb-0"><i class="fas fa-user-tie me-2"></i>Supervisores de Edificio Terminal</h2>
+                            <small class="text-muted">Gerencia de Operaciones · Edificio Terminal</small>
+                        </div>
+                    </div>
+                    <div id="setp-root"></div>
                 </div>
 
                 <!-- FIDS Section -->
@@ -41888,11 +41902,14 @@ FF
     <script src="js/ingenieria-civil.js?v=1"></script>
     <script src="js/capacidad-carga.js?v=4"></script>
     <script src="js/bhs-baggage-stats.js?v=4"></script>
+    <script src="js/setp-reportes.js?v=22"></script>
+    <script src="js/setp-recorridos.js?v=34"></script>
+    <script src="js/setp-formato.js?v=24"></script>
 
     <script src="js/miscelanea.js?v=1"></script>
     <script src="js/marca-agua.js?v=1"></script>
     <script src="js/data-manager.js"></script>
-    <script src="js/permissions.js"></script>
+    <script src="js/permissions.js?v=20261105-pull"></script>
     <script src="js/admin-ui.js"></script>
     <script src="js/aerocares.js"></script>
     <script src="js/abordadores-registro.js"></script>
@@ -42046,7 +42063,7 @@ FF
     <!-- Capa única de totales (oficial hasta el corte, detalle después): ver el archivo -->
     <script src="js/totales-service.js?v=20261019-sin-sesion" defer></script>
     <script src="js/manifiestos-avisos.js?v=20261019-sin-sesion" defer></script>
-    <script src="script.js?v=20261030-realtime-por-modulo" defer></script>
+    <script src="script.js?v=20261105-pull" defer></script>
     <!-- Campos de fecha en dd/mm/aaaa sin importar el idioma del navegador. -->
     <script src="js/fecha-ddmm.js?v=20260912-fecha-1" defer></script>
     <!-- Botón y menú de usuario del encabezado de inicio. -->
