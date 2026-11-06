@@ -2225,8 +2225,13 @@ document.addEventListener('click', (event) => {
 
 // Páginas que viven fuera de su módulo pero forman parte de él. Reportes se
 // abre desde Conciliación Manifiestos: quien tiene Conciliación la ve, aunque
-// no sea un módulo que el administrador asigne por separado.
-const SECCIONES_DE_MODULO = { 'conci-reportes': 'conciliacion' };
+// no sea un módulo que el administrador asigne por separado. Lo mismo con
+// Estadísticas de equipaje: es una página de BHS y se ve con ese módulo.
+const SECCIONES_DE_MODULO = { 'conci-reportes': 'conciliacion', 'bhs-estadisticas-equipaje': 'bhs' };
+
+// Centinela de "Ninguno" en allowed_sections (ver AU_VIEWS_NONE en el panel
+// de usuarios): marca una lista sin módulos, no es una sección navegable.
+const SECCION_SIN_MODULOS = '__none__';
 
 function permisoDeSeccion(key) {
     return SECCIONES_DE_MODULO[key] || key;
@@ -2276,10 +2281,13 @@ function isSectionAllowed(sectionKey) {
 
 function getDefaultAllowedSection() {
     if (Array.isArray(userSectionWhitelist) && userSectionWhitelist.length) {
-        if (userDefaultSectionKey && userSectionWhitelist.includes(userDefaultSectionKey)) {
+        if (userDefaultSectionKey && userDefaultSectionKey !== SECCION_SIN_MODULOS
+            && userSectionWhitelist.includes(userDefaultSectionKey)) {
             return userDefaultSectionKey;
         }
-        return userSectionWhitelist[0];
+        // Con "Ninguno" la lista sólo trae el centinela: no hay sección a la
+        // cual mandar al usuario (quien llama muestra el lanzador vacío).
+        return userSectionWhitelist.find(key => key !== SECCION_SIN_MODULOS) || null;
     }
     return 'operaciones-totales';
 }
@@ -2289,11 +2297,9 @@ function applySectionPermissions(userName) {
 
     const role = sessionStorage.getItem('user_role') || 'viewer';
     const isColabOnly = ['colab_viewer', 'colab_editor'].includes(role);
-    // Conciliación es un módulo base para toda sesión válida (la base de datos
-    // conserva sus propios permisos RLS). Mantener esta regla igual que
-    // js/permissions.js evita que una capa la muestre y la otra la vuelva a
-    // ocultar durante el arranque.
-    const authenticatedCoreSections = ['conciliacion'];
+    // Conciliación ya no es un módulo base: como cualquier otro, sólo se ve si
+    // el administrador la marcó (o si el usuario tiene acceso total). Mantener
+    // esta regla igual que js/permissions.js.
 
     // admin y superadmin: acceso total siempre, sin importar allowed_sections
     const isFullAdmin = ['admin', 'superadmin'].includes(role);
@@ -2312,33 +2318,29 @@ function applySectionPermissions(userName) {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed) && parsed.length > 0) {
                 explicitWhitelist = parsed.map(s => normalizeSectionKey(s)).filter(Boolean);
-                authenticatedCoreSections.forEach(sectionKey => {
-                    if (!explicitWhitelist.includes(sectionKey)) explicitWhitelist.push(sectionKey);
-                });
             }
         }
     } catch (_) {}
     const hasExplicitWhitelist = explicitWhitelist.length > 0;
 
-    // Roles de solo-Colaboradores: conservar Colaboradores y los módulos base
-    // autenticados. Si el admin designó módulos concretos, se respeta esa lista
-    // ampliada con el mismo núcleo autenticado.
+    // Roles de solo-Colaboradores: conservar únicamente Colaboradores. Si el
+    // admin designó módulos concretos, se respeta esa lista.
     if (isColabOnly && !hasExplicitWhitelist) {
         document.querySelectorAll('.menu-item[data-section]').forEach(item => {
-            if (item.dataset.section !== 'colaboradores' && !authenticatedCoreSections.includes(item.dataset.section)) {
+            if (item.dataset.section !== 'colaboradores') {
                 item.classList.add('perm-hidden');
             }
         });
         document.querySelectorAll('.content-section').forEach(sectionEl => {
             const key = permisoDeSeccion((sectionEl.id || '').replace(/-section$/, ''));
-            if (key !== 'colaboradores' && !authenticatedCoreSections.includes(key)) {
+            if (key !== 'colaboradores') {
                 sectionEl.classList.add('perm-hidden');
                 sectionEl.classList.remove('active');
             }
         });
         hideEmptySidebarGroups();
         // No navegar automáticamente: showMainApp restaurará el hash solicitado
-        // (#conciliacion incluido) y sólo usará el menú cuando no exista ruta.
+        // y sólo usará el menú cuando no exista ruta.
         return;
     }
 
@@ -2368,11 +2370,6 @@ function applySectionPermissions(userName) {
 
     // Preferir Supabase; caer en legacy si no hay Supabase
     const rawWhitelist = supabaseList.length ? supabaseList : legacyList;
-    if (rawWhitelist.length) {
-        authenticatedCoreSections.forEach(sectionKey => {
-            if (!rawWhitelist.includes(sectionKey)) rawWhitelist.push(sectionKey);
-        });
-    }
 
     // Permitir siempre la sección de historia y biblioteca SOLO en whitelist legacy (no Supabase)
     if (rawWhitelist.length && !supabaseList.length) {
@@ -2386,10 +2383,12 @@ function applySectionPermissions(userName) {
         const preferred = normalizeSectionKey(user?.defaultSection);
         userDefaultSectionKey = preferred && userSectionWhitelist.includes(preferred)
             ? preferred
-            : userSectionWhitelist[0];
+            : (userSectionWhitelist.find(key => key !== SECCION_SIN_MODULOS) || null);
 
         document.querySelectorAll('.menu-item[data-section]').forEach((item) => {
-            const sectionKey = normalizeSectionKey(item.dataset.section);
+            // Igual que con las secciones: un enlace a una página de otro módulo
+            // (p. ej. Estadísticas de equipaje → BHS) se ve con ese módulo.
+            const sectionKey = permisoDeSeccion(normalizeSectionKey(item.dataset.section));
             if (!userSectionWhitelist.includes(sectionKey)) {
                 item.classList.add('perm-hidden');
             }
@@ -2631,7 +2630,6 @@ async function refreshUserPermissionsFromServer() {
             const abierta = document.querySelector('.content-section.active');
             const claveAbierta = abierta ? String(abierta.id || '').replace(/-section$/, '') : '';
             const sigueDentro = !claveAbierta
-                || claveAbierta === 'conciliacion'
                 || isSectionAllowed(claveAbierta);
             if (!sigueDentro) {
                 const destino = getDefaultAllowedSection();
@@ -3932,12 +3930,10 @@ function restoreSectionFromNavigation(sectionKey, options = {}) {
     if (!key || !/^[a-z0-9-]+$/i.test(key)) return false;
     const target = document.getElementById(`${resolveSectionHostKey(key)}-section`);
     if (!target) return false;
-    const isAuthenticatedCore = key === 'conciliacion';
-    if (!isAuthenticatedCore && !isSectionAllowed(key)) return false;
+    // Conciliación ya no tiene paso garantizado: se revisa como cualquier módulo.
+    if (!isSectionAllowed(key)) return false;
 
-    if (isAuthenticatedCore) target.classList.remove('perm-hidden', 'd-none-auth');
     const links = [...document.querySelectorAll(`.menu-item[data-section="${key}"]`)];
-    if (isAuthenticatedCore) links.forEach(link => link.classList.remove('perm-hidden', 'd-none-auth'));
     const link = links.find(item =>
         !item.classList.contains('perm-hidden') && !item.classList.contains('d-none-auth')
     ) || links[0] || null;
@@ -13345,7 +13341,7 @@ function showMainApp() {
                     && !requestedLink.classList.contains('perm-hidden')
                     && !(requestedSection && requestedSection.classList.contains('perm-hidden'))
                     && isSectionAllowed(requestedSectionKey);
-                if (requestedAllowed || requestedSectionKey === 'conciliacion') {
+                if (requestedAllowed) {
                     restoreSectionFromNavigation(requestedSectionKey);
                 } else {
                     // URL raíz o enlace no autorizado: mostrar el lanzador de

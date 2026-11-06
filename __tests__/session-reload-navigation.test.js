@@ -53,15 +53,19 @@ describe('restauracion de sesion y apartado durante reload', () => {
     expect(script).toContain('restoreActiveTab(targetKey, target)');
   });
 
-  test('Conciliacion permanece visible para toda sesion autenticada', () => {
-    expect(script).toContain("const authenticatedCoreSections = ['conciliacion']");
-    expect(script).toContain("!authenticatedCoreSections.includes(item.dataset.section)");
-    expect(script).toContain("!authenticatedCoreSections.includes(key)");
+  test('Conciliacion solo se ve si el administrador la marco (ya no es modulo base)', () => {
+    expect(script).not.toContain('authenticatedCoreSections');
+    expect(script).not.toContain('isAuthenticatedCore');
+    expect(script).not.toContain("requestedSectionKey === 'conciliacion'");
     expect(html).toMatch(/<script src="script\.js\?v=[^"]+" defer><\/script>/);
-    expect(script).toContain("const isAuthenticatedCore = key === 'conciliacion'");
-    expect(script).toContain("target.classList.remove('perm-hidden', 'd-none-auth')");
+    // La restauracion de ruta revisa el permiso como en cualquier otro modulo.
+    const restore = script.slice(script.indexOf('function restoreSectionFromNavigation'));
+    expect(restore.slice(0, 600)).toContain('if (!isSectionAllowed(key)) return false;');
     expect(script).toContain("document.body.classList.add('navdeck-active')");
     expect(script).toContain('restoreSectionFromNavigation(requestedSectionKey)');
+    // Y la otra capa de permisos tampoco la fuerza.
+    const permissionsJs = fs.readFileSync(path.join(__dirname, '..', 'js', 'permissions.js'), 'utf8');
+    expect(permissionsJs).toContain("const alwaysVisible = ['historia', 'biblioteca'];");
   });
 
   // El sondeo ya NO reafirma la ruta. Reafirmarla era la navegacion que sobraba:
