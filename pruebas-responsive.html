@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Pruebas responsive · Operaciones AIFA</title>
+<!--
+  Herramienta de pruebas: carga una página del aplicativo (por defecto
+  index.html#setp) dentro de marcos con medidas de celular, tableta y
+  computadora. Ábrela con Live Server: http://127.0.0.1:5500/pruebas-responsive.html
+  Parámetros opcionales: ?url=index.html%23setp&disp=ipad-air&modo=comparar
+  La sesión es la misma del aplicativo: si un marco pide iniciar sesión, entra
+  una vez y presiona "Recargar".
+-->
+<style>
+  :root{
+    --bg:#e9eef5;--bar:#0f172a;--bar-2:#1e293b;--ink:#0f172a;--muted:#64748b;--line:#cbd5e1;
+    --chip:#334155;--chip-on:#2563eb;--frame:#111827;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;}
+  button,input,select{font:inherit;}
+  .bar{background:var(--bar);color:#e2e8f0;padding:10px 14px;display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;}
+  .brand{font-weight:800;letter-spacing:.02em;white-space:nowrap;margin-right:4px;}
+  .brand small{display:block;font-weight:500;color:#94a3b8;font-size:.72rem;letter-spacing:0;}
+  .url{display:flex;flex:1 1 320px;min-width:220px;gap:6px;}
+  .url input{flex:1;min-width:0;border:1px solid #334155;background:#0b1220;color:#e2e8f0;border-radius:8px;padding:7px 10px;}
+  .btn{border:1px solid #334155;background:var(--bar-2);color:#e2e8f0;border-radius:8px;padding:7px 12px;cursor:pointer;white-space:nowrap;}
+  .btn:hover{background:#273449;}
+  .btn.on{background:var(--chip-on);border-color:var(--chip-on);color:#fff;}
+  .btn:focus-visible,.chip:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid rgba(96,165,250,.6);outline-offset:1px;}
+  .bar-2{background:var(--bar-2);color:#cbd5e1;padding:8px 14px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;border-top:1px solid #0b1220;}
+  .grp{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+  .grp-t{font-size:.68rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;margin-right:2px;}
+  .chip{border:1px solid #475569;background:transparent;color:#e2e8f0;border-radius:999px;padding:4px 11px;cursor:pointer;font-size:.8rem;white-space:nowrap;}
+  .chip:hover{border-color:#93c5fd;}
+  .chip.on{background:var(--chip-on);border-color:var(--chip-on);color:#fff;}
+  .chip span{color:#94a3b8;font-size:.72rem;margin-left:4px;}
+  .chip.on span{color:#dbeafe;}
+  .dims{display:flex;gap:6px;align-items:center;}
+  .dims input{width:74px;border:1px solid #475569;background:#0b1220;color:#e2e8f0;border-radius:8px;padding:5px 8px;}
+  .dims select{border:1px solid #475569;background:#0b1220;color:#e2e8f0;border-radius:8px;padding:5px 8px;}
+  .stage{flex:1;overflow:auto;padding:18px;display:flex;gap:22px;align-items:flex-start;justify-content:center;flex-wrap:wrap;}
+  .dev{display:flex;flex-direction:column;align-items:center;gap:8px;}
+  .dev-head{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;justify-content:center;}
+  .dev-name{font-weight:800;}
+  .dev-meta{color:var(--muted);font-size:.8rem;font-variant-numeric:tabular-nums;}
+  .tag{display:inline-block;border-radius:999px;padding:1px 8px;font-size:.7rem;font-weight:700;background:#dbeafe;color:#1e3a8a;}
+  .tag.cel{background:#fce7f3;color:#9d174d;}
+  .tag.tab{background:#fef3c7;color:#92400e;}
+  .tag.pc{background:#dcfce7;color:#166534;}
+  .shell{background:var(--frame);padding:10px;border-radius:22px;box-shadow:0 18px 40px rgba(15,23,42,.25);}
+  .shell.cel{border-radius:34px;padding:12px 10px;}
+  .shell.pc{border-radius:12px;padding:8px;}
+  .box{position:relative;overflow:hidden;background:#fff;border-radius:12px;}
+  .shell.cel .box{border-radius:24px;}
+  .shell.pc .box{border-radius:6px;}
+  .box iframe{position:absolute;top:0;left:0;border:0;background:#fff;transform-origin:0 0;}
+  .help{padding:6px 14px 10px;color:var(--muted);font-size:.78rem;text-align:center;}
+  .help kbd{background:#fff;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;font-size:.74rem;}
+  @media (max-width:700px){.brand small{display:none;}.stage{padding:10px;}}
+</style>
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">Pruebas responsive<small>Operaciones AIFA · celular, tableta y computadora</small></div>
+    <form class="url" id="f-url" autocomplete="off">
+      <label for="url" class="grp-t" style="align-self:center">Página</label>
+      <input id="url" type="text" spellcheck="false" aria-label="Página a probar">
+      <button class="btn" type="submit" title="Cargar la página">Cargar</button>
+    </form>
+    <button class="btn" id="b-reload" type="button" title="Recargar los marcos (R)">Recargar</button>
+    <button class="btn" id="b-open" type="button" title="Abrir la página en una pestaña nueva">Abrir en pestaña</button>
+  </header>
+
+  <nav class="bar-2" aria-label="Dispositivos">
+    <div class="grp" role="group" aria-label="Modo">
+      <span class="grp-t">Modo</span>
+      <button class="chip" type="button" data-modo="uno">Un dispositivo</button>
+      <button class="chip" type="button" data-modo="comparar">Comparar 3</button>
+    </div>
+    <div class="grp" id="g-cel" role="group" aria-label="Celulares"><span class="grp-t">Celular</span></div>
+    <div class="grp" id="g-tab" role="group" aria-label="Tabletas"><span class="grp-t">Tableta</span></div>
+    <div class="grp" id="g-pc" role="group" aria-label="Computadoras"><span class="grp-t">Computadora</span></div>
+    <div class="grp dims" role="group" aria-label="Medidas">
+      <span class="grp-t">Medida</span>
+      <input id="w" type="number" min="240" max="3840" step="1" aria-label="Ancho en píxeles"> ×
+      <input id="h" type="number" min="240" max="2400" step="1" aria-label="Alto en píxeles">
+      <button class="btn" id="b-rot" type="button" title="Girar vertical/horizontal (G)">Girar</button>
+      <select id="zoom" aria-label="Zoom">
+        <option value="fit">Ajustar</option>
+        <option value="1">100 %</option>
+        <option value="0.75">75 %</option>
+        <option value="0.5">50 %</option>
+      </select>
+    </div>
+  </nav>
+
+  <main class="stage" id="stage" aria-live="polite"></main>
+  <div class="help">
+    Medidas en píxeles CSS (como las reporta el navegador del equipo). <kbd>R</kbd> recarga · <kbd>G</kbd> gira ·
+    <kbd>1</kbd>–<kbd>9</kbd> elige dispositivo. Para probar el tacto (botones de 40 px y letra de 16 px)
+    usa además el modo dispositivo de Chrome: <kbd>F12</kbd> y luego <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd>.
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  var DISPOSITIVOS = [
+    { id: 'iphone-se', tipo: 'cel', nombre: 'iPhone SE', w: 375, h: 667 },
+    { id: 'galaxy-s23', tipo: 'cel', nombre: 'Galaxy S23', w: 360, h: 780 },
+    { id: 'iphone-15', tipo: 'cel', nombre: 'iPhone 15', w: 393, h: 852 },
+    { id: 'pixel-8', tipo: 'cel', nombre: 'Pixel 8 Pro', w: 412, h: 915 },
+    { id: 'ipad-mini', tipo: 'tab', nombre: 'iPad mini', w: 768, h: 1024 },
+    { id: 'galaxy-tab', tipo: 'tab', nombre: 'Galaxy Tab S9', w: 800, h: 1280 },
+    { id: 'ipad-air', tipo: 'tab', nombre: 'iPad Air', w: 820, h: 1180 },
+    { id: 'ipad-pro', tipo: 'tab', nombre: 'iPad Pro 12.9', w: 1024, h: 1366 },
+    { id: 'laptop', tipo: 'pc', nombre: 'Laptop', w: 1280, h: 800 },
+    { id: 'laptop-hd', tipo: 'pc', nombre: 'Laptop HD', w: 1366, h: 768 },
+    { id: 'full-hd', tipo: 'pc', nombre: 'Full HD', w: 1920, h: 1080 }
+  ];
+  var COMPARAR = ['iphone-15', 'ipad-air', 'laptop-hd'];
+  var TIPO = { cel: 'Celular', tab: 'Tableta', pc: 'Computadora' };
+  var KEY = 'aifa-pruebas-responsive';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var guardado = {};
+  try { guardado = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (_) { guardado = {}; }
+  var qs = new URLSearchParams(location.search);
+
+  var st = {
+    url: qs.get('url') || guardado.url || 'index.html#setp',
+    disp: qs.get('disp') || guardado.disp || 'iphone-15',
+    modo: qs.get('modo') || guardado.modo || 'uno',
+    w: guardado.w || 0,
+    h: guardado.h || 0,
+    zoom: guardado.zoom || 'fit'
+  };
+
+  function porId(id) { return DISPOSITIVOS.find(function (d) { return d.id === id; }) || null; }
+  if (!porId(st.disp) && st.disp !== 'medida') st.disp = 'iphone-15';
+  if (!st.w || !st.h) { var d0 = porId(st.disp) || porId('iphone-15'); st.w = d0.w; st.h = d0.h; }
+
+  function guardar() {
+    try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (_) { /* sin almacenamiento */ }
+  }
+
+  // Bootstrap 5 (breakpoints del aplicativo) y modo del módulo SETP por ancho.
+  function breakpoint(w) {
+    if (w >= 1400) return 'xxl';
+    if (w >= 1200) return 'xl';
+    if (w >= 992) return 'lg';
+    if (w >= 768) return 'md';
+    if (w >= 576) return 'sm';
+    return 'xs';
+  }
+  function tipoPorAncho(w) { return w < 600 ? 'cel' : w < 1000 ? 'tab' : 'pc'; }
+
+  function urlSegura(u) {
+    // Sólo páginas del mismo sitio (rutas relativas o el mismo origen).
+    try {
+      var abs = new URL(u, location.href);
+      return abs.origin === location.origin ? abs.href : null;
+    } catch (_) { return null; }
+  }
+
+  // ---------- barra ----------
+
+  function pintarChips() {
+    ['cel', 'tab', 'pc'].forEach(function (t) {
+      var g = $('g-' + t);
+      g.querySelectorAll('.chip').forEach(function (c) { c.remove(); });
+      DISPOSITIVOS.filter(function (d) { return d.tipo === t; }).forEach(function (d) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'chip';
+        b.setAttribute('data-disp', d.id);
+        b.innerHTML = d.nombre + '<span>' + d.w + '×' + d.h + '</span>';
+        g.appendChild(b);
+      });
+    });
+  }
+
+  function marcar() {
+    document.querySelectorAll('[data-disp]').forEach(function (c) {
+      var on = st.modo === 'uno' && c.getAttribute('data-disp') === st.disp;
+      c.classList.toggle('on', on);
+      c.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-modo]').forEach(function (c) {
+      var on = c.getAttribute('data-modo') === st.modo;
+      c.classList.toggle('on', on);
+      c.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    $('w').value = st.w;
+    $('h').value = st.h;
+    $('zoom').value = st.zoom;
+    $('url').value = st.url;
+    var uno = st.modo === 'uno';
+    $('w').disabled = $('h').disabled = $('b-rot').disabled = !uno;
+  }
+
+  // ---------- marcos ----------
+
+  var marcos = [];
+
+  function lista() {
+    if (st.modo === 'comparar') return COMPARAR.map(porId);
+    var d = porId(st.disp);
+    var base = d && d.w === st.w && d.h === st.h ? d : null;
+    var rot = d && d.w === st.h && d.h === st.w;
+    return [{
+      id: st.disp,
+      tipo: d ? d.tipo : tipoPorAncho(st.w),
+      nombre: base ? d.nombre : d && rot ? d.nombre + ' (horizontal)' : 'Medida personalizada',
+      w: st.w, h: st.h
+    }];
+  }
+
+  function escalaPara(d, cuantos) {
+    if (st.zoom !== 'fit') return Number(st.zoom);
+    var stage = $('stage');
+    var disponibleW = (stage.clientWidth - 36 - (cuantos - 1) * 22) / cuantos - 28;
+    var disponibleH = stage.clientHeight - 36 - 70;
+    var s = Math.min(1, disponibleW / d.w, Math.max(disponibleH, 320) / d.h);
+    // En "Comparar" la altura no limita: se desplaza la página hacia abajo.
+    if (cuantos > 1) s = Math.min(1, disponibleW / d.w);
+    return Math.max(0.2, Math.round(s * 1000) / 1000);
+  }
+
+  function construir() {
+    var stage = $('stage');
+    var url = urlSegura(st.url);
+    stage.innerHTML = '';
+    marcos = [];
+    if (!url) {
+      stage.innerHTML = '<p style="color:#b91c1c">Escribe una página de este mismo sitio, por ejemplo <b>index.html#setp</b>.</p>';
+      return;
+    }
+    var devs = lista();
+    devs.forEach(function (d) {
+      var tipoAncho = tipoPorAncho(d.w);
+      var wrap = document.createElement('section');
+      wrap.className = 'dev';
+      wrap.setAttribute('aria-label', d.nombre);
+      wrap.innerHTML =
+        '<div class="dev-head"><span class="dev-name">' + d.nombre + '</span>' +
+        '<span class="tag ' + d.tipo + '">' + TIPO[d.tipo] + '</span>' +
+        '<span class="dev-meta" data-meta></span></div>' +
+        '<div class="shell ' + d.tipo + '"><div class="box"><iframe title="' + d.nombre + '" loading="eager"></iframe></div></div>';
+      stage.appendChild(wrap);
+      var frame = wrap.querySelector('iframe');
+      frame.src = url;
+      marcos.push({ d: d, wrap: wrap, frame: frame, tipoAncho: tipoAncho });
+    });
+    escalar();
+  }
+
+  function escalar() {
+    marcos.forEach(function (m) {
+      var s = escalaPara(m.d, marcos.length);
+      var box = m.wrap.querySelector('.box');
+      box.style.width = Math.round(m.d.w * s) + 'px';
+      box.style.height = Math.round(m.d.h * s) + 'px';
+      m.frame.style.width = m.d.w + 'px';
+      m.frame.style.height = m.d.h + 'px';
+      m.frame.style.transform = 'scale(' + s + ')';
+      m.wrap.querySelector('[data-meta]').textContent =
+        m.d.w + ' × ' + m.d.h + ' px · ' + Math.round(s * 100) + ' % · Bootstrap ' + breakpoint(m.d.w) +
+        ' · SETP ' + ({ cel: 'tarjetas (celular)', tab: 'tarjetas (tableta)', pc: 'tabla' })[m.tipoAncho];
+    });
+  }
+
+  function aplicar() { guardar(); marcar(); construir(); }
+
+  // ---------- eventos ----------
+
+  pintarChips();
+
+  document.querySelector('.bar-2').addEventListener('click', function (e) {
+    var c = e.target.closest('[data-disp],[data-modo]');
+    if (!c) return;
+    if (c.hasAttribute('data-modo')) {
+      st.modo = c.getAttribute('data-modo');
+    } else {
+      var d = porId(c.getAttribute('data-disp'));
+      st.modo = 'uno';
+      st.disp = d.id; st.w = d.w; st.h = d.h;
+    }
+    aplicar();
+  });
+
+  function medida() {
+    var w = Math.round(Number($('w').value)), h = Math.round(Number($('h').value));
+    if (!(w >= 240 && w <= 3840 && h >= 240 && h <= 2400)) { marcar(); return; }
+    st.w = w; st.h = h;
+    var d = DISPOSITIVOS.find(function (x) { return (x.w === w && x.h === h) || (x.w === h && x.h === w); });
+    st.disp = d ? d.id : 'medida';
+    aplicar();
+  }
+  $('w').addEventListener('change', medida);
+  $('h').addEventListener('change', medida);
+
+  function girar() {
+    if (st.modo !== 'uno') return;
+    var t = st.w; st.w = st.h; st.h = t;
+    aplicar();
+  }
+  $('b-rot').addEventListener('click', girar);
+
+  $('zoom').addEventListener('change', function () { st.zoom = this.value; guardar(); escalar(); });
+
+  $('f-url').addEventListener('submit', function (e) {
+    e.preventDefault();
+    st.url = $('url').value.trim() || 'index.html#setp';
+    aplicar();
+  });
+
+  function recargar() {
+    marcos.forEach(function (m) {
+      try { m.frame.contentWindow.location.reload(); } catch (_) { m.frame.src = m.frame.src; }
+    });
+  }
+  $('b-reload').addEventListener('click', recargar);
+
+  $('b-open').addEventListener('click', function () {
+    var u = urlSegura(st.url);
+    if (u) window.open(u, '_blank', 'noopener');
+  });
+
+  var t = null;
+  window.addEventListener('resize', function () { clearTimeout(t); t = setTimeout(escalar, 120); });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test((e.target && e.target.tagName) || '')) return;
+    if (e.key === 'r' || e.key === 'R') { recargar(); e.preventDefault(); }
+    else if (e.key === 'g' || e.key === 'G') { girar(); e.preventDefault(); }
+    else if (/^[1-9]$/.test(e.key)) {
+      var d = DISPOSITIVOS[Number(e.key) - 1];
+      if (d) { st.modo = 'uno'; st.disp = d.id; st.w = d.w; st.h = d.h; aplicar(); }
+    }
+  });
+
+  aplicar();
+})();
+</script>
+</body>
+</html>

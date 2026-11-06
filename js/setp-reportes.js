@@ -139,7 +139,34 @@
             R + ' #setp-detail-usuario{width:auto;min-width:220px;}',
             '@media (max-width:575px){' + R + ' .setp-hist li{flex-wrap:wrap;}' + R + ' .setp-hist-btn{width:100%;}}',
             '@media (max-width:1199px){' + R + ' .setp-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}}',
-            '@media (max-width:575px){' + R + ' .setp-kpis{grid-template-columns:1fr;}}'
+            '@media (max-width:575px){' + R + ' .setp-kpis{grid-template-columns:1fr;}}',
+            // Responsive por ancho del módulo (no de la ventana): así también se
+            // acomoda cuando el menú lateral le quita espacio. Las tablas de
+            // js/setp-recorridos.js y js/setp-formato.js usan este contenedor.
+            R + '{container-type:inline-size;container-name:setp;}',
+            '#setp-section .section-heading{font-size:clamp(1.3rem,4.6vw,2rem);overflow-wrap:anywhere;}',
+            '@container setp (max-width:599.98px){',
+            R + ' .setp-toolbar{flex-direction:column;align-items:stretch;}',
+            R + ' .setp-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}',
+            R + ' .setp-filters > div:first-child{grid-column:1/-1;}',
+            R + ' .setp-filters .form-select{min-width:0;width:100%;}',
+            R + ' .setp-actions .btn{flex:1 1 auto;}',
+            R + ' .setp-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}',
+            R + ' .setp-kpi{padding:10px 12px;border-radius:12px;}',
+            R + ' .setp-kpi:nth-child(n+3){grid-column:1/-1;}',
+            R + ' .setp-kpi-value{font-size:1.3rem;margin-top:4px;}',
+            R + ' .setp-panel{border-radius:12px;}',
+            R + ' .setp-panel-head{padding:10px 12px;}',
+            R + ' .setp-detail-tools,' + R + ' #setp-detail-usuario{width:100%;min-width:0;}',
+            R + ' .setp-hist li{padding:9px 12px;}',
+            '}',
+            // Pantallas táctiles (celular y tableta): controles de al menos 40 px y
+            // letra de 16 px en campos para que iOS no acerque la página al tocarlos.
+            '@media (pointer:coarse){',
+            R + ' .btn-sm{min-height:40px;}',
+            R + ' .form-select-sm,' + R + ' .form-control-sm{min-height:40px;font-size:16px;}',
+            R + ' .btn-group-sm > .btn{min-width:40px;}',
+            '}'
         ].join('');
         document.head.appendChild(style);
     }

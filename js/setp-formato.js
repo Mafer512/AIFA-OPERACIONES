@@ -656,7 +656,16 @@
             M + ' .setp-fmt-photo-preview{max-width:100%;max-height:140px;border-radius:8px;margin-top:6px;display:block;}',
             M + ' .setp-fmt-preview{width:100%;height:68vh;border:1px solid #cbd5e1;border-radius:10px;background:#e5e7eb;}',
             M + ' .setp-fmt-badge-ok{background:#ecfdf5;color:#047857;}',
-            M + ' .setp-fmt-badge-pend{background:#fef2f2;color:#b91c1c;}'
+            M + ' .setp-fmt-badge-pend{background:#fef2f2;color:#b91c1c;}',
+            // Celular: el Periodo del oficio baja a su propio renglón y los pasos se deslizan.
+            '@media (max-width:575.98px){' +
+                M + ' .modal-header{flex-wrap:wrap;gap:8px;}' +
+                M + ' .modal-header > .ms-auto{order:3;width:100%;margin:0 !important;}' +
+                M + ' #setp-fmt-periodo{flex:1 1 auto;width:auto !important;}' +
+                M + ' .setp-fmt-steps{flex-wrap:nowrap;overflow-x:auto;white-space:nowrap;}' +
+                M + ' .setp-fmt-card{padding:12px;}' +
+                M + ' .setp-fmt-preview{height:60vh;}' +
+            '}'
         ].join('');
         document.head.appendChild(style);
     }
@@ -1257,8 +1266,51 @@
             R + ' .setp-rep-local{display:inline-flex;align-items:center;margin-left:8px;padding:1px 8px;border-radius:999px;background:#fffbeb;color:#92400e;font-weight:600;}',
             R + ' .setp-rep-ok{background:#ecfdf5;color:#047857;}',
             R + ' .setp-rep-pend{background:#fef2f2;color:#b91c1c;}'
-        ].join('');
+        ].concat(repEstilosResponsive(R)).join('');
         document.head.appendChild(style);
+    }
+
+    // Celular y tableta (#setp-root < 1000 px, contenedor "setp" de js/setp-reportes.js):
+    // cada hallazgo, también el que se captura o edita, se ve como tarjeta y los
+    // títulos de grupo como franjas. Las etiquetas siguen el orden de las columnas.
+    function repEstilosResponsive(R) {
+        var T = R + ' .setp-rep-table';
+        var etiquetas = ['No.', 'Fecha de reporte', 'Ubicación de incidencia', 'Descripción de incidencia', 'Evidencia fotográfica', 'Estatus', 'Fecha de solución', 'Evidencia solucionada'];
+        var areas = ['no', 'fec', 'ubi', 'des', 'evi', 'est', 'fso', 'evs', 'acc'];
+        var card = T + ' tr:not(.setp-rep-group)';
+        return [
+            '@container setp (max-width:999.98px){',
+            R + ' .table-responsive{overflow:visible;}',
+            R + ' .table-responsive::after{display:none !important;}',
+            T + ',' + T + ' tbody{display:block;width:100%;}',
+            T + ' thead{display:none;}',
+            T + ' tbody{padding:0 12px 4px;}',
+            T + ' tr.setp-rep-group{display:block;margin:0 -12px 10px;}',
+            T + ' tr.setp-rep-group th{display:block;white-space:normal;padding:10px 16px;line-height:1.6;}',
+            card + '{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"no fec ubi acc" "des des des des" "evi est fso evs";',
+            'gap:10px 14px;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px;margin-bottom:12px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.04);}',
+            T + ' tr.setp-rep-edit{background:#f8fbff;border-color:#bfdbfe;}',
+            T + ' td{display:block;border:0;padding:0;min-width:0;background:transparent !important;box-shadow:none !important;text-align:left !important;}',
+            T + ' td::before{display:block;font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;margin-bottom:3px;}',
+            etiquetas.map(function (e, i) { return T + ' td:nth-child(' + (i + 1) + ')::before{content:"' + e + '";}'; }).join(''),
+            areas.map(function (a, i) { return card + ' td:nth-child(' + (i + 1) + '):not([colspan]){grid-area:' + a + ';}'; }).join(''),
+            T + ' td:nth-child(9){justify-self:end;align-self:start;}',
+            // "Sin hallazgos." y "Cargando…": aviso simple, sin etiqueta.
+            T + ' td[colspan]{grid-column:1/-1;text-align:center !important;}',
+            T + ' td[colspan]::before{content:none;}',
+            T + ' tr:has(> td[colspan]){border-style:dashed;box-shadow:none;background:transparent;}',
+            R + ' .setp-rep-table td.setp-rep-desc{min-width:0;}',
+            T + ' .form-control,' + T + ' .form-select{min-width:0 !important;width:100%;}',
+            '}',
+            '@container setp (max-width:599.98px){',
+            card + '{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"no acc" "fec ubi" "des des" "evi evs" "est fso";gap:8px 12px;padding:12px;}',
+            R + ' .setp-rep-thumb,' + R + ' .setp-rep-nothumb{width:100%;max-width:200px;height:96px;}',
+            R + ' .setp-rep-head{padding:12px;}',
+            R + ' .setp-rep-actions{width:100%;}',
+            R + ' .setp-rep-actions .btn{flex:1 1 auto;}',
+            R + ' #setp-rep-periodo{flex:1 1 150px;width:auto !important;}',
+            '}'
+        ];
     }
 
     function repShell() {

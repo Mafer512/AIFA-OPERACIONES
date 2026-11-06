@@ -238,10 +238,52 @@
             R + ' .setp-rec-mas{width:48px;height:48px;border-style:dashed;display:inline-flex;align-items:center;justify-content:center;}',
             R + ' .setp-rec-pend{color:#b45309;font-weight:600;}',
             R + ' .setp-rec-desc-btn{font-size:.72rem;text-decoration:none;}'
-        ].join('');
+        ].concat(estilosResponsive(R)).join('');
         document.head.appendChild(style);
     }
 
+
+    // Celular y tableta: con #setp-root más angosto que 1000 px (contenedor "setp",
+    // js/setp-reportes.js) cada recorrido se ve como tarjeta en lugar de renglón,
+    // sin deslizar a los lados. Tableta: 3 renglones; celular (< 600 px): 2 columnas.
+    // Las etiquetas salen del orden de las columnas de la tabla.
+    function estilosResponsive(R) {
+        var T = R + ' .setp-rec-table';
+        var etiquetas = ['No. de empleado', 'Nombre y apellido', 'Cargo', 'Área de recorrido', 'Hora de inicio', 'Hora de término', 'Evidencia'];
+        var areas = ['no', 'nom', 'car', 'area', 'ini', 'fin', 'ev', 'acc'];
+        return [
+            '@container setp (max-width:999.98px){',
+            R + ' .table-responsive{overflow:visible;}',
+            R + ' .table-responsive::after{display:none !important;}',
+            T + ',' + T + ' tbody{display:block;width:100%;}',
+            T + ' thead{display:none;}',
+            T + ' tbody{padding:12px;}',
+            T + ' tr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"no nom car acc" "area area ini fin" "ev ev ev ev";',
+            'gap:10px 14px;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px;margin-bottom:12px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.04);}',
+            T + ' tr:last-child{margin-bottom:0;}',
+            T + ' tr.setp-rec-curso{background:#fffbeb;border-color:#fcd34d;}',
+            T + ' tr.setp-rec-nuevo{background:#f8fbff;border-color:#bfdbfe;}',
+            T + ' tr.setp-rec-hint{display:block;border-style:dashed;box-shadow:none;}',
+            T + ' td{display:block;border:0;padding:0;min-width:0;background:transparent !important;box-shadow:none !important;}',
+            T + ' td:empty{display:none;}',
+            T + ' td::before{display:block;font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;margin-bottom:3px;}',
+            T + ' tr.setp-rec-hint td::before{content:none;}',
+            etiquetas.map(function (e, i) { return T + ' td:nth-child(' + (i + 1) + ')::before{content:"' + e + '";}'; }).join(''),
+            areas.map(function (a, i) { return T + ' tr:not(.setp-rec-hint) td:nth-child(' + (i + 1) + '){grid-area:' + a + ';}'; }).join(''),
+            T + ' td:nth-child(8){justify-self:end;align-self:start;}',
+            R + ' .setp-rec-area,' + R + ' .setp-rec-turno{min-width:0;max-width:none;width:100%;}',
+            R + ' .setp-rec-turno{margin-top:6px;}',
+            R + ' .setp-rec-file{max-width:100%;}',
+            '}',
+            '@container setp (max-width:599.98px){',
+            T + ' tbody{padding:10px;}',
+            T + ' tr{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"nom acc" "no car" "area area" "ini fin" "ev ev";gap:8px 12px;padding:12px;}',
+            // Botones de captura a todo lo ancho de la tarjeta (fáciles de tocar).
+            T + ' td:nth-child(5) .btn,' + T + ' td:nth-child(6) .btn,' + T + ' td:nth-child(7) > .btn:not(.btn-link){width:100%;}',
+            R + ' .setp-rec-thumb{width:120px;height:80px;}',
+            '}'
+        ];
+    }
 
     // Vista previa sin guardar: tocarla permite elegir otra.
     function evidenciaPendiente(r, p) {
