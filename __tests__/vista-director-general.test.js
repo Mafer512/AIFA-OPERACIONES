@@ -30,8 +30,9 @@ const FIN_ACORDEON = '</div><!-- /accordion -->';
 const acordeon = html.slice(html.indexOf('<div class="accordion accordion-flush" id="yoy-accordion">'), html.indexOf(FIN_ACORDEON) + FIN_ACORDEON.length);
 const $ = (id) => document.getElementById(id);
 const esperar = () => new Promise((r) => setTimeout(r, 0));
-const ordenAccesos = (raizAccesos) => [...raizAccesos.querySelectorAll(':scope > a.si-quick')].map((a) => a.dataset.section);
-const ORDEN = ['operaciones-totales', 'inicio', 'frecuencias-semana', 'conciliacion', 'aviacion-general', 'puntualidad-agosto', 'demoras'];
+// Los accesos internos se identifican por su sección; los externos (SMS), por su enlace.
+const ordenAccesos = (raizAccesos) => [...raizAccesos.querySelectorAll(':scope > a.si-quick')].map((a) => a.dataset.section || a.getAttribute('href'));
+const ORDEN = ['operaciones-totales', 'inicio', 'frecuencias-semana', 'conciliacion', 'aviacion-general', 'http://localhost:3000/reportes/general', 'puntualidad-agosto', 'demoras'];
 
 function montar(rol) {
     document.body.className = 'navdeck-mode';
