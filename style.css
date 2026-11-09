@@ -20877,6 +20877,44 @@ body.conci-manifest-workspace .app-body {
    overflow: hidden;
 }
 
+/* Barra HOY / MAÑANA: es del Inicio. Dentro de un módulo sólo quitaba espacio,
+   así que se oculta mientras hay una sección abierta (navdeck-active) y vuelve
+   al regresar al Inicio. Con el Mapa Interactivo abierto se queda (mapa-abierto,
+   js/mapa-interactivo.js): ahí está el botón para cerrarlo y el mapa se acomoda
+   debajo de ella. Mientras está oculta, el mapa se abre desde #btn-mapa-header. */
+body.navdeck-mode.navdeck-active:not(.mapa-abierto) #ag-today-bar {
+   display: none !important;
+}
+
+/* Dentro de un módulo, sin la barra de agenda, el contenido sube: menos aire
+   entre el encabezado y el módulo (el Inicio conserva sus medidas). El
+   !important es porque la regla de una sola fila del encabezado (más abajo,
+   min-width: 992px) tiene el mismo peso y gana por orden. */
+body.navdeck-mode.navdeck-active .header {
+   margin-bottom: .5rem !important;
+}
+
+body.navdeck-mode.navdeck-active .main-content {
+   padding-top: .5rem !important;
+}
+
+/* Por cómo está anidado el HTML, varios módulos (de Parte de Operaciones en
+   adelante: Conciliación, Seguimiento, Muebles y Bienes, Coord. Auditoría…)
+   quedan fuera de <main> en la página real. Cuando el abierto es uno de ellos,
+   <main> queda vacío pero seguía ocupando su relleno arriba del módulo. */
+body.navdeck-mode.navdeck-active .main-content:not(:has(.content-section.active)) {
+   padding-top: 0 !important;
+   padding-bottom: 0 !important;
+}
+
+#btn-mapa-header {
+   display: none !important;
+}
+
+body.navdeck-mode.navdeck-active:not(.mapa-abierto) #btn-mapa-header {
+   display: inline-flex !important;
+}
+
 /* Estos bloques siguen en el DOM y reaparecen al salir de Manifiestos. */
 body.conci-manifest-workspace .header,
 body.conci-manifest-workspace #ag-today-bar,

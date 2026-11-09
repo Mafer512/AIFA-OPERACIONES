@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20261103-emblema-encabezado">
+    <link rel="stylesheet" href="style.css?v=20261105-espacio-modulos-2">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20261012-director-general">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -1801,6 +1801,16 @@ FF
                                 <div class="utc-clock" id="utc-clock">00:00:00</div>
                             </div>
                         </div>
+                        <!-- Mapa Interactivo dentro de un módulo: ahí la barra HOY / MAÑANA se oculta
+                             (con su botón del mapa), así que el acceso pasa aquí. Sólo se ve entonces
+                             (reglas #btn-mapa-header en style.css). -->
+                        <button id="btn-mapa-header"
+                            class="btn btn-outline-secondary btn-sm align-items-center gap-2 header-action-btn"
+                            type="button" onclick="toggleMapaInteractivo()"
+                            title="Abrir Mapa Interactivo del Aeropuerto" aria-label="Abrir Mapa Interactivo del Aeropuerto">
+                            <i class="fas fa-map-marked-alt" aria-hidden="true"></i>
+                            <span class="d-none d-xl-inline">Mapa</span>
+                        </button>
                         <button id="btn-global-refresh"
                             class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-2 header-action-btn"
                             type="button"
@@ -41864,9 +41874,9 @@ FF
     <script src="js/vehiculos.js?v=2"></script>
     <script src="js/muebles-bienes.js?v=8"></script>
     <!-- Seguimiento · Dirección de Operación (sólo cuentas con acceso; db/create_seguimiento.sql) -->
-    <link rel="stylesheet" href="seguimiento.css?v=8">
-    <script src="js/seguimiento-core.js?v=6"></script>
-    <script src="js/seguimiento.js?v=10"></script>
+    <link rel="stylesheet" href="seguimiento.css?v=16">
+    <script src="js/seguimiento-core.js?v=8"></script>
+    <script src="js/seguimiento.js?v=18"></script>
     <script src="js/email-analisis.js"></script>
     <script src="js/agenda.js?v=20261030-sin-realtime"></script>
     <script src="js/agenda-assistant.js?v=2"></script>
@@ -44997,6 +45007,6 @@ window.AeropuertosModule = (function () {
         </div>
     </div>
 </div>
-<script src="js/mapa-interactivo.js?v=20260616m" defer></script>
+<script src="js/mapa-interactivo.js?v=20261105-barra" defer></script>
 </body>
 </html>

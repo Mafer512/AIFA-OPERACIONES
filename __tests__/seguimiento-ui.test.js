@@ -167,6 +167,15 @@ test('pinta las tareas agrupadas por subdirección', async () => {
     expect(fila('a1').querySelector('[data-accion="comentarios"]').textContent.trim()).toBe('1');
 });
 
+test('un grupo sin tareas es una sola línea: sin encabezados de columna, con su renglón para agregar', () => {
+    const vacio = [...document.querySelectorAll('#seg-body .seg-group.is-vacio')]
+        .find(g => g.textContent.includes('Servicios Conexos'));
+    expect(vacio).toBeTruthy();
+    expect(vacio.querySelector('.seg-th')).toBeNull();
+    expect(vacio.querySelector('input[data-add="SSC"]')).not.toBeNull();
+    expect(vacio.textContent).toContain('Sin tareas abiertas');
+});
+
 test('avisa lo vencido arriba y en los indicadores', () => {
     expect(document.getElementById('seg-alerta').textContent).toContain('1 tarea vencida');
     const kpi = document.querySelector('[data-kpi="vencidas"] .seg-kpi-val');
@@ -459,11 +468,68 @@ test('reabrir una renovación ofrece quitar la siguiente que ya se programó', a
     await esperar();
     document.querySelector('#seg-drawer .seg-barra-hecho [data-dr="completar"]').click();
     await esperar(12);
-    expect(window.confirm).toHaveBeenCalled();
+    // La pregunta es el diálogo del módulo, no el cuadro del navegador.
+    expect(window.confirm).not.toHaveBeenCalled();
+    const dialogo = document.getElementById('seg-confirm');
+    expect(dialogo.hidden).toBe(false);
+    expect(dialogo.textContent).toContain('¿Quitar la siguiente renovación?');
+    dialogo.querySelector('[data-cf="si"]').click();
+    await esperar(12);
     expect(db.seguimiento_tareas.find(t => t.id === 'a2').estatus).toBe('pendiente');
     expect(db.seguimiento_tareas.find(t => t.id === siguiente.id).estatus).toBe('cancelada');
     expect(db.seguimiento_tareas.find(t => t.id === 'a2').siguiente_id).toBeNull();
     document.querySelector('#seg-drawer [data-dr="cerrar"]').click();
+});
+
+test('eliminar pregunta con un diálogo propio que dice qué se pierde y ofrece cancelarla', async () => {
+    window.confirm = jest.fn(() => true);
+    const input = document.querySelector('#seg-body input[data-add="SSO"]');
+    input.value = 'Tarea para borrar';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await esperar();
+    const t = db.seguimiento_tareas.find(x => x.titulo === 'Tarea para borrar');
+    const abrirMenuYEliminar = async () => {
+        window.seguimientoModule.abrir(t.id);
+        await esperar();
+        document.querySelector('#seg-drawer [data-dr="mas"]').click();
+        [...document.querySelectorAll('#seg-menu .seg-menu-item')].find(b => b.textContent.includes('Eliminar definitivamente')).click();
+        await esperar(2);
+    };
+    const dialogo = document.getElementById('seg-confirm');
+
+    // 1. «No, conservarla»: no pasa nada.
+    await abrirMenuYEliminar();
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(dialogo.hidden).toBe(false);
+    expect(dialogo.textContent).toContain('¿Eliminar esta tarea definitivamente?');
+    expect(dialogo.textContent).toContain('Tarea para borrar');
+    expect(dialogo.textContent).toContain('No se puede deshacer');
+    expect(dialogo.querySelectorAll('.seg-confirm-lista li').length).toBeGreaterThanOrEqual(3);
+    expect(document.activeElement && document.activeElement.dataset.cf).toBe('no');   // el foco empieza en no borrar
+    dialogo.querySelector('[data-cf="no"]').click();
+    await esperar(4);
+    expect(dialogo.hidden).toBe(true);
+    expect(db.seguimiento_tareas.some(x => x.id === t.id)).toBe(true);
+
+    // 2. «Cancelarla en su lugar»: se conserva y queda Cancelada.
+    await abrirMenuYEliminar();
+    dialogo.querySelector('[data-cf="alterno"]').click();
+    await esperar(8);
+    expect(db.seguimiento_tareas.find(x => x.id === t.id).estatus).toBe('cancelada');
+
+    // 3. «Eliminar definitivamente»: se borra.
+    await abrirMenuYEliminar();
+    expect(dialogo.querySelector('[data-cf="alterno"]')).toBeNull();   // ya está cancelada
+    dialogo.querySelector('[data-cf="si"]').click();
+    await esperar(8);
+    expect(db.seguimiento_tareas.some(x => x.id === t.id)).toBe(false);
+});
+
+test('ya no queda ningún cuadro del navegador en el módulo', () => {
+    // Sólo queda el respaldo dentro de confirmar(), por si la capa del diálogo no existe.
+    const usos = leer('js/seguimiento.js').match(/window\.confirm\(/g) || [];
+    expect(usos).toHaveLength(1);
+    expect(leer('js/seguimiento.js')).toContain("if (!el) return Promise.resolve(window.confirm(");
 });
 
 test('tablero y calendario se pintan con las mismas tareas', async () => {

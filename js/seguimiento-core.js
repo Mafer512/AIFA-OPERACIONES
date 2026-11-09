@@ -556,6 +556,274 @@
     /** Una igual en la misma subdirección no se crea: es la misma tarea. */
     const bloqueaDuplicado = candidatas => (candidatas || []).some(c => c.tipo === 'igual' && c.mismaSubdireccion);
 
+    /* ---------- Tablero de mando ----------
+       Lo que un director, subdirector o gerente necesita leer al entrar: qué
+       está vencido, qué vence pronto, qué está detenido y dónde, sólo de su
+       parte de la Dirección. */
+
+    // Claves de área (tabla areas / permisos del usuario) → subdirección de Seguimiento.
+    const CLAVES_AREA = Object.freeze({ 'SD-SO': 'SSO', 'SD-SA': 'SSA', 'SD-SC': 'SSC', 'SD-ING': 'SI', SGE: 'SGE', SSO: 'SSO', SSA: 'SSA', SSC: 'SSC', SI: 'SI' });
+    const ROLES_DIRECCION = Object.freeze(['admin', 'superadmin', 'director_general']);
+    const ALCANCE_TODO = Object.freeze({ tipo: 'todo', subdireccion: null, gerencia: null });
+
+    /** De qué parte de la Dirección es responsable quien entra, según su área:
+        { tipo: 'todo' | 'subdireccion' | 'gerencia', subdireccion, gerencia }.
+        area = { clave, nombre, nivel, padre: { clave, nombre } } (o null). */
+    function alcanceDeArea(area, rol) {
+        if (ROLES_DIRECCION.includes(String(rol || '').trim().toLowerCase())) return ALCANCE_TODO;
+        if (!area) return ALCANCE_TODO;
+        const clave = String(area.clave || '').trim().toUpperCase();
+        if (clave === 'DO' || Number(area.nivel) === 1) return ALCANCE_TODO;
+        const n = normalizar(area.nombre);
+        const sd = CLAVES_AREA[clave] ? SUBDIR[CLAVES_AREA[clave]]
+            : SUBDIRECCIONES.find(x => x.clave !== 'DO' && n && (n === normalizar(x.nombre) || n === normalizar(x.corto) || n === normalizar(x.nombre.replace(/^Subdirecci[oó]n de /, ''))));
+        if (sd) return { tipo: 'subdireccion', subdireccion: sd.clave, gerencia: null };
+        for (const x of SUBDIRECCIONES) {
+            const g = x.gerencias.find(nombre => normalizar(nombre) === n);
+            if (g) return { tipo: 'gerencia', subdireccion: x.clave, gerencia: g };
+        }
+        // Una gerencia que no está en el catálogo: se toma la subdirección de su área de arriba.
+        if (area.padre) {
+            const arriba = alcanceDeArea(area.padre, '');
+            if (arriba.tipo === 'subdireccion') return arriba;
+        }
+        return ALCANCE_TODO;
+    }
+
+    /** Las vistas que puede elegir: la suya y las más amplias (gerencia → subdirección → todo). */
+    function alcancesPosibles(base) {
+        const b = base || ALCANCE_TODO;
+        const lista = [];
+        if (b.tipo === 'gerencia') lista.push(b);
+        if (b.tipo === 'gerencia' || b.tipo === 'subdireccion') lista.push({ tipo: 'subdireccion', subdireccion: b.subdireccion, gerencia: null });
+        lista.push(ALCANCE_TODO);
+        return lista;
+    }
+
+    function filtrarAlcance(tareas, alcance) {
+        const a = alcance || ALCANCE_TODO;
+        return (tareas || []).filter(t => {
+            if (a.tipo === 'todo') return true;
+            if (t.subdireccion !== a.subdireccion) return false;
+            return a.tipo !== 'gerencia' || normalizar(t.gerencia) === normalizar(a.gerencia);
+        });
+    }
+
+    /** Qué tan urgente es una tarea abierta para el tablero (menor = antes); null si no requiere atención. */
+    function urgenciaMando(t, hoy) {
+        if (!estaAbierta(t)) return null;
+        const sit = situacion(t, hoy);
+        if (sit === 'vencida') return 0;
+        if (sit === 'vence_hoy') return 1;
+        if (t.estatus === 'detenida') return 2;
+        if (sit === 'por_vencer') return 3;
+        return null;
+    }
+
+    /** Lo que se lee en el tablero: cifras, lo que requiere atención y las renovaciones próximas. */
+    function resumenMando(tareas, hoy, opciones) {
+        const o = Object.assign({ diasRenovacion: 90 }, opciones || {});
+        const abiertas = (tareas || []).filter(estaAbierta);
+        const dias = t => diasEntre(hoy, t.fecha_limite);
+        const atencion = abiertas
+            .map(t => ({ tarea: t, urgencia: urgenciaMando(t, hoy), situacion: situacion(t, hoy), dias: dias(t) }))
+            .filter(x => x.urgencia != null)
+            .sort((a, b) => a.urgencia - b.urgencia
+                || (a.dias == null ? 1e6 : a.dias) - (b.dias == null ? 1e6 : b.dias)
+                || pesoPrioridad(a.tarea) - pesoPrioridad(b.tarea));
+        const renovaciones = abiertas
+            .filter(t => (t.tipo === 'renovacion' || t.tipo === 'certificado') && dias(t) != null && dias(t) >= 0 && dias(t) <= o.diasRenovacion)
+            .map(t => ({ tarea: t, dias: dias(t) }))
+            .sort((a, b) => a.dias - b.dias);
+        const est = estadisticas(tareas, hoy);
+        return {
+            abiertas: abiertas.length,
+            vencidas: est.vencidas,
+            semana: abiertas.filter(t => dias(t) != null && dias(t) >= 0 && dias(t) <= 7).length,
+            detenidas: abiertas.filter(t => t.estatus === 'detenida').length,
+            cumplimiento: est.cumplimiento,
+            atencion,
+            renovaciones,
+        };
+    }
+
+    /** Desglose para el semáforo: por subdirección (todo), por gerencia (una subdirección)
+        o por responsable (una gerencia). [{ clave, nombre, color, abiertas, vencidas, porVencer, nivel }] */
+    function desgloseMando(tareas, alcance, hoy) {
+        const a = alcance || ALCANCE_TODO;
+        const cuenta = lista => {
+            const r = { abiertas: 0, vencidas: 0, porVencer: 0 };
+            lista.forEach(t => {
+                if (!estaAbierta(t)) return;
+                r.abiertas++;
+                const sit = situacion(t, hoy);
+                if (sit === 'vencida') r.vencidas++;
+                else if (sit === 'por_vencer' || sit === 'vence_hoy') r.porVencer++;
+            });
+            r.nivel = r.vencidas ? 'rojo' : r.porVencer ? 'ambar' : r.abiertas ? 'verde' : 'vacio';
+            return r;
+        };
+        const propias = filtrarAlcance(tareas, a);
+        if (a.tipo === 'todo') {
+            return SUBDIRECCIONES.map(sd => Object.assign({ clave: sd.clave, nombre: sd.corto, color: sd.color, icono: sd.icono },
+                cuenta(propias.filter(t => t.subdireccion === sd.clave))));
+        }
+        if (a.tipo === 'subdireccion') {
+            const sd = SUBDIR[a.subdireccion];
+            const filas = (sd ? sd.gerencias : []).map(g => Object.assign({ clave: g, nombre: g, color: sd.color, icono: 'building' },
+                cuenta(propias.filter(t => normalizar(t.gerencia) === normalizar(g)))));
+            const sinGerencia = propias.filter(t => !String(t.gerencia || '').trim());
+            if (sinGerencia.length) filas.push(Object.assign({ clave: '', nombre: 'Toda la subdirección', color: sd ? sd.color : '#64748b', icono: 'sitemap' }, cuenta(sinGerencia)));
+            return filas;
+        }
+        const porPersona = new Map();
+        propias.filter(estaAbierta).forEach(t => {
+            const n = String(t.responsable || '').trim() || 'Sin responsable';
+            if (!porPersona.has(n)) porPersona.set(n, []);
+            porPersona.get(n).push(t);
+        });
+        return [...porPersona.entries()]
+            .map(([n, lista]) => Object.assign({ clave: n, nombre: n, color: colorDeNombre(n), icono: 'user' }, cuenta(lista)))
+            .sort((x, y) => y.vencidas - x.vencidas || y.abiertas - x.abiertas || x.nombre.localeCompare(y.nombre, 'es'));
+    }
+
+    /* ---------- Área de cada cuenta (quién ve y trabaja qué) ----------
+       Misma regla que la base (db/seguimiento_alcance_por_area.sql):
+         admin o sin área         → toda la Dirección
+         subdirección             → subdirector: todo lo de su subdirección
+         subdirección + gerencia  → gerente: su gerencia y lo de toda la
+                                    subdirección (sin gerencia); nada de otras
+                                    gerencias. */
+    const ALCANCE_DIRECCION = Object.freeze({ tipo: 'todo', subdireccion: null, gerencia: null });
+
+    /** El alcance de una cuenta de seguimiento_acceso ({ rol, subdireccion, gerencia }). */
+    function alcanceDeAcceso(fila) {
+        if (!fila || fila.rol === 'admin' || !fila.subdireccion || !SUBDIR[fila.subdireccion]) return ALCANCE_DIRECCION;
+        const g = String(fila.gerencia || '').trim();
+        return g ? { tipo: 'gerencia', subdireccion: fila.subdireccion, gerencia: g }
+            : { tipo: 'subdireccion', subdireccion: fila.subdireccion, gerencia: null };
+    }
+
+    /** ¿Una tarea de esta subdirección y gerencia le toca a quien tiene este alcance? */
+    function dentroDeAlcance(alcance, subdireccion, gerencia) {
+        const a = alcance || ALCANCE_DIRECCION;
+        if (a.tipo === 'todo') return true;
+        if (subdireccion !== a.subdireccion) return false;
+        if (a.tipo === 'subdireccion') return true;
+        const g = normalizar(gerencia);
+        return !g || g === normalizar(a.gerencia);
+    }
+
+    /** Subdirecciones en las que puede trabajar. */
+    function subdireccionesPermitidas(alcance) {
+        const a = alcance || ALCANCE_DIRECCION;
+        return a.tipo === 'todo' ? SUBDIRECCIONES.map(x => x.clave) : [a.subdireccion];
+    }
+
+    /** Gerencias que puede asignar en una subdirección ('' = toda la subdirección), y si puede escribir otra. */
+    function gerenciasPermitidas(alcance, subdireccion) {
+        const a = alcance || ALCANCE_DIRECCION;
+        const sd = SUBDIR[subdireccion];
+        if (!sd || !dentroDeAlcance(a, subdireccion, '')) return { opciones: [], libre: false };
+        if (a.tipo === 'gerencia') return { opciones: ['', a.gerencia], libre: false };
+        return { opciones: [''].concat(sd.gerencias), libre: true };
+    }
+
+    /** Texto para mostrar el área: «Toda la Dirección», «Subdirección de…» o la gerencia. */
+    function nombreAlcanceArea(alcance) {
+        const a = alcance || ALCANCE_DIRECCION;
+        if (a.tipo === 'todo') return 'Toda la Dirección';
+        if (a.tipo === 'gerencia') return a.gerencia;
+        return (SUBDIR[a.subdireccion] || {}).nombre || a.subdireccion;
+    }
+
+    /* ---------- Sugerir el área desde Colaboradores ----------
+       Colaboradores (agenda_2026) sabe en qué subdirección y gerencia está cada
+       persona, si está comisionada y cuál es su puesto. Con eso se propone el
+       área de cada cuenta: el Director ve todo; un subdirector, su subdirección;
+       un gerente (o su gente), su gerencia. Si está comisionado, cuenta donde
+       trabaja de verdad. */
+    const llaveCol = k => normalizar(k).replace(/[^a-z0-9]+/g, ' ').trim();
+    function campoColaborador(fila, prueba) {
+        const k = Object.keys(fila || {}).find(x => prueba(llaveCol(x)));
+        return k ? String(fila[k] == null ? '' : fila[k]).trim() : '';
+    }
+    const esVacioArea = v => !v || /^(0|no|n a|na|-+|ninguna|sin dato)$/.test(llaveCol(v));
+
+    function subdireccionDeTexto(texto) {
+        const n = llaveCol(texto);
+        if (!n) return null;
+        const sd = SUBDIRECCIONES.find(x => {
+            const nombre = llaveCol(x.nombre), corto = llaveCol(x.corto), sinPref = llaveCol(x.nombre.replace(/^Subdirecci[oó]n de /, ''));
+            return n === nombre || n === corto || n === sinPref || (x.clave.length > 2 && n === x.clave.toLowerCase()) || (n.length > 8 && (nombre.includes(n) || n.includes(sinPref)));
+        });
+        if (sd) return sd.clave;
+        return n === 'direccion de operacion' ? 'DO' : null;
+    }
+    function gerenciaDeTexto(subdireccion, texto) {
+        const n = llaveCol(texto);
+        if (!n) return null;
+        // Primero el nombre exacto (en su subdirección y luego en cualquiera), y
+        // sólo después parecidos: «Gerencia de Seguridad» no es la «… Operacional».
+        const orden = (subdireccion && SUBDIR[subdireccion] ? [SUBDIR[subdireccion]] : []).concat(SUBDIRECCIONES);
+        const pruebas = [g => llaveCol(g) === n, g => n.length > 10 && (llaveCol(g).includes(n) || n.includes(llaveCol(g)))];
+        for (const prueba of pruebas) {
+            for (const sd of orden) {
+                const g = sd.gerencias.find(prueba);
+                if (g) return { subdireccion: sd.clave, gerencia: g };
+            }
+        }
+        return null;
+    }
+
+    /** Área sugerida para una persona del directorio: { subdireccion, gerencia, motivo } o null. */
+    function areaDeColaborador(fila) {
+        if (!fila) return null;
+        const puesto = llaveCol(campoColaborador(fila, k => k === 'puesto' || k.startsWith('puesto ') || k === 'cargo'));
+        const flag = llaveCol(campoColaborador(fila, k => k === 'personal comisionado' || (k.includes('comision') && !/direcc|subdir|gerenc|coordin/.test(k))));
+        const comisionado = /^(1|si|true)$/.test(flag) || flag.includes('comisionad');
+        const subCom = campoColaborador(fila, k => /^subdir/.test(k) && k.includes('comision'));
+        const gerCom = campoColaborador(fila, k => /^gerencia/.test(k) && k.includes('comision'));
+        const subOrg = campoColaborador(fila, k => /^subdir/.test(k) && !k.includes('comision'));
+        const gerOrg = campoColaborador(fila, k => /^gerencia/.test(k) && !k.includes('comision'));
+        const usarCom = comisionado && !esVacioArea(subCom);
+        const subTxt = usarCom ? subCom : subOrg;
+        const gerTxt = usarCom ? gerCom : gerOrg;
+        const motivoBase = usarCom ? ' (comisionado)' : '';
+
+        // El Director (no el subdirector) ve toda la Dirección.
+        if (/\bdirector(a)?\b/.test(puesto) && !/subdirector/.test(puesto)) return { subdireccion: null, gerencia: null, motivo: 'Puesto de Director' };
+        let sd = esVacioArea(subTxt) ? null : subdireccionDeTexto(subTxt);
+        const gTxt = esVacioArea(gerTxt) ? null : gerenciaDeTexto(sd, gerTxt);
+        if (!sd && gTxt) sd = gTxt.subdireccion;
+        if (!sd) return null;
+        if (/subdirector/.test(puesto)) return { subdireccion: sd, gerencia: null, motivo: 'Subdirector' + motivoBase };
+        if (gTxt && gTxt.subdireccion === sd) return { subdireccion: sd, gerencia: gTxt.gerencia, motivo: (/gerente/.test(puesto) ? 'Gerente' : 'Su gerencia') + motivoBase };
+        return { subdireccion: sd, gerencia: null, motivo: 'Su subdirección' + motivoBase };
+    }
+
+    /** La persona del directorio que corresponde a una cuenta, por nombre o por usuario. */
+    function colaboradorDeCuenta(cuenta, filas) {
+        const activas = (filas || []).filter(f => !/baja/i.test(campoColaborador(f, k => k === 'estatus' || k === 'status')));
+        const tokens = v => llaveCol(v).split(' ').filter(w => w.length > 1 && !PALABRAS_VACIAS.has(w));
+        const nombreDe = f => campoColaborador(f, k => k === 'nombre' || k === 'nombre completo');
+        const unico = lista => (lista.length === 1 ? lista[0] : null);
+        const nom = llaveCol(cuenta && cuenta.nombre);
+        if (nom) {
+            const exacta = unico(activas.filter(f => llaveCol(nombreDe(f)) === nom));
+            if (exacta) return exacta;
+            const t = tokens(cuenta.nombre);
+            if (t.length >= 2) {
+                const contiene = unico(activas.filter(f => { const ft = new Set(tokens(nombreDe(f))); return t.every(w => ft.has(w)); }));
+                if (contiene) return contiene;
+            }
+        }
+        const usuario = String((cuenta && cuenta.email) || '').split('@')[0];
+        const tu = tokens(usuario.replace(/[._-]+/g, ' '));
+        if (tu.length >= 2) return unico(activas.filter(f => { const ft = new Set(tokens(nombreDe(f))); return tu.every(w => ft.has(w)); }));
+        return null;
+    }
+
     /* ---------- Personas ---------- */
 
     const PARTICULAS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e']);
@@ -679,6 +947,9 @@
         subtareasConFecha, periodoTarea, subtareaFueraDePeriodo, sugerirFechasSubtarea, repartirSubtareas,
         inicioSubtarea, diasSubtarea, ajustarFechasSubtarea, diasCubiertos,
         posiblesDuplicadas, bloqueaDuplicado,
+        alcanceDeArea, alcancesPosibles, filtrarAlcance, urgenciaMando, resumenMando, desgloseMando,
+        ALCANCE_DIRECCION, alcanceDeAcceso, dentroDeAlcance, subdireccionesPermitidas, gerenciasPermitidas, nombreAlcanceArea,
+        areaDeColaborador, colaboradorDeCuenta,
         iniciales, colorDeNombre, telefonoWhatsApp, mensajeWhatsApp, urlWhatsApp,
         idCorto, etiquetasDeTexto, cambios, etiquetaValor, MESES_LARGOS,
     });

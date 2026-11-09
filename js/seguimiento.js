@@ -55,6 +55,7 @@
     const state = {
         rol: null, revisado: false, revisando: null, sinInstalar: false, errorAcceso: null,
         sesion: { email: '', nombre: '' }, sinSesion: false,
+        area: C.ALCANCE_DIRECCION, directorio: null, acceso: { filas: [], conArea: true, sugerencias: [], areaTocada: false, cuentas: null, cuentasFaltan: false, q: '', sugLista: [], sugIdx: -1 },
         tareas: [], nComent: new Map(), personas: [], personasCargadas: false,
         cargado: false, cargando: null, errorCarga: null,
         vista: 'lista', agrupar: 'subdireccion', orden: { campo: 'fecha_limite', asc: true },
@@ -113,6 +114,20 @@
 
     const puedeEditar = () => state.rol === 'admin' || state.rol === 'editor';
     const esAdmin = () => state.rol === 'admin';
+    /* El área de la cuenta: un gerente trabaja su gerencia y lo de toda su
+       subdirección; un subdirector, toda su subdirección; sin área, todo. La
+       base aplica la misma regla (db/seguimiento_alcance_por_area.sql). */
+    const areaRestringida = () => Boolean(state.area && state.area.tipo !== 'todo');
+    const enMiArea = (sd, ger) => C.dentroDeAlcance(state.area, sd, ger);
+    const gerenciaPorDefecto = () => (state.area && state.area.tipo === 'gerencia' ? state.area.gerencia : '');
+    const fueraDeArea = () => 'Sólo puedes crear y trabajar tareas de tu área: ' + C.nombreAlcanceArea(state.area) + '.';
+    function explicarArea() {
+        const a = state.area;
+        const sd = C.SUBDIR[a.subdireccion] || {};
+        if (a.tipo === 'gerencia') return 'Ves, creas y respondes las tareas de tu gerencia y las que son de toda la ' + (sd.nombre || a.subdireccion) + '. Las de otras gerencias no.';
+        if (a.tipo === 'subdireccion') return 'Ves, creas y respondes todas las tareas de la ' + (sd.nombre || a.subdireccion) + ', de cualquiera de sus gerencias.';
+        return 'Ves toda la Dirección.';
+    }
     const buscar = id => state.tareas.find(t => t.id === id);
     const seccionActiva = () => Boolean($('seguimiento-section') && $('seguimiento-section').classList.contains('active'));
 
@@ -193,6 +208,7 @@
             '<aside class="seg-drawer" id="seg-drawer" role="dialog" aria-modal="true" aria-label="Detalle de la tarea" aria-hidden="true"></aside>' +
             '<div class="seg-menu" id="seg-menu" role="menu" hidden></div>' +
             '<div class="seg-modal" id="seg-modal" hidden></div>' +
+            '<div class="seg-confirm" id="seg-confirm" hidden></div>' +
             '<div class="seg-toasts" id="seg-toasts" aria-live="polite"></div>' +
             '<div class="seg-tip" id="seg-tip" role="tooltip" hidden></div>' +
             '<input type="file" id="seg-file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" multiple hidden>' +
@@ -209,7 +225,7 @@
                 '<div class="seg-logo"><i class="fas fa-list-check"></i></div>' +
                 '<div>' +
                   '<div class="seg-crumb"><span>Dirección de Operación</span><i class="fas fa-chevron-right" style="font-size:.55rem"></i>' +
-                  '<span class="seg-crumb-tag">Seguimiento</span></div>' +
+                  '<span class="seg-crumb-tag">Seguimiento</span><span class="seg-crumb-hoy" id="seg-hoy">' + esc(textoHoy()) + '</span></div>' +
                   '<h2>Seguimiento de órdenes y pendientes</h2>' +
                 '</div>' +
               '</div>' +
@@ -217,7 +233,7 @@
                 '<button type="button" class="seg-btn" id="seg-btn-guia"' + tip('Guía', 'Cómo organizar tu información y dar de alta una tarea.', { ico: 'book-open' }) + '><i class="fas fa-book-open"></i>Guía</button>' +
                 '<button type="button" class="seg-btn" id="seg-btn-resumen"' + tip('Descargar resumen', 'Reporte ejecutivo en PDF o la tabla completa en Excel.', { ico: 'download' }) + '><i class="fas fa-download"></i>Descargar resumen</button>' +
                 '<button type="button" class="seg-btn" id="seg-btn-acceso" hidden' + tip('Quién puede ver Seguimiento', 'Agrega o quita cuentas y elige su rol.', { ico: 'user-lock' }) + '><i class="fas fa-user-plus"></i>Acceso</button>' +
-                '<button type="button" class="seg-btn seg-btn-primary" id="seg-btn-nueva"' + tip('Nueva tarea', 'Registra una orden, renovación, certificado o pendiente.', { kbd: 'N', ico: 'plus' }) + '><i class="fas fa-plus"></i>Nueva tarea</button>' +
+                '<button type="button" class="seg-btn seg-btn-primary" id="seg-btn-nueva"' + tip('Nueva tarea', 'Registra una orden, renovación, certificado o pendiente.', { kbd: 'N', ico: 'plus' }) + '><i class="fas fa-plus"></i>Nueva tarea<kbd class="seg-kbd" aria-hidden="true">N</kbd></button>' +
               '</div>' +
             '</header>' +
             '<div class="seg-kpis" id="seg-kpis"></div>' +
@@ -237,6 +253,13 @@
             '<div class="seg-alerta" id="seg-alerta"></div>' +
             '<div id="seg-body" class="seg-body"></div>';
         conectarEsqueleto();
+    }
+
+    /** «Lunes 9 de noviembre de 2026». */
+    function textoHoy() {
+        let dia = '';
+        try { dia = new Date().toLocaleDateString('es-MX', { weekday: 'long' }); } catch (_) { dia = ''; }
+        return (dia ? dia.charAt(0).toUpperCase() + dia.slice(1) + ' ' : '') + C.fechaLarga(hoy());
     }
 
     function pintarPuerta(tipo) {
@@ -311,6 +334,7 @@
                     state.errorAcceso = errTxt(e);
                 }
             }
+            await cargarMiArea(c);
             state.revisado = true;
             pintarMenu();
             return state.rol;
@@ -318,13 +342,29 @@
         return state.revisando;
     }
 
+    /* El área de quien entra (Seguimiento → Acceso). Si la base todavía no tiene
+       las columnas (falta db/seguimiento_alcance_por_area.sql), todo sigue igual. */
+    async function cargarMiArea(c) {
+        state.area = C.ALCANCE_DIRECCION;
+        if (!state.rol || state.rol === 'instalar' || state.rol === 'admin') return;
+        try {
+            const { data, error } = await c.from('seguimiento_acceso').select('*').eq('email', state.sesion.email).limit(1);
+            if (!error && data && data[0]) state.area = C.alcanceDeAcceso(data[0]);
+        } catch (_) { /* sin área: toda la Dirección */ }
+    }
+
     function olvidarSesion() {
+        state.area = C.ALCANCE_DIRECCION; state.directorio = null;
         state.rol = null; state.revisado = false; state.cargado = false; state.tareas = []; state.nComent = new Map();
         state.sesion = { email: '', nombre: '' };
         state.personas = []; state.personasCargadas = false;
         cerrarDrawer(true);
         pintarMenu();
         if ($('seg-shell')) $('seg-shell').innerHTML = '';
+        mando.clave = null; mando.area = undefined; mando.alcance = null; mando.cargadoEn = 0; mando.abierto = false;
+        const panel = $('seg-mando');
+        if (panel) { panel.hidden = true; panel.innerHTML = ''; }
+        pintarInsignia(0);
     }
 
     async function entrar() {
@@ -381,7 +421,7 @@
                 c.from('seguimiento_comentarios').select('tarea_id').limit(50000),
             ]);
             if (t.error) throw t.error;
-            state.tareas = t.data || [];
+            state.tareas = (t.data || []).filter(x => enMiArea(x.subdireccion, x.gerencia));
             state.nComent = new Map();
             (cm.data || []).forEach(r => state.nComent.set(r.tarea_id, (state.nComent.get(r.tarea_id) || 0) + 1));
             state.cargado = true;
@@ -444,6 +484,7 @@
         if (/recurrencia_meses|seguimiento_tareas_recurr/i.test(m)) {
             return 'para repetir con un tiempo personalizado falta correr db/seguimiento_recurrencia_personalizada.sql en Supabase.';
         }
+        if (/row-level security|42501/i.test(m) && areaRestringida()) return 'sólo puedes trabajar tareas de tu área (' + C.nombreAlcanceArea(state.area) + ').';
         return errTxt(e);
     }
 
@@ -542,6 +583,7 @@
     async function crearEnBase(datos, opts) {
         const o = opts || {};
         if (!puedeEditar()) { toast('Tu acceso a Seguimiento es de solo consulta.', 'error'); return null; }
+        if (!enMiArea(datos.subdireccion, datos.gerencia)) { toast(fueraDeArea(), 'error'); return null; }
         // La siguiente de una renovación lleva el mismo nombre a propósito: la anterior ya se cerró.
         if (!o.origen && !(await revisarDuplicado(datos))) return null;
         const u = usuario();
@@ -561,6 +603,9 @@
         const t = buscar(id);
         if (!t) return false;
         if (!puedeEditar()) { toast('Tu acceso a Seguimiento es de solo consulta.', 'error'); return false; }
+        if (('subdireccion' in patchIn || 'gerencia' in patchIn) && !enMiArea('subdireccion' in patchIn ? patchIn.subdireccion : t.subdireccion, 'gerencia' in patchIn ? patchIn.gerencia : t.gerencia)) {
+            toast(fueraDeArea(), 'error'); pintarDrawerSi(id, true); return false;
+        }
         const patch = limpiarFila(patchIn);
         // La base exige inicio <= límite: si el límite se adelanta, el inicio lo sigue.
         const limite = 'fecha_limite' in patch ? patch.fecha_limite : t.fecha_limite;
@@ -607,14 +652,77 @@
         return true;
     }
 
+    /* ---------- Confirmaciones propias del módulo ----------
+       En lugar del cuadro gris del navegador: dice qué se va a hacer, sobre qué,
+       qué se pierde y, cuando la hay, ofrece la salida menos drástica.
+       Devuelve una promesa: 'si', 'alterno' o false. El foco arranca en
+       «Cancelar» para que un Enter distraído no borre nada. */
+    let resolverConfirmar = null;
+
+    function confirmar(o) {
+        const el = $('seg-confirm');
+        if (!el) return Promise.resolve(window.confirm(o.titulo + (o.textoPlano ? '\n\n' + o.textoPlano : '')) ? 'si' : false);
+        if (resolverConfirmar) cerrarConfirmar(false);
+        const tono = o.tono || 'aviso';
+        const icono = o.icono || (tono === 'peligro' ? 'trash-can' : 'circle-question');
+        el.hidden = false;
+        el.innerHTML = '<div class="seg-confirm-box is-' + tono + '" role="alertdialog" aria-modal="true" aria-labelledby="seg-cf-t"' + (o.texto ? ' aria-describedby="seg-cf-d"' : '') + '>' +
+            '<div class="seg-confirm-ico"><i class="fas fa-' + icono + '"></i></div>' +
+            '<h3 id="seg-cf-t">' + esc(o.titulo) + '</h3>' +
+            (o.texto ? '<p class="seg-confirm-txt" id="seg-cf-d">' + o.texto + '</p>' : '') +
+            (o.tarjeta || '') +
+            (o.lista && o.lista.length
+                ? '<div class="seg-confirm-lista-h">' + esc(o.listaTitulo || 'Se borra también') + '</div><ul class="seg-confirm-lista">' +
+                    o.lista.map(i => '<li><i class="fas fa-' + i.ico + '"></i><span>' + i.txt + '</span></li>').join('') + '</ul>'
+                : '') +
+            (o.alterno
+                ? '<div class="seg-confirm-alt"><i class="fas fa-lightbulb"></i><div><b>' + esc(o.alterno.titulo) + '</b><small>' + esc(o.alterno.texto) + '</small></div>' +
+                    '<button type="button" class="seg-btn seg-btn-sm" data-cf="alterno"><i class="fas fa-' + (o.alterno.icono || 'ban') + '"></i>' + esc(o.alterno.boton) + '</button></div>'
+                : '') +
+            (o.nota ? '<div class="seg-confirm-nota"><i class="fas fa-triangle-exclamation"></i>' + esc(o.nota) + '</div>' : '') +
+            '<div class="seg-confirm-foot">' +
+              '<button type="button" class="seg-btn" data-cf="no">' + esc(o.cancelar || 'Cancelar') + '</button>' +
+              '<button type="button" class="seg-btn ' + (tono === 'peligro' ? 'seg-cf-peligro' : 'seg-btn-primary') + '" data-cf="si"><i class="fas fa-' + (o.iconoAceptar || icono) + '"></i>' + esc(o.aceptar || 'Aceptar') + '</button>' +
+            '</div></div>';
+        setTimeout(() => el.querySelector('[data-cf="no"]')?.focus(), 30);
+        return new Promise(res => { resolverConfirmar = res; });
+    }
+
+    function cerrarConfirmar(valor) {
+        const r = resolverConfirmar;
+        resolverConfirmar = null;
+        const el = $('seg-confirm');
+        if (el) { el.hidden = true; el.innerHTML = ''; }
+        if (r) r(valor);
+    }
+
+    /** Tarjeta con la tarea de la que se habla: folio, nombre, subdirección y estatus. */
+    function tarjetaTarea(t) {
+        const sd = C.SUBDIR[t.subdireccion];
+        const est = C.EST[t.estatus] || C.ESTATUS[0];
+        return '<div class="seg-confirm-tarea">' +
+            '<span class="seg-confirm-folio">' + esc(C.folio(t.folio)) + '</span>' +
+            '<div><b>' + esc(recortar(t.titulo, 90)) + '</b><small>' +
+              (sd ? '<span style="color:' + sd.color + '"><i class="fas fa-' + sd.icono + '"></i> ' + esc(sd.corto) + '</span> · ' : '') +
+              '<span style="color:' + est.color + '">' + esc(est.nombre) + '</span>' +
+              (t.fecha_limite ? ' · vence ' + esc(C.fechaCorta(t.fecha_limite)) : '') +
+            '</small></div></div>';
+    }
+
     /* Si se reabre una renovación que ya había programado la siguiente, esa
        siguiente sobra: se ofrece quitarla para que no quede repetida. */
     async function quitarSiguienteSiSobra(t) {
         const sig = t.siguiente_id && buscar(t.siguiente_id);
         if (!sig || !C.estaAbierta(sig)) return;
-        const ok = window.confirm('Al completarla se había programado la siguiente: ' + C.folio(sig.folio) + ', para el ' +
-            C.fechaLarga(sig.fecha_limite) + '.\n\n¿La quito para que no quede repetida?');
-        if (!ok) return;
+        const ok = await confirmar({
+            tono: 'aviso', icono: 'repeat', iconoAceptar: 'ban',
+            titulo: '¿Quitar la siguiente renovación?',
+            texto: 'Al completarla se había programado la siguiente para el <b>' + esc(C.fechaLarga(sig.fecha_limite)) + '</b>. Si la reabres, esa sobra y quedaría repetida.',
+            tarjeta: tarjetaTarea(sig),
+            nota: 'Se marca como Cancelada: no se borra nada.',
+            aceptar: 'Sí, quitarla', cancelar: 'Dejarla',
+        });
+        if (ok !== 'si') return;
         const hecho = await actualizar(sig.id, { estatus: 'cancelada' }, { silencioso: true });
         if (hecho) {
             await actualizar(t.id, { siguiente_id: null }, { bitacora: false, silencioso: true });
@@ -650,7 +758,32 @@
     async function eliminarTarea(id) {
         const t = buscar(id);
         if (!t || !esAdmin()) return;
-        if (!window.confirm('¿Eliminar definitivamente «' + recortar(t.titulo, 80) + '»?\n\nSe borran también sus comentarios, bitácora y evidencias. Si sólo ya no aplica, mejor cámbiala a "Cancelada".')) return;
+        const nComent = state.nComent.get(id) || 0;
+        const nEvid = (t.evidencias || []).length;
+        const nSubs = (t.checklist || []).length;
+        const decision = await confirmar({
+            tono: 'peligro', icono: 'trash-can',
+            titulo: '¿Eliminar esta tarea definitivamente?',
+            texto: 'Se borra de Seguimiento para todos. <b>No se puede deshacer.</b>',
+            tarjeta: tarjetaTarea(t),
+            lista: [
+                { ico: 'comments', txt: nComent ? plural(nComent, 'comentario', 'comentarios') : 'Sus comentarios' },
+                { ico: 'clock-rotate-left', txt: 'Su bitácora de actividad' },
+                { ico: 'paperclip', txt: nEvid ? plural(nEvid, 'evidencia', 'evidencias') + ' (PDF o fotos)' : 'Sus evidencias' },
+            ].concat(nSubs ? [{ ico: 'list-check', txt: plural(nSubs, 'subtarea', 'subtareas') }] : []),
+            alterno: t.estatus !== 'cancelada' && puedeEditar() ? {
+                titulo: '¿Sólo ya no aplica?',
+                texto: 'Márcala como Cancelada: deja de contar como pendiente y se conserva todo su historial.',
+                boton: 'Cancelarla en su lugar', icono: 'ban',
+            } : null,
+            aceptar: 'Eliminar definitivamente', cancelar: 'No, conservarla',
+        });
+        if (decision === 'alterno') {
+            const hecho = await actualizar(id, { estatus: 'cancelada' });
+            if (hecho) toast('Tarea marcada como Cancelada; se conservó todo.', 'ok');
+            return;
+        }
+        if (decision !== 'si') return;
         const c = await sb();
         const rutas = (t.evidencias || []).map(e => e.path).filter(Boolean);
         const { error } = await c.from('seguimiento_tareas').delete().eq('id', id);
@@ -684,12 +817,13 @@
         if (q) q.value = '';
         renderTodo();
     }
-    const subdirUnica = () => state.filtros.subdirecciones.length === 1 ? state.filtros.subdirecciones[0] : '';
+    const subdirUnica = () => state.filtros.subdirecciones.length === 1 ? state.filtros.subdirecciones[0] : (areaRestringida() ? state.area.subdireccion : '');
 
     /* ==========================================================================
        Pintado general
        ========================================================================== */
     function renderPronto() {
+        programarMando();
         if (!seccionActiva()) { state.sucio = true; return; }
         if (state.pintando) return;
         state.pintando = raf(() => { state.pintando = 0; renderTodo(); });
@@ -698,6 +832,7 @@
     function renderTodo() {
         if (!$('seg-body') || !state.cargado) return;
         state.sucio = false;
+        if ($('seg-hoy')) $('seg-hoy').textContent = textoHoy();
         pintarKpis();
         pintarChips();
         pintarAlerta();
@@ -761,8 +896,9 @@
         el.innerHTML = kpis.map(k =>
             '<button type="button" class="seg-kpi' + (k.on ? ' is-active' : '') + '" style="--c:' + k.c + '" data-kpi="' + k.id + '"' +
             tip(k.lbl + ': ' + k.val, k.ayuda, { c: k.c }) + '>' +
-            '<div class="seg-kpi-lbl"><i class="fas fa-' + k.ico + '"></i>' + k.lbl + '</div>' +
-            '<div class="seg-kpi-val">' + esc(k.val) + '</div><div class="seg-kpi-sub">' + esc(k.sub) + '</div></button>').join('');
+            '<span class="seg-kpi-ico"><i class="fas fa-' + k.ico + '"></i></span>' +
+            '<span class="seg-kpi-txt"><span class="seg-kpi-lbl">' + k.lbl + '</span>' +
+            '<span class="seg-kpi-val">' + esc(k.val) + '</span><span class="seg-kpi-sub">' + esc(k.sub) + '</span></span></button>').join('');
     }
 
     function clicKpi(id) {
@@ -782,6 +918,15 @@
         const el = $('seg-chips');
         if (!el) return;
         const base = C.filtrar(state.tareas, Object.assign({}, state.filtros, { subdirecciones: [], situacion: '', estatus: [], verCerradas: false }), hoy());
+        if (areaRestringida()) {
+            const sd = C.SUBDIR[state.area.subdireccion] || {};
+            el.innerHTML = '<span class="seg-area-tag" style="--c:' + (sd.color || '#4f46e5') + '"' + tip('Tu área en Seguimiento', explicarArea(), { ico: 'lock' }) + '>' +
+                '<i class="fas fa-' + (state.area.tipo === 'gerencia' ? 'building' : (sd.icono || 'sitemap')) + '"></i>' +
+                '<span class="seg-area-tag-k">Tu área</span>' + esc(C.nombreAlcanceArea(state.area)) +
+                (state.area.tipo === 'gerencia' ? '<span class="seg-area-tag-sd">' + esc(sd.corto || '') + '</span>' : '') +
+                '<span class="seg-chip-n">' + base.length + '</span></span>';
+            return;
+        }
         const sel = state.filtros.subdirecciones;
         el.innerHTML = '<button type="button" class="seg-chip' + (sel.length ? '' : ' is-on') + '" data-sd="" style="--c:#4f46e5"' +
             tip('Todas las subdirecciones', plural(base.length, 'tarea abierta', 'tareas abiertas'), { ico: 'layer-group' }) + '>' +
@@ -868,6 +1013,7 @@
         const todas = alcance();
         const gruposTodo = new Map(C.agrupar(todas, state.agrupar, h).map(g => [g.clave, g.tareas]));
         let grupos = C.agrupar(vis, state.agrupar, h);
+        if (state.agrupar === 'subdireccion' && areaRestringida()) grupos = grupos.filter(g => C.subdireccionesPermitidas(state.area).includes(g.clave));
         if (state.agrupar === 'subdireccion') {
             if (state.filtros.subdirecciones.length) grupos = grupos.filter(g => state.filtros.subdirecciones.includes(g.clave));
             else if (hayFiltros()) grupos = grupos.filter(g => g.tareas.length);
@@ -907,23 +1053,34 @@
         const llave = state.agrupar + ':' + g.clave;
         const col = state.colapsados.includes(llave);
         const ed = puedeEditar();
-        return '<section class="seg-group' + (col ? ' is-collapsed' : '') + '">' +
+        const vacio = !g.tareas.length && !hayFiltros();
+        return '<section class="seg-group' + (col ? ' is-collapsed' : '') + (vacio ? ' is-vacio' : '') + '" style="--g:' + g.color + '">' +
             '<header class="seg-group-head" data-accion="grupo" data-grupo="' + esc(g.clave) + '" aria-expanded="' + (!col) + '">' +
               '<span class="seg-caret"><i class="fas fa-chevron-down"></i></span>' +
-              '<span class="seg-group-pill" style="--c:' + g.color + '"><i class="fas fa-' + g.icono + '"></i>' + esc(g.nombre) + '</span>' +
+              '<span class="seg-group-pill" style="--c:' + g.color + '"><span class="seg-group-ico"><i class="fas fa-' + g.icono + '"></i></span>' + esc(g.nombre) + '</span>' +
               '<span class="seg-group-n">' + g.tareas.length + '</span>' +
               (reales.length ? '<span class="seg-group-prog"><span class="seg-mini-bar"><span style="width:' + pct + '%"></span></span>' + hechas + '/' + reales.length + ' completadas</span>' : '') +
+              (vacio ? '<span class="seg-group-sin">Sin tareas abiertas</span>' : '') +
               (venc ? '<span class="seg-group-flag is-danger"><i class="fas fa-triangle-exclamation"></i> ' + plural(venc, 'vencida', 'vencidas') + '</span>' : '') +
               (porV ? '<span class="seg-group-flag is-warn">' + porV + ' por vencer</span>' : '') +
               (ed ? '<button type="button" class="seg-btn seg-btn-sm seg-btn-ghost seg-group-add" data-accion="grupo-nueva" data-grupo="' + esc(g.clave) + '"><i class="fas fa-plus"></i>Tarea</button>' : '') +
             '</header>' +
             '<div class="seg-table" role="table" aria-label="' + esc(g.nombre) + '">' +
-              htmlEncabezado() +
+              (vacio ? '' : htmlEncabezado()) +
               (g.tareas.length ? g.tareas.map(t => htmlFila(t, h)).join('')
-                : '<div class="seg-group-vacio">' + (hayFiltros() ? 'Nada con estos filtros.' : 'Sin tareas abiertas.') + '</div>') +
+                : vacio ? '' : '<div class="seg-group-vacio">Nada con estos filtros.</div>') +
               (ed ? '<div class="seg-add-row"><i class="fas fa-plus"></i><input type="text" data-add="' + esc(g.clave) + '" maxlength="300" placeholder="Agregar tarea" aria-label="Agregar tarea en ' + esc(g.nombre) + '"><span class="seg-add-hint">Enter para guardar</span></div>' : '') +
             '</div></section>';
     }
+
+    /** Prioridad como barras de señal (baja 1 · normal 2 · alta 3) y urgente con signo de alerta. */
+    function iconoPrioridad(clave) {
+        if (clave === 'urgente') return '<span class="seg-prio-ico is-urgente" aria-hidden="true"><i class="fas fa-exclamation"></i></span>';
+        const n = clave === 'alta' ? 3 : clave === 'baja' ? 1 : 2;
+        return '<span class="seg-prio-ico" aria-hidden="true">' + [1, 2, 3].map(i => '<i class="' + (i <= n ? 'is-on' : '') + '"></i>').join('') + '</span>';
+    }
+
+    const marcaAbierta = id => (state.dr && state.dr.id === id && $('seg-drawer')?.classList.contains('is-open') ? ' is-abierta' : '');
 
     function htmlFila(t, h) {
         const sit = C.situacion(t, h);
@@ -962,11 +1119,12 @@
                 : (nombreSit === 'Vence hoy' ? 'Vence hoy' : nombreSit + ' ' + C.relativo(t.fecha_limite, h)) + ' · avisa ' + plural(+t.aviso_dias || 0, 'día', 'días') + ' antes.' + (ed ? ' Clic para cambiarla.' : ''),
                 { ico: 'calendar-check', c: sit === 'vencida' ? '#dc2626' : ['por_vencer', 'vence_hoy'].includes(sit) ? '#d97706' : '' })
             : tip('Sin fecha límite', ed ? 'Clic para ponerle una: así el sistema avisa antes de que venza.' : 'No tiene fecha límite.', { ico: 'calendar' });
-        return '<div class="seg-tr seg-row is-' + sit + (cerrada ? ' is-cerrada' : '') + '" data-id="' + t.id + '" role="row" tabindex="0">' +
+        return '<div class="seg-tr seg-row is-' + sit + (cerrada ? ' is-cerrada' : '') + marcaAbierta(t.id) + '" data-id="' + t.id + '" role="row" tabindex="0">' +
             '<div class="seg-td seg-td-hecha" role="cell">' + htmlHecho(t, dis) + '</div>' +
             '<div class="seg-td seg-td-nombre" role="cell">' +
-              '<div class="seg-nombre"><div class="seg-meta">' + meta.join('<span>·</span>') + '</div>' +
-                '<div class="seg-titulo">' + esc(t.titulo) + '</div>' + (tags.length ? '<div class="seg-tags">' + tags.join('') + '</div>' : '') + '</div>' +
+              '<div class="seg-nombre"><div class="seg-titulo">' + esc(t.titulo) + '</div>' +
+                '<div class="seg-sub-linea"><div class="seg-meta">' + meta.join('<span>·</span>') + '</div>' +
+                (tags.length ? '<div class="seg-tags">' + tags.join('') + '</div>' : '') + '</div></div>' +
             '</div>' +
             '<div class="seg-td" role="cell"><button type="button" class="seg-cell-btn' + (nC ? ' has-n' : '') + '" data-accion="comentarios"' + tip(nC ? plural(nC, 'comentario', 'comentarios') : 'Sin comentarios', nC ? 'Clic para leerlos o escribir un avance.' : 'Clic para escribir el primer avance.', { ico: 'comments' }) + '><i class="far fa-comment"></i>' + (nC || '') + '</button></div>' +
             '<div class="seg-td" role="cell"><div class="seg-wa-cell"><button type="button" class="seg-wa' + (tel ? '' : ' is-sin-tel') + '" data-accion="whatsapp"' + tipWhatsApp(t) + ' aria-label="' + esc(waTitle) + '"><i class="fab fa-whatsapp"></i></button>' +
@@ -977,9 +1135,9 @@
               '<span class="seg-resp-nombre">' + esc(t.responsable || 'Asignar') + '</span></button></div>' +
             '<div class="seg-td" role="cell"><button type="button" class="seg-cell-btn" data-accion="fecha"' + dis + tipFecha + '>' + fecha + '</button></div>' +
             '<div class="seg-td" role="cell"><button type="button" class="seg-cell-btn seg-prio" style="--c:' + prio.color + '" data-accion="prioridad"' + dis +
-              tip('Prioridad ' + prio.nombre.toLowerCase(), ed ? 'Clic para cambiarla.' : '', { c: prio.color }) + '><i class="fas fa-flag"></i>' + prio.nombre + '</button></div>' +
+              tip('Prioridad ' + prio.nombre.toLowerCase(), ed ? 'Clic para cambiarla.' : '', { c: prio.color }) + '>' + iconoPrioridad(t.prioridad) + prio.nombre + '</button></div>' +
             '<div class="seg-td" role="cell"><button type="button" class="seg-pill" style="--c:' + est.color + '" data-accion="estatus"' + dis +
-              tip('Estatus: ' + est.nombre, ed ? 'Clic para cambiarlo.' : '', { c: est.color }) + '>' + est.nombre + (ed ? '<i class="fas fa-chevron-down"></i>' : '') + '</button></div>' +
+              tip('Estatus: ' + est.nombre, ed ? 'Clic para cambiarlo.' : '', { c: est.color }) + '><i class="fas fa-' + est.icono + ' seg-pill-ico"></i><span class="seg-pill-txt">' + est.nombre + '</span>' + (ed ? '<i class="fas fa-chevron-down"></i>' : '') + '</button></div>' +
             '</div>';
     }
 
@@ -1024,6 +1182,8 @@
         else if (state.agrupar === 'tipo') b.tipo = clave;
         else if (state.agrupar === 'responsable' && g && g.nombre !== 'Sin responsable') b.responsable = g.nombre;
         if (!b.subdireccion && subdirUnica()) b.subdireccion = subdirUnica();
+        // Un gerente escribe, de entrada, para su gerencia.
+        if (gerenciaPorDefecto() && b.subdireccion === state.area.subdireccion) b.gerencia = gerenciaPorDefecto();
         return b;
     }
 
@@ -1069,7 +1229,7 @@
         return '<div class="seg-board">' + C.ESTATUS.filter(e => e.clave !== 'cancelada' || state.filtros.verCerradas).map(e => {
             const lista = C.ordenar(tareas.filter(t => t.estatus === e.clave), state.orden.campo, state.orden.asc);
             return '<div class="seg-col" style="--c:' + e.color + '"' + (ed ? ' data-drop-estatus="' + e.clave + '"' : '') + '>' +
-                '<div class="seg-col-head"><span class="seg-pill" style="--c:' + e.color + '">' + e.nombre + '</span><span class="seg-group-n">' + lista.length + '</span>' +
+                '<div class="seg-col-head"><span class="seg-pill seg-col-pill" style="--c:' + e.color + '"><i class="fas fa-' + e.icono + '" aria-hidden="true"></i>' + e.nombre + '</span><span class="seg-group-n">' + lista.length + '</span>' +
                 (e.clave === 'completada' && recientes.length ? '<span class="seg-group-n" style="margin-left:auto;font-size:.68rem">últimos 14 días</span>' : '') + '</div>' +
                 '<div class="seg-col-body">' + (lista.map(t => htmlTarjeta(t, h)).join('') || '<div class="seg-col-vacia">Arrastra aquí una tarea</div>') +
                 (ed && C.ABIERTOS.includes(e.clave) ? '<button type="button" class="seg-col-add" data-accion="col-nueva" data-estatus="' + e.clave + '"><i class="fas fa-plus me-1"></i>Agregar</button>' : '') +
@@ -1084,7 +1244,7 @@
         const ck = C.avanceChecklist(t);
         const nC = state.nComent.get(t.id) || 0;
         const cerrada = !C.estaAbierta(t);
-        return '<div class="seg-card is-' + sit + '" data-id="' + t.id + '"' + (puedeEditar() ? ' draggable="true"' : '') + ' tabindex="0">' +
+        return '<div class="seg-card is-' + sit + (cerrada ? ' is-cerrada' : '') + marcaAbierta(t.id) + '" data-id="' + t.id + '"' + (puedeEditar() ? ' draggable="true"' : '') + ' tabindex="0">' +
             '<div class="seg-card-sd" style="--c:' + sd.color + '"><i class="fas fa-' + sd.icono + '"></i><span>' + esc(sd.corto) + '</span><span class="seg-card-folio">' + C.folio(t.folio) + '</span></div>' +
             '<div class="seg-card-title">' + htmlHecho(t, puedeEditar() ? '' : ' disabled', true) + '<span>' + esc(t.titulo) + '</span></div>' +
             '<div class="seg-card-foot">' +
@@ -1555,7 +1715,7 @@
         flushTextos();
         cerrarMenu();
         const t = Object.assign({
-            titulo: '', descripcion: '', tipo: 'orden', subdireccion: subdirUnica(), gerencia: '', estatus: 'pendiente', prioridad: 'normal',
+            titulo: '', descripcion: '', tipo: 'orden', subdireccion: subdirUnica(), gerencia: gerenciaPorDefecto(), estatus: 'pendiente', prioridad: 'normal',
             responsable: '', responsable_num: null, responsable_tel: '', fecha_inicio: null, fecha_limite: null,
             recurrencia: 'ninguna', aviso_dias: 7, referencia: '', etiquetas: [], checklist: [], evidencias: [],
         }, base || {});
@@ -1577,13 +1737,22 @@
         d.classList.toggle('is-open', si);
         bd.classList.toggle('is-open', si);
         d.setAttribute('aria-hidden', si ? 'false' : 'true');
+        document.querySelectorAll('#seg-body .is-abierta').forEach(x => x.classList.remove('is-abierta'));
+        if (si && state.dr && state.dr.id) document.querySelectorAll('#seg-body [data-id="' + cssEsc(state.dr.id) + '"]').forEach(x => x.classList.add('is-abierta'));
     }
 
     function cerrarDrawer(forzar) {
         const dr = state.dr;
         if (!dr) { mostrarDrawer(false); return; }
-        if (!forzar && dr.modo === 'crear' && String(dr.t.titulo || '').trim()
-            && !window.confirm('¿Descartar la tarea sin guardar?')) return;
+        if (!forzar && dr.modo === 'crear' && String(dr.t.titulo || '').trim()) {
+            confirmar({
+                tono: 'aviso', icono: 'file-circle-xmark', iconoAceptar: 'xmark',
+                titulo: '¿Descartar la tarea nueva?',
+                texto: 'Todavía no se ha creado. Si sales, se pierde lo que capturaste de <b>' + esc(recortar(dr.t.titulo, 70)) + '</b>.',
+                aceptar: 'Descartar', cancelar: 'Seguir editando',
+            }).then(ok => { if (ok === 'si') cerrarDrawer(true); });
+            return;
+        }
         flushTextos();
         state.dr = null;
         cerrarMenu();
@@ -2147,7 +2316,16 @@
 
     async function borrarComentario(cid) {
         const dr = state.dr;
-        if (!dr || !window.confirm('¿Borrar este comentario?')) return;
+        if (!dr) return;
+        const com = (dr.comentarios || []).find(x => x.id === cid);
+        const ok = await confirmar({
+            tono: 'peligro', icono: 'comment-slash', iconoAceptar: 'trash-can',
+            titulo: '¿Borrar este comentario?',
+            texto: com ? '<span class="seg-confirm-cita">«' + esc(recortar(com.texto, 160)) + '»</span>' + (com.autor ? '<small class="seg-confirm-autor">' + esc(com.autor) + '</small>' : '') : '',
+            nota: 'No se puede deshacer.',
+            aceptar: 'Borrar comentario',
+        });
+        if (ok !== 'si') return;
         const c = await sb();
         const { error } = await c.from('seguimiento_comentarios').delete().eq('id', cid);
         if (error) { toast('No se pudo borrar: ' + errTxt(error), 'error'); return; }
@@ -2312,7 +2490,15 @@
     async function borrarEvidencia(i) {
         const t = tareaDelPanel();
         const ev = t && (t.evidencias || [])[i];
-        if (!ev || !window.confirm('¿Quitar la evidencia «' + ev.nombre + '»?')) return;
+        if (!ev) return;
+        const quitar = await confirmar({
+            tono: 'peligro', icono: 'file-circle-minus', iconoAceptar: 'trash-can',
+            titulo: '¿Quitar esta evidencia?',
+            texto: '<span class="seg-confirm-archivo"><i class="fas fa-file"></i>' + esc(ev.nombre) + '</span>',
+            nota: 'El archivo se borra del almacenamiento. Queda anotado en la bitácora.',
+            aceptar: 'Quitar evidencia',
+        });
+        if (quitar !== 'si') return;
         const resto = t.evidencias.filter((_, k) => k !== i);
         const ok = await actualizar(t.id, { evidencias: resto }, { bitacora: false });
         if (!ok) return;
@@ -2348,34 +2534,262 @@
         if (!esAdmin()) return;
         const m = $('seg-modal');
         m.hidden = false;
-        m.innerHTML = '<div class="seg-modal-box" role="dialog" aria-modal="true" aria-labelledby="seg-acc-t">' +
+        Object.assign(state.acceso, { areaTocada: false, cuentas: null, q: '', sugLista: [], sugIdx: -1 });
+        cargarCuentas();
+        m.innerHTML = '<div class="seg-modal-box seg-acc-box" role="dialog" aria-modal="true" aria-labelledby="seg-acc-t">' +
             '<div class="seg-modal-head"><i class="fas fa-user-lock" style="color:var(--seg-accent)"></i><h3 id="seg-acc-t">Quién puede ver Seguimiento</h3>' +
             '<button type="button" class="seg-icon-btn" data-m="cerrar" aria-label="Cerrar"><i class="fas fa-xmark"></i></button></div>' +
-            '<div class="seg-modal-body"><p style="color:var(--seg-muted);font-size:.86rem;margin:0 0 10px">Sólo estas cuentas ven el módulo. ' +
+            '<div class="seg-modal-body"><p style="color:var(--seg-muted);font-size:.86rem;margin:0 0 10px">Sólo estas cuentas ven el módulo, y cada una sólo las tareas de <b>su área</b>. ' +
             'A las demás no les aparece en el menú y la base tampoco les entrega los datos.</p>' +
             '<div id="seg-acc-lista"><div class="seg-skel"></div></div>' +
-            '<div class="seg-acc-add"><input id="seg-acc-user" placeholder="Usuario (ej. gonzalo.sandoval)" autocomplete="off"><input id="seg-acc-nombre" placeholder="Nombre" autocomplete="off">' +
-            '<select id="seg-acc-rol"><option value="editor">Editor</option><option value="admin">Admin</option><option value="lector">Lector</option></select>' +
+            '<div class="seg-acc-add"><label class="seg-acc-buscar"><i class="fas fa-magnifying-glass"></i><input id="seg-acc-user" placeholder="Buscar persona o usuario…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="seg-acc-sugs" aria-expanded="false"></label>' +
+            '<input id="seg-acc-nombre" placeholder="Nombre" autocomplete="off">' +
+            '<select id="seg-acc-area" aria-label="Área">' + opcionesArea('', '') + '</select>' +
+            '<select id="seg-acc-rol" aria-label="Rol"><option value="editor">Editor</option><option value="admin">Admin</option><option value="lector">Lector</option></select>' +
             '<button type="button" class="seg-btn seg-btn-primary" data-m="agregar"><i class="fas fa-plus"></i>Agregar</button></div>' +
-            '<div style="font-size:.76rem;color:var(--seg-faint);margin-top:10px">Es el mismo usuario con el que entra a la plataforma. <b>Admin</b>: además administra este acceso · <b>Editor</b>: crea y edita · <b>Lector</b>: consulta y comenta.</div>' +
-            '</div></div>';
+            '<div class="seg-acc-sugs" id="seg-acc-sugs" role="listbox" aria-label="Cuentas de la plataforma" hidden></div>' +
+            '<div class="seg-acc-hint" id="seg-acc-hint" hidden></div>' +
+            '<div class="seg-acc-ayuda">' +
+              '<div><b>Área</b> · <b>Toda la Dirección</b>: ve todo (Director, staff) · <b>Subdirección (toda)</b>: el subdirector ve y trabaja todo lo de su subdirección · ' +
+              '<b>Una gerencia</b>: el gerente ve y trabaja lo de su gerencia y lo que es de toda su subdirección; nada de las otras gerencias.</div>' +
+              '<div><b>Rol</b> · <b>Admin</b>: ve todo y administra este acceso · <b>Editor</b>: crea y edita · <b>Lector</b>: consulta y comenta. Es el mismo usuario con el que entra a la plataforma.</div>' +
+            '</div></div></div>';
         cargarAcceso();
         setTimeout(() => $('seg-acc-user')?.focus(), 50);
     }
 
+    /** Opciones del área: Toda la Dirección, cada subdirección completa y sus gerencias. */
+    function opcionesArea(sd, ger) {
+        const actual = sd ? sd + '|' + (ger || '') : '';
+        const op = (valor, texto) => '<option value="' + esc(valor) + '"' + (valor === actual ? ' selected' : '') + '>' + esc(texto) + '</option>';
+        return op('', 'Toda la Dirección') + C.SUBDIRECCIONES.map(s => {
+            const gerencias = s.gerencias.slice();
+            if (s.clave === sd && ger && !gerencias.includes(ger)) gerencias.push(ger);
+            return '<optgroup label="' + esc(s.nombre) + '">' + op(s.clave + '|', s.corto + ' · toda la subdirección') +
+                gerencias.map(g => op(s.clave + '|' + g, g)).join('') + '</optgroup>';
+        }).join('');
+    }
+    const leerArea = v => {
+        const [sd, ...resto] = String(v || '').split('|');
+        return { subdireccion: sd || null, gerencia: (sd && resto.join('|').trim()) || null };
+    };
+    const textoArea = a => C.nombreAlcanceArea(C.alcanceDeAcceso({ rol: 'editor', subdireccion: a.subdireccion, gerencia: a.gerencia }));
+
+    /** Colaboradores (agenda_2026), para sugerir el área de cada cuenta. */
+    async function cargarDirectorio() {
+        if (state.directorio) return state.directorio;
+        try {
+            const c = await sb();
+            const { data, error } = await c.from('agenda_2026').select('*').limit(3000);
+            if (error) throw error;
+            state.directorio = data || [];
+        } catch (e) {
+            console.info('[Seguimiento] Sin Colaboradores para sugerir áreas:', errTxt(e));
+            state.directorio = [];
+        }
+        return state.directorio;
+    }
+    function sugerenciaArea(cuenta) {
+        const col = C.colaboradorDeCuenta(cuenta, state.directorio || []);
+        const a = col && C.areaDeColaborador(col);
+        return a && a.subdireccion ? a : null;
+    }
+
     async function cargarAcceso() {
         const c = await sb();
-        const { data, error } = await c.from('seguimiento_acceso').select('*').order('creado_en');
+        const [{ data, error }] = await Promise.all([c.from('seguimiento_acceso').select('*').order('creado_en'), cargarDirectorio()]);
         const cont = $('seg-acc-lista');
         if (!cont) return;
         if (error) { cont.innerHTML = '<div class="seg-vacio-mini">No se pudo leer: ' + esc(errTxt(error)) + '</div>'; return; }
+        const filas = data || [];
+        const conArea = !filas.length || filas.some(a => 'subdireccion' in a);
         const yo = usuario().email;
-        cont.innerHTML = (data || []).map(a => '<div class="seg-acc-row">' + avatar(a.nombre || a.email) +
-            '<div style="min-width:0"><b>' + esc(a.nombre || a.email.split('@')[0]) + (a.email === yo ? ' <span class="seg-tag is-label"' + tip('Esta es tu cuenta', 'No puedes quitarte el acceso ni cambiar tu rol.') + '>Tú</span>' : '') + '</b><small>' + esc(a.email) + '</small></div>' +
-            '<select data-acc-rol="' + esc(a.email) + '"' + (a.email === yo ? ' disabled' : '') + '>' +
-            ['admin', 'editor', 'lector'].map(r => '<option value="' + r + '"' + (a.rol === r ? ' selected' : '') + '>' + r.charAt(0).toUpperCase() + r.slice(1) + '</option>').join('') + '</select>' +
-            (a.email === yo ? '<span></span>' : '<button type="button" class="seg-icon-btn" data-acc-quitar="' + esc(a.email) + '"' + tip('Quitar acceso', 'Deja de ver el módulo en cuanto vuelva a entrar.') + ' aria-label="Quitar acceso"><i class="fas fa-user-minus"></i></button>') +
-            '</div>').join('') || '<div class="seg-vacio-mini">Nadie todavía.</div>';
+        const sugerencias = [];
+        const filasHtml = filas.map(a => {
+            const esYo = a.email === yo;
+            const admin = a.rol === 'admin';
+            const sug = conArea && !admin && !a.subdireccion ? sugerenciaArea(a) : null;
+            if (sug) sugerencias.push({ email: a.email, nombre: a.nombre || a.email.split('@')[0], sug });
+            const area = !conArea
+                ? '<select disabled aria-label="Área"' + tip('Falta preparar la base', 'Corre db/seguimiento_alcance_por_area.sql en Supabase para asignar áreas.', { ico: 'database' }) + '><option>Toda la Dirección</option></select>'
+                : admin
+                    ? '<select disabled aria-label="Área"' + tip('Admin ve todo', 'Un admin ve y administra toda la Dirección, sin importar su área.', { ico: 'user-shield' }) + '><option>Toda la Dirección</option></select>'
+                    : '<select data-acc-area="' + esc(a.email) + '" aria-label="Área de ' + esc(a.nombre || a.email) + '">' + opcionesArea(a.subdireccion, a.gerencia) + '</select>';
+            return '<div class="seg-acc-row">' + avatar(a.nombre || a.email) +
+                '<div style="min-width:0"><b>' + esc(a.nombre || a.email.split('@')[0]) + (esYo ? ' <span class="seg-tag is-label"' + tip('Esta es tu cuenta', 'No puedes quitarte el acceso ni cambiar tu rol.') + '>Tú</span>' : '') + '</b><small>' + esc(a.email) + '</small>' +
+                (sug ? '<span class="seg-acc-sug"><i class="fas fa-wand-magic-sparkles"></i>Según Colaboradores: <b>' + esc(textoArea(sug)) + '</b> · ' + esc(sug.motivo) +
+                    '<button type="button" class="seg-link" data-acc-aplicar="' + esc(a.email) + '" data-sd="' + esc(sug.subdireccion) + '" data-ger="' + esc(sug.gerencia || '') + '">Asignar</button></span>' : '') +
+                '</div>' + area +
+                '<select data-acc-rol="' + esc(a.email) + '"' + (esYo ? ' disabled' : '') + ' aria-label="Rol">' +
+                ['admin', 'editor', 'lector'].map(r => '<option value="' + r + '"' + (a.rol === r ? ' selected' : '') + '>' + r.charAt(0).toUpperCase() + r.slice(1) + '</option>').join('') + '</select>' +
+                (esYo ? '<span></span>' : '<button type="button" class="seg-icon-btn" data-acc-quitar="' + esc(a.email) + '"' + tip('Quitar acceso', 'Deja de ver el módulo en cuanto vuelva a entrar.') + ' aria-label="Quitar acceso"><i class="fas fa-user-minus"></i></button>') +
+                '</div>';
+        }).join('');
+        state.acceso = Object.assign(state.acceso, { filas, conArea, sugerencias });
+        const add = $('seg-acc-area');
+        if (add) add.disabled = !conArea;
+        cont.innerHTML =
+            (conArea ? '' : '<div class="seg-acc-aviso"><i class="fas fa-database"></i><div><b>Falta un paso en la base para separar por áreas.</b> Corre <code>db/seguimiento_alcance_por_area.sql</code> en Supabase (SQL Editor → Run). Mientras tanto, todos ven toda la Dirección.</div></div>') +
+            (sugerencias.length ? '<div class="seg-acc-bar"><i class="fas fa-wand-magic-sparkles"></i><span>' + plural(sugerencias.length, 'cuenta sin área tiene', 'cuentas sin área tienen') + ' su área en Colaboradores.</span>' +
+                '<button type="button" class="seg-btn seg-btn-sm" data-m="completar"><i class="fas fa-check-double"></i>Asignar ' + (sugerencias.length === 1 ? 'la sugerida' : 'las ' + sugerencias.length) + '</button></div>' : '') +
+            (filasHtml || '<div class="seg-vacio-mini">Nadie todavía.</div>');
+    }
+
+    async function guardarArea(email, area, silencio) {
+        const c = await sb();
+        const { error } = await c.from('seguimiento_acceso').update({ subdireccion: area.subdireccion || null, gerencia: (area.subdireccion && area.gerencia) || null }).eq('email', email);
+        if (error) { toast('No se cambió el área: ' + errTxt(error), 'error'); return false; }
+        if (!silencio) toast('Área de ' + email.split('@')[0] + ': ' + textoArea(area) + '. Se aplica cuando vuelva a entrar.', 'ok');
+        return true;
+    }
+
+    async function completarAreas() {
+        const lista = state.acceso.sugerencias || [];
+        if (!lista.length) return;
+        const ok = await confirmar({
+            tono: 'aviso', icono: 'wand-magic-sparkles', iconoAceptar: 'check-double',
+            titulo: lista.length === 1 ? '¿Asignar el área sugerida?' : '¿Asignar las ' + lista.length + ' áreas sugeridas?',
+            texto: 'Se toman de Colaboradores (subdirección, gerencia, comisión y puesto). Después puedes cambiar cualquiera.',
+            listaTitulo: 'Se asigna', lista: lista.map(x => ({ ico: 'user', txt: '<b>' + esc(x.nombre) + '</b> → ' + esc(textoArea(x.sug)) })),
+            aceptar: 'Asignar',
+        });
+        if (ok !== 'si') return;
+        let n = 0;
+        for (const x of lista) if (await guardarArea(x.email, x.sug, true)) n++;
+        toast(plural(n, 'área asignada', 'áreas asignadas') + '. Se aplican cuando cada quien vuelva a entrar.', n ? 'ok' : 'error');
+        cargarAcceso();
+    }
+
+    /* ---------- Buscar a quién darle acceso ----------
+       Las cuentas de la plataforma (seguimiento_cuentas, sólo para admins de
+       Seguimiento; si aún no existe, la vista del panel de usuarios). Al
+       escribir se listan las que coinciden por nombre o usuario, con su puesto
+       y el área que les toca según Colaboradores. */
+    async function cargarCuentas() {
+        if (state.acceso.cuentas) return state.acceso.cuentas;
+        if (state.acceso.cargandoCuentas) return state.acceso.cargandoCuentas;
+        state.acceso.cargandoCuentas = (async () => {
+            const c = await sb();
+            const limpiar = filas => filas.map(x => ({ email: String(x.email || '').trim().toLowerCase(), nombre: String(x.nombre || x.full_name || '').trim() }))
+                .filter(x => x.email.includes('@'));
+            let lista = null;
+            try {
+                const r = await c.rpc('seguimiento_cuentas');
+                if (!r.error && Array.isArray(r.data)) lista = limpiar(r.data);
+            } catch (_) { /* aún no existe */ }
+            if (!lista) {
+                try {
+                    const r = await c.from('v_usuarios_roles').select('email, full_name').limit(5000);
+                    if (!r.error && Array.isArray(r.data)) lista = limpiar(r.data);
+                } catch (_) { /* sin permiso */ }
+            }
+            const vistas = new Set();
+            state.acceso.cuentasFaltan = !lista;
+            state.acceso.cuentas = (lista || []).filter(x => !vistas.has(x.email) && vistas.add(x.email));
+            await cargarDirectorio();
+            return state.acceso.cuentas;
+        })().finally(() => { state.acceso.cargandoCuentas = null; });
+        return state.acceso.cargandoCuentas;
+    }
+
+    const tokensBusqueda = v => C.normalizar(v).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean);
+
+    /** Hasta 8 cuentas que coinciden: cada palabra escrita es inicio de su nombre o usuario. */
+    function buscarCuentas(q) {
+        const tq = tokensBusqueda(q);
+        if (!tq.length) return [];
+        const ya = new Set(state.acceso.filas.map(a => a.email));
+        return (state.acceso.cuentas || []).map(cta => {
+            const toks = tokensBusqueda(cta.nombre + ' ' + cta.email);
+            if (!tq.every(w => toks.some(t => t.startsWith(w)))) return null;
+            return { cta, ya: ya.has(cta.email), inicio: toks[0].startsWith(tq[0]) ? 0 : 1 };
+        }).filter(Boolean)
+            .sort((a, b) => a.ya - b.ya || a.inicio - b.inicio || (a.cta.nombre || a.cta.email).localeCompare(b.cta.nombre || b.cta.email, 'es'))
+            .slice(0, 8);
+    }
+
+    function cerrarSugCuentas() {
+        const box = $('seg-acc-sugs');
+        if (box) { box.hidden = true; box.innerHTML = ''; }
+        $('seg-acc-user')?.setAttribute('aria-expanded', 'false');
+        state.acceso.sugLista = [];
+        state.acceso.sugIdx = -1;
+    }
+
+    function pintarSugCuentas() {
+        const box = $('seg-acc-sugs');
+        if (!box) return;
+        const q = state.acceso.q.trim();
+        if (q.length < 2) { cerrarSugCuentas(); return; }
+        box.hidden = false;
+        $('seg-acc-user')?.setAttribute('aria-expanded', 'true');
+        if (!state.acceso.cuentas) {
+            box.innerHTML = '<div class="seg-acc-sugs-msg"><i class="fas fa-spinner fa-spin"></i>Buscando cuentas…</div>';
+            cargarCuentas().then(() => { if (state.acceso.q.trim() === q) pintarSugCuentas(); });
+            return;
+        }
+        const res = buscarCuentas(q);
+        state.acceso.sugLista = res;
+        const elegibles = res.map((r, i) => (r.ya ? -1 : i)).filter(i => i >= 0);
+        if (!elegibles.includes(state.acceso.sugIdx)) state.acceso.sugIdx = elegibles.length ? elegibles[0] : -1;
+        if (!res.length) {
+            box.innerHTML = '<div class="seg-acc-sugs-msg"><i class="fas fa-circle-info"></i>' + (state.acceso.cuentasFaltan
+                ? 'No se pudo leer la lista de cuentas. Corre <code>db/seguimiento_alcance_por_area.sql</code> en Supabase para buscarlas aquí; mientras, escribe el usuario completo.'
+                : 'Ninguna cuenta de la plataforma coincide con «' + esc(q) + '». Si aún no tiene cuenta, primero hay que crearla.') + '</div>';
+            return;
+        }
+        box.innerHTML = res.map((r, i) => {
+            const col = C.colaboradorDeCuenta(r.cta, state.directorio || []);
+            const area = col && C.areaDeColaborador(col);
+            const puesto = col ? String(col['Puesto'] || col['puesto'] || '').trim() : '';
+            return '<button type="button" class="seg-acc-sug-op' + (i === state.acceso.sugIdx ? ' is-on' : '') + '" role="option" data-acc-cuenta="' + i + '"' +
+                ' aria-selected="' + (i === state.acceso.sugIdx) + '"' + (r.ya ? ' disabled' : '') + '>' + avatar(r.cta.nombre || r.cta.email) +
+                '<span class="seg-acc-sug-txt"><b>' + esc(r.cta.nombre || r.cta.email.split('@')[0]) + '</b><small>' + esc(r.cta.email) + (puesto ? ' · ' + esc(puesto) : '') + '</small></span>' +
+                (r.ya ? '<span class="seg-acc-sug-area is-ya"><i class="fas fa-check"></i>Ya tiene acceso</span>'
+                    : area && area.subdireccion ? '<span class="seg-acc-sug-area"><i class="fas fa-sitemap"></i>' + esc(textoArea(area)) + '</span>' : '') +
+                '</button>';
+        }).join('');
+        box.querySelector('.is-on')?.scrollIntoView?.({ block: 'nearest' });
+    }
+
+    function moverSugCuentas(paso) {
+        const lista = state.acceso.sugLista;
+        if (!lista.length) return;
+        let i = state.acceso.sugIdx;
+        for (let n = 0; n < lista.length; n++) {
+            i = (i + paso + lista.length) % lista.length;
+            if (!lista[i].ya) break;
+        }
+        state.acceso.sugIdx = i;
+        pintarSugCuentas();
+    }
+
+    function elegirCuenta(i) {
+        const r = state.acceso.sugLista[i];
+        if (!r || r.ya) return;
+        const email = r.cta.email;
+        $('seg-acc-user').value = email.endsWith('@aifa.operaciones') ? email.split('@')[0] : email;
+        $('seg-acc-nombre').value = r.cta.nombre || '';
+        state.acceso.q = '';
+        state.acceso.areaTocada = false;
+        cerrarSugCuentas();
+        sugerirAreaNueva();
+        $('seg-acc-rol')?.focus();
+    }
+
+    /* Al escribir una cuenta nueva se propone su área según Colaboradores. */
+    function sugerirAreaNueva() {
+        const hint = $('seg-acc-hint');
+        const sel = $('seg-acc-area');
+        if (!hint || !sel || !state.acceso.conArea) return;
+        const cuenta = { email: usuarioAEmail($('seg-acc-user').value), nombre: $('seg-acc-nombre').value.trim() };
+        const sug = (cuenta.nombre || cuenta.email) ? sugerenciaArea(cuenta) : null;
+        hint.hidden = !sug;
+        if (!sug) return;
+        hint.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i>Según Colaboradores: <b>' + esc(textoArea(sug)) + '</b> · ' + esc(sug.motivo) +
+            (state.acceso.areaTocada ? ' <button type="button" class="seg-link" data-m="usar-sugerida">Usar</button>' : '');
+        hint.dataset.valor = sug.subdireccion + '|' + (sug.gerencia || '');
+        if (!state.acceso.areaTocada) sel.value = hint.dataset.valor;
     }
 
     async function agregarAcceso() {
@@ -2383,12 +2797,19 @@
         const nombre = $('seg-acc-nombre').value.trim();
         const rol = $('seg-acc-rol').value;
         if (!email || !/^[^@\s]+@[^@\s]+$/.test(email)) { toast('Escribe el usuario con el que entra a la plataforma.', 'error'); return; }
+        const fila = { email, nombre: nombre || null, rol, agregado_por: usuario().nombre };
+        if (state.acceso.conArea && $('seg-acc-area')) Object.assign(fila, leerArea($('seg-acc-area').value));
         const c = await sb();
-        const { error } = await c.from('seguimiento_acceso').insert({ email, nombre: nombre || null, rol, agregado_por: usuario().nombre });
+        const { error } = await c.from('seguimiento_acceso').insert(fila);
         if (error) { toast(/duplicate|23505/i.test(errTxt(error) + error.code) ? 'Esa cuenta ya tiene acceso.' : 'No se pudo agregar: ' + errTxt(error), 'error'); return; }
         $('seg-acc-user').value = '';
         $('seg-acc-nombre').value = '';
-        toast('Acceso dado a ' + email + '. Lo verá al volver a entrar.', 'ok');
+        state.acceso.q = '';
+        cerrarSugCuentas();
+        if ($('seg-acc-area')) $('seg-acc-area').value = '';
+        if ($('seg-acc-hint')) $('seg-acc-hint').hidden = true;
+        state.acceso.areaTocada = false;
+        toast('Acceso dado a ' + email + (fila.subdireccion ? ' (' + textoArea(fila) + ')' : '') + '. Lo verá al volver a entrar.', 'ok');
         cargarAcceso();
     }
 
@@ -2821,29 +3242,67 @@
         });
         $('seg-file').addEventListener('change', e => { recibirArchivos(e.target.files); e.target.value = ''; });
 
+        $('seg-confirm').addEventListener('click', e => {
+            const b = e.target.closest('[data-cf]');
+            if (b) { cerrarConfirmar(b.dataset.cf === 'si' ? 'si' : b.dataset.cf === 'alterno' ? 'alterno' : false); return; }
+            if (e.target === e.currentTarget) cerrarConfirmar(false);
+        });
         $('seg-modal').addEventListener('click', e => {
             const dup = e.target.closest('[data-dup]');
             if (dup) { terminarDuplicado(dup.dataset.dup === 'abrir' ? 'abrir:' + dup.dataset.dupId : dup.dataset.dup); return; }
             if (resolverDuplicado && (e.target === e.currentTarget || e.target.closest('[data-m="cerrar"]'))) { terminarDuplicado('cancelar'); return; }
             if (e.target.closest('[data-m="nueva"]')) { e.currentTarget.hidden = true; e.currentTarget.innerHTML = ''; nuevaTarea(); return; }
             if (e.target === e.currentTarget || e.target.closest('[data-m="cerrar"]')) { e.currentTarget.hidden = true; e.currentTarget.innerHTML = ''; return; }
+            const cuenta = e.target.closest('[data-acc-cuenta]');
+            if (cuenta) { elegirCuenta(+cuenta.dataset.accCuenta); return; }
+            if (!e.target.closest('.seg-acc-add, #seg-acc-sugs')) cerrarSugCuentas();
             if (e.target.closest('[data-m="agregar"]')) { agregarAcceso(); return; }
+            if (e.target.closest('[data-m="completar"]')) { completarAreas(); return; }
+            if (e.target.closest('[data-m="usar-sugerida"]')) { const h = $('seg-acc-hint'); if (h && $('seg-acc-area')) { $('seg-acc-area').value = h.dataset.valor || ''; state.acceso.areaTocada = false; sugerirAreaNueva(); } return; }
+            const ap = e.target.closest('[data-acc-aplicar]');
+            if (ap) { guardarArea(ap.dataset.accAplicar, { subdireccion: ap.dataset.sd, gerencia: ap.dataset.ger }).then(ok => ok && cargarAcceso()); return; }
             const q = e.target.closest('[data-acc-quitar]');
             if (q) {
-                if (!window.confirm('¿Quitar el acceso a ' + q.dataset.accQuitar + '?')) return;
-                sb().then(c => c.from('seguimiento_acceso').delete().eq('email', q.dataset.accQuitar)).then(r => {
+                confirmar({
+                    tono: 'peligro', icono: 'user-slash', iconoAceptar: 'user-minus',
+                    titulo: '¿Quitar el acceso?',
+                    texto: '<b>' + esc(q.dataset.accQuitar) + '</b> dejará de ver Seguimiento en el menú y la base ya no le entregará las tareas.',
+                    aceptar: 'Quitar acceso',
+                }).then(ok => ok === 'si' && sb().then(c => c.from('seguimiento_acceso').delete().eq('email', q.dataset.accQuitar)).then(r => {
                     if (r.error) toast('No se pudo quitar: ' + errTxt(r.error), 'error'); else { toast('Acceso retirado.', 'ok'); cargarAcceso(); }
-                });
+                }));
             }
         });
         $('seg-modal').addEventListener('change', e => {
+            if (e.target.id === 'seg-acc-area') { state.acceso.areaTocada = true; sugerirAreaNueva(); return; }
+            const ar = e.target.closest('[data-acc-area]');
+            if (ar) { guardarArea(ar.dataset.accArea, leerArea(ar.value)).then(ok => ok && cargarAcceso()); return; }
             const s = e.target.closest('[data-acc-rol]');
             if (!s) return;
             sb().then(c => c.from('seguimiento_acceso').update({ rol: s.value }).eq('email', s.dataset.accRol)).then(r => {
-                if (r.error) toast('No se cambió el rol: ' + errTxt(r.error), 'error'); else toast('Rol actualizado.', 'ok');
+                if (r.error) toast('No se cambió el rol: ' + errTxt(r.error), 'error');
+                else { toast('Rol actualizado.', 'ok'); cargarAcceso(); }   // un admin ve todo: su área se bloquea
             });
         });
-        $('seg-modal').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest('.seg-acc-add input')) { e.preventDefault(); agregarAcceso(); } });
+        let tSugerir = 0;
+        $('seg-modal').addEventListener('input', e => {
+            if (e.target.id !== 'seg-acc-user' && e.target.id !== 'seg-acc-nombre') return;
+            state.acceso.q = e.target.value;
+            state.acceso.sugIdx = -1;
+            pintarSugCuentas();
+            clearTimeout(tSugerir);
+            tSugerir = setTimeout(sugerirAreaNueva, 250);
+        });
+        $('seg-modal').addEventListener('keydown', e => {
+            if (!e.target.closest('.seg-acc-add input')) return;
+            const abiertas = !$('seg-acc-sugs')?.hidden && state.acceso.sugLista.length;
+            if (abiertas && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); moverSugCuentas(e.key === 'ArrowDown' ? 1 : -1); return; }
+            if (!$('seg-acc-sugs')?.hidden && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrarSugCuentas(); return; }
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            if (abiertas && state.acceso.sugIdx >= 0) elegirCuenta(state.acceso.sugIdx);
+            else agregarAcceso();
+        });
 
         // Cerrar el menú flotante al hacer clic fuera, al desplazarse o al cambiar el tamaño.
         document.addEventListener('mousedown', e => {
@@ -2867,7 +3326,8 @@
             case 'estatus': return menuEstatus(el, t, v => cambiarDesdePanel({ estatus: v }));
             case 'prioridad': return menuPrioridad(el, t, v => cambiarDesdePanel({ prioridad: v }));
             case 'subdireccion':
-                return menuSimple(el, 'Subdirección', C.SUBDIRECCIONES.map(s => ({ valor: s.clave, texto: s.nombre, icono: s.icono, color: s.color })), t.subdireccion, v => {
+                return menuSimple(el, 'Subdirección', C.SUBDIRECCIONES.filter(s => C.subdireccionesPermitidas(state.area).includes(s.clave))
+                    .map(s => ({ valor: s.clave, texto: s.nombre, icono: s.icono, color: s.color })), t.subdireccion, v => {
                     const sd = C.SUBDIR[v];
                     const patch = { subdireccion: v };
                     if (t.gerencia && sd && !sd.gerencias.includes(t.gerencia)) patch.gerencia = null;
@@ -2876,12 +3336,14 @@
             case 'gerencia': {
                 const sd = C.SUBDIR[t.subdireccion];
                 if (!sd) { toast('Primero elige la subdirección.', 'info'); return; }
-                const ops = [{ valor: '', texto: 'Sin gerencia (toda la subdirección)', icono: 'minus' }].concat(sd.gerencias.map(g => ({ valor: g, texto: g, icono: 'building' })));
+                // Un gerente sólo elige entre su gerencia y toda la subdirección.
+                const perm = C.gerenciasPermitidas(state.area, t.subdireccion);
+                const ops = perm.opciones.map(g => (g ? { valor: g, texto: g, icono: 'building' } : { valor: '', texto: 'Sin gerencia (toda la subdirección)', icono: 'minus' }));
                 return abrirMenu(el, {
-                    titulo: 'Gerencia · ' + sd.corto, buscar: 'Buscar o escribir otra área…', ancho: 320,
+                    titulo: 'Gerencia · ' + sd.corto, buscar: perm.libre ? 'Buscar o escribir otra área…' : 'Buscar…', ancho: 320,
                     items: ops.map(o => Object.assign({ sel: (t.gerencia || '') === o.valor, fijo: !o.valor }, o)),
                     alElegir: v => cambiarDesdePanel({ gerencia: v || null }),
-                    libre: texto => cambiarDesdePanel({ gerencia: texto }),
+                    libre: perm.libre ? texto => cambiarDesdePanel({ gerencia: texto }) : null,
                 });
             }
             case 'responsable': return menuResponsable(el, t, p => cambiarDesdePanel(patchResponsable(t, p)));
@@ -3072,6 +3534,7 @@
     /* Atajos: N nueva tarea, / buscar, Esc cerrar. Sólo con la sección a la vista. */
     function atajos(e) {
         if (e.key === 'Escape') {
+            if (resolverConfirmar) { cerrarConfirmar(false); e.preventDefault(); return; }
             if (state.menu) { cerrarMenu(); e.preventDefault(); return; }
             const m = $('seg-modal');
             if (m && !m.hidden) { if (resolverDuplicado) terminarDuplicado('cancelar'); else { m.hidden = true; m.innerHTML = ''; } return; }
@@ -3094,6 +3557,313 @@
     /* ==========================================================================
        Arranque
        ========================================================================== */
+    /* ==========================================================================
+       Tablero de mando en el Inicio
+       --------------------------------------------------------------------------
+       Para directores, subdirectores y gerentes: lo que requiere atención, sin
+       entrar al módulo. Vive en el Inicio (dentro de #sidebar-nav, que es la
+       pantalla de tarjetas), así que se ve al entrar y se esconde solo al abrir
+       cualquier sección. Cada quien ve su parte según el área de su usuario
+       (gerencia → subdirección → toda la Dirección) y puede ampliar la vista.
+       Lo ven las mismas cuentas que tienen acceso a Seguimiento.
+       ========================================================================== */
+    const PREF_MANDO = 'aifa_seguimiento_mando_v1';
+    const LIMITE_ATENCION = 6;
+    const mando = { clave: null, area: undefined, alcanceBase: null, alcance: null, cargadoEn: 0, actualizando: null, pintado: 0, abierto: false };
+
+    const enInicio = () => document.body.classList.contains('navdeck-mode') && !document.body.classList.contains('navdeck-active');
+
+    function asegurarMando() {
+        let el = $('seg-mando');
+        if (el) return el;
+        const nav = $('sidebar-nav');
+        if (!nav) return null;
+        el = document.createElement('section');
+        el.className = 'seg-root seg-mando';
+        el.id = 'seg-mando';
+        el.hidden = true;
+        el.setAttribute('aria-labelledby', 'seg-mando-t');
+        // Arriba de Operaciones Totales en la vista de Dirección General; para los
+        // demás, justo después de los accesos directos.
+        const antes = $('dg-operaciones') || nav.querySelector(':scope > .si-sep');
+        nav.insertBefore(el, antes || null);
+        el.addEventListener('click', clicMando);
+        return el;
+    }
+
+    /** El área del usuario (tabla areas), con la de arriba para gerencias fuera de catálogo. */
+    async function cargarAreaMando() {
+        let clave = '';
+        try { clave = String(sessionStorage.getItem('user_area') || '').trim(); } catch (_) { /* nada */ }
+        if (mando.clave === clave && mando.area !== undefined) return mando.area;
+        mando.clave = clave;
+        mando.area = null;
+        if (!clave) return null;
+        try {
+            const c = await sb();
+            const { data } = await c.from('areas').select('id, clave, nombre, nivel, parent_area_id').eq('clave', clave).limit(1);
+            const a = data && data[0];
+            mando.area = a ? { clave: a.clave, nombre: a.nombre, nivel: a.nivel } : { clave, nombre: clave };
+            if (a && a.parent_area_id) {
+                const arriba = await c.from('areas').select('clave, nombre, nivel').eq('id', a.parent_area_id).limit(1);
+                if (arriba.data && arriba.data[0]) mando.area.padre = arriba.data[0];
+            }
+        } catch (_) {
+            mando.area = { clave, nombre: clave };
+        }
+        return mando.area;
+    }
+
+    function rolDeAplicacion() {
+        try { return sessionStorage.getItem('user_role') || ''; } catch (_) { return ''; }
+    }
+
+    function guardarAlcance() {
+        try { localStorage.setItem(PREF_MANDO + ':' + state.sesion.email, mando.alcance ? mando.alcance.tipo : ''); } catch (_) { /* nada */ }
+    }
+    function alcanceGuardado(opciones) {
+        try {
+            const tipo = localStorage.getItem(PREF_MANDO + ':' + state.sesion.email);
+            return opciones.find(o => o.tipo === tipo) || null;
+        } catch (_) { return null; }
+    }
+
+    /** Carga (si hace falta) y pinta el tablero. Se llama al llegar al Inicio. */
+    function actualizarMando(forzar) {
+        if (mando.actualizando) return mando.actualizando;
+        mando.actualizando = (async () => {
+            const el = asegurarMando();
+            if (!el) return;
+            if (!state.rol || state.rol === 'instalar') { el.hidden = true; el.innerHTML = ''; pintarInsignia(0); return; }
+            if (!enInicio()) return;   // se pinta al volver al Inicio
+            asegurarPortal();
+            if (forzar || !state.cargado || Date.now() - mando.cargadoEn > 2 * 60 * 1000) {
+                if (!el.innerHTML) { el.hidden = false; el.innerHTML = '<div class="seg-mando-cargando"><div class="seg-skel"></div><div class="seg-skel"></div></div>'; }
+                const ok = await cargar();
+                if (!ok) {
+                    el.hidden = false;
+                    el.innerHTML = '<div class="seg-mando-error"><i class="fas fa-circle-exclamation"></i>No se pudieron cargar los pendientes. <button type="button" class="seg-link" data-mando="reintentar">Reintentar</button></div>';
+                    return;
+                }
+                mando.cargadoEn = Date.now();
+            }
+            if (areaRestringida()) mando.alcanceBase = state.area;
+            else mando.alcanceBase = C.alcanceDeArea(await cargarAreaMando(), rolDeAplicacion());
+            const opciones = opcionesMando();
+            if (!mando.alcance || !opciones.some(o => o.tipo === mando.alcance.tipo)) mando.alcance = alcanceGuardado(opciones) || opciones[0];
+            pintarMando();
+        })().catch(e => console.warn('[Seguimiento] Tablero de mando:', e)).finally(() => { mando.actualizando = null; });
+        return mando.actualizando;
+    }
+
+    /** Repinta tras cualquier cambio (crear, editar, completar, eliminar). */
+    function programarMando() {
+        if (mando.pintado || !$('seg-mando') || !state.cargado || !state.rol) return;
+        mando.pintado = raf(() => { mando.pintado = 0; if (state.cargado && state.rol) pintarMando(); });
+    }
+
+    // Con área fija en Seguimiento no hay «Toda la Dirección»: la base no le entrega más.
+    const opcionesMando = () => C.alcancesPosibles(mando.alcanceBase).filter(o => !areaRestringida() || o.tipo !== 'todo');
+
+    const nombreAlcance = a => a.tipo === 'gerencia' ? a.gerencia
+        : a.tipo === 'subdireccion' ? ((C.SUBDIR[a.subdireccion] || {}).nombre || a.subdireccion)
+        : 'Dirección de Operación';
+    const etiquetaAlcance = a => a.tipo === 'gerencia' ? 'Mi gerencia' : a.tipo === 'subdireccion' ? 'Mi subdirección' : 'Toda la Dirección';
+
+    function estadoAtencion(x) {
+        if (x.situacion === 'vencida') return { txt: -x.dias === 1 ? '1 día de atraso' : -x.dias + ' días de atraso', cls: 'rojo' };
+        if (x.situacion === 'vence_hoy') return { txt: 'Vence hoy', cls: 'naranja' };
+        if (x.tarea.estatus === 'detenida') return { txt: 'Detenida', cls: 'detenida' };
+        const txt = x.dias === 1 ? 'Vence mañana' : 'Vence en ' + x.dias + ' días';
+        return { txt, cls: x.situacion === 'a_tiempo' ? 'tiempo' : 'ambar' };
+    }
+
+    function pintarInsignia(n) {
+        const link = $('menu-seguimiento');
+        if (!link) return;
+        let b = link.querySelector('.seg-insignia');
+        if (!n) { if (b) b.remove(); return; }
+        if (!b) { b = document.createElement('span'); b.className = 'seg-insignia'; link.appendChild(b); }
+        b.textContent = n > 99 ? '99+' : String(n);
+        b.title = plural(n, 'tarea vencida', 'tareas vencidas');
+    }
+
+    /* El Inicio es la pantalla de tarjetas: el tablero no puede comérsela. Se
+       pinta como una barra del alto de los accesos directos (cifras en chips y
+       semáforo en luces); el detalle se despliega debajo sólo cuando se pide. */
+    const ABREV = { SSO: 'SSO', SSA: 'SSA', SSC: 'SSC', SI: 'ING', SGE: 'SGE', DO: 'DO' };
+
+    function pintarMando() {
+        const el = $('seg-mando');
+        if (!el || !state.cargado || !state.rol) return;
+        const h = hoy();
+        const alc = mando.alcance || C.alcancesPosibles(null)[0];
+        const r = C.resumenMando(C.filtrarAlcance(state.tareas, alc), h);
+        const desglose = C.desgloseMando(state.tareas, alc, h);
+        const opciones = opcionesMando();
+        const verArea = alc.tipo === 'todo';
+        const alDia = !r.vencidas && !r.semana && !r.detenidas;
+        // Lo siguiente que vence, para que el detalle nunca quede vacío.
+        const proximas = r.atencion.length ? [] : C.filtrarAlcance(state.tareas, alc)
+            .filter(t => C.estaAbierta(t) && t.fecha_limite && C.diasEntre(h, t.fecha_limite) >= 0)
+            .sort((a, b) => (a.fecha_limite < b.fecha_limite ? -1 : 1))
+            .slice(0, 4)
+            .map(t => ({ tarea: t, situacion: C.situacion(t, h), dias: C.diasEntre(h, t.fecha_limite) }));
+
+        const chip = (filtro, n, uno, varios, cls, ico) => n
+            ? '<button type="button" class="seg-mando-chip is-' + cls + '" data-mando="filtro" data-filtro="' + filtro + '"' + tip(plural(n, uno, varios), 'Abrir Seguimiento con sólo éstas.', { ico }) + '>' +
+                '<i class="fas fa-' + ico + '"></i><b>' + n + '</b>' + (n === 1 ? uno : varios) + '</button>'
+            : '';
+
+        // Semáforo en luces: sólo en la vista de toda la Dirección (una por subdirección).
+        const luces = verArea
+            ? '<div class="seg-mando-luces" role="group" aria-label="Semáforo por subdirección">' + desglose.map(d =>
+                '<button type="button" class="seg-mando-luz-btn is-' + d.nivel + '" data-mando="area" data-tipo="todo" data-clave="' + esc(d.clave) + '"' +
+                  tip(d.nombre, d.abiertas ? plural(d.abiertas, 'abierta', 'abiertas') + (d.vencidas ? ' · ' + d.vencidas + ' vencidas' : '') + (d.porVencer ? ' · ' + d.porVencer + ' por vencer' : '') : 'Sin pendientes', { c: d.color }) +
+                  ' aria-label="' + esc(d.nombre) + '"><span class="seg-mando-luz"></span>' + esc(ABREV[d.clave] || d.clave) + '</button>').join('') + '</div>'
+            : '';
+
+        const filaAtencion = x => {
+            const t = x.tarea;
+            const e = estadoAtencion(x);
+            const sd = C.SUBDIR[t.subdireccion];
+            return '<div class="seg-mando-fila is-' + e.cls + '">' +
+                '<span class="seg-mando-luz" aria-hidden="true"></span>' +
+                '<button type="button" class="seg-mando-info" data-mando="ver" data-id="' + esc(t.id) + '">' +
+                  '<span class="seg-mando-nom"><span class="seg-mando-folio">' + esc(C.folio(t.folio)) + '</span>' + esc(recortar(t.titulo, 70)) + '</span>' +
+                  '<span class="seg-mando-meta">' +
+                    (verArea && sd ? '<span>' + esc(sd.corto) + '</span>' : (t.gerencia ? '<span>' + esc(t.gerencia) + '</span>' : '')) +
+                    '<span>' + esc(t.responsable || 'Sin responsable') + '</span></span>' +
+                '</button>' +
+                '<span class="seg-mando-estado">' + esc(e.txt) + '</span>' +
+                (t.responsable ? '<button type="button" class="seg-icon-btn seg-mando-wa" data-mando="whatsapp" data-id="' + esc(t.id) + '"' + tip('Recordar por WhatsApp', 'A ' + t.responsable + ', con lo que falta.', { ico: 'comment' }) + ' aria-label="Recordar por WhatsApp"><i class="fab fa-whatsapp"></i></button>' : '<span class="seg-mando-wa-vacio"></span>') +
+                '</div>';
+        };
+
+        const tituloDesglose = alc.tipo === 'todo' ? 'Por subdirección' : alc.tipo === 'subdireccion' ? 'Por gerencia' : 'Por responsable';
+        const filaDesglose = d => '<button type="button" class="seg-mando-sem is-' + d.nivel + '" data-mando="area" data-tipo="' + alc.tipo + '" data-clave="' + esc(d.clave) + '">' +
+            '<span class="seg-mando-luz" aria-hidden="true"></span><span class="seg-mando-sem-nom">' + esc(d.nombre) + '</span>' +
+            '<span class="seg-mando-sem-num">' + (d.vencidas ? '<b class="is-rojo">' + d.vencidas + '</b>' : '') + (d.porVencer ? '<b class="is-ambar">' + d.porVencer + '</b>' : '') +
+              '<span>' + (d.abiertas || '—') + '</span></span></button>';
+        const filaRenovacion = x => '<button type="button" class="seg-mando-ren' + (x.dias <= 30 ? ' is-pronto' : '') + '" data-mando="ver" data-id="' + esc(x.tarea.id) + '">' +
+            '<span class="seg-mando-ren-nom">' + esc(recortar(x.tarea.titulo, 48)) + '</span>' +
+            '<span class="seg-mando-ren-dias">' + (x.dias === 0 ? 'hoy' : x.dias === 1 ? 'mañana' : esc(C.fechaCorta(x.tarea.fecha_limite))) + '</span></button>';
+
+        el.hidden = false;
+        el.classList.toggle('is-abierto', Boolean(mando.abierto));
+        el.innerHTML =
+            '<div class="seg-mando-barra">' +
+              '<button type="button" class="seg-mando-cabeza" data-mando="toggle" aria-expanded="' + Boolean(mando.abierto) + '" aria-controls="seg-mando-pop">' +
+                '<span class="seg-mando-logo' + (r.vencidas ? ' is-alerta' : '') + '"><i class="fas fa-list-check"></i></span>' +
+                '<span class="seg-mando-titulo"><b id="seg-mando-t">Pendientes</b><small>' + esc(nombreAlcance(alc)) + '</small></span>' +
+              '</button>' +
+              '<div class="seg-mando-chips">' +
+                (alDia
+                    ? '<span class="seg-mando-ok"><i class="fas fa-circle-check"></i>Todo al día</span>'
+                    : chip('vencida', r.vencidas, 'vencida', 'vencidas', 'rojo', 'triangle-exclamation') +
+                      chip('semana', r.semana, 'vence esta semana', 'vencen esta semana', 'ambar', 'hourglass-half') +
+                      chip('detenida', r.detenidas, 'detenida', 'detenidas', 'naranja', 'circle-pause')) +
+                '<span class="seg-mando-dato">' + (r.abiertas ? plural(r.abiertas, 'abierta', 'abiertas') : 'Sin tareas abiertas') +
+                  (r.cumplimiento == null ? '' : ' · <b>' + r.cumplimiento + '%</b> a tiempo') + '</span>' +
+              '</div>' +
+              luces +
+              '<button type="button" class="seg-mando-toggle" data-mando="toggle" aria-expanded="' + Boolean(mando.abierto) + '" aria-controls="seg-mando-pop">' +
+                (mando.abierto ? 'Ocultar' : 'Ver detalle') + '<i class="fas fa-chevron-down"></i></button>' +
+            '</div>' +
+            '<div class="seg-mando-pop" id="seg-mando-pop" role="region" aria-label="Detalle de pendientes"' + (mando.abierto ? '' : ' hidden') + '>' +
+              '<div class="seg-mando-pop-h">' +
+                (opciones.length > 1 ? '<div class="seg-mando-alcance" role="group" aria-label="Qué ver">' + opciones.map((o, i) =>
+                    '<button type="button" class="' + (o.tipo === alc.tipo ? 'is-on' : '') + '" data-mando="alcance" data-i="' + i + '" aria-pressed="' + (o.tipo === alc.tipo) + '">' + etiquetaAlcance(o) + '</button>').join('') + '</div>'
+                  : '<span class="seg-mando-pop-t">' + esc(nombreAlcance(alc)) + '</span>') +
+                '<span class="seg-mando-corte">Corte: ' + esc(C.fechaLarga(h)) + '</span>' +
+                (puedeEditar() ? '<button type="button" class="seg-btn seg-btn-sm seg-btn-primary" data-mando="instruccion"><i class="fas fa-bullhorn"></i>Dar una instrucción</button>' : '') +
+                '<button type="button" class="seg-btn seg-btn-sm" data-mando="abrir">Abrir Seguimiento<i class="fas fa-arrow-right"></i></button>' +
+              '</div>' +
+              '<div class="seg-mando-pop-grid">' +
+                '<section class="seg-mando-col">' +
+                  '<h3>Requiere atención<span class="seg-mando-n">' + r.atencion.length + '</span>' +
+                    (r.atencion.length > LIMITE_ATENCION ? '<button type="button" class="seg-link" data-mando="abrir">Ver todas</button>' : '') + '</h3>' +
+                  (r.atencion.length
+                      ? '<div class="seg-mando-lista">' + r.atencion.slice(0, LIMITE_ATENCION).map(filaAtencion).join('') + '</div>'
+                      : '<p class="seg-mando-vacio"><i class="fas fa-circle-check"></i>Nada vencido, por vencer ni detenido.</p>' +
+                        (proximas.length ? '<h3 class="seg-mando-h3-sep">Próximas</h3><div class="seg-mando-lista">' + proximas.map(filaAtencion).join('') + '</div>' : '')) +
+                '</section>' +
+                '<section class="seg-mando-col">' +
+                  '<h3>' + tituloDesglose + '</h3>' +
+                  (desglose.length ? '<div class="seg-mando-semaforo">' + desglose.map(filaDesglose).join('') + '</div>' : '<p class="seg-mando-vacio">Sin tareas abiertas.</p>') +
+                  '<h3 class="seg-mando-h3-sep">Renovaciones · 90 días</h3>' +
+                  (r.renovaciones.length ? '<div class="seg-mando-rens">' + r.renovaciones.slice(0, 4).map(filaRenovacion).join('') + '</div>'
+                      : '<p class="seg-mando-vacio">Ninguna licencia ni certificado por vencer.</p>') +
+                '</section>' +
+              '</div>' +
+            '</div>';
+        // El globo del menú cuenta las vencidas de su propia área.
+        pintarInsignia(C.resumenMando(C.filtrarAlcance(state.tareas, mando.alcanceBase || alc), h).vencidas);
+    }
+
+    function abrirDetalleMando(si) {
+        mando.abierto = Boolean(si);
+        pintarMando();
+    }
+
+    // Esc cierra el detalle (si no hay otra ventana del módulo encima).
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && mando.abierto && !state.dr && !resolverConfirmar) abrirDetalleMando(false);
+    });
+
+    /** Abre Seguimiento ya filtrado a lo que se estaba viendo. */
+    function abrirSeguimiento(cambios) {
+        const alc = mando.alcance || {};
+        const extra = Object.assign({}, cambios || {});
+        const vista = extra.vista;
+        delete extra.vista;
+        state.filtros = Object.assign({}, state.filtros, {
+            texto: alc.tipo === 'gerencia' ? alc.gerencia : '', subdirecciones: alc.subdireccion ? [alc.subdireccion] : [],
+            estatus: [], prioridades: [], tipos: [], responsable: '', situacion: '',
+        }, extra);
+        if (vista) state.vista = vista;
+        mando.abierto = false;
+        const link = $('menu-seguimiento');
+        if (link) link.click();
+        else if (typeof window.showSection === 'function') window.showSection('seguimiento');
+    }
+
+    function clicMando(e) {
+        const b = e.target.closest('[data-mando]');
+        if (!b) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const acc = b.dataset.mando;
+        if (acc === 'toggle') { abrirDetalleMando(!mando.abierto); return; }
+        if (acc === 'ver') { abrirTarea(b.dataset.id); return; }
+        if (acc === 'whatsapp') { recordar(b.dataset.id, b); return; }
+        if (acc === 'reintentar') { actualizarMando(true); return; }
+        if (acc === 'alcance') {
+            mando.alcance = opcionesMando()[+b.dataset.i] || mando.alcance;
+            guardarAlcance();
+            pintarMando();
+            return;
+        }
+        if (acc === 'instruccion') {
+            const a = mando.alcance || {};
+            nuevaTarea({ tipo: 'orden', subdireccion: a.subdireccion || subdirUnica(), gerencia: a.gerencia || gerenciaPorDefecto() });
+            return;
+        }
+        if (acc === 'abrir') { abrirSeguimiento(); return; }
+        if (acc === 'filtro') {
+            const f = b.dataset.filtro;
+            abrirSeguimiento(f === 'vencida' ? { situacion: 'vencida' } : f === 'semana' ? { situacion: 'por_vencer' }
+                : f === 'detenida' ? { estatus: ['detenida'] } : f === 'cumplimiento' ? { vista: 'resumen' } : {});
+            return;
+        }
+        if (acc === 'area') {
+            const clave = b.dataset.clave;
+            if (b.dataset.tipo === 'todo') abrirSeguimiento({ subdirecciones: [clave] });
+            else if (b.dataset.tipo === 'subdireccion') abrirSeguimiento({ texto: clave });
+            else abrirSeguimiento({ responsable: clave === 'Sin responsable' ? '' : clave });
+        }
+    }
+
     function iniciar() {
         const sec = asegurarSeccion();
         if (!sec) return;
@@ -3108,7 +3878,14 @@
         }).observe(sec, { attributes: true, attributeFilter: ['class'] });
         document.addEventListener('keydown', atajos);
         conectarTips();
-        const reRevisar = () => { olvidarSesion(); revisarAcceso().then(() => { if (seccionActiva()) entrar(); }); };
+        asegurarMando();
+        let estabaEnInicio = enInicio();
+        new MutationObserver(() => {
+            const ahora = enInicio();
+            if (ahora && !estabaEnInicio) actualizarMando();
+            estabaEnInicio = ahora;
+        }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        const reRevisar = () => { olvidarSesion(); revisarAcceso().then(() => { if (seccionActiva()) entrar(); actualizarMando(true); }); };
         window.addEventListener('aifa:login', reRevisar);
         // Al entrar, salir o cambiar de cuenta se vuelve a revisar el acceso.
         // Fuera del callback (setTimeout): supabase-js se traba si dentro de él
@@ -3127,12 +3904,13 @@
         const probar = () => {
             revisarAcceso().then(rol => {
                 if (seccionActiva()) entrar();
+                if (rol) actualizarMando();
                 if (rol == null && !state.revisado && ++intentos < 6) setTimeout(probar, 1500);
             });
         };
         probar();
         // Las vencidas cambian a medianoche aunque nadie toque nada.
-        setInterval(() => { if (state.cargado) renderPronto(); }, 5 * 60 * 1000);
+        setInterval(() => { if (state.cargado) renderPronto(); if (enInicio()) actualizarMando(); }, 5 * 60 * 1000);
     }
 
     // La sección se crea en cuanto carga el script: así existe cuando la

@@ -40,6 +40,7 @@
             _mapaLog(isOpen ? 'closing' : 'opening');
 
             if (isOpen) {
+                document.body.classList.remove('mapa-abierto');
                 section.classList.remove('active');
                 iframe.src = '';
                 if (btn) btn.classList.remove('active');
@@ -55,6 +56,10 @@
                 _mapaActiveSectionKey = null;
                 _mapaActiveSectionEl  = null;
             } else {
+                // La barra HOY / MAÑANA se oculta dentro de los módulos; con el mapa
+                // abierto vuelve (ahí está su botón para cerrarlo). Se marca antes de
+                // medirla para que el mapa quede justo debajo.
+                document.body.classList.add('mapa-abierto');
                 var agBar = document.getElementById('ag-today-bar');
                 var topPx = agBar ? (agBar.getBoundingClientRect().bottom) : 160;
                 section.style.top = topPx + 'px';
@@ -101,6 +106,22 @@
         _mapaBindBtn();
     }
 
+    // Si el mapa deja de estar activo por cualquier camino (menú, botón Inicio,
+    // otra sección), la barra HOY / MAÑANA vuelve a su regla normal.
+    function _mapaVigilarSeccion() {
+        var section = document.getElementById('mapa-interactivo-section');
+        if (!section || section.dataset.mapaVigilada === '1' || typeof MutationObserver === 'undefined') return;
+        section.dataset.mapaVigilada = '1';
+        new MutationObserver(function () {
+            if (!section.classList.contains('active')) document.body.classList.remove('mapa-abierto');
+        }).observe(section, { attributes: true, attributeFilter: ['class'] });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _mapaVigilarSeccion);
+    } else {
+        _mapaVigilarSeccion();
+    }
+
     // Cuando se navega via menu-item, descargar el iframe y limpiar estado
     document.addEventListener('click', function (e) {
         var menuItem = e.target.closest('.menu-item[data-section]');
@@ -109,6 +130,7 @@
         var btn     = document.getElementById('btn-mapa-interactivo');
         var section = document.getElementById('mapa-interactivo-section');
         if (section) section.classList.remove('active');
+        document.body.classList.remove('mapa-abierto');
         if (iframe)  iframe.src = '';
         if (btn)     btn.classList.remove('active');
         if (_mapaAddedNavdeckActive) {
