@@ -19,6 +19,17 @@
     const LIST_LIMIT = 100;
     const COLS = 7;
     const ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx';
+    // Celular o tableta (no computadora): ahí el + abre directo la cámara.
+    // Se ve el navegador y no la pantalla táctil, para que una laptop con
+    // pantalla táctil siga como computadora. El iPad moderno se presenta como
+    // Mac, por eso se revisa también si tiene pantalla táctil.
+    const ES_MOVIL_O_TABLETA = (function () {
+        var nav = window.navigator || {};
+        if (nav.userAgentData && nav.userAgentData.mobile) return true;
+        var ua = nav.userAgent || '';
+        if (/Android|iPhone|iPad|iPod|Mobi|Tablet|Silk|Kindle/i.test(ua)) return true;
+        return /Macintosh/i.test(ua) && (nav.maxTouchPoints || 0) > 1;
+    })();
     // Turno que elige el supervisor al iniciar (columna turno, db/setp_recorridos_turno.sql).
     const TURNOS_REC = [
         { key: 'MATUTINO', label: 'Matutino' },
@@ -338,7 +349,7 @@
         var html = '<div class="setp-rec-evs">';
         if (busy === 'guardar') html += '<span class="spinner-border spinner-border-sm text-primary"></span>';
         else if (p) html += evidenciaPendiente(r, p);
-        else html += '<button type="button" class="btn btn-sm btn-outline-primary setp-rec-mas" data-rec="evidencia-mas" data-id="' + esc(r.id) + '" title="Agregar otra evidencia (foto)" aria-label="Agregar otra evidencia"><i class="fas fa-plus"></i></button>';
+        else html += '<button type="button" class="btn btn-sm btn-outline-primary setp-rec-mas" data-rec="evidencia-mas" data-id="' + esc(r.id) + '" title="Tomar otra foto de evidencia" aria-label="Tomar otra foto de evidencia"><i class="fas fa-plus"></i></button>';
         html += '</div>';
         if (p && busy !== 'guardar') html += avisoPendiente(r, p);
         return html;
@@ -946,6 +957,12 @@
                 state.evidenciaExtra = act === 'evidencia-mas';
                 var input = $('setp-rec-file');
                 input.accept = state.evidenciaExtra ? 'image/*' : ACCEPT;
+                // Las evidencias adicionales son sólo fotos: en celular y tableta
+                // abren directo la cámara trasera cada vez, en vez de la galería.
+                // En computadora se sigue eligiendo el archivo como siempre, y la
+                // primera evidencia sigue permitiendo foto o archivo (PDF, Word…).
+                if (state.evidenciaExtra && ES_MOVIL_O_TABLETA) input.setAttribute('capture', 'environment');
+                else input.removeAttribute('capture');
                 input.value = '';
                 input.click();
             }
