@@ -538,6 +538,7 @@
 .ops-imp-stat.tone-new{border-left-color:#16a34a}.ops-imp-stat.tone-new .ops-imp-stat-value{color:#15803d}
 .ops-imp-stat.tone-upd{border-left-color:#2563eb}.ops-imp-stat.tone-upd .ops-imp-stat-value{color:#1d4ed8}
 .ops-imp-stat.tone-skip{border-left-color:#94a3b8}.ops-imp-stat.tone-skip .ops-imp-stat-value{color:#475569}
+.ops-imp-stat.tone-bad{border-left-color:#dc2626}.ops-imp-stat.tone-bad .ops-imp-stat-value{color:#b91c1c}
 .ops-imp-notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
 .ops-imp-notes li{display:flex;gap:10px;align-items:flex-start;font-size:.82rem;line-height:1.4;color:#334155;background:#f8fafc;border:1px solid #eef1f6;border-radius:10px;padding:9px 11px}
 .ops-imp-notes li i{flex:0 0 auto;margin-top:2px;color:#64748b;width:15px;text-align:center}
@@ -610,6 +611,7 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
                     <div class="ops-imp-foot">
                         <span class="ops-imp-foot-note">${escapeHtml(opts.footNote || '')}</span>
                         <div class="ops-imp-actions">
+                            ${opts.extraAction ? `<button type="button" class="ops-imp-btn ops-imp-btn-ghost" data-imp="extra"><i class="fas ${escapeHtml(opts.extraAction.icon || 'fa-download')}"></i> ${escapeHtml(opts.extraAction.text)}</button>` : ''}
                             ${cancelText ? `<button type="button" class="ops-imp-btn ops-imp-btn-ghost" data-imp="cancel">${escapeHtml(cancelText)}</button>` : ''}
                             <button type="button" class="ops-imp-btn ops-imp-btn-primary" data-imp="confirm">${escapeHtml(opts.confirmText || 'Continuar')}</button>
                         </div>
@@ -633,6 +635,7 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
 
             overlay.addEventListener('click', ev => {
                 const btn = ev.target.closest('[data-imp]');
+                if (btn && btn.dataset.imp === 'extra') { opts.extraAction.onClick(); return; }
                 if (btn) { close(btn.dataset.imp === 'confirm'); return; }
                 if (ev.target === overlay) close(!cancelText); // clic fuera = cerrar
             });
@@ -672,11 +675,19 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
             const yearFromName = inferYearFromFilename(file.name);
             if (yearFromName) lastImportYear = yearFromName;
 
-            const mapped = rows
-                .filter(r => r.some(cell => String(cell || '').trim() !== ''))
-                .map(r => mapRowToObject(headers, r));
+            // La línea de cada fila se fija antes de quitar las vacías, para
+            // que el reporte de rechazados apunte a la línea real del archivo.
+            const dataRows = rows
+                .map((cells, index) => ({ cells, line: index + 2 }))
+                .filter(({ cells }) => cells.some(cell => String(cell || '').trim() !== ''));
+            const mapped = dataRows.map(({ cells }) => mapRowToObject(headers, cells));
 
             if (mapped.length === 0) throw new Error('No hay filas de datos válidas en el CSV.');
+
+            // Amadeus cuenta visitas (una fila = llegada + salida); el sistema
+            // guarda la visita pero Manifiestos trabaja por vuelo.
+            const flightsDetected = mapped.reduce((total, row) =>
+                total + (row['[Arr] Flight Designator'] ? 1 : 0) + (row['[Dep] Flight Designator'] ? 1 : 0), 0);
 
             // --- DUPLICATE DETECTION START ---
             const supabase = window.supabaseClient;
@@ -684,16 +695,30 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
 
             const referenceDate = inferImportReferenceDate(file);
             lastImportYear = referenceDate.getFullYear();
-            const preparedRows = mapped.map((row, index) => prepareFlightIdentity(row, referenceDate, index + 2));
-            const invalidMovements = preparedRows.flatMap(item => item.invalidMovements);
-            if (invalidMovements.length) {
-                const sample = invalidMovements.slice(0, 8).join(', ');
-                const extra = invalidMovements.length > 8 ? '…' : '';
-                throw new Error(
-                    `No se pudo construir la llave única de ${sample}${extra}. ` +
-                    'Cada movimiento requiere aerolínea, número de vuelo, fecha programada y Routing.'
-                );
-            }
+            const preparedRows = mapped.map((row, index) => prepareFlightIdentity(row, referenceDate, dataRows[index].line));
+
+            // Una fila con problema se rechaza sola —con su línea y el motivo—
+            // y el resto del archivo se importa. Antes un solo caso abortaba
+            // todo el archivo y se perdían cientos de vuelos válidos.
+            const rejected = [];
+            const reject = (item, reason) => rejected.push({ line: item.sourceRow, row: item.payload, reason });
+            const describeMissingKey = (row, side) => {
+                const p = side === 'A' ? '[Arr]' : '[Dep]';
+                const sched = side === 'A' ? '[Arr] SIBT' : '[Dep] SOBT';
+                return `${side === 'A' ? 'llegada' : 'salida'} ${row[`${p} Flight Designator`] || '(sin vuelo)'}: ` +
+                    `aerolínea "${row[`${p} Airline code`]}", ${sched.slice(6)} "${row[sched]}", Routing "${row.Routing}"`;
+            };
+            const validRows = preparedRows.filter(item => {
+                if (!item.invalidMovements.length) return true;
+                const row = item.payload;
+                const detail = [];
+                if (row['[Arr] Flight Designator'] && !item.arrKey) detail.push(describeMissingKey(row, 'A'));
+                if (row['[Dep] Flight Designator'] && !item.depKey) detail.push(describeMissingKey(row, 'D'));
+                reject(item, detail.length
+                    ? `Sin llave única (requiere aerolínea, número de vuelo, fecha programada DDMMM HH:MM y Routing) — ${detail.join('; ')}`
+                    : 'La fila no trae vuelo de llegada ni de salida.');
+                return false;
+            });
 
             const { data: existingIdentityRows, error: identityError } = await fetchAllFlightIdentityRows(supabase);
             if (identityError) {
@@ -744,12 +769,14 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
             const fileOwnerByMovement = new Map();
             let duplicatesInFile = 0;
             let resolvedCancelledInFile = 0;
-            preparedRows.forEach(item => {
+            validRows.forEach(item => {
                 const ownerIndexes = new Set(item.movementIdentities
                     .map(identity => fileOwnerByMovement.get(identity))
                     .filter(index => index !== undefined));
                 if (ownerIndexes.size > 1) {
-                    throw new Error(`La fila ${item.sourceRow} enlaza movimientos que pertenecen a turnarounds distintos dentro del archivo.`);
+                    const lines = [...ownerIndexes].map(index => uniquePrepared[index].sourceRow).join(' y ');
+                    reject(item, `Enlaza movimientos que en este mismo archivo pertenecen a visitas distintas (líneas ${lines}).`);
+                    return;
                 }
                 if (ownerIndexes.size === 1) {
                     const ownerIndex = [...ownerIndexes][0];
@@ -774,14 +801,19 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
                             return;
                         }
                         const shared = item.movementIdentities.filter(identity => previous.movementIdentities.includes(identity));
-                        throw new Error(
-                            `La fila ${item.sourceRow} reutiliza un movimiento (${shared.join(', ')}) ` +
-                            `con un enlace de llegada/salida diferente al de la fila ${previous.sourceRow}.`
+                        reject(item,
+                            `Reutiliza un movimiento (${shared.join(', ')}) ` +
+                            `con un enlace de llegada/salida diferente al de la línea ${previous.sourceRow}.`
                         );
+                        return;
                     }
+                    // Misma visita repetida: gana la última, salvo que sea la
+                    // cancelada/no-operando y la anterior esté vigente (VB 9405
+                    // del 11NOV vino como "Flight scheduled" y "Not operating").
+                    duplicatesInFile++;
+                    if (isExcludedStatus(item.payload) && !isExcludedStatus(previous.payload)) return;
                     uniquePrepared[ownerIndex] = item;
                     item.movementIdentities.forEach(identity => fileOwnerByMovement.set(identity, ownerIndex));
-                    duplicatesInFile++;
                     return;
                 }
                 const newIndex = uniquePrepared.length;
@@ -853,14 +885,19 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
                     // enlace nuevo; el enlace de salida obsoleto del otro
                     // registro se libera más abajo (ver liberación de
                     // llaves obsoletas) para que no choque con el nuevo.
+                    // Lo mismo cuando NINGUNO de los registros está activo: el
+                    // AODB exportó primero la llegada y la salida como dos
+                    // visitas sueltas (ambas Cancelled, p. ej. AC 7246 del
+                    // 08NOV en el archivo del 06NOV) y después las unió en
+                    // una sola. Antes este caso abortaba todo el archivo.
                     const arrMatchedId = arrMatchByItem.get(item);
-                    if (arrMatchedId && activeIds.includes(arrMatchedId)) {
+                    if (arrMatchedId && (activeIds.includes(arrMatchedId) || activeIds.length === 0)) {
                         updateItems.push({ id: arrMatchedId, ...item });
                         resolvedTurnaroundReassignInDb++;
                         return;
                     }
-                    throw new Error(
-                        `La fila ${item.sourceRow} coincide con más de un registro existente. ` +
+                    reject(item,
+                        `Coincide con más de un registro existente (ids ${ids.join(', ')}). ` +
                         'La base contiene un enlace de turnaround inconsistente que requiere revisión.'
                     );
                 });
@@ -954,9 +991,27 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
             const insertRows = insertItems.map(item => item.payload);
             const duplicatesCount = duplicatesInFile + exactDuplicates;
 
+            const readSummary = `${mapped.length} filas leídas · ${flightsDetected} vuelos detectados`;
+            const downloadRejected = () => ({
+                text: 'Descargar rechazados',
+                icon: 'fa-download',
+                onClick: () => _importDescargarRechazados(file.name, rejected)
+            });
+
             if (insertRows.length === 0 && updateRows.length === 0) {
                 hideUploadCsvModal();
-                await showImportDialog({
+                await showImportDialog(rejected.length ? {
+                    tone: 'danger',
+                    icon: 'fa-triangle-exclamation',
+                    title: 'No se importó ningún vuelo',
+                    subtitle: `${readSummary} · ${rejected.length} fila(s) rechazada(s)` +
+                        (duplicatesCount ? ` · ${duplicatesCount} ya estaban guardadas sin cambios` : ''),
+                    stats: [{ value: rejected.length, label: 'Rechazados', tone: 'bad' }],
+                    footNote: 'Descarga la lista para ver la línea y el motivo de cada una.',
+                    extraAction: downloadRejected(),
+                    cancelText: null,
+                    confirmText: 'Cerrar'
+                } : {
                     tone: 'warning',
                     icon: 'fa-circle-check',
                     title: 'No hay nada nuevo que importar',
@@ -998,16 +1053,22 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
                 { value: updateRows.length, label: 'Actualizados', tone: 'upd' }
             ];
             if (duplicatesCount) stats.push({ value: duplicatesCount, label: 'Sin cambios', tone: 'skip' });
+            if (rejected.length) stats.push({ value: rejected.length, label: 'Rechazados', tone: 'bad' });
+            if (rejected.length) notes.push({
+                icon: 'fa-circle-xmark', count: rejected.length,
+                text: 'fila(s) rechazadas: no se guardan, pero el resto del archivo sí. Descarga la lista para ver la línea y el motivo de cada una.'
+            });
 
             hideUploadCsvModal();
             const confirmed = await showImportDialog({
-                tone: 'info',
+                tone: rejected.length ? 'warning' : 'info',
                 icon: 'fa-file-csv',
                 title: 'Resumen de la importación',
-                subtitle: `${mapped.length} registros leídos · fecha de referencia ${formatDateLabel(referenceDate)}`,
+                subtitle: `${readSummary} · fecha de referencia ${formatDateLabel(referenceDate)}`,
                 stats,
                 notes,
-                footNote: `Se guardarán ${insertRows.length + updateRows.length} vuelo(s).`,
+                footNote: `Se guardarán ${insertRows.length + updateRows.length} registro(s).`,
+                extraAction: rejected.length ? downloadRejected() : null,
                 confirmText: 'Importar'
             });
             if (!confirmed) return;
@@ -1039,22 +1100,38 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
             // solo queda libre después de que el registro ganador se
             // actualice con sus datos nuevos. Insertar antes chocaría con
             // la llave que ese id todavía tiene.
-            await updateExistingFlights(updateRows);
-            await saveToDatabase(insertRows, true);
+            const updated = await updateExistingFlights(updateRows);
+            const inserted = await saveToDatabase(insertRows, true);
 
+            // Lo que la base rechazó aun después del reintento fila por fila
+            // pasa a la lista de rechazados con el error que dio la base.
+            const lineByRow = new Map(uniquePrepared.map(item => [_importRowKey(item.payload), item.sourceRow]));
+            const lineOf = row => lineByRow.get(_importRowKey(row)) || '';
+            [...updated.failed, ...inserted.failed].forEach(({ row, reason }) => {
+                rejected.push({ line: lineOf(row), row, reason: `La base de datos lo rechazó: ${reason}` });
+            });
+            const mirrorFailed = [...updated.mirrorFailed, ...inserted.mirrorFailed];
+            mirrorFailed.forEach(({ row, table, reason }) => {
+                rejected.push({ line: lineOf(row), row, reason: `Guardado en el itinerario, pero no se copió a ${table}: ${reason}` });
+            });
 
             _flightProbeCache = null; // new/updated rows — invalidate probe cache
             await loadFlights();
 
             const resultStats = [];
-            if (insertRows.length) resultStats.push({ value: insertRows.length, label: 'Vuelos nuevos', tone: 'new' });
-            if (updateRows.length) resultStats.push({ value: updateRows.length, label: 'Actualizados', tone: 'upd' });
+            if (inserted.saved) resultStats.push({ value: inserted.saved, label: 'Vuelos nuevos', tone: 'new' });
+            if (updated.saved) resultStats.push({ value: updated.saved, label: 'Actualizados', tone: 'upd' });
+            if (duplicatesCount) resultStats.push({ value: duplicatesCount, label: 'Sin cambios', tone: 'skip' });
+            if (rejected.length) resultStats.push({ value: rejected.length, label: 'Rechazados', tone: 'bad' });
             await showImportDialog({
-                tone: 'success',
-                icon: 'fa-circle-check',
-                title: 'Importación completada',
-                subtitle: 'El itinerario ya quedó al día con el archivo.',
+                tone: rejected.length ? 'warning' : 'success',
+                icon: rejected.length ? 'fa-triangle-exclamation' : 'fa-circle-check',
+                title: rejected.length ? 'Importación completada con rechazados' : 'Importación completada',
+                subtitle: rejected.length
+                    ? `${readSummary} · ${rejected.length} rechazado(s); el resto ya quedó guardado.`
+                    : `${readSummary} · el itinerario ya quedó al día con el archivo.`,
                 stats: resultStats,
+                extraAction: rejected.length ? downloadRejected() : null,
                 cancelText: null,
                 confirmText: 'Listo'
             });
@@ -1075,23 +1152,80 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
     // Copia cada fila recién insertada (con su mismo id) hacia las tablas
     // editables independientes de Itinerario y Manifiestos. Nunca borra nada
     // ahí — solo agrega — para que ediciones ya hechas en esas pestañas nunca
-    // se pierdan por una reimportación. Es best-effort: si esto falla, el
-    // import a la tabla cruda (ya confirmado al usuario) NO se revierte.
+    // se pierdan por una reimportación. Si esto falla, el import a la tabla
+    // cruda NO se revierte, pero cada fila que no llegó se devuelve para
+    // reportarla: sin esa copia el vuelo no aparece en Manifiestos.
     async function _mirrorRowsToEditableTables(supabase, rowsWithId) {
-        if (!rowsWithId.length) return;
-        try {
-            const chunks = chunkArray(rowsWithId, 500);
-            for (const chunk of chunks) {
-                const [itinRes, manifRes] = await Promise.all([
-                    supabase.from('itinerario_vuelos_editable').upsert(chunk, { onConflict: 'id' }),
-                    supabase.from('manifiestos_vuelos_editable').upsert(chunk, { onConflict: 'id' })
-                ]);
-                if (itinRes.error) console.warn('[Itinerario] no se pudo copiar a itinerario_vuelos_editable:', itinRes.error);
-                if (manifRes.error) console.warn('[Itinerario] no se pudo copiar a manifiestos_vuelos_editable:', manifRes.error);
+        if (!rowsWithId.length) return [];
+        const results = await Promise.all([EDIT_TABLE_NAME, MANIFIESTOS_MIRROR_TABLE_NAME].map(async table => {
+            const { failed } = await _importLotesResilientes(rowsWithId, 500,
+                chunk => supabase.from(table).upsert(chunk, { onConflict: 'id' }));
+            failed.forEach(f => console.warn(`[Itinerario] no se pudo copiar a ${table}:`, f.reason));
+            return failed.map(f => ({ ...f, table }));
+        }));
+        return results.flat();
+    }
+
+    // Envía `rows` en lotes. Si un lote falla, lo reintenta fila por fila
+    // para que un solo registro con problema no se lleve a los demás.
+    // Devuelve lo que sí entró (con la fila que respondió la base) y cada
+    // fila que no, con el motivo que dio la base.
+    async function _importLotesResilientes(rows, size, send) {
+        const attempt = async chunk => {
+            try {
+                const { data, error } = await send(chunk);
+                return { data, error: error ? (error.message || String(error)) : null };
+            } catch (err) {
+                return { data: null, error: err?.message || String(err) };
             }
-        } catch (err) {
-            console.warn('[Itinerario] error copiando a tablas editables:', err);
+        };
+        const saved = [];
+        const failed = [];
+        for (const chunk of chunkArray(rows, size)) {
+            const result = await attempt(chunk);
+            if (!result.error) {
+                chunk.forEach((row, i) => saved.push({ row, data: result.data?.[i] }));
+                continue;
+            }
+            if (chunk.length === 1) { failed.push({ row: chunk[0], reason: result.error }); continue; }
+            for (const row of chunk) {
+                const single = await attempt([row]);
+                if (single.error) failed.push({ row, reason: single.error });
+                else saved.push({ row, data: single.data?.[0] });
+            }
         }
+        return { saved, failed };
+    }
+
+    // Identifica una fila del archivo por sus dos movimientos; sirve para
+    // devolver a su línea original lo que la base rechaza al guardar.
+    function _importRowKey(row) {
+        return ['[Arr] Flight Designator', '[Arr] SIBT', '[Dep] Flight Designator', '[Dep] SOBT']
+            .map(field => normalizeValue(row?.[field])).join('|');
+    }
+
+    function _importRechazadosCsv(rejected) {
+        const cell = value => `"${String(value ?? '').replace(/"/g, '""')}"`;
+        const header = ['Línea', 'Status', '[Arr] Flight Designator', '[Arr] SIBT', '[Dep] Flight Designator', '[Dep] SOBT', 'Routing', 'Motivo'];
+        const lines = [...rejected]
+            .sort((a, b) => (Number(a.line) || 0) - (Number(b.line) || 0))
+            .map(({ line, row, reason }) => [
+                line, row?.Status, row?.['[Arr] Flight Designator'], row?.['[Arr] SIBT'],
+                row?.['[Dep] Flight Designator'], row?.['[Dep] SOBT'], row?.Routing, reason
+            ].map(cell).join(','));
+        return '﻿' + [header.map(cell).join(','), ...lines].join('\r\n') + '\r\n';
+    }
+
+    function _importDescargarRechazados(fileName, rejected) {
+        const blob = new Blob([_importRechazadosCsv(rejected)], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `rechazados_${String(fileName || 'itinerario.csv').replace(/\.csv$/i, '')}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     async function saveToDatabase(rows, append = false) {
@@ -1107,21 +1241,16 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
             if (delError) throw delError;
         }
 
-        const chunks = chunkArray(rows, 500);
-        const insertedWithId = [];
-        for (const chunk of chunks) {
-            const { data: insertedRows, error: insError } = await supabase.from(TABLE_NAME).insert(chunk).select('id');
-            if (insError) throw insError;
-            // PostgREST insert-returning preserva el orden de envío: se puede
-            // emparejar cada fila del chunk con su id recién asignado por índice.
-            (insertedRows || []).forEach((r, i) => {
-                if (r?.id !== undefined && r?.id !== null && chunk[i]) {
-                    insertedWithId.push({ ...chunk[i], id: r.id });
-                }
-            });
-        }
+        // PostgREST insert-returning preserva el orden de envío: se puede
+        // emparejar cada fila del chunk con su id recién asignado por índice.
+        const { saved, failed } = await _importLotesResilientes(rows, 500,
+            chunk => supabase.from(TABLE_NAME).insert(chunk).select('id'));
+        const insertedWithId = saved
+            .filter(({ data }) => data?.id !== undefined && data?.id !== null)
+            .map(({ row, data }) => ({ ...row, id: data.id }));
 
-        await _mirrorRowsToEditableTables(supabase, insertedWithId);
+        const mirrorFailed = await _mirrorRowsToEditableTables(supabase, insertedWithId);
+        return { saved: saved.length, failed, mirrorFailed };
     }
 
     // Un vuelo ya existente (misma aerolínea+designador+día) reimportado con
@@ -1129,21 +1258,16 @@ body.dark-mode .ops-imp-btn-ghost:hover{background:#243047}
     // en las 3 tablas en vez de crear una fila duplicada. Sólo se escriben
     // las columnas que trae el CSV — validado/observaciones/validado_por
     // (que no vienen del CSV) se preservan intactas.
+    // Las tablas espejo solo reciben lo que sí quedó en la tabla cruda.
     async function updateExistingFlights(updateRows) {
-        if (!updateRows.length) return;
+        if (!updateRows.length) return { saved: 0, failed: [], mirrorFailed: [] };
         const supabase = window.supabaseClient;
-        for (const batch of chunkArray(updateRows, 500)) {
-            const payloads = batch.map(({ id, payload }) => ({ ...payload, id }));
-            const results = await Promise.all([
-                supabase.from(TABLE_NAME).upsert(payloads, { onConflict: 'id' }),
-                supabase.from(EDIT_TABLE_NAME).upsert(payloads, { onConflict: 'id' }),
-                supabase.from(MANIFIESTOS_MIRROR_TABLE_NAME).upsert(payloads, { onConflict: 'id' })
-            ]);
-            results.forEach((r, i) => {
-                if (r.error) console.warn(`[Itinerario] no se pudo actualizar un lote de vuelos existentes (tabla ${i}):`, r.error);
-            });
-            if (results[0].error) throw results[0].error;
-        }
+        const payloads = updateRows.map(({ id, payload }) => ({ ...payload, id }));
+        const { saved, failed } = await _importLotesResilientes(payloads, 500,
+            batch => supabase.from(TABLE_NAME).upsert(batch, { onConflict: 'id' }));
+        failed.forEach(f => console.warn('[Itinerario] no se pudo actualizar un vuelo existente:', f.reason));
+        const mirrorFailed = await _mirrorRowsToEditableTables(supabase, saved.map(({ row }) => row));
+        return { saved: saved.length, failed, mirrorFailed };
     }
 
     function initColumnVisibility() {
