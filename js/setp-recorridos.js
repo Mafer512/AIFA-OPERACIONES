@@ -27,57 +27,8 @@
     ];
     // Pisos que se eligen como "Área de recorrido".
     const PISOS = ['0.00', '5.25', '10.50'];
-    // Módulos que se ofrecen en "Descripción del hallazgo" según el nivel (piso) del
-    // recorrido. Cada módulo lleva sus locales (claves de ubicación exacta, según los PDF).
-    // Los tres niveles ya están capturados.
-    const MODULOS_POR_NIVEL = {
-        '0.00': [
-            { nombre: 'Módulo A', zona: 'Llegadas', locales: 'LLENA-01, LLENA-02A, LLENA-02B, LLENA-MA01'.split(', ') },
-            { nombre: 'Módulo B', zona: 'Llegadas', locales: 'LLENB-01, LLEIE4-01, LLEIE4-MA01'.split(', ') },
-            { nombre: 'Módulo H', zona: 'Llegadas', locales: 'LLEIH-01, LLEIH-02, LLEIH-03, LLEIH-04, LLEIH-07, LLEIH-MA01, LLEIH-MA02, LLEIH-06, LLEIH-05'.split(', ') },
-            { nombre: 'Módulo I', zona: 'Llegadas', locales: 'LLENI-01, LLENI-02, LLENI-MA01'.split(', ') },
-            { nombre: 'Módulo J', zona: 'Llegadas', locales: ['LLENJ-01'] },
-            { nombre: 'Módulo K', zona: 'Llegadas', locales: 'LLEIK-MA01, LLEIK-01, LLEIK-02'.split(', ') },
-            { nombre: 'Módulo L', zona: 'Llegadas', locales: ('LLANL-01A, LLANL-01B, LLANL-02, LLANL-03, LLANL-04, LLANL-11, LLANL-12, LLANL-13, LLANL-20, LLANL-21, LLANL-14, LLANL-15, ' +
-                'LLANL-22, LLANL-23, LLANL-24, LLANL-25, LLANL-26, LLANL-27, LLANL-28, LLANL-29, LLANL-30, LLANL-31, LLANL-32, LLANL-33, LLANL-34, LLANL-35, ' +
-                'LLANL-36, LLANL-37, LLANL-38, LLANL-39, LLANL-40, LLANL-41, LLANL-42A, LLANL-42B, LLANL-43, LLANL-43B, LLANL-45, LLANL-46, LLANL-C4, LLANL-MA01').split(', ') },
-            { nombre: 'Módulo M', zona: 'Llegadas', locales: ('LLANM-01, LLANM-02, LLANM-03, LLAIM-04, LLANM-05, LLANM-07, LLANM-08, LLANM-09, LLANM-10, LLANM-11, LLAIM-12, ' +
-                'LLANM-13, LLAIM-14, LLAIM-15, LLAIM-16, LLAIM-17, LLAIM-18, LLAIM-19, LLAIM-20, LLANM-21, LLANM-22, LLANM-23, LLANM-23B, LLANM-24, LLANM-25A, ' +
-                'LLANM-25B, LLANM-25C, LLANM-26, LLANM-27, LLANM-MA2').split(', ') },
-            { nombre: 'Módulo N', zona: 'Llegadas', locales: 'LLAIN-03, LLAIN-04, LLAIN-05, LLAIN-06, LLAIN-07, LLAIN-08, LLAIN-09, LLAIN-10, LLAIN-11, LLAIN-12, LLAIN-15, LLAIN-18, LLAIN-20, LLAIN-MA01, LLAIN-C16'.split(', ') }
-        ],
-        '5.25': [
-            { nombre: 'Módulo C', locales: ['MENC-01'] },
-            { nombre: 'Módulo F', locales: ['MEIF-01', 'MEIF-02'] },
-            { nombre: 'Módulo G1', locales: ['MEIGI-01'] },
-            { nombre: 'Módulo H', locales: ['MEIH-01'] },
-            { nombre: 'Módulo K', locales: ['MEIK-01'] }
-        ],
-        '10.50': [
-            { nombre: 'Módulo A', locales: 'SENA-01, SENA-02, SENA-03, SENA-04, SENA-05, SENA-06, SENA-07, SENA-08, SENA-09, SENA-10, SENA-11, SENA-12, SENA-13, SENA-14, SENA-MA01'.split(', ') },
-            { nombre: 'Módulo B', locales: 'SENB-01, SENB-02, SENB-03, SENB-04, SENB-05, SENB-06, SENB-07, SENB-08, SENB-09, SENB-10, SENB-11, SENB-MA01'.split(', ') },
-            { nombre: 'Módulo C', locales: 'SENC-01, SENC-02, SENC-03, SENC-04, SENC-05, SENC-06, SENC-07, SENC-09, SENC-10A, SENC-10B, SENC-MA02, SENC-MA01'.split(', ') },
-            { nombre: 'Módulo D', locales: ('SEND-01, SEND-02, SEND-03A, SEND-03B, SEND-04A, SEND-04B, SEND-05, SEND-06, SEND-06B, SEND-07, SEND-0, SEND-09, SEND-10A, SEND-10B, ' +
-                'SEND-10C, SEND-10D, SEND-11, SEND-12, SEND-13, SEND-14, SEND-15A, SEND-15B, SEND-MA01').split(', ') },
-            { nombre: 'Módulo E1', locales: 'SENE1-01, SENE1-02, SENE1-03, SENE1-04A, SENE1-04B, SENE1-05, SENE1-06, SENE1-07, SENE1-08, SENE1-09, SENE1-10, SENE1-11, SENE1-12, SENE1-13'.split(', ') },
-            { nombre: 'Módulo E2', locales: 'SENE2-01, SENE2-02, SEIE2-03, SENE2-04, SEIE2-05, SENE2-06, SENE2-07'.split(', ') },
-            { nombre: 'Módulo E3', locales: 'SEIE3-01, SEIE3-02, SEIE3-03, SEIE3-04, SEIE3-05, SEIE3-06A, SEIE3-06B, SEIE3-07B, SEIE3-07A, SEIE3-08, SEIE3-09, SEIE3-10, SEIE3-11, SEIE3-12, SEIE3-14'.split(', ') },
-            { nombre: 'Módulo E4', locales: ('SEIE4-01, SEIE4-02, SEIE4-03, SEIE4-04, SEIE4-05, SEIE4-06, SEIE4-07, SEIE4-32, SEIE4-08, SEIE4-09, SEIE4-10, SEIE4-11, SEIE4-12, ' +
-                'SEIE4-13, SEIE4-14, SEIE4-15, SEIE4-16, SEIE4-33, SEIE4-17, SEIE4-18, SEIE4-19, SEIE4-20, SEIE4-21, SEIE4-22A, SEIE4-22B, SEIE4-23, SEIE4-24, ' +
-                'SEIE4-25, SEIE4-26, SEIE4-27A, SEIE4-27B, SEIE4-29, SEIE4-30, SEIE4-31').split(', ') },
-            { nombre: 'Sala de espera', locales: 'SEIF-01, SEIF-02, SEIF-03, SEIF-04, SEIF-05, SEIF-10'.split(', ') },
-            { nombre: 'Módulo G1', locales: 'SEIG1-01, SEIG1-02, SEIG1-03, SEIG1-04, SEIG1-05, SEIG1-06, SEIGI-MA01'.split(', ') },
-            { nombre: 'Módulo G2', locales: 'SEIG2-01, SEIG2-02, SEIG2-03, SEIG2-04, SEIG2-05'.split(', ') },
-            { nombre: 'Módulo H', locales: ['SEIH-01', 'SEIH-MA01'] },
-            { nombre: 'Módulo I', locales: 'SENI-01, SENI-02, SENI-03, SENI-04, SENI-05, SENI-06, SENI-07, SENI-08, SENI-09, SENI-10, SENI-11, SENI-12, SENI-13, SENI-14'.split(', ') },
-            { nombre: 'Módulo K', locales: 'SEIK-01, SEIK-02, SEIK-03, SEIK-04, SEIK-05, SEIK-06, SEIK-07, SEIK-08, SEIK-09, SEIK-10, SEIK-11'.split(', ') },
-            { nombre: 'Módulo L', locales: ('SANL-01, SANL-01B, SANL-02, SANL-03, SANL-03B, SANL-04, SANL-05, SANL-06, SANL-12, SANL-13, SANL-14 Y 15, SANL-19, SANL-20, SANL-21, ' +
-                'SANL-22, SANL-23, SANL-24, SANL-25, SANL-MP01, SANL-MA01, SANL-C1, SANL-C12, SANL-C13, SANL-C9, SANL-C5, SANL-C2, SANL-27, SANL-28, SANL-29, SANL-30').split(', ') },
-            { nombre: 'Módulo M', locales: 'SAIM-01, SAIM-01B, SANM-02, SANM-03, SAIM-04, SAIM-05A, SAIM-05B, SAIM-MA02'.split(', ') },
-            { nombre: 'Módulo N', locales: 'SAIN-01, SAIN-02, SAIN-MA02, SAIN-02B, SAIN-03, SAIN-07, SAIN-08, SAIN-09, SAIN-10, SAIN-11, SAIN-12, SAIN-13A, SAIN-13B'.split(', ') }
-        ]
-    };
-
+    // Módulos, locales, etiquetas, items y condiciones: js/setp-catalogo.js.
+    function catalogo() { return window.setpCatalogo; }
     function moduloTexto(m) { return m.nombre + (m.zona ? ' (' + m.zona + ')' : ''); }
     // Selector de turno debajo del área de recorrido (false lo oculta sin borrarlo).
     const SELECTOR_TURNO = true;
@@ -360,7 +311,9 @@
     }
 
     function avisoPendiente(r, p) {
-        return '<span class="setp-rec-dia setp-rec-pend">Sin guardar · presiona ✓</span>' + (p.esFoto
+        return '<span class="setp-rec-dia setp-rec-pend">Sin guardar · presiona ✓</span>' +
+            (p.esFoto && p.descripcion ? '<span class="setp-rec-dia">' + esc(p.descripcion) + (p.mismoQue ? ' · se une a <b>' + esc(p.mismoQue.folio || 'un hallazgo registrado') + '</b>' : '') + '</span>' : '') +
+            (p.esFoto
             ? '<button type="button" class="btn btn-link p-0 setp-rec-desc-btn" data-rec="descripcion" data-id="' + esc(r.id) + '"><i class="fas fa-pen me-1"></i>' +
               (p.descripcion ? 'Editar descripción' : 'Agregar descripción') + '</button>'
             : '');
@@ -763,10 +716,14 @@
         if (extra && !esFoto) return setStatus('Las evidencias adicionales deben ser fotos, porque cada una se agrega como hallazgo en <b>Hallazgos detectados</b>.', 'warning');
         var blob = esFoto ? await compressImage(file) : file;
         if (blob.size > MAX_FILE) return setStatus('El archivo pesa más de 10 MB. Elige uno más ligero.', 'warning');
+        // Al cambiar la foto se conserva lo ya capturado (etiqueta, item, módulo…).
         var previa = state.pending[id];
-        var descripcion = previa && previa.extra === !!extra ? previa.descripcion : '';
+        var captura = {};
+        if (previa && previa.extra === !!extra) {
+            ['descripcion', 'etiqueta', 'item', 'condicion', 'cantidad', 'modulo', 'local', 'detalle', 'mismoQue'].forEach(function (k) { captura[k] = previa[k]; });
+        }
         soltarPendiente(id);
-        state.pending[id] = { file: file, blob: blob, esFoto: esFoto, extra: !!extra, descripcion: descripcion, url: esFoto ? URL.createObjectURL(blob) : '' };
+        state.pending[id] = Object.assign(captura, { file: file, blob: blob, esFoto: esFoto, extra: !!extra, url: esFoto ? URL.createObjectURL(blob) : '' });
         setStatus(esFoto ? '' : 'Presiona <b>✓</b> para guardar la evidencia.', 'info');
         render();
         if (esFoto) abrirDescripcion(id);
@@ -785,48 +742,114 @@
         return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
     }
 
-    // La ruta de la foto lleva el id del recorrido (y "-x" si es evidencia
-    // adicional): así el historial y la tabla ligan el hallazgo con su recorrido.
-    async function crearHallazgoDetectado(sb, r, p, descripcion) {
-        var fechaRep = fechaLocal(r.registrado_en);
+    // Columnas que pueden faltar si aún no se aplica su script SQL: se guarda sin
+    // ellas. Sin "local" (db/setp_hallazgos_identificacion.sql), el local va en
+    // el módulo para no perderlo.
+    const COLUMNAS_OPCIONALES = ['no_empleado', 'seccion', 'local', 'etiqueta', 'item', 'condicion', 'cantidad', 'detalle'];
+
+    async function insertarHallazgo(sb, hallazgo) {
+        var campos = 'id, folio';
+        var res;
+        for (var intento = 0; intento <= COLUMNAS_OPCIONALES.length + 1; intento++) {
+            res = await sb.from('setp_hallazgos').insert([hallazgo]).select(campos).single();
+            if (!res.error) break;
+            var msg = res.error.message || '';
+            // Sin la columna folio: sólo se pide el id.
+            if (campos !== 'id' && /folio/.test(msg)) { campos = 'id'; continue; }
+            var col = COLUMNAS_OPCIONALES.find(function (c) { return c in hallazgo && new RegExp("'" + c + "'|\\b" + c + '\\b').test(msg); });
+            if (!col) break;
+            if (col === 'local' && hallazgo.local) hallazgo.modulo += ' (' + hallazgo.local + ')';
+            delete hallazgo[col];
+        }
+        return res;
+    }
+
+    async function subirFotoHallazgo(sb, r, p, fechaRep) {
         var path = rutaEvidencia('hallazgos/' + fechaRep.slice(0, 7), 'rec-' + r.id + (p.extra ? '-x' : '') + '.jpg');
         var up = await sb.storage.from(BUCKET).upload(path, p.blob, { contentType: 'image/jpeg', upsert: false });
         if (up.error) throw up.error;
         var pub = sb.storage.from(BUCKET).getPublicUrl(path);
+        return { path: path, url: pub && pub.data ? pub.data.publicUrl : null };
+    }
+
+    // La ruta de la foto lleva el id del recorrido (y "-x" si es evidencia
+    // adicional): así el historial y la tabla ligan el hallazgo con su recorrido.
+    async function crearHallazgoDetectado(sb, r, p) {
+        var fechaRep = fechaLocal(r.registrado_en);
+        var foto = await subirFotoHallazgo(sb, r, p, fechaRep);
         var actor = sessionStorage.getItem('user_role') || 'authenticated';
+        var descripcion = p.descripcion;
         var hallazgo = {
             fecha_reporte: fechaRep,
-            modulo: r.area_recorrido,
-            nivel: null,
+            // Ubicación exacta: módulo y local de la captura; el nivel es el piso del recorrido.
+            modulo: p.modulo || r.area_recorrido,
+            nivel: p.modulo ? r.area_recorrido : null,
             descripcion: descripcion,
-            evidencia_url: pub && pub.data ? pub.data.publicUrl : null,
-            evidencia_path: path,
+            evidencia_url: foto.url,
+            evidencia_path: foto.path,
             estatus: 'PENDIENTE',
             seccion: 'DETECTADOS',
             // Supervisor del recorrido (db/setp_hallazgos_por_supervisor.sql).
             no_empleado: r.no_empleado,
+            // Identificación (db/setp_hallazgos_identificacion.sql).
+            local: p.local || null,
+            etiqueta: p.etiqueta || null,
+            item: p.item || null,
+            condicion: p.condicion || null,
+            cantidad: Number(p.cantidad) || 1,
+            detalle: p.detalle || null,
             created_by: actor,
             updated_by: actor
         };
-        // Si aún no se aplica db/setp_hallazgos_por_supervisor.sql (o
-        // db/setp_hallazgos_secciones.sql), se guarda sin esa columna.
-        var res;
-        for (var intento = 0; intento < 3; intento++) {
-            res = await sb.from('setp_hallazgos').insert([hallazgo]).select('id').single();
-            var msg = res.error && res.error.message || '';
-            if (/no_empleado/.test(msg) && 'no_empleado' in hallazgo) delete hallazgo.no_empleado;
-            else if (/seccion/.test(msg) && 'seccion' in hallazgo) delete hallazgo.seccion;
-            else break;
-        }
+        var res = await insertarHallazgo(sb, hallazgo);
         if (res.error) {
-            try { await sb.storage.from(BUCKET).remove([path]); } catch (_) { /* sin efecto */ }
+            try { await sb.storage.from(BUCKET).remove([foto.path]); } catch (_) { /* sin efecto */ }
             throw res.error;
         }
         return {
             ym: fechaRep.slice(0, 7),
             fecha: fechaRep,
-            hallazgo: { id: res.data && res.data.id, descripcion: descripcion, evidencia_url: hallazgo.evidencia_url, evidencia_path: path }
+            folio: res.data && res.data.folio,
+            hallazgo: { id: res.data && res.data.id, descripcion: descripcion, evidencia_url: foto.url, evidencia_path: foto.path }
         };
+    }
+
+    // "Es el mismo · agregar mi foto": no crea otro hallazgo; suma un reporte
+    // al existente y guarda la foto (función setp_sumar_reporte de
+    // db/setp_hallazgos_identificacion.sql; sin ella, se actualiza directo).
+    async function sumarAHallazgo(sb, r, p) {
+        var fechaRep = fechaLocal(r.registrado_en);
+        var foto = await subirFotoHallazgo(sb, r, p, fechaRep);
+        var extra = { url: foto.url, path: foto.path, no_empleado: r.no_empleado, fecha: fechaRep, recorrido_id: r.id, descripcion: p.descripcion };
+        var res = await sb.rpc('setp_sumar_reporte', { p_hallazgo: p.mismoQue.id, p_foto: extra });
+        if (res.error) {
+            var cur = await sb.from('setp_hallazgos').select('veces, fotos_extra').eq('id', p.mismoQue.id).single();
+            if (cur.error) {
+                try { await sb.storage.from(BUCKET).remove([foto.path]); } catch (_) { /* sin efecto */ }
+                throw cur.error;
+            }
+            res = await sb.from('setp_hallazgos').update({
+                veces: (Number(cur.data.veces) || 1) + 1,
+                fotos_extra: (cur.data.fotos_extra || []).concat([extra]),
+                updated_at: new Date().toISOString()
+            }).eq('id', p.mismoQue.id).select('id').single();
+            if (res.error) {
+                try { await sb.storage.from(BUCKET).remove([foto.path]); } catch (_) { /* sin efecto */ }
+                throw res.error;
+            }
+        }
+        return { ym: fechaRep.slice(0, 7), fecha: fechaRep, folio: p.mismoQue.folio, mismo: true, hallazgo: null };
+    }
+
+    // ✓ de una foto: crea el hallazgo o, si se eligió "Es el mismo", lo suma al existente.
+    function registrarHallazgo(sb, r, p) {
+        return p.mismoQue ? sumarAHallazgo(sb, r, p) : crearHallazgoDetectado(sb, r, p);
+    }
+
+    function avisoRegistrado(out) {
+        return out.mismo
+            ? 'Tu foto se agregó al hallazgo <b>' + esc(out.folio || 'registrado') + '</b> (no se creó otro).'
+            : 'El hallazgo' + (out.folio ? ' <b>' + esc(out.folio) + '</b>' : '') + ' se agregó a <b>Hallazgos detectados</b> de ' + esc(mesDe(out.ym)) + '.';
     }
 
     function mesDe(ym) {
@@ -845,10 +868,10 @@
         render();
         try {
             var sb = await getClient();
-            var out = await crearHallazgoDetectado(sb, r, p, p.descripcion);
-            state.extras[r.id] = (state.extras[r.id] || []).concat([out.hallazgo]);
+            var out = await registrarHallazgo(sb, r, p);
+            if (out.hallazgo) state.extras[r.id] = (state.extras[r.id] || []).concat([out.hallazgo]);
             soltarPendiente(r.id);
-            setStatus('Evidencia agregada. El hallazgo se agregó a <b>Hallazgos detectados</b> de ' + esc(mesDe(out.ym)) + '.', 'success');
+            setStatus('Evidencia agregada. ' + avisoRegistrado(out), 'success');
             mostrarEnReporte(out.fecha);
         } catch (error) {
             setStatus('No se pudo guardar la evidencia adicional: ' + errText(error), 'danger');
@@ -863,9 +886,8 @@
         var p = state.pending[id];
         if (!r || !p || !canEdit() || state.busy[id]) return;
         // Las fotos necesitan su descripción (ventana "Descripción del hallazgo").
-        if (p.esFoto && !p.descripcion) return abrirDescripcion(id, 'Escribe la descripción del hallazgo y presiona <b>Guardar</b>. Después confirma con <b>✓</b>.');
+        if (p.esFoto && !p.descripcion) return abrirDescripcion(id, 'Elige etiqueta, item, condición, módulo y local, y presiona <b>Guardar</b>. Después confirma con <b>✓</b>.');
         if (p.extra) return guardarEvidenciaExtra(r, p);
-        var descripcion = p.descripcion;
         var ext = p.esFoto ? 'jpg' : (String(p.file.name).split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
         var path = rutaEvidencia('recorridos/' + String(r.no_empleado).replace(/[^\w-]+/g, '_'), ext);
         state.busy[id] = 'guardar';
@@ -897,8 +919,8 @@
             setStatus('Evidencia guardada.', 'success');
         } else {
             try {
-                var out = await crearHallazgoDetectado(sb, r, p, descripcion);
-                setStatus('Evidencia guardada. El hallazgo se agregó a <b>Hallazgos detectados</b> de ' + esc(mesDe(out.ym)) + '. Usa <b>+</b> si hay más evidencias.', 'success');
+                var out = await registrarHallazgo(sb, r, p);
+                setStatus('Evidencia guardada. ' + avisoRegistrado(out) + ' Usa <b>+</b> si hay más evidencias.', 'success');
                 mostrarEnReporte(out.fecha);
             } catch (error) {
                 setStatus('La evidencia se guardó en el recorrido, pero no se pudo agregar a Hallazgos detectados: ' + errText(error), 'warning');
@@ -1070,11 +1092,16 @@
     }
 
     // ---------- Ventana "Descripción del hallazgo" ----------
-    // Reemplaza al window.prompt: fondo con desenfoque, vista previa de la foto
-    // y "Guardar", que cierra la ventana; el hallazgo se confirma después con ✓.
+    // Captura por pasos (catálogo de js/setp-catalogo.js): Etiqueta → Item →
+    // Condición → Cantidad → Módulo y Local, más un detalle opcional. Al
+    // presionar Guardar se buscan en la base hallazgos pendientes iguales (mismo
+    // item en el mismo local; si el objeto se mueve, en todo el nivel durante
+    // 24 h) y se pregunta "¿Es el mismo?" con las fotos lado a lado. Guardar
+    // cierra la ventana; el hallazgo se confirma después con ✓.
 
     const DESC_ID = 'setp-desc-modal';
     const DESC_MAX = 500;
+    const MOVIBLE_HORAS = 24;
 
     // Modo oscuro (body.dark-mode, script.js): mismas variables que el resto del aplicativo.
     function descEstilosOscuros(D) {
@@ -1084,20 +1111,31 @@
             D + ' .sd-head,' + D + ' .sd-foot{border-color:var(--border-color);}',
             D + ' .sd-foot{background:rgba(255,255,255,.03);}',
             D + ' .sd-icon{background:rgba(77,171,247,.14);color:var(--primary-color);}',
-            D + ' .sd-kicker,' + D + ' .sd-lbl,' + D + ' .sd-count,' + D + ' .sd-note,' + D + ' .sd-mod-vacio{color:var(--text-muted-color);}',
-            D + ' .sd-title,' + D + ' .sd-val{color:var(--text-color);}',
-            D + ' label{color:#c3c9d2;}',
+            D + ' .sd-kicker,' + D + ' .sd-lbl,' + D + ' .sd-count,' + D + ' .sd-note,' + D + ' .sd-mod-vacio,' + D + ' .sd-paso .h,' + D + ' .sd-dup-sub{color:var(--text-muted-color);}',
+            D + ' .sd-title,' + D + ' .sd-val,' + D + ' .sd-dup-tit{color:var(--text-color);}',
+            D + ' label,' + D + ' .sd-paso{color:#c3c9d2;}',
+            D + ' .sd-paso .n{background:rgba(77,171,247,.18);color:#8cc8ff;}',
             D + ' .sd-info{background:rgba(255,255,255,.04);border-color:var(--border-color);}',
-            D + ' .sd-info img{border-color:var(--border-color);}',
+            D + ' .sd-info img,' + D + ' .sd-dup-foto{border-color:var(--border-color);}',
             D + ' .btn-close{filter:invert(1) grayscale(100%) brightness(2);}',
             D + ' .sd-mod-lista,' + D + ' .sd-loc-lista{background:rgba(15,23,42,.55);border-color:var(--border-color);}',
             D + ' .sd-mod-item{color:var(--text-color);}',
             D + ' .sd-mod-item i{color:var(--text-muted-color);}',
             D + ' .sd-mod-item[aria-checked="true"] i{color:inherit;}',
-            D + ' .sd-mod-item:hover,' + D + ' .sd-loc:hover{background:rgba(255,255,255,.06);}',
+            D + ' .sd-mod-item:hover,' + D + ' .sd-loc:hover,' + D + ' .sd-chip:hover,' + D + ' .sd-cond button:hover{background:rgba(255,255,255,.06);}',
             D + ' .sd-mod-item[aria-checked="true"]{background:rgba(77,171,247,.16);color:#8cc8ff;}',
-            D + ' .sd-loc{background:rgba(255,255,255,.04);border-color:var(--border-color);color:#c3c9d2;}',
-            D + ' .sd-loc[aria-checked="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}'
+            D + ' .sd-loc,' + D + ' .sd-chip,' + D + ' .sd-cond button,' + D + ' .sd-cant button{background:rgba(255,255,255,.04);border-color:var(--border-color);color:#c3c9d2;}',
+            D + ' .sd-loc[aria-checked="true"],' + D + ' .sd-cond button[aria-checked="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}',
+            D + ' .sd-chip[aria-checked="true"]{background:color-mix(in srgb,var(--c) 30%,transparent);border-color:var(--c);color:#fff;}',
+            D + ' .sd-chip[aria-checked="true"] i{color:#fff;}',
+            D + ' .sd-cant{border-color:var(--border-color);}',
+            D + ' .sd-cant span{color:var(--text-color);}',
+            D + ' .sd-resumen{background:rgba(77,171,247,.08);border-color:rgba(77,171,247,.3);color:#cfe6ff;}',
+            D + ' .sd-resumen b{color:#fff;}',
+            D + ' .sd-dup{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.45);}',
+            D + ' .sd-dup-h{color:#fcd34d;}',
+            D + ' .sd-dup-cand{background:rgba(15,23,42,.55);border-color:var(--border-color);}',
+            D + ' .sd-dup-lbl{color:var(--text-muted-color);}'
         ];
     }
 
@@ -1105,46 +1143,84 @@
         if ($(DESC_ID)) return;
         var style = document.createElement('style');
         style.id = 'setp-desc-styles';
+        var M = '#' + DESC_ID;
         style.textContent = [
-            '#' + DESC_ID + '{position:fixed;inset:0;z-index:1085;display:flex;align-items:center;justify-content:center;padding:16px;',
+            M + '{position:fixed;inset:0;z-index:1085;display:flex;align-items:center;justify-content:center;padding:16px;',
             'background:rgba(15,23,42,.38);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);opacity:0;transition:opacity .18s ease;}',
-            '#' + DESC_ID + '.is-open{opacity:1;}',
-            '#' + DESC_ID + '[hidden]{display:none;}',
-            '#' + DESC_ID + ' .sd-card{width:100%;max-width:520px;background:rgba(255,255,255,.96);border:1px solid #e2e8f0;border-radius:18px;',
+            M + '.is-open{opacity:1;}',
+            M + '[hidden]{display:none;}',
+            M + ' .sd-card{width:100%;max-width:560px;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;',
+            'background:rgba(255,255,255,.96);border:1px solid #e2e8f0;border-radius:18px;',
             'box-shadow:0 24px 60px rgba(15,23,42,.28);transform:translateY(8px) scale(.98);transition:transform .18s ease;overflow:hidden;}',
-            '#' + DESC_ID + '.is-open .sd-card{transform:none;}',
-            '#' + DESC_ID + ' .sd-head{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid #e2e8f0;}',
-            '#' + DESC_ID + ' .sd-icon{width:40px;height:40px;border-radius:12px;background:#eff6ff;color:#2563eb;display:flex;align-items:center;justify-content:center;flex:none;}',
-            '#' + DESC_ID + ' .sd-kicker{font-size:.68rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;}',
-            '#' + DESC_ID + ' .sd-title{font-size:1.05rem;font-weight:800;color:#0f172a;margin:0;}',
-            '#' + DESC_ID + ' .sd-head .btn-close{margin-left:auto;}',
-            '#' + DESC_ID + ' .sd-body{padding:16px 18px;}',
-            '#' + DESC_ID + ' .sd-info{display:flex;gap:14px;align-items:center;padding:10px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;margin-bottom:14px;}',
-            '#' + DESC_ID + ' .sd-info img{width:112px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;flex:none;}',
-            '#' + DESC_ID + ' .sd-lbl{font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;}',
-            '#' + DESC_ID + ' .sd-val{font-size:.88rem;font-weight:600;color:#0f172a;margin-bottom:6px;overflow-wrap:anywhere;}',
-            '#' + DESC_ID + ' label{font-size:.8rem;font-weight:700;color:#334155;margin-bottom:4px;}',
-            '#' + DESC_ID + ' textarea{resize:vertical;min-height:96px;}',
-            '#' + DESC_ID + ' .sd-count{font-size:.72rem;color:#64748b;text-align:right;margin-top:4px;}',
-            '#' + DESC_ID + ' .sd-note{font-size:.76rem;color:#64748b;margin-top:8px;}',
-            '#' + DESC_ID + ' .sd-mod{margin-top:14px;}',
-            '#' + DESC_ID + ' .sd-mod-lista{list-style:none;margin:0;padding:4px;border:1px solid #e2e8f0;border-radius:12px;max-height:168px;overflow-y:auto;background:#fff;}',
-            '#' + DESC_ID + ' .sd-mod-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font:inherit;font-size:.86rem;padding:7px 10px;border:0;border-radius:8px;background:transparent;color:#0f172a;cursor:pointer;}',
-            '#' + DESC_ID + ' .sd-mod-item:hover{background:#f1f5f9;}',
-            '#' + DESC_ID + ' .sd-mod-item[aria-checked="true"]{background:#eff6ff;color:#1d4ed8;font-weight:700;}',
-            '#' + DESC_ID + ' .sd-mod-item:focus-visible{outline:3px solid rgba(37,99,235,.45);outline-offset:1px;}',
-            '#' + DESC_ID + ' .sd-loc-lista{display:flex;flex-wrap:wrap;gap:6px;max-height:132px;overflow-y:auto;padding:4px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;}',
-            '#' + DESC_ID + ' .sd-loc{font:inherit;font-size:.78rem;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;}',
-            '#' + DESC_ID + ' .sd-loc:hover{background:#f1f5f9;}',
-            '#' + DESC_ID + ' .sd-loc[aria-checked="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}',
-            '#' + DESC_ID + ' .sd-loc:focus-visible{outline:3px solid rgba(37,99,235,.45);outline-offset:1px;}',
-            '@media (pointer:coarse){#' + DESC_ID + ' .sd-loc{min-height:40px;padding:6px 12px;}}',
-            '#' + DESC_ID + ' .sd-mod-vacio{font-size:.82rem;color:#64748b;padding:10px;text-align:center;}',
-            '@media (pointer:coarse){#' + DESC_ID + ' .sd-mod-item{min-height:40px;}}',
-            '#' + DESC_ID + ' .sd-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid #e2e8f0;background:#f8fafc;}',
-            '@media (prefers-reduced-motion:reduce){#' + DESC_ID + ',#' + DESC_ID + ' .sd-card{transition:none;}}'
-        ].concat(descEstilosOscuros('body.dark-mode #' + DESC_ID)).join('');
+            M + '.is-open .sd-card{transform:none;}',
+            M + ' .sd-head{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid #e2e8f0;flex:none;}',
+            M + ' .sd-icon{width:40px;height:40px;border-radius:12px;background:#eff6ff;color:#2563eb;display:flex;align-items:center;justify-content:center;flex:none;}',
+            M + ' .sd-kicker{font-size:.68rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;}',
+            M + ' .sd-title{font-size:1.05rem;font-weight:800;color:#0f172a;margin:0;}',
+            M + ' .sd-head .btn-close{margin-left:auto;}',
+            M + ' .sd-body{padding:16px 18px;overflow-y:auto;flex:1 1 auto;min-height:0;}',
+            M + ' .sd-info{display:flex;gap:14px;align-items:center;padding:10px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;margin-bottom:12px;}',
+            M + ' .sd-info img{width:112px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;flex:none;}',
+            M + ' .sd-lbl{font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;}',
+            M + ' .sd-val{font-size:.88rem;font-weight:600;color:#0f172a;margin-bottom:6px;overflow-wrap:anywhere;}',
+            M + ' label{font-size:.8rem;font-weight:700;color:#334155;margin-bottom:4px;}',
+            M + ' textarea{resize:vertical;min-height:64px;}',
+            M + ' .sd-count{font-size:.72rem;color:#64748b;text-align:right;margin-top:4px;}',
+            M + ' .sd-note{font-size:.76rem;color:#64748b;margin-top:8px;}',
+            // Pasos
+            M + ' .sd-paso{display:flex;align-items:center;gap:8px;margin:14px 0 6px;font-size:.8rem;font-weight:700;color:#334155;}',
+            M + ' .sd-paso:first-child{margin-top:0;}',
+            M + ' .sd-paso .n{width:20px;height:20px;border-radius:50%;background:#dbeafe;color:#1d4ed8;font-size:.7rem;display:inline-flex;align-items:center;justify-content:center;flex:none;}',
+            M + ' .sd-paso .h{font-weight:400;color:#64748b;font-size:.76rem;}',
+            M + ' .sd-et{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:6px;}',
+            M + ' .sd-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px;}',
+            M + ' .sd-chip{display:flex;align-items:center;gap:7px;font:inherit;font-size:.78rem;font-weight:600;padding:7px 9px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;color:#334155;text-align:left;cursor:pointer;line-height:1.2;}',
+            M + ' .sd-chip i{width:16px;text-align:center;color:var(--c);flex:none;}',
+            M + ' .sd-items .sd-chip{flex-direction:column;justify-content:center;text-align:center;padding:9px 6px;gap:4px;}',
+            M + ' .sd-items .sd-chip i{font-size:1.05rem;width:auto;}',
+            M + ' .sd-chip:hover{background:#f1f5f9;}',
+            M + ' .sd-chip[aria-checked="true"]{background:color-mix(in srgb,var(--c) 12%,#fff);border-color:var(--c);color:#0f172a;font-weight:700;}',
+            M + ' .sd-cond{display:flex;flex-wrap:wrap;gap:6px;}',
+            M + ' .sd-cond button{font:inherit;font-size:.78rem;font-weight:600;padding:5px 12px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;}',
+            M + ' .sd-cond button:hover{background:#f1f5f9;}',
+            M + ' .sd-cond button[aria-checked="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}',
+            M + ' .sd-cant{display:inline-flex;align-items:center;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;}',
+            M + ' .sd-cant button{width:38px;height:34px;border:0;background:#f8fafc;color:#334155;font-weight:800;cursor:pointer;}',
+            M + ' .sd-cant span{min-width:46px;text-align:center;font-weight:800;color:#0f172a;}',
+            M + ' .sd-resumen{display:flex;align-items:flex-start;gap:8px;margin:14px 0 4px;padding:9px 11px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;font-size:.82rem;color:#1e3a8a;}',
+            M + ' .sd-resumen i{margin-top:2px;}',
+            M + ' .sd-mod-lista{list-style:none;margin:0;padding:4px;border:1px solid #e2e8f0;border-radius:12px;max-height:168px;overflow-y:auto;background:#fff;}',
+            M + ' .sd-mod-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font:inherit;font-size:.86rem;padding:7px 10px;border:0;border-radius:8px;background:transparent;color:#0f172a;cursor:pointer;}',
+            M + ' .sd-mod-item:hover{background:#f1f5f9;}',
+            M + ' .sd-mod-item[aria-checked="true"]{background:#eff6ff;color:#1d4ed8;font-weight:700;}',
+            M + ' .sd-loc-lista{display:flex;flex-wrap:wrap;gap:6px;max-height:132px;overflow-y:auto;padding:4px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;}',
+            M + ' .sd-loc{font:inherit;font-size:.78rem;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;}',
+            M + ' .sd-loc:hover{background:#f1f5f9;}',
+            M + ' .sd-loc[aria-checked="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}',
+            M + ' .sd-mod-vacio{font-size:.82rem;color:#64748b;padding:10px;text-align:center;}',
+            M + ' :is(.sd-chip,.sd-cond button,.sd-loc,.sd-mod-item,.sd-cant button):focus-visible{outline:3px solid rgba(37,99,235,.45);outline-offset:1px;}',
+            '@media (pointer:coarse){' + M + ' .sd-loc,' + M + ' .sd-cond button{min-height:40px;padding:6px 12px;}' + M + ' .sd-mod-item,' + M + ' .sd-chip{min-height:40px;}' + M + ' .sd-cant button{width:44px;height:40px;}}',
+            // ¿Es el mismo?
+            M + ' .sd-dup{border:1px solid #fcd34d;background:#fffbeb;border-radius:14px;padding:12px;}',
+            M + ' .sd-dup-h{display:flex;gap:8px;align-items:flex-start;font-size:.84rem;color:#92400e;font-weight:700;margin-bottom:10px;}',
+            M + ' .sd-dup-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start;}',
+            M + ' .sd-dup-lbl{font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;margin-bottom:4px;}',
+            M + ' .sd-dup-foto{width:100%;height:120px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;display:block;background:#e2e8f0;}',
+            M + ' .sd-dup-tit{font-size:.8rem;font-weight:700;color:#0f172a;margin-top:6px;overflow-wrap:anywhere;}',
+            M + ' .sd-dup-sub{font-size:.74rem;color:#64748b;overflow-wrap:anywhere;}',
+            M + ' .sd-dup-lista{display:flex;flex-direction:column;gap:10px;max-height:340px;overflow-y:auto;}',
+            M + ' .sd-dup-cand{border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:8px;}',
+            M + ' .sd-dup-cand .btn{width:100%;margin-top:8px;}',
+            M + ' .sd-dup-btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}',
+            M + ' .sd-dup-btns .btn{flex:1 1 160px;}',
+            '@media (max-width:480px){' + M + ' .sd-dup-grid{grid-template-columns:1fr;}}',
+            M + ' .sd-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid #e2e8f0;background:#f8fafc;flex:none;}',
+            '@media (prefers-reduced-motion:reduce){' + M + ',' + M + ' .sd-card{transition:none;}}'
+        ].concat(descEstilosOscuros('body.dark-mode ' + M)).join('');
         document.head.appendChild(style);
+        var paso = function (n, texto, ayuda, id) {
+            return '<div class="sd-paso"' + (id ? ' id="' + id + '"' : '') + '><span class="n">' + n + '</span>' + texto + (ayuda ? ' <span class="h">· ' + ayuda + '</span>' : '') + '</div>';
+        };
         var wrap = document.createElement('div');
         wrap.innerHTML = '<div id="' + DESC_ID + '" role="dialog" aria-modal="true" aria-labelledby="setp-desc-title" hidden>' +
             '<form class="sd-card" id="setp-desc-form" novalidate>' +
@@ -1156,83 +1232,167 @@
             '<div><div class="sd-lbl">Ubicación</div><div class="sd-val" id="setp-desc-area"></div>' +
             '<div class="sd-lbl">Recorrido</div><div class="sd-val mb-0" id="setp-desc-fecha"></div></div></div>' +
             '<div id="setp-desc-aviso" class="d-none"></div>' +
-            '<label for="setp-desc-text">Descripción *</label>' +
-            '<textarea id="setp-desc-text" class="form-control" maxlength="' + DESC_MAX + '" placeholder="Ej. Butaca dañada en sala de última espera"></textarea>' +
-            '<div class="sd-count"><span id="setp-desc-n">0</span>/' + DESC_MAX + '</div>' +
-            '<div class="sd-mod"><label id="setp-desc-mod-lbl">Módulo <span class="fw-normal text-muted" id="setp-desc-mod-nivel"></span></label>' +
+            '<div id="setp-desc-captura">' +
+            paso(1, 'Etiqueta *', 'tipo de hallazgo', 'setp-desc-et-lbl') +
+            '<div class="sd-et" id="setp-desc-et" role="radiogroup" aria-labelledby="setp-desc-et-lbl"></div>' +
+            '<div id="setp-desc-item-wrap" hidden>' + paso(2, 'Item *', '¿qué elemento?', 'setp-desc-item-lbl') +
+            '<div class="sd-items" id="setp-desc-item" role="radiogroup" aria-labelledby="setp-desc-item-lbl"></div>' +
+            paso(3, 'Condición *', '', 'setp-desc-cond-lbl') +
+            '<div class="sd-cond" id="setp-desc-cond" role="radiogroup" aria-labelledby="setp-desc-cond-lbl"></div>' +
+            paso(4, 'Cantidad', 'piezas') +
+            '<div class="sd-cant"><button type="button" data-cant="-1" aria-label="Menos">−</button><span id="setp-desc-cant" aria-live="polite">1</span><button type="button" data-cant="1" aria-label="Más">+</button></div></div>' +
+            paso(5, 'Módulo *', '', 'setp-desc-mod-lbl').replace('</div>', '<span class="h" id="setp-desc-mod-nivel"></span></div>') +
             '<ul class="sd-mod-lista" id="setp-desc-mod" role="radiogroup" aria-labelledby="setp-desc-mod-lbl"></ul>' +
-            '<div id="setp-desc-loc-wrap" class="mt-3" hidden><label id="setp-desc-loc-lbl">Local <span class="fw-normal text-muted" id="setp-desc-loc-mod"></span></label>' +
-            '<div class="sd-loc-lista" id="setp-desc-loc" role="radiogroup" aria-labelledby="setp-desc-loc-lbl"></div></div></div>' +
-            '<div class="sd-note"><i class="fas fa-circle-info me-1"></i>Al guardar se cierra esta ventana. Después presiona <b>✓</b> para confirmar el hallazgo.</div>' +
+            '<div id="setp-desc-loc-wrap" hidden>' + paso(6, 'Local *', '', 'setp-desc-loc-lbl').replace('</div>', '<span class="h" id="setp-desc-loc-mod"></span></div>') +
+            '<div class="sd-loc-lista" id="setp-desc-loc" role="radiogroup" aria-labelledby="setp-desc-loc-lbl"></div></div>' +
+            '<div class="sd-resumen d-none" id="setp-desc-resumen"></div>' +
+            '<label for="setp-desc-text" class="mt-2" id="setp-desc-text-lbl">Detalle <span class="fw-normal text-muted">(opcional)</span></label>' +
+            '<textarea id="setp-desc-text" class="form-control" maxlength="' + DESC_MAX + '" rows="2" placeholder="Ej. Respaldo roto en la fila 3"></textarea>' +
+            '<div class="sd-count"><span id="setp-desc-n">0</span>/' + DESC_MAX + '</div>' +
+            '<div class="sd-note"><i class="fas fa-circle-info me-1"></i>Al guardar se revisa si ya está reportado y se cierra esta ventana. Después presiona <b>✓</b> para confirmar el hallazgo.</div>' +
             '</div>' +
-            '<div class="sd-foot"><button type="button" class="btn btn-outline-secondary" data-desc="cerrar">Cancelar</button>' +
-            '<button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Guardar</button></div>' +
+            '<div id="setp-desc-dup" hidden></div>' +
+            '</div>' +
+            '<div class="sd-foot" id="setp-desc-foot"><button type="button" class="btn btn-outline-secondary" data-desc="cerrar">Cancelar</button>' +
+            '<button type="submit" class="btn btn-primary" id="setp-desc-guardar"><i class="fas fa-save me-1"></i>Guardar</button></div>' +
             '</form></div>';
         var modal = wrap.firstChild;
         document.body.appendChild(modal);
         modal.addEventListener('click', function (e) {
-            if (e.target === modal || e.target.closest('[data-desc="cerrar"]')) cerrarDescripcion();
+            if (e.target === modal || e.target.closest('[data-desc="cerrar"]')) return cerrarDescripcion();
+            var p = state.descFor && state.pending[state.descFor];
+            if (!p) return;
+            var b;
+            // Al elegir algo se quita el aviso de "Falta elegir…".
+            if (e.target.closest('[data-etq], [data-item], [data-cond], [data-modulo], [data-local]')) descAviso('');
+            if ((b = e.target.closest('[data-etq]'))) {
+                var etq = b.getAttribute('data-etq');
+                if (p.etiqueta !== etq) { p.etiqueta = etq; p.item = ''; p.condicion = ''; }
+                pintarCaptura();
+            } else if ((b = e.target.closest('[data-item]'))) {
+                p.item = p.item === b.getAttribute('data-item') ? '' : b.getAttribute('data-item');
+                pintarCaptura();
+            } else if ((b = e.target.closest('[data-cond]'))) {
+                p.condicion = p.condicion === b.getAttribute('data-cond') ? '' : b.getAttribute('data-cond');
+                pintarCaptura();
+            } else if ((b = e.target.closest('[data-cant]'))) {
+                p.cantidad = Math.min(99, Math.max(1, (Number(p.cantidad) || 1) + Number(b.getAttribute('data-cant'))));
+                pintarCaptura();
+            } else if ((b = e.target.closest('[data-modulo]'))) {
+                var nombre = b.getAttribute('data-modulo');
+                // Tocar el módulo elegido lo quita; al cambiar de módulo se limpia el local.
+                p.modulo = p.modulo === nombre ? '' : nombre;
+                p.local = '';
+                pintarCaptura();
+            } else if ((b = e.target.closest('[data-local]'))) {
+                var loc = b.getAttribute('data-local');
+                p.local = p.local === loc ? '' : loc;
+                pintarCaptura();
+            } else if ((b = e.target.closest('[data-dup-mismo]'))) {
+                p.mismoQue = { id: b.getAttribute('data-dup-mismo'), folio: b.getAttribute('data-dup-folio') || '' };
+                terminarDescripcion();
+            } else if (e.target.closest('[data-dup="otro"]')) {
+                p.mismoQue = null;
+                terminarDescripcion();
+            } else if (e.target.closest('[data-dup="volver"]')) {
+                vistaDuplicados(false);
+            }
         });
         modal.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') { e.preventDefault(); cerrarDescripcion(); }
             else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); guardarDescripcion(); }
             else if (e.key === 'Tab') {
                 // El foco se queda dentro de la ventana.
-                var f = modal.querySelectorAll('button, textarea');
+                var f = Array.prototype.filter.call(modal.querySelectorAll('button, textarea'), function (x) { return x.offsetParent !== null; });
                 var first = f[0], last = f[f.length - 1];
                 if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
                 else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
             }
         });
-        $('setp-desc-mod').addEventListener('click', function (e) {
-            var it = e.target.closest('[data-modulo]');
-            var p = state.descFor && state.pending[state.descFor];
-            if (!it || !p) return;
-            var nombre = it.getAttribute('data-modulo');
-            // Tocar el módulo elegido lo quita; al cambiar de módulo se limpia el local.
-            p.modulo = p.modulo === nombre ? '' : nombre;
-            p.local = '';
-            pintarModulos();
-        });
-        $('setp-desc-loc').addEventListener('click', function (e) {
-            var it = e.target.closest('[data-local]');
-            var p = state.descFor && state.pending[state.descFor];
-            if (!it || !p) return;
-            var loc = it.getAttribute('data-local');
-            p.local = p.local === loc ? '' : loc;
-            pintarModulos();
-        });
         $('setp-desc-text').addEventListener('input', function (e) {
+            var p = state.descFor && state.pending[state.descFor];
+            if (p) p.detalle = e.target.value;
             $('setp-desc-n').textContent = e.target.value.length;
-            if (e.target.value.trim()) descAviso('');
+            pintarResumen();
         });
         $('setp-desc-form').addEventListener('submit', function (e) { e.preventDefault(); guardarDescripcion(); });
     }
 
-    // Lista "Módulo": los módulos del nivel (área de recorrido) del recorrido abierto.
-    function pintarModulos() {
+    // Módulos del nivel (área de recorrido) del recorrido abierto.
+    function modulosDe(r) {
+        var cat = catalogo();
+        return cat ? cat.modulos(r.area_recorrido) : [];
+    }
+
+    // Texto de ubicación: "10.50 · Módulo E4 · SEIE4-12".
+    function ubicacionTexto(r, p) {
+        var m = modulosDe(r).find(function (x) { return x.nombre === p.modulo; });
+        return [r.area_recorrido, m ? moduloTexto(m) : '', p.local].filter(Boolean).join(' · ');
+    }
+
+    function pintarCaptura() {
         var r = state.descFor && state.recorridos.find(function (x) { return x.id === state.descFor; });
         var p = state.descFor && state.pending[state.descFor];
-        var lista = $('setp-desc-mod');
-        if (!r || !p || !lista) return;
-        var modulos = MODULOS_POR_NIVEL[r.area_recorrido] || [];
+        var cat = catalogo();
+        if (!r || !p || !cat || !$('setp-desc-et')) return;
+        var radio = function (on) { return ' role="radio" aria-checked="' + !!on + '"'; };
+        // 1 · Etiqueta
+        $('setp-desc-et').innerHTML = cat.etiquetas.map(function (e) {
+            return '<button type="button" class="sd-chip" style="--c:' + e.color + '" data-etq="' + e.key + '"' + radio(p.etiqueta === e.key) + '>' +
+                '<i class="fas ' + e.icono + '"></i>' + esc(e.nombre) + '</button>';
+        }).join('');
+        // 2 · Item, 3 · Condición, 4 · Cantidad
+        var etq = cat.etiqueta(p.etiqueta);
+        $('setp-desc-item-wrap').hidden = !etq;
+        if (etq) {
+            $('setp-desc-item').innerHTML = cat.items(etq.key).map(function (i) {
+                return '<button type="button" class="sd-chip" style="--c:' + etq.color + '" data-item="' + esc(i.nombre) + '"' + radio(p.item === i.nombre) + '>' +
+                    '<i class="fas ' + i.icono + '"></i>' + esc(i.nombre) + '</button>';
+            }).join('');
+            $('setp-desc-cond').innerHTML = cat.condiciones(etq.key).map(function (c) {
+                return '<button type="button" data-cond="' + c.key + '"' + radio(p.condicion === c.key) + '>' + esc(c.texto) + '</button>';
+            }).join('');
+            $('setp-desc-cant').textContent = String(p.cantidad || 1);
+        }
+        // 5 · Módulo y 6 · Local
+        var modulos = modulosDe(r);
         $('setp-desc-mod-nivel').textContent = '· Nivel ' + r.area_recorrido;
-        lista.innerHTML = modulos.length
+        $('setp-desc-mod').innerHTML = modulos.length
             ? modulos.map(function (m) {
-                var t = moduloTexto(m);
-                return '<li><button type="button" class="sd-mod-item" role="radio" aria-checked="' + (p.modulo === t) + '" data-modulo="' + esc(t) + '">' +
-                    '<i class="fas ' + (p.modulo === t ? 'fa-circle-dot' : 'fa-circle') + '"></i>' + esc(t) + '</button></li>';
+                var on = p.modulo === m.nombre;
+                return '<li><button type="button" class="sd-mod-item" data-modulo="' + esc(m.nombre) + '"' + radio(on) + '>' +
+                    '<i class="' + (on ? 'fas fa-circle-dot' : 'far fa-circle') + '"></i>' + esc(moduloTexto(m)) + '</button></li>';
             }).join('')
             : '<li class="sd-mod-vacio">Aún no hay módulos para el nivel ' + esc(r.area_recorrido) + '.</li>';
-        // Locales del módulo elegido.
-        var elegido = modulos.find(function (m) { return moduloTexto(m) === p.modulo; });
-        var wrap = $('setp-desc-loc-wrap');
-        wrap.hidden = !elegido;
-        if (!elegido) return;
-        $('setp-desc-loc-mod').textContent = '· ' + elegido.nombre;
-        $('setp-desc-loc').innerHTML = elegido.locales.map(function (l) {
-            return '<button type="button" class="sd-loc" role="radio" aria-checked="' + (p.local === l) + '" data-local="' + esc(l) + '">' + esc(l) + '</button>';
-        }).join('');
+        var elegido = modulos.find(function (m) { return m.nombre === p.modulo; });
+        $('setp-desc-loc-wrap').hidden = !elegido;
+        if (elegido) {
+            $('setp-desc-loc-mod').textContent = '· ' + elegido.nombre;
+            $('setp-desc-loc').innerHTML = elegido.locales.map(function (l) {
+                return '<button type="button" class="sd-loc" data-local="' + esc(l) + '"' + radio(p.local === l) + '>' + esc(l) + '</button>';
+            }).join('');
+        }
+        // Con item "Otro" el detalle es obligatorio (es la descripción).
+        var otro = p.item === cat.OTRO;
+        $('setp-desc-text-lbl').innerHTML = otro ? 'Describe el elemento *' : 'Detalle <span class="fw-normal text-muted">(opcional)</span>';
+        $('setp-desc-text').placeholder = otro ? 'Ej. Cartel del evento desprendido' : 'Ej. Respaldo roto en la fila 3';
+        $('setp-desc-area').textContent = ubicacionTexto(r, p);
+        pintarResumen();
+    }
+
+    function pintarResumen() {
+        var r = state.descFor && state.recorridos.find(function (x) { return x.id === state.descFor; });
+        var p = state.descFor && state.pending[state.descFor];
+        var cat = catalogo();
+        var box = $('setp-desc-resumen');
+        if (!r || !p || !cat || !box) return;
+        var etq = cat.etiqueta(p.etiqueta);
+        var texto = p.item && p.condicion ? cat.componer(p) : '';
+        box.classList.toggle('d-none', !texto);
+        if (!texto) return;
+        var lugar = p.local ? ubicacionTexto(r, p) : '';
+        box.innerHTML = '<i class="fas fa-clipboard-check"></i><div>Se registrará: <b>' + esc(texto) + '</b>' +
+            '<div class="small">' + esc(etq ? etq.nombre : '') + (lugar ? ' · ' + esc(lugar) : '') + '</div></div>';
     }
 
     function descAviso(html, tipo) {
@@ -1241,24 +1401,38 @@
         box.innerHTML = html || '';
     }
 
+    function vistaDuplicados(on) {
+        $('setp-desc-captura').hidden = !!on;
+        $('setp-desc-dup').hidden = !on;
+        $('setp-desc-foot').hidden = !!on;
+        $('setp-desc-title').textContent = on ? '¿Es el mismo hallazgo?' : 'Descripción del hallazgo';
+        if (!on) $('setp-desc-dup').innerHTML = '';
+        var body = document.querySelector('#' + DESC_ID + ' .sd-body');
+        if (body) body.scrollTop = 0;
+    }
+
     function abrirDescripcion(id, aviso) {
         var r = state.recorridos.find(function (x) { return x.id === id; });
         var p = state.pending[id];
         if (!r || !p || !p.esFoto) return;
         ensureDescModal();
         state.descFor = id;
+        if (!p.cantidad) p.cantidad = 1;
         $('setp-desc-foto').src = p.url;
-        $('setp-desc-area').textContent = r.area_recorrido;
         $('setp-desc-fecha').textContent = (fecha(r.registrado_en) || '—') + ' · ' + hhmm(r.hora_inicio) + ' hrs' + (p.extra ? ' · evidencia adicional' : '');
-        $('setp-desc-text').value = p.descripcion || '';
-        $('setp-desc-n').textContent = String((p.descripcion || '').length);
+        $('setp-desc-text').value = p.detalle || '';
+        $('setp-desc-n').textContent = String((p.detalle || '').length);
         descAviso(aviso || '', 'info');
-        pintarModulos();
+        vistaDuplicados(false);
+        pintarCaptura();
         var modal = $(DESC_ID);
         modal.hidden = false;
         document.body.style.overflow = 'hidden';
         requestAnimationFrame(function () { modal.classList.add('is-open'); });
-        setTimeout(function () { $('setp-desc-text').focus(); }, 30);
+        setTimeout(function () {
+            var foco = modal.querySelector('.sd-chip[aria-checked="true"]') || modal.querySelector('.sd-chip');
+            if (foco) foco.focus();
+        }, 30);
     }
 
     function cerrarDescripcion() {
@@ -1274,19 +1448,122 @@
         if (back) back.focus();
     }
 
-    function guardarDescripcion() {
-        var p = state.descFor && state.pending[state.descFor];
-        if (!p) return cerrarDescripcion();
-        var texto = $('setp-desc-text').value.trim().replace(/\s+/g, ' ');
-        if (!texto) {
-            descAviso('Escribe la descripción del hallazgo para guardarla.');
-            $('setp-desc-text').focus();
+    // Lo que falta por capturar (el primer paso pendiente recibe el foco).
+    function faltantes(p) {
+        var cat = catalogo();
+        var f = [];
+        if (!p.etiqueta) f.push(['etiqueta', '#setp-desc-et']);
+        else if (!p.item) f.push(['item', '#setp-desc-item']);
+        if (p.etiqueta && !p.condicion) f.push(['condición', '#setp-desc-cond']);
+        if (!p.modulo) f.push(['módulo', '#setp-desc-mod']);
+        else if (!p.local) f.push(['local', '#setp-desc-loc']);
+        if (cat && p.item === cat.OTRO && !String(p.detalle || '').trim()) f.push(['descripción del elemento', '#setp-desc-text']);
+        return f;
+    }
+
+    // Hallazgos pendientes iguales en la base: mismo item en el mismo local
+    // (y nivel); si el objeto se mueve, en todo el nivel durante las últimas
+    // 24 h. Sin las columnas de db/setp_hallazgos_identificacion.sql no revisa.
+    async function buscarDuplicados(r, p) {
+        var cat = catalogo();
+        if (!cat || (p.item === cat.OTRO && !cat.esMovible(p.etiqueta, p.item))) return [];
+        try {
+            var sb = await getClient();
+            var res = await sb.from('setp_hallazgos')
+                .select('id, folio, fecha_reporte, created_at, modulo, local, nivel, etiqueta, item, condicion, cantidad, descripcion, evidencia_url, no_empleado, veces')
+                .eq('estatus', 'PENDIENTE').is('duplicado_de', null).eq('etiqueta', p.etiqueta).eq('item', p.item)
+                .order('created_at', { ascending: false }).limit(40);
+            if (res.error) return [];
+            var nivel = cat.nivel(r.area_recorrido);
+            var mov = cat.esMovible(p.etiqueta, p.item);
+            var desde = Date.now() - MOVIBLE_HORAS * 3600 * 1000;
+            return (res.data || []).filter(function (h) {
+                if (cat.nivel(h.nivel) !== nivel) return false;
+                if (mov) return new Date(h.created_at).getTime() >= desde;
+                return h.local === p.local;
+            });
+        } catch (_) {
+            return [];
+        }
+    }
+
+    function fechaHora(ts) {
+        var d = ts ? new Date(ts) : null;
+        if (!d || isNaN(d)) return '';
+        return d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' +
+            d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+    }
+
+    function pintarDuplicados(r, p, lista) {
+        var cat = catalogo();
+        var etq = cat.etiqueta(p.etiqueta);
+        var mov = cat.esMovible(p.etiqueta, p.item);
+        var yo = supervisor(r.no_empleado);
+        var foto = function (url) {
+            return url ? '<img class="sd-dup-foto" src="' + esc(url) + '" alt="Foto del hallazgo registrado">' : '<div class="sd-dup-foto d-flex align-items-center justify-content-center small text-muted">Sin foto</div>';
+        };
+        var donde = mov ? 'en el nivel ' + esc(r.area_recorrido) + ' durante las últimas ' + MOVIBLE_HORAS + ' h' : 'en este mismo local (' + esc(p.local) + ')';
+        $('setp-desc-dup').innerHTML = '<div class="sd-dup">' +
+            '<div class="sd-dup-h"><i class="fas fa-triangle-exclamation mt-1"></i><span>' +
+            (lista.length === 1 ? 'Ya hay un hallazgo pendiente igual' : 'Ya hay ' + lista.length + ' hallazgos pendientes iguales') +
+            ': <b>' + esc(etq ? etq.nombre : '') + ' › ' + esc(p.item) + '</b> ' + donde + '.</span></div>' +
+            '<div class="sd-dup-grid">' +
+            '<div><div class="sd-dup-lbl">Tu foto · ahora</div>' + foto(p.url) +
+            '<div class="sd-dup-tit">' + esc(cat.componer(p)) + '</div>' +
+            '<div class="sd-dup-sub">' + esc(yo ? yo.nombre : r.no_empleado) + ' · ' + esc(ubicacionTexto(r, p)) + '</div></div>' +
+            '<div class="sd-dup-lista">' + lista.map(function (h) {
+                var s = supervisor(h.no_empleado);
+                return '<div class="sd-dup-cand"><div class="sd-dup-lbl">' + esc(h.folio || 'Registrado') + ' · pendiente</div>' + foto(h.evidencia_url) +
+                    '<div class="sd-dup-tit">' + esc(h.descripcion) + '</div>' +
+                    '<div class="sd-dup-sub">' + esc([h.nivel, h.modulo, h.local].filter(Boolean).join(' · ')) + '</div>' +
+                    '<div class="sd-dup-sub">' + esc(s ? s.nombre : (h.no_empleado || '')) + ' · ' + esc(fechaHora(h.created_at) || h.fecha_reporte) +
+                    (h.veces > 1 ? ' · reportado ' + h.veces + ' veces' : '') + '</div>' +
+                    '<button type="button" class="btn btn-warning btn-sm" data-dup-mismo="' + esc(h.id) + '" data-dup-folio="' + esc(h.folio || '') + '"><i class="fas fa-link me-1"></i>Es el mismo · agregar mi foto</button></div>';
+            }).join('') + '</div></div>' +
+            '<div class="small mt-2" style="color:inherit"><i class="fas fa-circle-info me-1"></i>Compara las fotos. Si es el mismo, tu foto se agrega a ese hallazgo y no se crea otro.</div>' +
+            '<div class="sd-dup-btns"><button type="button" class="btn btn-outline-secondary btn-sm" data-dup="volver"><i class="fas fa-arrow-left me-1"></i>Regresar</button>' +
+            '<button type="button" class="btn btn-primary btn-sm" data-dup="otro"><i class="fas fa-plus me-1"></i>Es otro hallazgo</button></div></div>';
+        vistaDuplicados(true);
+        var b = $('setp-desc-dup').querySelector('[data-dup-mismo]');
+        if (b) b.focus();
+    }
+
+    async function guardarDescripcion() {
+        var id = state.descFor;
+        var p = id && state.pending[id];
+        var r = id && state.recorridos.find(function (x) { return x.id === id; });
+        if (!p || !r) return cerrarDescripcion();
+        if (!catalogo()) return descAviso('No se cargó el catálogo de hallazgos (js/setp-catalogo.js). Recarga la página.', 'danger');
+        p.detalle = $('setp-desc-text').value.trim().replace(/\s+/g, ' ');
+        var falta = faltantes(p);
+        if (falta.length) {
+            descAviso('Falta elegir: <b>' + falta.map(function (f) { return f[0]; }).join(', ') + '</b>.');
+            var el = document.querySelector('#' + DESC_ID + ' ' + falta[0][1]);
+            if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); var f = el.matches('textarea') ? el : el.querySelector('button'); if (f) f.focus({ preventScroll: true }); }
             return;
         }
-        p.descripcion = texto;
+        descAviso('');
+        p.mismoQue = null;
+        var btn = $('setp-desc-guardar');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Revisando…';
+        var lista = await buscarDuplicados(r, p);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar';
+        if (state.descFor !== id) return; // se cerró mientras revisaba
+        if (lista.length) return pintarDuplicados(r, p, lista);
+        terminarDescripcion();
+    }
+
+    function terminarDescripcion() {
+        var p = state.descFor && state.pending[state.descFor];
+        if (!p) return cerrarDescripcion();
+        p.descripcion = catalogo().componer(p);
         render();
         cerrarDescripcion();
-        setStatus('Descripción guardada. Presiona <b>✓</b> para confirmar la evidencia y agregar el hallazgo a <b>Hallazgos detectados</b>.', 'info');
+        setStatus(p.mismoQue
+            ? 'Tu foto se agregará al hallazgo <b>' + esc(p.mismoQue.folio || 'registrado') + '</b> (no se crea otro). Presiona <b>✓</b> para confirmar.'
+            : 'Descripción guardada. Presiona <b>✓</b> para confirmar la evidencia y agregar el hallazgo a <b>Hallazgos detectados</b>.', 'info');
     }
 
     // ---------- Crear usuario (supervisor) ----------
