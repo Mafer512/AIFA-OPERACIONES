@@ -58,3 +58,7 @@ videos/FBO AIFA - Trim.mp4
 # nunca se suben al repositorio.
 /privado/
 /Agenda*.csv
+
+# Scripts y datos de diagnóstico locales (CSV del itinerario, SQL de respaldo
+# y verificación): se ejecutan a mano, no se suben.
+/diagnostico/
