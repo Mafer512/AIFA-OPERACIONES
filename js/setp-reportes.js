@@ -17,10 +17,6 @@
         { key: 'VESPERTINO', label: 'Vespertino', color: '#eb6834' },
         { key: 'NOCTURNO', label: 'Nocturno', color: '#1baf7a' }
     ];
-    // Filtros Mes y Año inhabilitados por el momento (se ven, pero no se usan
-    // ni filtran). Cambiar a true para activarlos.
-    const FILTROS_FECHA = false;
-    const FILTRO_FECHA_ATTR = FILTROS_FECHA ? '' : ' disabled title="Inhabilitado por el momento"';
     const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
     const state = {
@@ -98,6 +94,11 @@
         style.id = 'setp-styles';
         style.textContent = [
             R + '{--setp-surface:#fff;--setp-ink:#0f172a;--setp-ink-2:#475569;--setp-muted:#64748b;--setp-line:#e2e8f0;}',
+            // Modo oscuro (body.dark-mode, script.js): colores del aplicativo.
+            'body.dark-mode ' + R + '{--setp-surface:var(--card-bg);--setp-ink:var(--text-color);--setp-ink-2:#c3c9d2;--setp-muted:var(--text-muted-color);--setp-line:var(--border-color);}',
+            'body.dark-mode ' + R + ' .setp-kpi,body.dark-mode ' + R + ' .setp-panel{box-shadow:0 6px 16px rgba(0,0,0,.25);}',
+            'body.dark-mode ' + R + ' .setp-hist-dot--curso{background:var(--card-bg);box-shadow:inset 0 0 0 2px #fbbf24;}',
+            'body.dark-mode ' + R + ' .setp-hist-tag--curso{color:#fbbf24;}',
             R + ' .setp-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:end;justify-content:space-between;margin-bottom:14px;}',
             R + ' .setp-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:end;}',
             R + ' .setp-filters .form-select{min-width:140px;}',
@@ -178,10 +179,7 @@
             '<div id="setp-status" class="alert d-none mb-3"></div>',
             '<div class="setp-toolbar">',
             '  <div class="setp-filters" role="group" aria-label="Filtros del reporte SETP">',
-            '    <div><label for="setp-f-supervisor">Supervisor</label><select id="setp-f-supervisor" class="form-select form-select-sm"></select></div>',
-            '    <div><label for="setp-f-month">Mes</label><select id="setp-f-month" class="form-select form-select-sm"' + FILTRO_FECHA_ATTR + '></select></div>',
-            '    <div><label for="setp-f-year">Año</label><select id="setp-f-year" class="form-select form-select-sm"' + FILTRO_FECHA_ATTR + '></select></div>',
-            '  </div>',
+            '    <div><label for="setp-f-supervisor">Supervisor</label><select id="setp-f-supervisor" class="form-select form-select-sm"></select></div>',            '  </div>',
             '  <div class="setp-actions">',
             '    <button type="button" class="btn btn-sm btn-primary d-none" id="setp-crear-usuario"><i class="fas fa-user-plus me-1"></i>Crear usuario</button>',
             '    <button type="button" class="btn btn-sm btn-outline-primary d-none" id="setp-editar-usuario"><i class="fas fa-user-pen me-1"></i>Editar usuario</button>',
@@ -239,22 +237,8 @@
         state.rows = all;
     }
 
+    // Los filtros Mes y Año se retiraron: sólo queda Supervisor.
     function fillFilters() {
-        var years = Array.from(new Set(state.rows.map(function (r) { return Number(String(r.fecha).slice(0, 4)); })))
-            .filter(Boolean).sort(function (a, b) { return b - a; });
-
-        var yearSel = $('setp-f-year');
-        var prevYear = yearSel.value;
-        yearSel.innerHTML = '<option value="">--Seleccionar--</option>' + years.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
-        yearSel.value = !FILTROS_FECHA ? '' : prevYear && years.indexOf(Number(prevYear)) >= 0 ? prevYear : (years[0] ? String(years[0]) : '');
-
-        var monthSel = $('setp-f-month');
-        var prevMonth = monthSel.value;
-        monthSel.innerHTML = '<option value="">--Seleccionar--</option>' + MONTH_NAMES.map(function (m, i) {
-            return '<option value="' + (i + 1) + '">' + m.charAt(0).toUpperCase() + m.slice(1) + '</option>';
-        }).join('');
-        monthSel.value = FILTROS_FECHA ? prevMonth : '';
-
         fillSupervisores();
     }
 
@@ -296,8 +280,8 @@
         var supSel = $('setp-f-supervisor');
         var supOpt = supSel.selectedIndex > 0 ? supSel.options[supSel.selectedIndex] : null;
         return {
-            year: FILTROS_FECHA ? $('setp-f-year').value : '',
-            month: FILTROS_FECHA ? $('setp-f-month').value : '',
+            year: '', // filtros Mes y Año retirados
+            month: '',
             turno: '', // filtro Turno eliminado
             supervisor: supOpt ? supOpt.textContent : '',
             noEmpleado: supSel.value
@@ -472,9 +456,7 @@
     // ---------- ciclo de vida ----------
 
     function bindEvents() {
-        ['setp-f-year', 'setp-f-month', 'setp-f-supervisor'].forEach(function (id) {
-            $(id).addEventListener('change', render);
-        });
+        $('setp-f-supervisor').addEventListener('change', render);
         // Al elegir supervisor, "Supervisor × turno" se llena con sus datos
         // y el Detalle de registros muestra su historial.
         $('setp-f-supervisor').addEventListener('change', function (e) {

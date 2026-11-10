@@ -27,6 +27,58 @@
     ];
     // Pisos que se eligen como "Área de recorrido".
     const PISOS = ['0.00', '5.25', '10.50'];
+    // Módulos que se ofrecen en "Descripción del hallazgo" según el nivel (piso) del
+    // recorrido. Cada módulo lleva sus locales (claves de ubicación exacta, según los PDF).
+    // Los tres niveles ya están capturados.
+    const MODULOS_POR_NIVEL = {
+        '0.00': [
+            { nombre: 'Módulo A', zona: 'Llegadas', locales: 'LLENA-01, LLENA-02A, LLENA-02B, LLENA-MA01'.split(', ') },
+            { nombre: 'Módulo B', zona: 'Llegadas', locales: 'LLENB-01, LLEIE4-01, LLEIE4-MA01'.split(', ') },
+            { nombre: 'Módulo H', zona: 'Llegadas', locales: 'LLEIH-01, LLEIH-02, LLEIH-03, LLEIH-04, LLEIH-07, LLEIH-MA01, LLEIH-MA02, LLEIH-06, LLEIH-05'.split(', ') },
+            { nombre: 'Módulo I', zona: 'Llegadas', locales: 'LLENI-01, LLENI-02, LLENI-MA01'.split(', ') },
+            { nombre: 'Módulo J', zona: 'Llegadas', locales: ['LLENJ-01'] },
+            { nombre: 'Módulo K', zona: 'Llegadas', locales: 'LLEIK-MA01, LLEIK-01, LLEIK-02'.split(', ') },
+            { nombre: 'Módulo L', zona: 'Llegadas', locales: ('LLANL-01A, LLANL-01B, LLANL-02, LLANL-03, LLANL-04, LLANL-11, LLANL-12, LLANL-13, LLANL-20, LLANL-21, LLANL-14, LLANL-15, ' +
+                'LLANL-22, LLANL-23, LLANL-24, LLANL-25, LLANL-26, LLANL-27, LLANL-28, LLANL-29, LLANL-30, LLANL-31, LLANL-32, LLANL-33, LLANL-34, LLANL-35, ' +
+                'LLANL-36, LLANL-37, LLANL-38, LLANL-39, LLANL-40, LLANL-41, LLANL-42A, LLANL-42B, LLANL-43, LLANL-43B, LLANL-45, LLANL-46, LLANL-C4, LLANL-MA01').split(', ') },
+            { nombre: 'Módulo M', zona: 'Llegadas', locales: ('LLANM-01, LLANM-02, LLANM-03, LLAIM-04, LLANM-05, LLANM-07, LLANM-08, LLANM-09, LLANM-10, LLANM-11, LLAIM-12, ' +
+                'LLANM-13, LLAIM-14, LLAIM-15, LLAIM-16, LLAIM-17, LLAIM-18, LLAIM-19, LLAIM-20, LLANM-21, LLANM-22, LLANM-23, LLANM-23B, LLANM-24, LLANM-25A, ' +
+                'LLANM-25B, LLANM-25C, LLANM-26, LLANM-27, LLANM-MA2').split(', ') },
+            { nombre: 'Módulo N', zona: 'Llegadas', locales: 'LLAIN-03, LLAIN-04, LLAIN-05, LLAIN-06, LLAIN-07, LLAIN-08, LLAIN-09, LLAIN-10, LLAIN-11, LLAIN-12, LLAIN-15, LLAIN-18, LLAIN-20, LLAIN-MA01, LLAIN-C16'.split(', ') }
+        ],
+        '5.25': [
+            { nombre: 'Módulo C', locales: ['MENC-01'] },
+            { nombre: 'Módulo F', locales: ['MEIF-01', 'MEIF-02'] },
+            { nombre: 'Módulo G1', locales: ['MEIGI-01'] },
+            { nombre: 'Módulo H', locales: ['MEIH-01'] },
+            { nombre: 'Módulo K', locales: ['MEIK-01'] }
+        ],
+        '10.50': [
+            { nombre: 'Módulo A', locales: 'SENA-01, SENA-02, SENA-03, SENA-04, SENA-05, SENA-06, SENA-07, SENA-08, SENA-09, SENA-10, SENA-11, SENA-12, SENA-13, SENA-14, SENA-MA01'.split(', ') },
+            { nombre: 'Módulo B', locales: 'SENB-01, SENB-02, SENB-03, SENB-04, SENB-05, SENB-06, SENB-07, SENB-08, SENB-09, SENB-10, SENB-11, SENB-MA01'.split(', ') },
+            { nombre: 'Módulo C', locales: 'SENC-01, SENC-02, SENC-03, SENC-04, SENC-05, SENC-06, SENC-07, SENC-09, SENC-10A, SENC-10B, SENC-MA02, SENC-MA01'.split(', ') },
+            { nombre: 'Módulo D', locales: ('SEND-01, SEND-02, SEND-03A, SEND-03B, SEND-04A, SEND-04B, SEND-05, SEND-06, SEND-06B, SEND-07, SEND-0, SEND-09, SEND-10A, SEND-10B, ' +
+                'SEND-10C, SEND-10D, SEND-11, SEND-12, SEND-13, SEND-14, SEND-15A, SEND-15B, SEND-MA01').split(', ') },
+            { nombre: 'Módulo E1', locales: 'SENE1-01, SENE1-02, SENE1-03, SENE1-04A, SENE1-04B, SENE1-05, SENE1-06, SENE1-07, SENE1-08, SENE1-09, SENE1-10, SENE1-11, SENE1-12, SENE1-13'.split(', ') },
+            { nombre: 'Módulo E2', locales: 'SENE2-01, SENE2-02, SEIE2-03, SENE2-04, SEIE2-05, SENE2-06, SENE2-07'.split(', ') },
+            { nombre: 'Módulo E3', locales: 'SEIE3-01, SEIE3-02, SEIE3-03, SEIE3-04, SEIE3-05, SEIE3-06A, SEIE3-06B, SEIE3-07B, SEIE3-07A, SEIE3-08, SEIE3-09, SEIE3-10, SEIE3-11, SEIE3-12, SEIE3-14'.split(', ') },
+            { nombre: 'Módulo E4', locales: ('SEIE4-01, SEIE4-02, SEIE4-03, SEIE4-04, SEIE4-05, SEIE4-06, SEIE4-07, SEIE4-32, SEIE4-08, SEIE4-09, SEIE4-10, SEIE4-11, SEIE4-12, ' +
+                'SEIE4-13, SEIE4-14, SEIE4-15, SEIE4-16, SEIE4-33, SEIE4-17, SEIE4-18, SEIE4-19, SEIE4-20, SEIE4-21, SEIE4-22A, SEIE4-22B, SEIE4-23, SEIE4-24, ' +
+                'SEIE4-25, SEIE4-26, SEIE4-27A, SEIE4-27B, SEIE4-29, SEIE4-30, SEIE4-31').split(', ') },
+            { nombre: 'Sala de espera', locales: 'SEIF-01, SEIF-02, SEIF-03, SEIF-04, SEIF-05, SEIF-10'.split(', ') },
+            { nombre: 'Módulo G1', locales: 'SEIG1-01, SEIG1-02, SEIG1-03, SEIG1-04, SEIG1-05, SEIG1-06, SEIGI-MA01'.split(', ') },
+            { nombre: 'Módulo G2', locales: 'SEIG2-01, SEIG2-02, SEIG2-03, SEIG2-04, SEIG2-05'.split(', ') },
+            { nombre: 'Módulo H', locales: ['SEIH-01', 'SEIH-MA01'] },
+            { nombre: 'Módulo I', locales: 'SENI-01, SENI-02, SENI-03, SENI-04, SENI-05, SENI-06, SENI-07, SENI-08, SENI-09, SENI-10, SENI-11, SENI-12, SENI-13, SENI-14'.split(', ') },
+            { nombre: 'Módulo K', locales: 'SEIK-01, SEIK-02, SEIK-03, SEIK-04, SEIK-05, SEIK-06, SEIK-07, SEIK-08, SEIK-09, SEIK-10, SEIK-11'.split(', ') },
+            { nombre: 'Módulo L', locales: ('SANL-01, SANL-01B, SANL-02, SANL-03, SANL-03B, SANL-04, SANL-05, SANL-06, SANL-12, SANL-13, SANL-14 Y 15, SANL-19, SANL-20, SANL-21, ' +
+                'SANL-22, SANL-23, SANL-24, SANL-25, SANL-MP01, SANL-MA01, SANL-C1, SANL-C12, SANL-C13, SANL-C9, SANL-C5, SANL-C2, SANL-27, SANL-28, SANL-29, SANL-30').split(', ') },
+            { nombre: 'Módulo M', locales: 'SAIM-01, SAIM-01B, SANM-02, SANM-03, SAIM-04, SAIM-05A, SAIM-05B, SAIM-MA02'.split(', ') },
+            { nombre: 'Módulo N', locales: 'SAIN-01, SAIN-02, SAIN-MA02, SAIN-02B, SAIN-03, SAIN-07, SAIN-08, SAIN-09, SAIN-10, SAIN-11, SAIN-12, SAIN-13A, SAIN-13B'.split(', ') }
+        ]
+    };
+
+    function moduloTexto(m) { return m.nombre + (m.zona ? ' (' + m.zona + ')' : ''); }
     // Selector de turno debajo del área de recorrido (false lo oculta sin borrarlo).
     const SELECTOR_TURNO = true;
 
@@ -237,7 +289,15 @@
             R + ' .setp-rec-thumb--pend{border:2px dashed #b45309;}',
             R + ' .setp-rec-mas{width:48px;height:48px;border-style:dashed;display:inline-flex;align-items:center;justify-content:center;}',
             R + ' .setp-rec-pend{color:#b45309;font-weight:600;}',
-            R + ' .setp-rec-desc-btn{font-size:.72rem;text-decoration:none;}'
+            R + ' .setp-rec-desc-btn{font-size:.72rem;text-decoration:none;}',
+            // Modo oscuro (body.dark-mode).
+            'body.dark-mode ' + R + ' .setp-rec-hora{color:var(--text-color);}',
+            'body.dark-mode ' + R + ' .setp-rec-dia,body.dark-mode ' + R + ' .setp-rec-hint td{color:var(--text-muted-color);}',
+            'body.dark-mode ' + R + ' .setp-rec-nuevo td{background:rgba(77,171,247,.08);}',
+            'body.dark-mode ' + R + ' .setp-rec-curso td{background:rgba(251,191,36,.08);}',
+            'body.dark-mode ' + R + ' .setp-rec-thumb{border-color:var(--border-color);}',
+            'body.dark-mode ' + R + ' .setp-rec-thumb--pend{border-color:#f59e0b;}',
+            'body.dark-mode ' + R + ' .setp-rec-pend{color:#fbbf24;}'
         ].concat(estilosResponsive(R)).join('');
         document.head.appendChild(style);
     }
@@ -274,6 +334,11 @@
             R + ' .setp-rec-area,' + R + ' .setp-rec-turno{min-width:0;max-width:none;width:100%;}',
             R + ' .setp-rec-turno{margin-top:6px;}',
             R + ' .setp-rec-file{max-width:100%;}',
+            'body.dark-mode ' + T + ' tr{background:var(--card-bg);border-color:var(--border-color);box-shadow:0 4px 12px rgba(0,0,0,.25);}',
+            'body.dark-mode ' + T + ' tr.setp-rec-curso{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.45);}',
+            'body.dark-mode ' + T + ' tr.setp-rec-nuevo{background:rgba(77,171,247,.08);border-color:rgba(77,171,247,.4);}',
+            'body.dark-mode ' + T + ' tr.setp-rec-hint{box-shadow:none;}',
+            'body.dark-mode ' + T + ' td::before{color:var(--text-muted-color);}',
             '}',
             '@container setp (max-width:599.98px){',
             T + ' tbody{padding:10px;}',
@@ -759,6 +824,7 @@
         }
         return {
             ym: fechaRep.slice(0, 7),
+            fecha: fechaRep,
             hallazgo: { id: res.data && res.data.id, descripcion: descripcion, evidencia_url: hallazgo.evidencia_url, evidencia_path: path }
         };
     }
@@ -767,9 +833,10 @@
         return new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 1, 1).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
     }
 
-    // Reporte de hallazgos (js/setp-formato.js): muestra el mes del hallazgo.
-    function mostrarEnReporte(ym) {
-        if (window.setpFormato && window.setpFormato.reloadReport) window.setpFormato.reloadReport(ym);
+    // Reporte de hallazgos (js/setp-formato.js): si la fecha del hallazgo queda
+    // fuera del periodo elegido, muestra su mes completo.
+    function mostrarEnReporte(fecha) {
+        if (window.setpFormato && window.setpFormato.reloadReport) window.setpFormato.reloadReport(fecha);
     }
 
     // ✓ de una evidencia adicional: sólo crea su hallazgo (el recorrido ya tiene su evidencia).
@@ -782,7 +849,7 @@
             state.extras[r.id] = (state.extras[r.id] || []).concat([out.hallazgo]);
             soltarPendiente(r.id);
             setStatus('Evidencia agregada. El hallazgo se agregó a <b>Hallazgos detectados</b> de ' + esc(mesDe(out.ym)) + '.', 'success');
-            mostrarEnReporte(out.ym);
+            mostrarEnReporte(out.fecha);
         } catch (error) {
             setStatus('No se pudo guardar la evidencia adicional: ' + errText(error), 'danger');
         } finally {
@@ -832,7 +899,7 @@
             try {
                 var out = await crearHallazgoDetectado(sb, r, p, descripcion);
                 setStatus('Evidencia guardada. El hallazgo se agregó a <b>Hallazgos detectados</b> de ' + esc(mesDe(out.ym)) + '. Usa <b>+</b> si hay más evidencias.', 'success');
-                mostrarEnReporte(out.ym);
+                mostrarEnReporte(out.fecha);
             } catch (error) {
                 setStatus('La evidencia se guardó en el recorrido, pero no se pudo agregar a Hallazgos detectados: ' + errText(error), 'warning');
             }
@@ -919,7 +986,20 @@
         '#' + CF_ID + '.cf-tono-ok .cf-icon{background:#ecfdf5;color:#059669;}',
         '#' + CF_ID + '.cf-tono-ok .cf-aviso{color:#065f46;background:#ecfdf5;}',
         '#' + CF_ID + '.cf-tono-ok .cf-si{background:#16a34a;border-color:#16a34a;}#' + CF_ID + '.cf-tono-ok .cf-si:hover{background:#15803d;}',
-        '@media (prefers-reduced-motion:reduce){#' + CF_ID + ',#' + CF_ID + ' .cf-card{transition:none;}}'
+        '@media (prefers-reduced-motion:reduce){#' + CF_ID + ',#' + CF_ID + ' .cf-card{transition:none;}}',
+        // Modo oscuro del aplicativo (en la ventana del historial no aplica: no tiene body.dark-mode).
+        'body.dark-mode #' + CF_ID + '{background:rgba(0,0,0,.55);}',
+        'body.dark-mode #' + CF_ID + ' .cf-card{background:rgba(30,39,57,.97);border-color:var(--border-color);color:var(--text-color);box-shadow:0 24px 60px rgba(0,0,0,.5);}',
+        'body.dark-mode #' + CF_ID + ' .cf-head,body.dark-mode #' + CF_ID + ' .cf-foot{border-color:var(--border-color);}',
+        'body.dark-mode #' + CF_ID + ' .cf-foot{background:rgba(255,255,255,.03);}',
+        'body.dark-mode #' + CF_ID + ' .cf-kicker,body.dark-mode #' + CF_ID + ' .cf-info dt{color:var(--text-muted-color);}',
+        'body.dark-mode #' + CF_ID + ' .cf-info{background:rgba(255,255,255,.04);border-color:var(--border-color);}',
+        'body.dark-mode #' + CF_ID + ' .cf-icon{background:rgba(248,113,113,.15);color:#f87171;}',
+        'body.dark-mode #' + CF_ID + ' .cf-aviso{background:rgba(248,113,113,.12);color:#fca5a5;}',
+        'body.dark-mode #' + CF_ID + ' .cf-no{background:transparent;color:#c3c9d2;border-color:rgba(148,163,184,.5);}',
+        'body.dark-mode #' + CF_ID + ' .cf-no:hover{background:rgba(255,255,255,.06);}',
+        'body.dark-mode #' + CF_ID + '.cf-tono-ok .cf-icon{background:rgba(16,185,129,.15);color:#34d399;}',
+        'body.dark-mode #' + CF_ID + '.cf-tono-ok .cf-aviso{background:rgba(16,185,129,.12);color:#6ee7b7;}'
     ].join('');
 
     const ICONO_CONFIRMAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
@@ -996,6 +1076,31 @@
     const DESC_ID = 'setp-desc-modal';
     const DESC_MAX = 500;
 
+    // Modo oscuro (body.dark-mode, script.js): mismas variables que el resto del aplicativo.
+    function descEstilosOscuros(D) {
+        return [
+            D + '{background:rgba(0,0,0,.55);}',
+            D + ' .sd-card{background:rgba(30,39,57,.97);border-color:var(--border-color);color:var(--text-color);box-shadow:0 24px 60px rgba(0,0,0,.5);}',
+            D + ' .sd-head,' + D + ' .sd-foot{border-color:var(--border-color);}',
+            D + ' .sd-foot{background:rgba(255,255,255,.03);}',
+            D + ' .sd-icon{background:rgba(77,171,247,.14);color:var(--primary-color);}',
+            D + ' .sd-kicker,' + D + ' .sd-lbl,' + D + ' .sd-count,' + D + ' .sd-note,' + D + ' .sd-mod-vacio{color:var(--text-muted-color);}',
+            D + ' .sd-title,' + D + ' .sd-val{color:var(--text-color);}',
+            D + ' label{color:#c3c9d2;}',
+            D + ' .sd-info{background:rgba(255,255,255,.04);border-color:var(--border-color);}',
+            D + ' .sd-info img{border-color:var(--border-color);}',
+            D + ' .btn-close{filter:invert(1) grayscale(100%) brightness(2);}',
+            D + ' .sd-mod-lista,' + D + ' .sd-loc-lista{background:rgba(15,23,42,.55);border-color:var(--border-color);}',
+            D + ' .sd-mod-item{color:var(--text-color);}',
+            D + ' .sd-mod-item i{color:var(--text-muted-color);}',
+            D + ' .sd-mod-item[aria-checked="true"] i{color:inherit;}',
+            D + ' .sd-mod-item:hover,' + D + ' .sd-loc:hover{background:rgba(255,255,255,.06);}',
+            D + ' .sd-mod-item[aria-checked="true"]{background:rgba(77,171,247,.16);color:#8cc8ff;}',
+            D + ' .sd-loc{background:rgba(255,255,255,.04);border-color:var(--border-color);color:#c3c9d2;}',
+            D + ' .sd-loc[aria-checked="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}'
+        ];
+    }
+
     function ensureDescModal() {
         if ($(DESC_ID)) return;
         var style = document.createElement('style');
@@ -1022,9 +1127,23 @@
             '#' + DESC_ID + ' textarea{resize:vertical;min-height:96px;}',
             '#' + DESC_ID + ' .sd-count{font-size:.72rem;color:#64748b;text-align:right;margin-top:4px;}',
             '#' + DESC_ID + ' .sd-note{font-size:.76rem;color:#64748b;margin-top:8px;}',
+            '#' + DESC_ID + ' .sd-mod{margin-top:14px;}',
+            '#' + DESC_ID + ' .sd-mod-lista{list-style:none;margin:0;padding:4px;border:1px solid #e2e8f0;border-radius:12px;max-height:168px;overflow-y:auto;background:#fff;}',
+            '#' + DESC_ID + ' .sd-mod-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font:inherit;font-size:.86rem;padding:7px 10px;border:0;border-radius:8px;background:transparent;color:#0f172a;cursor:pointer;}',
+            '#' + DESC_ID + ' .sd-mod-item:hover{background:#f1f5f9;}',
+            '#' + DESC_ID + ' .sd-mod-item[aria-checked="true"]{background:#eff6ff;color:#1d4ed8;font-weight:700;}',
+            '#' + DESC_ID + ' .sd-mod-item:focus-visible{outline:3px solid rgba(37,99,235,.45);outline-offset:1px;}',
+            '#' + DESC_ID + ' .sd-loc-lista{display:flex;flex-wrap:wrap;gap:6px;max-height:132px;overflow-y:auto;padding:4px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;}',
+            '#' + DESC_ID + ' .sd-loc{font:inherit;font-size:.78rem;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;}',
+            '#' + DESC_ID + ' .sd-loc:hover{background:#f1f5f9;}',
+            '#' + DESC_ID + ' .sd-loc[aria-checked="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}',
+            '#' + DESC_ID + ' .sd-loc:focus-visible{outline:3px solid rgba(37,99,235,.45);outline-offset:1px;}',
+            '@media (pointer:coarse){#' + DESC_ID + ' .sd-loc{min-height:40px;padding:6px 12px;}}',
+            '#' + DESC_ID + ' .sd-mod-vacio{font-size:.82rem;color:#64748b;padding:10px;text-align:center;}',
+            '@media (pointer:coarse){#' + DESC_ID + ' .sd-mod-item{min-height:40px;}}',
             '#' + DESC_ID + ' .sd-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid #e2e8f0;background:#f8fafc;}',
             '@media (prefers-reduced-motion:reduce){#' + DESC_ID + ',#' + DESC_ID + ' .sd-card{transition:none;}}'
-        ].join('');
+        ].concat(descEstilosOscuros('body.dark-mode #' + DESC_ID)).join('');
         document.head.appendChild(style);
         var wrap = document.createElement('div');
         wrap.innerHTML = '<div id="' + DESC_ID + '" role="dialog" aria-modal="true" aria-labelledby="setp-desc-title" hidden>' +
@@ -1040,6 +1159,10 @@
             '<label for="setp-desc-text">Descripción *</label>' +
             '<textarea id="setp-desc-text" class="form-control" maxlength="' + DESC_MAX + '" placeholder="Ej. Butaca dañada en sala de última espera"></textarea>' +
             '<div class="sd-count"><span id="setp-desc-n">0</span>/' + DESC_MAX + '</div>' +
+            '<div class="sd-mod"><label id="setp-desc-mod-lbl">Módulo <span class="fw-normal text-muted" id="setp-desc-mod-nivel"></span></label>' +
+            '<ul class="sd-mod-lista" id="setp-desc-mod" role="radiogroup" aria-labelledby="setp-desc-mod-lbl"></ul>' +
+            '<div id="setp-desc-loc-wrap" class="mt-3" hidden><label id="setp-desc-loc-lbl">Local <span class="fw-normal text-muted" id="setp-desc-loc-mod"></span></label>' +
+            '<div class="sd-loc-lista" id="setp-desc-loc" role="radiogroup" aria-labelledby="setp-desc-loc-lbl"></div></div></div>' +
             '<div class="sd-note"><i class="fas fa-circle-info me-1"></i>Al guardar se cierra esta ventana. Después presiona <b>✓</b> para confirmar el hallazgo.</div>' +
             '</div>' +
             '<div class="sd-foot"><button type="button" class="btn btn-outline-secondary" data-desc="cerrar">Cancelar</button>' +
@@ -1061,11 +1184,55 @@
                 else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
             }
         });
+        $('setp-desc-mod').addEventListener('click', function (e) {
+            var it = e.target.closest('[data-modulo]');
+            var p = state.descFor && state.pending[state.descFor];
+            if (!it || !p) return;
+            var nombre = it.getAttribute('data-modulo');
+            // Tocar el módulo elegido lo quita; al cambiar de módulo se limpia el local.
+            p.modulo = p.modulo === nombre ? '' : nombre;
+            p.local = '';
+            pintarModulos();
+        });
+        $('setp-desc-loc').addEventListener('click', function (e) {
+            var it = e.target.closest('[data-local]');
+            var p = state.descFor && state.pending[state.descFor];
+            if (!it || !p) return;
+            var loc = it.getAttribute('data-local');
+            p.local = p.local === loc ? '' : loc;
+            pintarModulos();
+        });
         $('setp-desc-text').addEventListener('input', function (e) {
             $('setp-desc-n').textContent = e.target.value.length;
             if (e.target.value.trim()) descAviso('');
         });
         $('setp-desc-form').addEventListener('submit', function (e) { e.preventDefault(); guardarDescripcion(); });
+    }
+
+    // Lista "Módulo": los módulos del nivel (área de recorrido) del recorrido abierto.
+    function pintarModulos() {
+        var r = state.descFor && state.recorridos.find(function (x) { return x.id === state.descFor; });
+        var p = state.descFor && state.pending[state.descFor];
+        var lista = $('setp-desc-mod');
+        if (!r || !p || !lista) return;
+        var modulos = MODULOS_POR_NIVEL[r.area_recorrido] || [];
+        $('setp-desc-mod-nivel').textContent = '· Nivel ' + r.area_recorrido;
+        lista.innerHTML = modulos.length
+            ? modulos.map(function (m) {
+                var t = moduloTexto(m);
+                return '<li><button type="button" class="sd-mod-item" role="radio" aria-checked="' + (p.modulo === t) + '" data-modulo="' + esc(t) + '">' +
+                    '<i class="fas ' + (p.modulo === t ? 'fa-circle-dot' : 'fa-circle') + '"></i>' + esc(t) + '</button></li>';
+            }).join('')
+            : '<li class="sd-mod-vacio">Aún no hay módulos para el nivel ' + esc(r.area_recorrido) + '.</li>';
+        // Locales del módulo elegido.
+        var elegido = modulos.find(function (m) { return moduloTexto(m) === p.modulo; });
+        var wrap = $('setp-desc-loc-wrap');
+        wrap.hidden = !elegido;
+        if (!elegido) return;
+        $('setp-desc-loc-mod').textContent = '· ' + elegido.nombre;
+        $('setp-desc-loc').innerHTML = elegido.locales.map(function (l) {
+            return '<button type="button" class="sd-loc" role="radio" aria-checked="' + (p.local === l) + '" data-local="' + esc(l) + '">' + esc(l) + '</button>';
+        }).join('');
     }
 
     function descAviso(html, tipo) {
@@ -1086,6 +1253,7 @@
         $('setp-desc-text').value = p.descripcion || '';
         $('setp-desc-n').textContent = String((p.descripcion || '').length);
         descAviso(aviso || '', 'info');
+        pintarModulos();
         var modal = $(DESC_ID);
         modal.hidden = false;
         document.body.style.overflow = 'hidden';

@@ -128,6 +128,16 @@
         return 'del 01 al ' + r.last + ' ' + MONTH_ABBR[r.m - 1] + ' ' + r.y;
     }
 
+    // Periodo con día ({ start, end } en 'YYYY-MM-DD'): "del 01 al 10 Nov. 2026",
+    // "del 25 Oct. al 10 Nov. 2026" o "del 25 Dic. 2025 al 10 Ene. 2026".
+    function rangoText(r) {
+        var a = r.start.split('-'), b = r.end.split('-');
+        var mes = function (p) { return MONTH_ABBR[Number(p[1]) - 1]; };
+        if (a[0] === b[0] && a[1] === b[1]) return 'del ' + a[2] + ' al ' + b[2] + ' ' + mes(b) + ' ' + b[0];
+        if (a[0] === b[0]) return 'del ' + a[2] + ' ' + mes(a) + ' al ' + b[2] + ' ' + mes(b) + ' ' + b[0];
+        return 'del ' + a[2] + ' ' + mes(a) + ' ' + a[0] + ' al ' + b[2] + ' ' + mes(b) + ' ' + b[0];
+    }
+
     function setStatus(message, type) {
         var box = $('setp-fmt-status');
         if (!box) return;
@@ -353,8 +363,10 @@
         return { periodo: ym, detectados: detectados, solucionados: solucionados, pendientes: cur.pendientes };
     }
 
+    // ym: mes 'YYYY-MM' o, desde el Reporte de hallazgos, un rango { start, end } con día.
     function computeSections(ym, hallazgos) {
-        var cur = monthRange(ym);
+        var cur = typeof ym === 'string' ? monthRange(ym) : ym;
+        if (typeof ym !== 'string') ym = ym.start.slice(0, 7);
         var inRange = function (d, r) { return d >= r.start && d <= r.end; };
         var byReporte = function (a, b) { return a.fecha_reporte < b.fecha_reporte ? -1 : a.fecha_reporte > b.fecha_reporte ? 1 : 0; };
         var bySolucion = function (a, b) {
@@ -657,6 +669,18 @@
             M + ' .setp-fmt-preview{width:100%;height:68vh;border:1px solid #cbd5e1;border-radius:10px;background:#e5e7eb;}',
             M + ' .setp-fmt-badge-ok{background:#ecfdf5;color:#047857;}',
             M + ' .setp-fmt-badge-pend{background:#fef2f2;color:#b91c1c;}',
+            // Modo oscuro (body.dark-mode). La vista previa del formato se queda en blanco: es la hoja impresa.
+            'body.dark-mode ' + M + ' .setp-fmt-steps .nav-link{color:#c3c9d2;}',
+            'body.dark-mode ' + M + ' .setp-fmt-steps .nav-link.active{color:#fff;background:#1d4ed8;}',
+            'body.dark-mode ' + M + ' .setp-fmt-card{background:rgba(255,255,255,.03);border-color:var(--border-color);}',
+            'body.dark-mode ' + M + ' .setp-fmt-card h6{color:var(--text-color);}',
+            'body.dark-mode ' + M + ' .setp-fmt-count{background:rgba(255,255,255,.1);color:var(--text-color);}',
+            'body.dark-mode ' + M + ' .setp-fmt-table th{color:#c3c9d2;}',
+            'body.dark-mode ' + M + ' .setp-fmt-thumb{border-color:var(--border-color);background:rgba(255,255,255,.05);}',
+            'body.dark-mode ' + M + ' .setp-fmt-nothumb{border-color:rgba(148,163,184,.4);color:var(--text-muted-color);}',
+            'body.dark-mode ' + M + ' .setp-fmt-preview{border-color:var(--border-color);background:#0f172a;}',
+            'body.dark-mode ' + M + ' .setp-fmt-badge-ok{background:rgba(16,185,129,.15);color:#6ee7b7;}',
+            'body.dark-mode ' + M + ' .setp-fmt-badge-pend{background:rgba(248,113,113,.15);color:#fca5a5;}',
             // Celular: el Periodo del oficio baja a su propio renglón y los pasos se deslizan.
             '@media (max-width:575.98px){' +
                 M + ' .modal-header{flex-wrap:wrap;gap:8px;}' +
@@ -1228,7 +1252,9 @@
     // Lista los hallazgos agrupados como en el oficio, permite capturarlos
     // en línea y "Generar formato" abre el oficio del periodo en vista previa.
 
-    const rep = { el: null, periodo: '', editing: null, editKind: null, solveId: null, solving: false, files: { evidencia: null, solucion: null }, saving: false };
+    // periodo: mes de "desde" ('YYYY-MM'), para el seguimiento y el formato;
+    // desde / hasta: periodo con día del reporte ('YYYY-MM-DD').
+    const rep = { el: null, periodo: '', desde: '', hasta: '', editing: null, editKind: null, solveId: null, solving: false, files: { evidencia: null, solucion: null }, saving: false };
     const REP_COLS = 9;
 
     function repStatus(message, type) {
@@ -1249,6 +1275,10 @@
             R + ' .setp-rep-title{font-weight:800;color:#0f172a;font-size:.9rem;margin:0;}',
             R + ' .setp-rep-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}',
             R + ' .setp-rep-actions label{font-size:.72rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin:0;}',
+            R + ' .setp-rep-periodo{display:flex;align-items:center;gap:6px;min-width:0;}',
+            R + ' .setp-rep-periodo input{width:145px;min-width:0;}',
+            R + ' .setp-rep-al{font-size:.8rem;color:#64748b;}',
+            'body.dark-mode ' + R + ' .setp-rep-al{color:var(--text-muted-color);}',
             R + ' .setp-rep-table td{vertical-align:middle;}',
             R + ' .setp-rep-table td.setp-rep-desc{min-width:240px;white-space:normal;}',
             R + ' tr.setp-rep-group th{background:#eff6ff;color:#1e3a8a;font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid #bfdbfe;}',
@@ -1265,7 +1295,22 @@
             R + ' tr.setp-rep-edit .form-control,' + R + ' tr.setp-rep-edit .form-select{min-width:120px;}',
             R + ' .setp-rep-local{display:inline-flex;align-items:center;margin-left:8px;padding:1px 8px;border-radius:999px;background:#fffbeb;color:#92400e;font-weight:600;}',
             R + ' .setp-rep-ok{background:#ecfdf5;color:#047857;}',
-            R + ' .setp-rep-pend{background:#fef2f2;color:#b91c1c;}'
+            R + ' .setp-rep-pend{background:#fef2f2;color:#b91c1c;}',
+            // Modo oscuro (body.dark-mode).
+            'body.dark-mode ' + R + '{border-top-color:var(--border-color);}',
+            'body.dark-mode ' + R + ' .setp-rep-head{background:rgba(255,255,255,.03);border-bottom-color:var(--border-color);}',
+            'body.dark-mode ' + R + ' .setp-rep-title{color:var(--text-color);}',
+            'body.dark-mode ' + R + ' .setp-rep-actions label,body.dark-mode ' + R + ' td.setp-rep-none{color:var(--text-muted-color);}',
+            'body.dark-mode ' + R + ' tr.setp-rep-group th{background:rgba(77,171,247,.12);color:#8cc8ff;border-bottom-color:rgba(77,171,247,.3);}',
+            'body.dark-mode ' + R + ' .setp-rep-count{background:rgba(77,171,247,.2);color:#cfe6ff;}',
+            'body.dark-mode ' + R + ' .setp-rep-note{color:#c3c9d2;}',
+            'body.dark-mode ' + R + ' .setp-rep-thumb{border-color:var(--border-color);background:rgba(255,255,255,.05);}',
+            'body.dark-mode ' + R + ' .setp-rep-nothumb{border-color:rgba(148,163,184,.4);color:var(--text-muted-color);}',
+            'body.dark-mode ' + R + ' label.setp-rep-photo:hover .setp-rep-nothumb,body.dark-mode ' + R + ' label.setp-rep-photo:hover .setp-rep-thumb{border-color:var(--primary-color);}',
+            'body.dark-mode ' + R + ' tr.setp-rep-edit td{background:rgba(77,171,247,.08);}',
+            'body.dark-mode ' + R + ' .setp-rep-local{background:rgba(251,191,36,.14);color:#fcd34d;}',
+            'body.dark-mode ' + R + ' .setp-rep-ok{background:rgba(16,185,129,.15);color:#6ee7b7;}',
+            'body.dark-mode ' + R + ' .setp-rep-pend{background:rgba(248,113,113,.15);color:#fca5a5;}'
         ].concat(repEstilosResponsive(R)).join('');
         document.head.appendChild(style);
     }
@@ -1301,6 +1346,10 @@
             T + ' tr:has(> td[colspan]){border-style:dashed;box-shadow:none;background:transparent;}',
             R + ' .setp-rep-table td.setp-rep-desc{min-width:0;}',
             T + ' .form-control,' + T + ' .form-select{min-width:0 !important;width:100%;}',
+            'body.dark-mode ' + card + '{background:var(--card-bg);border-color:var(--border-color);box-shadow:0 4px 12px rgba(0,0,0,.25);}',
+            'body.dark-mode ' + T + ' tr.setp-rep-edit{background:rgba(77,171,247,.08);border-color:rgba(77,171,247,.4);}',
+            'body.dark-mode ' + T + ' tr:has(> td[colspan]){background:transparent;box-shadow:none;}',
+            'body.dark-mode ' + T + ' td::before{color:var(--text-muted-color);}',
             '}',
             '@container setp (max-width:599.98px){',
             card + '{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"no acc" "fec ubi" "des des" "evi evs" "est fso";gap:8px 12px;padding:12px;}',
@@ -1308,7 +1357,8 @@
             R + ' .setp-rep-head{padding:12px;}',
             R + ' .setp-rep-actions{width:100%;}',
             R + ' .setp-rep-actions .btn{flex:1 1 auto;}',
-            R + ' #setp-rep-periodo{flex:1 1 150px;width:auto !important;}',
+            R + ' .setp-rep-periodo{width:100%;}',
+            R + ' .setp-rep-periodo input{flex:1 1 0;width:auto;}',
             '}'
         ];
     }
@@ -1318,7 +1368,10 @@
             '<div class="setp-rep-head">',
             '  <div><h4 class="setp-rep-title"><i class="fas fa-clipboard-list me-1 text-primary"></i>Reporte de hallazgos del Edificio Terminal</h4><div class="setp-panel-hint" id="setp-rep-hint"></div></div>',
             '  <div class="setp-rep-actions">',
-            '    <label for="setp-rep-periodo">Periodo</label><input type="month" id="setp-rep-periodo" class="form-control form-control-sm" style="width:165px">',
+            '    <div class="setp-rep-periodo" role="group" aria-label="Periodo del reporte">',
+            '      <label for="setp-rep-desde">Periodo</label><input type="date" id="setp-rep-desde" class="form-control form-control-sm" aria-label="Periodo desde">',
+            '      <span class="setp-rep-al">al</span><input type="date" id="setp-rep-hasta" class="form-control form-control-sm" aria-label="Periodo hasta">',
+            '    </div>',
             '    <button type="button" class="btn btn-sm btn-outline-primary d-none" data-rep="add"><i class="fas fa-plus me-1"></i>Agregar hallazgo</button>',
             '    <button type="button" class="btn btn-sm btn-success" data-rep="generar"><i class="fas fa-file-signature me-1"></i>Generar formato</button>',
             '    <button type="button" class="btn btn-sm btn-outline-success" data-rep="guardados"><i class="fas fa-folder-open me-1"></i>Formatos guardados</button>',
@@ -1375,7 +1428,7 @@
     // detectados se reportan en el mes del periodo; solucionados y pendientes
     // son del mes anterior (los solucionados, resueltos dentro del periodo).
     function repEditRow(h, n, kind) {
-        var r = monthRange(rep.periodo);
+        var r = repRango();
         var p = monthRange(prevMonth(rep.periodo));
         var today = todayIso();
         var inMonth = function (range) { return today >= range.start && today <= range.end ? today : range.start; };
@@ -1412,13 +1465,30 @@
         return '<tbody>' + head + body + '</tbody>';
     }
 
+    // Periodo del reporte (del … al …, con día).
+    function repRango() {
+        return { start: rep.desde, end: rep.hasta };
+    }
+
+    function repPonerMes(ym) {
+        var r = monthRange(ym);
+        rep.desde = r.start;
+        rep.hasta = r.end;
+        rep.periodo = ym;
+    }
+
     function renderReport() {
         if (!rep.el || !$('setp-rep-table')) return;
         var ym = rep.periodo;
         var prevYm = prevMonth(ym);
-        $('setp-rep-periodo').value = ym;
+        var rango = repRango();
+        var desde = $('setp-rep-desde'), hasta = $('setp-rep-hasta');
+        desde.value = rep.desde;
+        desde.max = rep.hasta;
+        hasta.value = rep.hasta;
+        hasta.min = rep.desde;
         var no = supervisorActual();
-        $('setp-rep-hint').innerHTML = 'Periodo reportado ' + periodText(ym) + ' · seguimiento del periodo ' + periodText(prevYm) +
+        $('setp-rep-hint').innerHTML = 'Periodo reportado ' + rangoText(rango) + ' · seguimiento del periodo ' + periodText(prevYm) +
             (state.porSupervisor && no ? ' · Detectados de <b>' + esc(nombreSupervisor(no)) + '</b> que aún no salen en un formato' : '') +
             (state.store === 'local' ? '<span class="setp-rep-local" title="Las tablas de Supabase (db/create_setp_formatos.sql) aún no están disponibles"><i class="fas fa-laptop me-1"></i>Guardado en este navegador</span>' : '');
         rep.el.querySelector('[data-rep="add"]').classList.toggle('d-none', !canEdit());        var table = $('setp-rep-table');
@@ -1426,10 +1496,10 @@
         var byId = {};
         state.hallazgos.forEach(function (h) { byId[h.id] = h; });
         var full = function (list) { return list.map(function (x) { return byId[x.id]; }); };
-        var s = seccionesDe(ym);
+        var s = seccionesDe(rango);
         table.innerHTML = thead +
-            repGroup('Hallazgos detectados', periodText(ym), full(s.detectados), 'detectados') +
-            repGroup('Hallazgos solucionados', 'solucionados en ' + MONTH_NAMES[Number(ym.slice(5, 7)) - 1] + ', con evidencia y estatus confirmado', full(s.solucionados), 'solucionados') +
+            repGroup('Hallazgos detectados', rangoText(rango), full(s.detectados), 'detectados') +
+            repGroup('Hallazgos solucionados', 'solucionados ' + rangoText(rango) + ', con evidencia y estatus confirmado', full(s.solucionados), 'solucionados') +
             repGroup('Hallazgos pendientes por solucionar', 'de todos los supervisores, hasta que se les dé seguimiento', full(s.pendientes), 'pendientes');
     }
 
@@ -1482,7 +1552,7 @@
             rep.editing = null;
             rep.solving = false;
             rep.files = { evidencia: null, solucion: null };
-            var s = seccionesDe(rep.periodo);
+            var s = seccionesDe(repRango());
             var visible = [s.detectados, s.solucionados, s.pendientes].some(function (l) { return l.some(function (x) { return x.id === saved.id; }); });
             if (seguimiento) {
                 var mes = saved.fecha_solucion ? MONTH_NAMES[Number(saved.fecha_solucion.slice(5, 7)) - 1] + ' de ' + saved.fecha_solucion.slice(0, 4) : '';
@@ -1584,8 +1654,9 @@
         if (!canEdit() || state.store !== 'db') return;
         var byId = {};
         state.hallazgos.forEach(function (h) { byId[h.id] = h; });
-        var det = seccionesDe(rep.periodo).detectados.map(function (x) { return byId[x.id] || x; });
-        if (!det.length) return repStatus('No hay hallazgos detectados por guardar en ' + periodText(rep.periodo) + '.', 'warning');
+        var rango = repRango();
+        var det = seccionesDe(rango).detectados.map(function (x) { return byId[x.id] || x; });
+        if (!det.length) return repStatus('No hay hallazgos detectados por guardar ' + rangoText(rango) + '.', 'warning');
         var grupos = agruparPorUsuarioTurno(det);
         var filas = grupos.map(function (g) {
             return [grupoLabel(g.no_empleado, g.turno), g.hallazgos.length + (g.hallazgos.length === 1 ? ' hallazgo' : ' hallazgos')];
@@ -1593,7 +1664,7 @@
         var aviso = 'Se guardan en Formatos guardados y "Hallazgos detectados" queda limpio. Ningún hallazgo se borra: los no solucionados siguen en "Pendientes por solucionar" hasta que se les dé seguimiento. Hazlo una vez guardado el formato.';
         var rec = window.setpRecorridos;
         var ok = rec && rec.confirmar
-            ? await rec.confirmar({ tono: 'ok', kicker: 'Reporte de hallazgos · ' + periodText(rep.periodo), titulo: '¿Guardar el reporte y limpiar los detectados?', filas: filas, aviso: aviso, boton: 'Guardar reporte' })
+            ? await rec.confirmar({ tono: 'ok', kicker: 'Reporte de hallazgos · ' + rangoText(rango), titulo: '¿Guardar el reporte y limpiar los detectados?', filas: filas, aviso: aviso, boton: 'Guardar reporte' })
             : window.confirm('¿Guardar el reporte y limpiar Hallazgos detectados?\n\n' + filas.map(function (f) { return f.join(': '); }).join('\n') + '\n\n' + aviso);
         if (!ok) return;
         btn.disabled = true;
@@ -1608,7 +1679,7 @@
                     fecha_oficio: hoy,
                     periodo: rep.periodo + '-01',
                     datos: {},
-                    secciones: { reporte: true, no_empleado: g.no_empleado, turno: g.turno, fecha: hoy, periodo: rep.periodo, guardado_en: new Date().toISOString(), hallazgos: g.hallazgos.map(pickHallazgo) },
+                    secciones: { reporte: true, no_empleado: g.no_empleado, turno: g.turno, fecha: hoy, periodo: rep.periodo, desde: rango.start, hasta: rango.end, guardado_en: new Date().toISOString(), hallazgos: g.hallazgos.map(pickHallazgo) },
                     created_by: actor(),
                     updated_by: actor(),
                     updated_at: new Date().toISOString()
@@ -1642,7 +1713,7 @@
             'table{width:100%;border-collapse:collapse;margin-top:10px;}th,td{border:1px solid #222;padding:4px 6px;vertical-align:middle;}th{font-size:9pt;text-transform:uppercase;}' +
             'tr{page-break-inside:avoid;}td img{width:3.6cm;height:2.2cm;object-fit:cover;display:block;margin:auto;}.c{text-align:center;}.sin{color:#666;}';
         var body = '<div class="head"><img src="' + esc(logo) + '" alt="AIFA"' + (mode === 'word' ? ' width="136"' : '') + '><div><h1>Reporte de hallazgos del Edificio Terminal</h1>' +
-            '<div class="sub"><b>' + esc(grupoLabel(s.no_empleado, s.turno)) + '</b> · Guardado el ' + fmtDate(s.fecha || o.fecha_oficio) + ' · Periodo ' + periodText(s.periodo || String(o.periodo).slice(0, 7)) + '</div></div></div>' +
+            '<div class="sub"><b>' + esc(grupoLabel(s.no_empleado, s.turno)) + '</b> · Guardado el ' + fmtDate(s.fecha || o.fecha_oficio) + ' · Periodo ' + (s.desde && s.hasta ? rangoText({ start: s.desde, end: s.hasta }) : periodText(s.periodo || String(o.periodo).slice(0, 7))) + '</div></div></div>' +
             '<table><thead><tr><th>No.</th><th>Fecha de reporte</th><th>Ubicación de incidencia</th><th>Descripción de incidencia</th><th>Evidencia fotográfica</th><th>Estatus</th><th>Fecha de solución</th><th>Evidencia solucionada</th></tr></thead><tbody>' +
             (rows.length ? rows.map(function (h, i) {
                 var sol = h.estatus === 'SOLUCIONADO';
@@ -1704,9 +1775,13 @@
                 rep.solveId = null;
                 t.value = '';
                 if (foto && hid) repSolucionar(hid, foto);
-            } else if (t.id === 'setp-rep-periodo') {
-                if (!/^\d{4}-\d{2}$/.test(t.value)) return;
-                rep.periodo = t.value;
+            } else if (t.id === 'setp-rep-desde' || t.id === 'setp-rep-hasta') {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(t.value)) return;
+                var esDesde = t.id === 'setp-rep-desde';
+                if (esDesde) rep.desde = t.value; else rep.hasta = t.value;
+                // Si las fechas quedan al revés, la otra se iguala a la elegida.
+                if (rep.desde > rep.hasta) { if (esDesde) rep.hasta = rep.desde; else rep.desde = rep.hasta; }
+                rep.periodo = rep.desde.slice(0, 7);
                 rep.editing = null;
                 repStatus('');
                 renderReport();
@@ -1743,7 +1818,8 @@
         if (rep.el !== container) {
             ensureReportStyles();
             rep.el = container;
-            rep.periodo = rep.periodo || prevMonth(todayIso().slice(0, 7));
+            // Por defecto, del 01 al último día del mes en curso.
+            if (!rep.desde) repPonerMes(todayIso().slice(0, 7));
             container.innerHTML = repShell();
             bindReport(container);
         }
@@ -1768,8 +1844,8 @@
             ? 'Formato de ' + esc(nombreSupervisor(state.borrador.no_empleado)) + ' · ' + fmtDate(state.borrador.fecha)
             : 'Crear formato de hallazgos');
         if (state.borrador) opts.periodo = state.borrador.periodo;
-        // Por defecto se reporta el mes anterior (el oficio se emite al inicio del mes siguiente).
-        state.periodo = /^\d{4}-\d{2}$/.test(opts.periodo || '') ? opts.periodo : prevMonth(todayIso().slice(0, 7));
+        // Por defecto se reporta el mes en curso (el seguimiento sigue siendo el mes anterior).
+        state.periodo = /^\d{4}-\d{2}$/.test(opts.periodo || '') ? opts.periodo : todayIso().slice(0, 7);
         $('setp-fmt-periodo').value = state.periodo;
         showStep('hallazgos');
         $('setp-fmt-lists').innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-2"></span>Cargando hallazgos…</div>';
@@ -1825,7 +1901,11 @@
             '#' + GUARDADOS_ID + ' .setp-g-main{flex:1;min-width:200px;}',
             '#' + GUARDADOS_ID + ' .setp-g-name{font-weight:700;color:#0f172a;font-size:.9rem;}',
             '#' + GUARDADOS_ID + ' .setp-g-sub{font-size:.78rem;color:#64748b;}',
-            '#' + GUARDADOS_ID + ' .setp-g-empty{padding:12px 14px;color:#64748b;font-size:.84rem;}'
+            '#' + GUARDADOS_ID + ' .setp-g-empty{padding:12px 14px;color:#64748b;font-size:.84rem;}',
+            'body.dark-mode #' + GUARDADOS_ID + ' .setp-g-sec{color:#c3c9d2;}',
+            'body.dark-mode #' + GUARDADOS_ID + ' .setp-g-list,body.dark-mode #' + GUARDADOS_ID + ' .setp-g-list li{border-color:var(--border-color);}',
+            'body.dark-mode #' + GUARDADOS_ID + ' .setp-g-name{color:var(--text-color);}',
+            'body.dark-mode #' + GUARDADOS_ID + ' .setp-g-sub,body.dark-mode #' + GUARDADOS_ID + ' .setp-g-empty{color:var(--text-muted-color);}'
         ].join('');
         document.head.appendChild(style);
         $('setp-guardados-body').addEventListener('click', function (e) {
@@ -2020,11 +2100,16 @@
     window.setpFormato = {
         open: open,
         mountReport: mountReport,
-        // Recarga la tabla de reporte en el mes indicado (p. ej. tras un hallazgo
-        // creado desde Supervisor × turno). No interrumpe una captura en curso.
-        reloadReport: function (ym) {
+        // Recarga la tabla de reporte (p. ej. tras un hallazgo creado desde
+        // Supervisor × turno). fecha: 'YYYY-MM-DD' o 'YYYY-MM'; si queda fuera
+        // del periodo elegido, se muestra su mes completo. No interrumpe una captura en curso.
+        reloadReport: function (fecha) {
             if (!rep.el || rep.editing) return Promise.resolve();
-            if (/^\d{4}-\d{2}$/.test(ym || '')) rep.periodo = ym;
+            fecha = String(fecha || '');
+            if (/^\d{4}-\d{2}(-\d{2})?$/.test(fecha)) {
+                var r = fecha.length === 10 ? { start: fecha, end: fecha } : monthRange(fecha);
+                if (!rep.desde || r.end < rep.desde || r.start > rep.hasta) repPonerMes(fecha.slice(0, 7));
+            }
             repStatus('');
             return mountReport(rep.el);
         },
