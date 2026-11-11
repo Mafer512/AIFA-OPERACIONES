@@ -2238,6 +2238,53 @@ function permisoDeSeccion(key) {
     return SECCIONES_DE_MODULO[key] || key;
 }
 
+// SETP (Supervisores de Edificio Terminal) es EXCLUSIVO de estas personas,
+// por el nombre de su perfil (user_fullname), y de los superadmin: ni
+// admin ni "acceso total" ni la subdirección SSO lo abren si el nombre no
+// está aquí. Se compara sin acentos, sin mayúsculas y sin importar
+// el orden de las palabras; el perfil debe traer todas las palabras del nombre.
+const SETP_PERSONAS_CON_ACCESO = [
+    'Ángel Everardo Rodriguez Ortiz',
+    'Antonio Medina Ortega',
+    'GSD',
+    'Luis Fernando Gutiérrez Hernández',
+    'Tania Vargas Gonzalez'
+];
+
+function _palabrasDeNombre(nombre) {
+    return String(nombre || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toUpperCase().replace(/[^A-Z0-9 ]+/g, ' ')
+        .split(/\s+/).filter(Boolean);
+}
+
+function puedeVerSetp() {
+    // Los superadmin también lo ven (los admin no).
+    try { if (sessionStorage.getItem('user_role') === 'superadmin') return true; } catch (_) { }
+    let actual = [];
+    try { actual = _palabrasDeNombre(sessionStorage.getItem('user_fullname')); } catch (_) { }
+    if (!actual.length) return false;
+    return SETP_PERSONAS_CON_ACCESO.some(persona =>
+        _palabrasDeNombre(persona).every(palabra => actual.includes(palabra)));
+}
+window.puedeVerSetp = puedeVerSetp;
+
+// Oculta el enlace y la sección SETP a quien no está en la lista. Corre en
+// cada applySectionPermissions, antes de cualquier salida temprana (admin).
+function aplicarExclusividadSetp() {
+    if (puedeVerSetp()) return;
+    document.querySelectorAll('.menu-item[data-section="setp"]').forEach(item => item.classList.add('perm-hidden'));
+    const sec = document.getElementById('setp-section');
+    if (!sec) return;
+    const estabaAbierta = sec.classList.contains('active');
+    sec.classList.add('perm-hidden');
+    sec.classList.remove('active');
+    if (estabaAbierta && typeof showSection === 'function') {
+        const destino = getDefaultAllowedSection();
+        if (destino) showSection(destino, document.querySelector(`.menu-item[data-section="${destino}"]`));
+    }
+}
+
 function normalizeSectionKey(key) {
     return (key || '').toString().trim();
 }
@@ -2276,6 +2323,7 @@ function hideEmptySidebarGroups() {
 
 function isSectionAllowed(sectionKey) {
     if (!sectionKey) return true;
+    if (permisoDeSeccion(sectionKey) === 'setp' && !puedeVerSetp()) return false;
     if (!Array.isArray(userSectionWhitelist) || !userSectionWhitelist.length) return true;
     return userSectionWhitelist.includes(permisoDeSeccion(sectionKey));
 }
@@ -2301,6 +2349,9 @@ function applySectionPermissions(userName) {
     // Conciliación ya no es un módulo base: como cualquier otro, sólo se ve si
     // el administrador la marcó (o si el usuario tiene acceso total). Mantener
     // esta regla igual que js/permissions.js.
+
+    // SETP: sólo las personas de SETP_PERSONAS_CON_ACCESO, también para admin.
+    aplicarExclusividadSetp();
 
     // admin y superadmin: acceso total siempre, sin importar allowed_sections
     const isFullAdmin = ['admin', 'superadmin'].includes(role);

@@ -163,7 +163,7 @@
         return sessionStorage.getItem('user_role') || 'authenticated';
     }
 
-    // Supervisor elegido en el filtro (js/setp-recorridos.js) · '' = ninguno.
+    // Supervisor del usuario que inició sesión (js/setp-reportes.js) · '' = ninguno.
     function supervisorActual() {
         var rec = window.setpRecorridos;
         return rec && rec.seleccionado ? rec.seleccionado() : '';
@@ -1227,13 +1227,8 @@
             } else {
                 try { await limpiarBorradores(sb, sup); } catch (_) { /* el formato ya quedó guardado */ }
             }
-            // Con borrador, el filtro sólo se limpia si es el mismo supervisor.
-            if (sup && (!b || supervisorActual() === sup)) {
-                // El filtro vuelve a --Seleccionar-- para que el siguiente supervisor elija su nombre.
-                var sel = $('setp-f-supervisor');
-                if (sel) { sel.value = ''; sel.dispatchEvent(new Event('change', { bubbles: true })); }
-                msg += ' El filtro <b>Supervisor</b> quedó en --Seleccionar-- para el siguiente.';
-            }
+            // El filtro Supervisor se retiró: cada supervisor entra con su usuario,
+            // así que ya no se limpia tras guardar el formato.
             renderLists();
             setStatus(msg, 'success');
         } catch (error) {
@@ -1334,6 +1329,9 @@
             R + ' .setp-rep-al{font-size:.8rem;color:#64748b;}',
             'body.dark-mode ' + R + ' .setp-rep-al{color:var(--text-muted-color);}',
             R + ' .setp-rep-table td{vertical-align:middle;}',
+            // Separador entre hallazgos más visible (en celular y tableta son tarjetas con borde).
+            '@container setp (min-width:1000px){' + R + ' .setp-rep-table>tbody>tr>td{border-bottom:2px solid #dbe2ea;}' +
+                'body.dark-mode ' + R + ' .setp-rep-table>tbody>tr>td{border-bottom-color:#5b6b82;}}',
             R + ' .setp-rep-table td.setp-rep-desc{min-width:240px;white-space:normal;}',
             R + ' tr.setp-rep-group th{background:#eff6ff;color:#1e3a8a;font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid #bfdbfe;}',
             R + ' .setp-rep-count{display:inline-flex;min-width:22px;justify-content:center;border-radius:999px;background:#dbeafe;color:#1e3a8a;font-size:.7rem;padding:0 7px;margin-left:6px;}',
@@ -1390,7 +1388,7 @@
             R + ' details.setp-rep-veces summary::-webkit-details-marker{display:none;}',
             R + ' .setp-rep-fotos{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}',
             R + ' .setp-rep-fotos img{width:64px;height:44px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;display:block;}',
-            R + ' .setp-rep-filtro{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 16px;border-bottom:1px solid #e2e8f0;}',
+            R + ' .setp-rep-filtro{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 16px;border-bottom:2px solid #dbe2ea;}',
             R + ' .setp-rep-filtro .l{font-size:.72rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-right:4px;}',
             R + ' .setp-rep-filtro button{font:inherit;font-size:.76rem;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;display:inline-flex;align-items:center;gap:5px;cursor:pointer;}',
             R + ' .setp-rep-filtro button i{color:var(--c,#64748b);}',
@@ -1412,7 +1410,7 @@
             'body.dark-mode ' + R + ' .setp-rep-cant{background:rgba(255,255,255,.08);color:#e2e8f0;}',
             'body.dark-mode ' + R + ' details.setp-rep-veces summary{background:rgba(251,191,36,.14);color:#fcd34d;}',
             'body.dark-mode ' + R + ' .setp-rep-fotos img{border-color:var(--border-color);}',
-            'body.dark-mode ' + R + ' .setp-rep-filtro{border-bottom-color:var(--border-color);}',
+            'body.dark-mode ' + R + ' .setp-rep-filtro{border-bottom-color:#5b6b82;}',
             'body.dark-mode ' + R + ' .setp-rep-filtro .l{color:var(--text-muted-color);}',
             'body.dark-mode ' + R + ' .setp-rep-filtro button{background:transparent;border-color:var(--border-color);color:#c3c9d2;}',
             'body.dark-mode ' + R + ' .setp-rep-filtro button[aria-pressed="true"]{background:rgba(77,171,247,.2);border-color:#4dabf7;color:#fff;}',
@@ -1489,7 +1487,6 @@
             '<div class="setp-rep-filtro d-none" id="setp-rep-filtro" role="group" aria-label="Filtrar por etiqueta"></div>',
             '<div class="setp-rep-filtro d-none" id="setp-rep-filtro-area" role="group" aria-label="Filtrar por área responsable"></div>',
             '<div class="table-responsive"><table class="table table-sm mb-0 setp-table setp-rep-table" id="setp-rep-table"></table></div>',
-            '<datalist id="setp-rep-modulos"></datalist><datalist id="setp-rep-locales"></datalist>',
             '<datalist id="setp-rep-niveles">' + NIVELES.map(function (n) { return '<option value="' + n + '">'; }).join('') + '</datalist>'
         ].join('');
     }
@@ -1652,15 +1649,48 @@
             esc(h ? (etq ? h.detalle || '' : h.descripcion) : '') + '</textarea></div>';
     }
 
-    // Sugerencias de módulo y local según el nivel y el módulo escritos.
-    function repSugerencias(row) {
+    // Módulo y Local: listas para elegir según el nivel (catálogo de
+    // js/setp-catalogo.js). Un valor guardado que no está en el catálogo
+    // (hallazgos de antes) se conserva como opción para no perderlo.
+    function repModuloOpciones(nivel, sel) {
         var cat = catalogo();
-        if (!cat || !row) return;
-        var get = function (f) { var el = row.querySelector('[data-f="' + f + '"]'); return el ? el.value.trim() : ''; };
-        var modulos = cat.modulos(get('nivel'));
-        var m = modulos.find(function (x) { return x.nombre.toLowerCase() === get('modulo').toLowerCase(); });
-        $('setp-rep-modulos').innerHTML = modulos.map(function (x) { return '<option value="' + esc(x.nombre) + '">'; }).join('');
-        $('setp-rep-locales').innerHTML = (m ? m.locales : []).map(function (l) { return '<option value="' + esc(l) + '">'; }).join('');
+        var modulos = cat ? cat.modulos(nivel) : [];
+        var html = '<option value="">' + (modulos.length ? 'Módulo…' : 'Elige primero el nivel…') + '</option>';
+        var esta = false;
+        html += modulos.map(function (m) {
+            var on = sel && m.nombre.toLowerCase() === String(sel).toLowerCase();
+            if (on) esta = true;
+            return '<option value="' + esc(m.nombre) + '"' + (on ? ' selected' : '') + '>' + esc(m.nombre + (m.zona ? ' (' + m.zona + ')' : '')) + '</option>';
+        }).join('');
+        if (sel && !esta) html += '<option value="' + esc(sel) + '" selected>' + esc(sel) + '</option>';
+        return html;
+    }
+
+    function repLocalOpciones(nivel, modulo, sel) {
+        var cat = catalogo();
+        var m = cat ? cat.modulos(nivel).find(function (x) { return x.nombre.toLowerCase() === String(modulo || '').toLowerCase(); }) : null;
+        var locales = m ? m.locales : [];
+        var html = '<option value="">' + (m ? 'Local…' : 'Elige primero el módulo…') + '</option>';
+        var esta = false;
+        html += locales.map(function (l) {
+            var on = sel && l.toUpperCase() === String(sel).toUpperCase();
+            if (on) esta = true;
+            return '<option value="' + esc(l) + '"' + (on ? ' selected' : '') + '>' + esc(l) + '</option>';
+        }).join('');
+        if (sel && !esta) html += '<option value="' + esc(sel) + '" selected>' + esc(sel) + '</option>';
+        return html;
+    }
+
+    // Al cambiar el nivel se vuelven a ofrecer sus módulos; al cambiar el
+    // módulo, sus locales (se conserva lo elegido si sigue en la lista).
+    function repSugerencias(row, cambio) {
+        if (!row) return;
+        var el = function (f) { return row.querySelector('[data-f="' + f + '"]'); };
+        var mod = el('modulo'), loc = el('local');
+        if (!mod || !loc || mod.tagName !== 'SELECT') return;
+        var nivel = el('nivel') ? el('nivel').value.trim() : '';
+        if (cambio === 'nivel') mod.innerHTML = repModuloOpciones(nivel, mod.value);
+        if (cambio === 'nivel' || cambio === 'modulo') loc.innerHTML = repLocalOpciones(nivel, mod.value, cambio === 'modulo' ? '' : loc.value);
     }
 
     // Hallazgo nuevo en curso de captura: 'new:detectados' | 'new:solucionados' | 'new:pendientes'.
@@ -1685,8 +1715,8 @@
             '<td class="text-center">' + (h ? n : '<i class="fas fa-plus text-primary" aria-label="Nuevo"></i>') + '</td>' +
             '<td><input type="date" class="form-control form-control-sm" data-f="fecha" value="' + esc(fecha) + '"' + limits(kind === 'detectados' ? r : p) + ' aria-label="Fecha de reporte"></td>' +
             '<td><input type="text" class="form-control form-control-sm mb-1" data-f="nivel" list="setp-rep-niveles" placeholder="Nivel (10.50)" value="' + esc(h && h.nivel ? h.nivel : '') + '" aria-label="Nivel">' +
-            '<input type="text" class="form-control form-control-sm mb-1" data-f="modulo" list="setp-rep-modulos" placeholder="Módulo N" value="' + esc(h ? h.modulo : '') + '" aria-label="Ubicación (módulo)">' +
-            '<input type="text" class="form-control form-control-sm" data-f="local" list="setp-rep-locales" placeholder="Local (ej. SEIE4-12)" value="' + esc(h && h.local ? h.local : '') + '" aria-label="Local"></td>' +
+            '<select class="form-select form-select-sm mb-1" data-f="modulo" aria-label="Ubicación (módulo)">' + repModuloOpciones(h && h.nivel, h ? h.modulo : '') + '</select>' +
+            '<select class="form-select form-select-sm" data-f="local" aria-label="Local">' + repLocalOpciones(h && h.nivel, h ? h.modulo : '', h && h.local ? h.local : '') + '</select></td>' +
             '<td class="setp-rep-desc">' + repCapturaHtml(h) + '</td>' +
             '<td class="setp-rep-area">' + repAreaEditHtml(h, h && h.etiqueta, h && h.item) + '</td>' +
             '<td>' + repPhotoInput('evidencia', h && h.evidencia_url, false, 'Evidencia fotográfica') + '</td>' +
@@ -2166,7 +2196,7 @@
     function bindReport(el) {
         el.addEventListener('input', function (e) {
             if (e.target.value && e.target.value.trim()) repCampoLleno(e.target);
-            if (e.target.matches('tr.setp-rep-edit [data-f="nivel"], tr.setp-rep-edit [data-f="modulo"]')) repSugerencias(e.target.closest('tr'));
+            if (e.target.matches('tr.setp-rep-edit [data-f="nivel"], tr.setp-rep-edit [data-f="modulo"]')) repSugerencias(e.target.closest('tr'), e.target.getAttribute('data-f'));
         });
         el.addEventListener('click', function (e) {
             var btn = e.target.closest('[data-rep]');
@@ -2548,7 +2578,7 @@
         else printDocument(buildDocument(datos, secciones, 'print'), win);
     }
 
-    // Al cambiar de supervisor en el filtro, el reporte muestra sólo los suyos.
+    // El reporte muestra sólo los del supervisor que inició sesión.
     document.addEventListener('setp:supervisor-elegido', function () {
         if (!rep.el || rep.saving) return;
         rep.editing = null;

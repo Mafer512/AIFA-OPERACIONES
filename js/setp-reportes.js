@@ -179,7 +179,11 @@
             '<div id="setp-status" class="alert d-none mb-3"></div>',
             '<div class="setp-toolbar">',
             '  <div class="setp-filters" role="group" aria-label="Filtros del reporte SETP">',
-            '    <div><label for="setp-f-supervisor">Supervisor</label><select id="setp-f-supervisor" class="form-select form-select-sm"></select></div>',            '  </div>',
+            // El filtro Supervisor se retiró de la pantalla: el supervisor es el usuario
+            // que inició sesión (supervisorDeSesion). Este select oculto sólo guarda
+            // su No. de empleado para el resto del módulo.
+            '    <select id="setp-f-supervisor" hidden aria-hidden="true" tabindex="-1"></select>',
+            '  </div>',
             '  <div class="setp-actions">',
             '    <button type="button" class="btn btn-sm btn-primary d-none" id="setp-crear-usuario"><i class="fas fa-user-plus me-1"></i>Crear usuario</button>',
             '    <button type="button" class="btn btn-sm btn-outline-primary d-none" id="setp-editar-usuario"><i class="fas fa-user-pen me-1"></i>Editar usuario</button>',
@@ -237,29 +241,51 @@
         state.rows = all;
     }
 
-    // Los filtros Mes y Año se retiraron: sólo queda Supervisor.
+    // Los filtros Mes, Año y Supervisor se retiraron.
     function fillFilters() {
         fillSupervisores();
     }
 
+    function palabras(value) {
+        return plain(value).replace(/[^A-Z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean);
+    }
+
+    // Supervisor de setp_supervisores que corresponde al usuario que inició
+    // sesión: todas las palabras de su nombre están en el nombre del perfil
+    // (sin acentos, mayúsculas ni orden). Si hay varios, el más completo.
+    // '' = el usuario no es supervisor (p. ej. un superadmin): ve a todos.
+    function supervisorDeSesion(list) {
+        var yo = [];
+        try { yo = palabras(sessionStorage.getItem('user_fullname')); } catch (_) { }
+        if (!yo.length) return '';
+        var mejor = null, largo = 0;
+        (list || []).forEach(function (s) {
+            var p = palabras(s.nombre);
+            if (p.length > largo && p.every(function (w) { return yo.indexOf(w) >= 0; })) { mejor = s; largo = p.length; }
+        });
+        return mejor ? mejor.no_empleado : '';
+    }
+
     // Supervisores dados de alta en setp_supervisores (js/setp-recorridos.js).
-    // El valor de cada opción es el No. de empleado.
-    function fillSupervisores(selectNo) {
+    // El valor de cada opción es el No. de empleado; queda elegido el del usuario.
+    // detalleNo: usuario a mostrar en "Detalle de registros" (el recién creado
+    // o editado); si no se da, el Detalle muestra al propio usuario.
+    function fillSupervisores(detalleNo) {
         var list = window.setpRecorridos ? window.setpRecorridos.supervisores() : [];
         var supSel = $('setp-f-supervisor');
-        var prevSup = selectNo || supSel.value;
-        supSel.innerHTML = '<option value="">--Seleccionar--</option>' + list.map(function (s) {
+        var propio = supervisorDeSesion(list);
+        supSel.innerHTML = '<option value=""></option>' + list.map(function (s) {
             return '<option value="' + esc(s.no_empleado) + '">' + esc(s.nombre) + '</option>';
         }).join('');
-        supSel.value = list.some(function (s) { return s.no_empleado === prevSup; }) ? prevSup : '';
-        fillUsuarioDetalle(list, supSel.value);
-        if (window.setpRecorridos) window.setpRecorridos.select(supSel.value);
+        supSel.value = propio;
+        fillUsuarioDetalle(list, detalleNo || propio);
+        if (window.setpRecorridos) window.setpRecorridos.select(propio);
     }
 
     // "Detalle de registros" tiene su propio selector de usuario: cualquiera
     // puede consultar el historial de otro (Luis el de Tania y viceversa) sin
     // cambiar el supervisor que captura en "Supervisor × turno".
-    // Al cambiar el filtro Supervisor, este selector lo sigue.
+    // Arranca en el propio usuario.
     function fillUsuarioDetalle(list, valor) {
         var sel = $('setp-detail-usuario');
         if (!sel) return;
@@ -327,10 +353,14 @@
         var bySup = aggregateBySupervisor(rows);
         renderKpis(rows, bySup, f);
         renderDetail();
-        // Crear, editar y eliminar usuario: sólo superadmin. Editar y eliminar
-        // actúan sobre el supervisor elegido en el filtro.
+        pintarBotonesUsuario();
+    }
+
+    // Crear, editar y eliminar usuario: sólo superadmin. Editar y eliminar
+    // actúan sobre el usuario elegido en "Detalle de registros".
+    function pintarBotonesUsuario() {
         var superadmin = !!(window.setpRecorridos && window.setpRecorridos.puedeCrearUsuario());
-        var elegido = $('setp-f-supervisor').value;
+        var elegido = $('setp-detail-usuario') ? $('setp-detail-usuario').value : '';
         ['setp-crear-usuario', 'setp-editar-usuario', 'setp-eliminar-usuario'].forEach(function (id) {
             var btn = $(id);
             if (btn) btn.classList.toggle('d-none', !superadmin);
@@ -339,7 +369,7 @@
             var btn = $(id);
             if (!btn) return;
             btn.disabled = !elegido;
-            btn.title = elegido ? '' : 'Elige un supervisor en el filtro';
+            btn.title = elegido ? '' : 'Elige un usuario en "Detalle de registros"';
         });
     }
 
@@ -456,32 +486,28 @@
     // ---------- ciclo de vida ----------
 
     function bindEvents() {
-        $('setp-f-supervisor').addEventListener('change', render);
-        // Al elegir supervisor, "Supervisor × turno" se llena con sus datos
-        // y el Detalle de registros muestra su historial.
-        $('setp-f-supervisor').addEventListener('change', function (e) {
-            fillUsuarioDetalle(null, e.target.value);
+        // Consultar el historial de otro usuario cambia el Detalle y el
+        // usuario sobre el que actúan Editar y Eliminar (superadmin).
+        $('setp-detail-usuario').addEventListener('change', function () {
             renderDetail();
-            if (window.setpRecorridos) window.setpRecorridos.select(e.target.value);
+            pintarBotonesUsuario();
         });
-        // Consultar el historial de otro usuario sólo cambia el Detalle.
-        $('setp-detail-usuario').addEventListener('change', renderDetail);
         $('setp-crear-usuario').addEventListener('click', function () {
             if (window.setpRecorridos) window.setpRecorridos.crearUsuario();
         });
         $('setp-editar-usuario').addEventListener('click', function () {
-            if (window.setpRecorridos) window.setpRecorridos.editarUsuario($('setp-f-supervisor').value);
+            if (window.setpRecorridos) window.setpRecorridos.editarUsuario($('setp-detail-usuario').value);
         });
         $('setp-eliminar-usuario').addEventListener('click', function () {
-            if (window.setpRecorridos) window.setpRecorridos.eliminarUsuario($('setp-f-supervisor').value);
+            if (window.setpRecorridos) window.setpRecorridos.eliminarUsuario($('setp-detail-usuario').value);
         });
         // "Ver historial" de cada registro: abre el historial de su supervisor con ese registro resaltado.
         $('setp-detail').addEventListener('click', function (e) {
             var b = e.target.closest('[data-hist-no]');
             if (b && window.setpRecorridos) window.setpRecorridos.abrirHistorial(b.getAttribute('data-hist-no'), b.getAttribute('data-hist-id'));
         });
-        // El usuario recién creado o editado queda elegido en el filtro;
-        // al eliminarlo, el filtro vuelve a "--Seleccionar--".
+        // El usuario recién creado o editado queda elegido en el Detalle;
+        // al eliminarlo, el Detalle vuelve al propio usuario.
         ['setp:supervisor-creado', 'setp:supervisor-editado', 'setp:supervisor-eliminado'].forEach(function (name) {
             document.addEventListener(name, function (e) {
                 fillSupervisores(name === 'setp:supervisor-eliminado' ? '' : e.detail && e.detail.no_empleado);
@@ -531,6 +557,8 @@
 
     async function activateModule() {
         init();
+        // Sección exclusiva (script.js, SETP_PERSONAS_CON_ACCESO): no cargar datos a nadie más.
+        if (typeof window.puedeVerSetp === 'function' && !window.puedeVerSetp()) return;
         if (!isSectionVisible()) return;
         await refresh();
     }

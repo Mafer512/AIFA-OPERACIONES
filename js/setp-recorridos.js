@@ -3,7 +3,7 @@
 
     // ============================================================
     // SETP · Supervisor × turno (recorridos de supervisión)
-    // Al elegir un supervisor en el filtro, su No. de empleado, nombre y
+    // El supervisor es el usuario que inició sesión; su No. de empleado, nombre y
     // cargo se llenan solos. "Iniciar recorrido" fija la hora de inicio y
     // "Finalizar recorrido" la de término (las pone el servidor). La
     // evidencia es una foto (cámara del celular) o un archivo de la PC.
@@ -17,7 +17,9 @@
     const MODAL_ID = 'setp-usuario-modal';
     const MAX_FILE = 10 * 1024 * 1024;
     const LIST_LIMIT = 100;
-    const COLS = 7;
+    // Sin "No. de empleado" ni "Nombre y apellido" (se retiraron de la pantalla;
+    // los datos siguen guardados y el historial los muestra).
+    const COLS = 5;
     const ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx';
     // Celular o tableta (no computadora): ahí el + abre directo la cámara.
     // Se ve el navegador y no la pantalla táctil, para que una laptop con
@@ -239,6 +241,8 @@
             // queda dentro del desplazamiento de la tabla y no ensancha la página en celular.
             R + ' .table-responsive{position:relative;}',
             R + ' .setp-rec-table td{vertical-align:middle;}',
+            // Hora de inicio y de término centradas (en celular y tableta son tarjetas: se quedan a la izquierda).
+            '@container setp (min-width:1000px){' + R + ' .setp-rec-table th:nth-child(3),' + R + ' .setp-rec-table th:nth-child(4),' + R + ' .setp-rec-table td:nth-child(3),' + R + ' .setp-rec-table td:nth-child(4){text-align:center;}}',
             R + ' .setp-rec-area{min-width:180px;}',
             R + ' .setp-rec-hora{font-weight:700;font-variant-numeric:tabular-nums;color:#0f172a;}',
             R + ' .setp-rec-dia{display:block;font-size:.72rem;color:#64748b;}',
@@ -254,6 +258,20 @@
             R + ' .setp-rec-mas{width:48px;height:48px;border-style:dashed;display:inline-flex;align-items:center;justify-content:center;}',
             R + ' .setp-rec-pend{color:#b45309;font-weight:600;}',
             R + ' .setp-rec-desc-btn{font-size:.72rem;text-decoration:none;}',
+            // Botón flotante fijo para iniciar o finalizar el recorrido (pintarFab).
+            // Encima del botón "Sugerencias" (#fb-fab-wrap, style.css), que ocupa la misma esquina.
+            '#setp-rec-fab{position:fixed;right:calc(1.6rem + env(safe-area-inset-right,0px));bottom:calc(1.6rem + 64px + env(safe-area-inset-bottom,0px));z-index:1045;',
+            'display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border:0;border-radius:999px;font:inherit;font-weight:700;font-size:.95rem;',
+            'color:#fff;box-shadow:0 10px 24px rgba(15,23,42,.28);cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;}',
+            '#setp-rec-fab.is-ini{background:#198754;}',
+            '#setp-rec-fab.is-fin{background:#dc3545;}',
+            '#setp-rec-fab:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 14px 28px rgba(15,23,42,.34);}',
+            '#setp-rec-fab:focus-visible{outline:3px solid #93c5fd;outline-offset:3px;}',
+            '#setp-rec-fab:disabled{opacity:.85;cursor:progress;}',
+            // Dentro de una sección del menú de tarjetas "Sugerencias" se oculta (style.css): baja a la esquina.
+            'body.navdeck-mode.navdeck-active #setp-rec-fab{bottom:calc(1.6rem + env(safe-area-inset-bottom,0px));}',
+            'body.dark-mode #setp-rec-fab{box-shadow:0 10px 24px rgba(0,0,0,.5);}',
+            '@media (max-width:599.98px){#setp-rec-fab{padding:12px 16px;}}',
             // Modo oscuro (body.dark-mode).
             'body.dark-mode ' + R + ' .setp-rec-hora{color:var(--text-color);}',
             'body.dark-mode ' + R + ' .setp-rec-dia,body.dark-mode ' + R + ' .setp-rec-hint td{color:var(--text-muted-color);}',
@@ -273,8 +291,8 @@
     // Las etiquetas salen del orden de las columnas de la tabla.
     function estilosResponsive(R) {
         var T = R + ' .setp-rec-table';
-        var etiquetas = ['No. de empleado', 'Nombre y apellido', 'Cargo', 'Área de recorrido', 'Hora de inicio', 'Hora de término', 'Evidencia'];
-        var areas = ['no', 'nom', 'car', 'area', 'ini', 'fin', 'ev', 'acc'];
+        var etiquetas = ['Cargo', 'Área de recorrido', 'Hora de inicio', 'Hora de término', 'Evidencia'];
+        var areas = ['car', 'area', 'ini', 'fin', 'ev', 'acc'];
         return [
             '@container setp (max-width:999.98px){',
             R + ' .table-responsive{overflow:visible;}',
@@ -282,7 +300,7 @@
             T + ',' + T + ' tbody{display:block;width:100%;}',
             T + ' thead{display:none;}',
             T + ' tbody{padding:12px;}',
-            T + ' tr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"no nom car acc" "area area ini fin" "ev ev ev ev";',
+            T + ' tr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"car car car acc" "area area ini fin" "ev ev ev ev";',
             'gap:10px 14px;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px;margin-bottom:12px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.04);}',
             T + ' tr:last-child{margin-bottom:0;}',
             T + ' tr.setp-rec-curso{background:#fffbeb;border-color:#fcd34d;}',
@@ -294,7 +312,7 @@
             T + ' tr.setp-rec-hint td::before{content:none;}',
             etiquetas.map(function (e, i) { return T + ' td:nth-child(' + (i + 1) + ')::before{content:"' + e + '";}'; }).join(''),
             areas.map(function (a, i) { return T + ' tr:not(.setp-rec-hint) td:nth-child(' + (i + 1) + '){grid-area:' + a + ';}'; }).join(''),
-            T + ' td:nth-child(8){justify-self:end;align-self:start;}',
+            T + ' td:nth-child(6){justify-self:end;align-self:start;}',
             R + ' .setp-rec-area,' + R + ' .setp-rec-turno{min-width:0;max-width:none;width:100%;}',
             R + ' .setp-rec-turno{margin-top:6px;}',
             R + ' .setp-rec-file{max-width:100%;}',
@@ -306,9 +324,9 @@
             '}',
             '@container setp (max-width:599.98px){',
             T + ' tbody{padding:10px;}',
-            T + ' tr{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"nom acc" "no car" "area area" "ini fin" "ev ev";gap:8px 12px;padding:12px;}',
+            T + ' tr{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"car acc" "area area" "ini fin" "ev ev";gap:8px 12px;padding:12px;}',
             // Botones de captura a todo lo ancho de la tarjeta (fáciles de tocar).
-            T + ' td:nth-child(5) .btn,' + T + ' td:nth-child(6) .btn,' + T + ' td:nth-child(7) > .btn:not(.btn-link){width:100%;}',
+            T + ' td:nth-child(3) .btn,' + T + ' td:nth-child(4) .btn,' + T + ' td:nth-child(5) > .btn:not(.btn-link){width:100%;}',
             R + ' .setp-rec-thumb{width:120px;height:80px;}',
             '}'
         ];
@@ -377,10 +395,9 @@
         return '<td class="text-end text-nowrap">' + html + '</td>';
     }
 
+    // "No. de empleado" y "Nombre y apellido" se retiraron de la tabla: sólo queda Cargo.
     function datosSupervisor(s) {
-        return '<td class="text-nowrap fw-semibold">' + esc(s ? s.no_empleado : '') + '</td>' +
-            '<td>' + esc(s ? s.nombre : '') + '</td>' +
-            '<td>' + (s && s.cargo ? esc(s.cargo) : '—') + '</td>';
+        return '<td>' + (s && s.cargo ? esc(s.cargo) : '—') + '</td>';
     }
 
     function turnoLabel(key) {
@@ -438,7 +455,8 @@
             (state.enFormato[r.id] ? '<span class="setp-rec-dia text-success"><i class="fas fa-file-signature me-1"></i>En formato guardado</span>' : '');
         else if (!canEdit() || consulta) termino = '<span class="badge text-bg-warning">En curso</span>';
         else if (state.busy[r.id] === 'finalizar') termino = '<span class="spinner-border spinner-border-sm text-danger"></span>';
-        else termino = '<button type="button" class="btn btn-sm btn-danger" data-rec="finalizar" data-id="' + esc(r.id) + '"><i class="fas fa-flag-checkered me-1"></i>Finalizar recorrido</button>';
+        // Se finaliza con el botón flotante (pintarFab): aquí ya no se repite el botón.
+        else termino = '<span class="badge text-bg-warning">En curso</span><span class="setp-rec-dia">Finalízalo con el botón de la esquina</span>';
         return '<tr' + (enCurso ? ' class="setp-rec-curso"' : '') + '>' + datosSupervisor(s) +
             '<td>' + area + '</td>' +
             '<td><span class="setp-rec-hora">' + hhmm(r.hora_inicio) + '</span><span class="setp-rec-dia">' + fecha(r.registrado_en) + '</span></td>' +
@@ -452,16 +470,17 @@
         return '<tr class="setp-rec-nuevo">' + datosSupervisor(s) +
             '<td>' + areaSelect(state.areaNueva, 'id="setp-rec-area-nueva"' + (busy ? ' disabled' : '')) +
             (conTurno() ? turnoSelect(state.turnoNuevo, 'id="setp-rec-turno-nuevo"' + (busy ? ' disabled' : '')) : '') + '</td>' +
+            // Se inicia con el botón flotante (pintarFab): aquí ya no se repite el botón.
             '<td>' + (busy
                 ? '<span class="spinner-border spinner-border-sm text-success"></span>'
-                : '<button type="button" class="btn btn-sm btn-success" data-rec="iniciar"><i class="fas fa-play me-1"></i>Iniciar recorrido</button>') + '</td>' +
+                : '<span class="text-muted small">Elige área y turno, y presiona <b>Iniciar recorrido</b> en la esquina</span>') + '</td>' +
             '<td><span class="text-muted">—</span></td>' +
             '<td><span class="text-muted small">Al iniciar</span></td>' + (conAcciones() ? '<td></td>' : '') + '</tr>';
     }
 
     function render() {
         if (!state.el) return;
-        var thead = '<thead><tr><th>No. de empleado</th><th>Nombre y apellido</th><th>Cargo</th><th>Área de recorrido</th>' +
+        var thead = '<thead><tr><th>Cargo</th><th>Área de recorrido</th>' +
             '<th>Hora de inicio de recorrido</th><th>Hora de término de recorrido</th>' +
             '<th title="Fotografía o archivo">Evidencia <span class="fw-normal text-lowercase">(foto o archivo)</span></th>' +
             (conAcciones() ? '<th><span class="visually-hidden">Acciones</span></th>' : '') + '</tr></thead>';
@@ -486,7 +505,7 @@
             if (state.error) {
                 body += hint(state.error);
             } else if (!s) {
-                body += hint('<i class="fas fa-hand-pointer me-1"></i>Selecciona un supervisor en el filtro <b>Supervisor</b> para registrar su recorrido.');
+                body += hint('<i class="fas fa-circle-info me-1"></i>Tu usuario no está dado de alta como supervisor, así que no puedes registrar recorridos. El nombre de tu perfil debe coincidir con el de un supervisor.');
             } else if (canEdit() && !lista.some(function (r) { return !r.hora_termino; })) {
                 body += nuevoRow(s);
             }
@@ -499,6 +518,80 @@
             '<input type="file" id="setp-rec-file" class="d-none" accept="' + ACCEPT + '">';
         // "Detalle de registros" (js/setp-reportes.js) muestra el historial compacto.
         document.dispatchEvent(new CustomEvent('setp:recorridos-actualizados'));
+        pintarFab();
+    }
+
+    // ---------- botón flotante ----------
+    // Botón fijo en la esquina inferior derecha para iniciar el recorrido propio
+    // o, si hay uno en curso, finalizarlo. Vive dentro de #setp-section, así que
+    // sólo se ve en SETP. Lo ven quienes tienen acceso a SETP: las personas de
+    // SETP_PERSONAS_CON_ACCESO (script.js) y los superadmin.
+    var FAB_ID = 'setp-rec-fab';
+
+    function recorridoEnCurso() {
+        var s = state.selected ? supervisor(state.selected) : null;
+        if (!s) return null;
+        return state.recorridos.find(function (r) { return r.no_empleado === s.no_empleado && !r.hora_termino; }) || null;
+    }
+
+    function pintarFab() {
+        var host = $('setp-section');
+        if (!host) return;
+        var fab = $(FAB_ID);
+        var visible = state.loaded && (typeof window.puedeVerSetp !== 'function' || window.puedeVerSetp());
+        if (!visible) { if (fab) fab.remove(); return; }
+        if (!fab) {
+            fab = document.createElement('button');
+            fab.type = 'button';
+            fab.id = FAB_ID;
+            fab.addEventListener('click', clickFab);
+            host.appendChild(fab);
+        }
+        var curso = recorridoEnCurso();
+        var busy = curso ? state.busy[curso.id] : state.busy.new;
+        fab.className = curso ? 'is-fin' : 'is-ini';
+        fab.disabled = !!busy;
+        fab.innerHTML = busy
+            ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>' + (curso ? 'Finalizando…' : 'Iniciando…') + '</span>'
+            : curso
+                ? '<i class="fas fa-flag-checkered" aria-hidden="true"></i><span>Finalizar recorrido</span>'
+                : '<i class="fas fa-play" aria-hidden="true"></i><span>Iniciar recorrido</span>';
+        fab.title = curso ? 'Finalizar el recorrido en curso (' + (curso.area_recorrido || '') + ', inició ' + hhmm(curso.hora_inicio) + ' hrs)' : 'Iniciar un recorrido';
+    }
+
+    async function clickFab() {
+        var wrap = state.el;
+        if (!wrap) return;
+        var ver = function (el) { (el || wrap).scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+        var s = state.selected ? supervisor(state.selected) : null;
+        if (!s) {
+            setStatus('Tu usuario no está dado de alta como supervisor, así que no puedes iniciar recorridos. El nombre de tu perfil debe coincidir con el de un supervisor.', 'warning');
+            ver();
+            return;
+        }
+        if (!canEdit()) {
+            setStatus('Tu nivel en SETP es de consulta. Para iniciar recorridos pide el nivel de captura en Vistas.', 'warning');
+            ver();
+            return;
+        }
+        var curso = recorridoEnCurso();
+        if (curso) {
+            var ok = await confirmarBorrado(document, {
+                tono: 'ok', kicker: 'Recorrido en curso', titulo: '¿Finalizar el recorrido?',
+                filas: [['Área de recorrido', curso.area_recorrido || '—'], ['Inicio', hhmm(curso.hora_inicio) + ' hrs']],
+                aviso: 'La hora de término la pone el sistema al confirmar. Después agrega la evidencia en el renglón del recorrido.',
+                boton: 'Finalizar'
+            });
+            if (!ok) return;
+            await finalizar(curso.id);
+            var ev = wrap.querySelector('[data-id="' + curso.id + '"][data-rec^="evidencia"]');
+            ver(ev ? ev.closest('tr') : null);
+            return;
+        }
+        // Sin recorrido en curso: lleva al renglón para iniciar. Si ya eligió
+        // área y turno lo inicia; si falta alguno, iniciar() lo pide y lo enfoca.
+        ver(wrap.querySelector('tr.setp-rec-nuevo'));
+        await iniciar();
     }
 
     // ---------- acciones ----------
@@ -1776,7 +1869,7 @@
             }
             state.supervisores = ordenarSupervisores(state.supervisores.concat([res.data]));
             bootstrap.Modal.getOrCreateInstance($(MODAL_ID)).hide();
-            // El filtro Supervisor (js/setp-reportes.js) se actualiza y lo selecciona.
+            // "Detalle de registros" (js/setp-reportes.js) se actualiza y lo muestra.
             document.dispatchEvent(new CustomEvent('setp:supervisor-creado', { detail: res.data }));
         } catch (error) {
             modalStatus('No se pudo crear el usuario: ' + errText(error));
@@ -2179,7 +2272,7 @@
     window.setpRecorridos = {
         mount: mount,
         supervisores: function () { return state.supervisores.slice(); },
-        // Supervisor elegido en el filtro ('' = todos).
+        // Supervisor del usuario que inició sesión ('' = todos).
         select: function (no) {
             var cambio = state.selected !== (no || '');
             state.selected = no || '';
