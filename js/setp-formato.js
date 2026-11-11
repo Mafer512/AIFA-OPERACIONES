@@ -69,6 +69,9 @@
         // true con db/setp_hallazgos_por_supervisor.sql: cada supervisor ve
         // sólo sus hallazgos que aún no salen en un formato guardado.
         porSupervisor: false,
+        // true si setp_hallazgos tiene la columna area: el área responsable
+        // elegida a mano se guarda (sin ella, el área sale sólo de la regla).
+        areaCol: false,
         // Formato guardado al finalizar el recorrido que se está generando
         // desde "Formatos guardados" (null = Generar formato normal).
         borrador: null,
@@ -554,6 +557,9 @@
             // Columnas de db/setp_hallazgos_identificacion.sql (folio, etiquetas, Fusionar).
             var c3 = await sb.from(T_HALLAZGOS).select('folio, duplicado_de').limit(1);
             state.identificacion = !c3.error;
+            // Área responsable elegida a mano (columna area).
+            var c4 = await sb.from(T_HALLAZGOS).select('area').limit(1);
+            state.areaCol = !c4.error;
             // Hallazgos ya guardados en un reporte (Guardar reporte).
             var arch = {};
             var rr = await sb.from(T_OFICIOS).select('numero, secciones').like('numero', REPORTE + '%');
@@ -568,6 +574,7 @@
             state.store = 'local';
             state.porSupervisor = false;
             state.identificacion = false;
+            state.areaCol = false;
         }
         state.dbReady = state.store === 'db';
     }
@@ -900,6 +907,8 @@
             payload.cantidad = Math.max(1, Number(v.cantidad) || 1);
             payload.detalle = v.etiqueta ? v.detalle || null : null;
         }
+        // Área responsable elegida a mano (vacío: la de la regla).
+        if ('area' in v && state.areaCol) payload.area = v.area || null;
         // Si cambia el estatus, el nuevo se vuelve a confirmar con ✓ (un detectado
         // pasa a solucionados sólo ya confirmado como solucionado).
         if (prev && prev.estatus !== payload.estatus && prev.confirmado_en) {
@@ -1299,8 +1308,8 @@
     // desde / hasta: periodo con día del reporte ('YYYY-MM-DD').
     // etiqueta: filtro de la barra Etiquetas ('' = todas; 'SIN' = sin etiqueta).
     // fusion: id del hallazgo que se va a unir a otro (botón Fusionar).
-    const rep = { el: null, periodo: '', desde: '', hasta: '', etiqueta: '', fusion: null, editing: null, editKind: null, solveId: null, solving: false, files: { evidencia: null, solucion: null }, saving: false };
-    const REP_COLS = 9;
+    const rep = { el: null, periodo: '', desde: '', hasta: '', etiqueta: '', area: '', fusion: null, editing: null, editKind: null, solveId: null, solving: false, files: { evidencia: null, solucion: null }, saving: false };
+    const REP_COLS = 10;
 
     function repStatus(message, type) {
         var box = $('setp-rep-status');
@@ -1336,6 +1345,13 @@
             R + ' label.setp-rep-photo{cursor:pointer;margin:0;display:block;}',
             R + ' label.setp-rep-photo:hover .setp-rep-nothumb,' + R + ' label.setp-rep-photo:hover .setp-rep-thumb{border-color:#2563eb;}',
             R + ' label.setp-rep-photo.is-disabled{cursor:not-allowed;opacity:.45;}',
+            // Datos obligatorios vacíos al guardar: campos en rojo y leyenda roja.
+            R + ' label.setp-rep-photo.is-invalid .setp-rep-nothumb,' + R + ' label.setp-rep-photo.is-invalid .setp-rep-thumb{border:2px solid #dc3545 !important;color:#dc3545;}',
+            R + ' tr.setp-rep-edit .is-invalid{border-color:#dc3545 !important;box-shadow:0 0 0 .2rem rgba(220,53,69,.2);}',
+            R + ' tr.setp-rep-aviso-row td{background:#fef2f2;border-top:0;padding:6px 12px 10px;}',
+            R + ' .setp-rep-leyenda{color:#dc3545;font-weight:600;}',
+            R + ' .setp-rep-leyenda .fa-question-circle{font-size:1.05em;}',
+            R + ' .setp-rep-leyenda-extra{font-weight:400;}',
             R + ' tr.setp-rep-edit td{background:#f8fbff;}',
             R + ' tr.setp-rep-edit .form-control,' + R + ' tr.setp-rep-edit .form-select{min-width:120px;}',
             R + ' .setp-rep-local{display:inline-flex;align-items:center;margin-left:8px;padding:1px 8px;border-radius:999px;background:#fffbeb;color:#92400e;font-weight:600;}',
@@ -1353,6 +1369,9 @@
             'body.dark-mode ' + R + ' .setp-rep-nothumb{border-color:rgba(148,163,184,.4);color:var(--text-muted-color);}',
             'body.dark-mode ' + R + ' label.setp-rep-photo:hover .setp-rep-nothumb,body.dark-mode ' + R + ' label.setp-rep-photo:hover .setp-rep-thumb{border-color:var(--primary-color);}',
             'body.dark-mode ' + R + ' tr.setp-rep-edit td{background:rgba(77,171,247,.08);}',
+            'body.dark-mode ' + R + ' tr.setp-rep-aviso-row td{background:rgba(248,113,113,.10);}',
+            'body.dark-mode ' + R + ' .setp-rep-leyenda{color:#f87171;}',
+            'body.dark-mode ' + R + ' label.setp-rep-photo.is-invalid .setp-rep-nothumb,body.dark-mode ' + R + ' label.setp-rep-photo.is-invalid .setp-rep-thumb{border-color:#f87171 !important;color:#f87171;}',
             'body.dark-mode ' + R + ' .setp-rep-local{background:rgba(251,191,36,.14);color:#fcd34d;}',
             'body.dark-mode ' + R + ' .setp-rep-ok{background:rgba(16,185,129,.15);color:#6ee7b7;}',
             'body.dark-mode ' + R + ' .setp-rep-pend{background:rgba(248,113,113,.15);color:#fca5a5;}',
@@ -1379,6 +1398,11 @@
             R + ' .setp-rep-filtro button[aria-pressed="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}',
             R + ' .setp-rep-filtro button[aria-pressed="true"] i{color:#fff;}',
             R + ' tr.setp-rep-fusion-origen td{background:#fffbeb !important;}',
+            // Área responsable (columna y barra Áreas).
+            R + ' .setp-rep-table td.setp-rep-area{min-width:170px;max-width:260px;white-space:normal;}',
+            R + ' tr.setp-rep-edit td.setp-rep-area .form-select{min-width:200px;}',
+            R + ' .setp-rep-apend{display:inline-flex;min-width:18px;justify-content:center;border-radius:999px;background:#dc2626;color:#fff;font-size:.66rem;font-weight:800;padding:0 5px;}',
+            'body.dark-mode ' + R + ' .setp-rep-apend{background:#ef4444;}',
             R + ' .setp-rep-cap{display:grid;grid-template-columns:1fr 1fr;gap:4px;}',
             R + ' .setp-rep-cap .full{grid-column:1/-1;}',
             'body.dark-mode ' + R + ' .setp-rep-folio{color:#8cc8ff;}',
@@ -1402,8 +1426,8 @@
     // títulos de grupo como franjas. Las etiquetas siguen el orden de las columnas.
     function repEstilosResponsive(R) {
         var T = R + ' .setp-rep-table';
-        var etiquetas = ['No.', 'Fecha de reporte', 'Ubicación de incidencia', 'Descripción de incidencia', 'Evidencia fotográfica', 'Estatus', 'Fecha de solución', 'Evidencia solucionada'];
-        var areas = ['no', 'fec', 'ubi', 'des', 'evi', 'est', 'fso', 'evs', 'acc'];
+        var etiquetas = ['No.', 'Fecha de reporte', 'Ubicación de incidencia', 'Descripción de incidencia', 'Área responsable', 'Evidencia fotográfica', 'Estatus', 'Fecha de solución', 'Evidencia solucionada'];
+        var areas = ['no', 'fec', 'ubi', 'des', 'are', 'evi', 'est', 'fso', 'evs', 'acc'];
         var card = T + ' tr:not(.setp-rep-group)';
         return [
             '@container setp (max-width:999.98px){',
@@ -1414,14 +1438,14 @@
             T + ' tbody{padding:0 12px 4px;}',
             T + ' tr.setp-rep-group{display:block;margin:0 -12px 10px;}',
             T + ' tr.setp-rep-group th{display:block;white-space:normal;padding:10px 16px;line-height:1.6;}',
-            card + '{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"no fec ubi acc" "des des des des" "evi est fso evs";',
+            card + '{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"no fec ubi acc" "des des des des" "are are are are" "evi est fso evs";',
             'gap:10px 14px;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px;margin-bottom:12px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.04);}',
             T + ' tr.setp-rep-edit{background:#f8fbff;border-color:#bfdbfe;}',
             T + ' td{display:block;border:0;padding:0;min-width:0;background:transparent !important;box-shadow:none !important;text-align:left !important;}',
             T + ' td::before{display:block;font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;margin-bottom:3px;}',
             etiquetas.map(function (e, i) { return T + ' td:nth-child(' + (i + 1) + ')::before{content:"' + e + '";}'; }).join(''),
             areas.map(function (a, i) { return card + ' td:nth-child(' + (i + 1) + '):not([colspan]){grid-area:' + a + ';}'; }).join(''),
-            T + ' td:nth-child(9){justify-self:end;align-self:start;}',
+            T + ' td:nth-child(10){justify-self:end;align-self:start;}',
             // "Sin hallazgos." y "Cargando…": aviso simple, sin etiqueta.
             T + ' td[colspan]{grid-column:1/-1;text-align:center !important;}',
             T + ' td[colspan]::before{content:none;}',
@@ -1434,7 +1458,7 @@
             'body.dark-mode ' + T + ' td::before{color:var(--text-muted-color);}',
             '}',
             '@container setp (max-width:599.98px){',
-            card + '{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"no acc" "fec ubi" "des des" "evi evs" "est fso";gap:8px 12px;padding:12px;}',
+            card + '{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"no acc" "fec ubi" "des des" "are are" "evi evs" "est fso";gap:8px 12px;padding:12px;}',
             R + ' .setp-rep-thumb,' + R + ' .setp-rep-nothumb{width:100%;max-width:200px;height:96px;}',
             R + ' .setp-rep-head{padding:12px;}',
             R + ' .setp-rep-actions{width:100%;}',
@@ -1463,6 +1487,7 @@
             // Cámara (o archivo en PC) para la foto de la solución del ✓ de pendientes.
             '<input type="file" id="setp-rep-sol-file" class="d-none" accept="image/*" capture="environment" aria-label="Foto de la solución">',
             '<div class="setp-rep-filtro d-none" id="setp-rep-filtro" role="group" aria-label="Filtrar por etiqueta"></div>',
+            '<div class="setp-rep-filtro d-none" id="setp-rep-filtro-area" role="group" aria-label="Filtrar por área responsable"></div>',
             '<div class="table-responsive"><table class="table table-sm mb-0 setp-table setp-rep-table" id="setp-rep-table"></table></div>',
             '<datalist id="setp-rep-modulos"></datalist><datalist id="setp-rep-locales"></datalist>',
             '<datalist id="setp-rep-niveles">' + NIVELES.map(function (n) { return '<option value="' + n + '">'; }).join('') + '</datalist>'
@@ -1517,6 +1542,46 @@
         return html;
     }
 
+    // Área responsable: píldora que abre cómo reportarle y a quién. Sale de la
+    // etiqueta e item (js/setp-catalogo.js) o de la que se eligió a mano.
+    function repAreaDe(h) {
+        var cat = catalogo();
+        return cat && cat.areaDe ? cat.areaDe(h) : null;
+    }
+
+    function repAreaHtml(h) {
+        var cat = catalogo();
+        if (!cat || !cat.areaChip) return '—';
+        var key = repAreaDe(h);
+        if (!key) return cat.areaChip(null);
+        var regla = cat.areaRegla(h.etiqueta, h.item);
+        var manual = !!h.area && h.area !== regla;
+        return '<details class="setp-area-det"><summary>' + cat.areaChip(key, true) + '</summary>' + cat.areaInfo(key, true) + '</details>' +
+            (manual ? '<span class="setp-area-man"><i class="fas fa-user-pen me-1"></i>Cambiada por el supervisor</span>' : '');
+    }
+
+    // Renglón en edición: con la columna area se puede elegir otra; sin ella,
+    // se muestra la que marca la regla para la etiqueta e item elegidos.
+    function repAreaEditHtml(h, etq, it) {
+        var cat = catalogo();
+        if (!cat || !cat.areaChip) return '—';
+        var regla = cat.areaRegla(etq, it);
+        if (!state.areaCol) return cat.areaChip(regla, true) + (regla ? '<div class="setp-rep-det mt-1">Se asigna sola</div>' : '');
+        var sel = h && h.area && h.area !== regla ? h.area : '';
+        return '<select class="form-select form-select-sm" data-f="area" aria-label="Área responsable">' +
+            '<option value="">' + esc(regla ? 'Automática: ' + cat.area(regla).corto : 'A consideración (elegir)…') + '</option>' +
+            cat.areas().map(function (a) { return '<option value="' + a.key + '"' + (a.key === sel ? ' selected' : '') + '>' + esc(a.corto) + '</option>'; }).join('') +
+            '</select>';
+    }
+
+    // Al cambiar etiqueta o item se vuelve a calcular el área (se conserva la elegida a mano).
+    function repPintarAreaEdit(fila) {
+        var celda = fila && fila.querySelector('td.setp-rep-area');
+        if (!celda) return;
+        var get = function (f) { var el = fila.querySelector('[data-f="' + f + '"]'); return el ? el.value : ''; };
+        celda.innerHTML = repAreaEditHtml({ area: get('area') }, get('etiqueta'), get('item'));
+    }
+
     // kind: grupo donde se dibuja el renglón. En pendientes, ✓ da el seguimiento
     // (solución con evidencia) y el hallazgo pasa a solucionados.
     function repViewRow(h, n, kind) {
@@ -1544,7 +1609,8 @@
         return '<tr' + (origen ? ' class="setp-rep-fusion-origen"' : '') + '><td class="text-center">' + n + (h.folio ? '<span class="setp-rep-folio">' + esc(h.folio) + '</span>' : '') + '</td>' +
             '<td class="text-nowrap">' + fmtDate(h.fecha_reporte) + '</td>' +
             '<td>' + repUbiHtml(h) + '</td>' +
-            '<td class="setp-rep-desc">' + repDescHtml(h) + '</td><td>' + repThumb(h.evidencia_url) + '</td>' +
+            '<td class="setp-rep-desc">' + repDescHtml(h) + '</td>' +
+            '<td class="setp-rep-area">' + repAreaHtml(h) + '</td><td>' + repThumb(h.evidencia_url) + '</td>' +
             '<td><span class="badge ' + (solved ? 'setp-rep-ok"><i class="fas fa-check-circle me-1"></i>Solucionado' : 'setp-rep-pend"><i class="fas fa-exclamation-circle me-1"></i>Pendiente') + '</span>' + confirmadoHtml(h) + '</td>' +
             '<td class="text-nowrap">' + (solved ? fmtDate(h.fecha_solucion) : '—') + '</td>' +
             '<td>' + (solved ? repThumb(h.evidencia_solucion_url) : '—') + '</td>' +
@@ -1622,6 +1688,7 @@
             '<input type="text" class="form-control form-control-sm mb-1" data-f="modulo" list="setp-rep-modulos" placeholder="Módulo N" value="' + esc(h ? h.modulo : '') + '" aria-label="Ubicación (módulo)">' +
             '<input type="text" class="form-control form-control-sm" data-f="local" list="setp-rep-locales" placeholder="Local (ej. SEIE4-12)" value="' + esc(h && h.local ? h.local : '') + '" aria-label="Local"></td>' +
             '<td class="setp-rep-desc">' + repCapturaHtml(h) + '</td>' +
+            '<td class="setp-rep-area">' + repAreaEditHtml(h, h && h.etiqueta, h && h.item) + '</td>' +
             '<td>' + repPhotoInput('evidencia', h && h.evidencia_url, false, 'Evidencia fotográfica') + '</td>' +
             '<td><select class="form-select form-select-sm" data-f="estatus" aria-label="Estatus"><option value="PENDIENTE">Pendiente</option><option value="SOLUCIONADO"' + (solved ? ' selected' : '') + '>Solucionado</option></select></td>' +
             '<td><input type="date" class="form-control form-control-sm" data-f="fsol" value="' + esc(fsol) + '"' + (kind === 'solucionados' ? limits(r) : '') + (solved ? '' : ' disabled') + ' aria-label="Fecha de solución"></td>' +
@@ -1672,17 +1739,21 @@
             (state.porSupervisor && no ? ' · Detectados de <b>' + esc(nombreSupervisor(no)) + '</b> que aún no salen en un formato' : '') +
             (state.store === 'local' ? '<span class="setp-rep-local" title="Las tablas de Supabase (db/create_setp_formatos.sql) aún no están disponibles"><i class="fas fa-laptop me-1"></i>Guardado en este navegador</span>' : '');
         rep.el.querySelector('[data-rep="add"]').classList.toggle('d-none', !canEdit());        var table = $('setp-rep-table');
-        var thead = '<thead><tr><th>' + (state.identificacion ? 'No. / Folio' : 'No.') + '</th><th>Fecha de reporte</th><th>Ubicación de incidencia</th><th>Descripción de incidencia</th><th>Evidencia fotográfica</th><th>Estatus</th><th>Fecha de solución</th><th>Evidencia solucionada</th><th></th></tr></thead>';
+        var thead = '<thead><tr><th>' + (state.identificacion ? 'No. / Folio' : 'No.') + '</th><th>Fecha de reporte</th><th>Ubicación de incidencia</th><th>Descripción de incidencia</th><th>Área responsable</th><th>Evidencia fotográfica</th><th>Estatus</th><th>Fecha de solución</th><th>Evidencia solucionada</th><th></th></tr></thead>';
         var byId = {};
         state.hallazgos.forEach(function (h) { byId[h.id] = h; });
         var s = seccionesDe(rango);
         var todos = {};
         [s.detectados, s.solucionados, s.pendientes].forEach(function (l) { l.forEach(function (x) { if (byId[x.id]) todos[x.id] = byId[x.id]; }); });
-        pintarFiltroEtiquetas(Object.keys(todos).map(function (k) { return todos[k]; }));
+        var listaTodos = Object.keys(todos).map(function (k) { return todos[k]; });
+        pintarFiltroEtiquetas(listaTodos);
+        pintarFiltroAreas(listaTodos);
         var pasa = function (h) {
             if (!h) return false;
-            if (!rep.etiqueta || h.id === rep.editing) return true;
-            return rep.etiqueta === 'SIN' ? !h.etiqueta : h.etiqueta === rep.etiqueta;
+            if (h.id === rep.editing) return true;
+            if (rep.etiqueta && (rep.etiqueta === 'SIN' ? !!h.etiqueta : h.etiqueta !== rep.etiqueta)) return false;
+            if (rep.area && (repAreaDe(h) || 'SIN') !== rep.area) return false;
+            return true;
         };
         var full = function (list) { return list.map(function (x) { return byId[x.id]; }).filter(pasa); };
         table.innerHTML = thead +
@@ -1713,6 +1784,38 @@
         box.innerHTML = '<span class="l"><i class="fas fa-tags me-1"></i>Etiquetas</span>' + boton('', 'Todas', lista.length) +
             cat.etiquetas.filter(function (e) { return cuenta[e.key]; }).map(function (e) { return boton(e.key, e.nombre, cuenta[e.key], e); }).join('') +
             (cuenta.SIN ? boton('SIN', 'Sin etiqueta', cuenta.SIN) : '');
+        box.classList.remove('d-none');
+    }
+
+    // Barra "Áreas": a quién le toca cada hallazgo del periodo y cuántos tiene
+    // pendientes (número rojo), para darles seguimiento.
+    function pintarFiltroAreas(lista) {
+        var box = $('setp-rep-filtro-area');
+        var cat = catalogo();
+        if (!box) return;
+        if (!cat || !cat.areas || !lista.some(function (h) { return repAreaDe(h); })) {
+            box.classList.add('d-none');
+            box.innerHTML = '';
+            if (rep.area) rep.area = '';
+            return;
+        }
+        var cuenta = {}, pend = {};
+        lista.forEach(function (h) {
+            var k = repAreaDe(h) || 'SIN';
+            cuenta[k] = (cuenta[k] || 0) + 1;
+            if (h.estatus !== 'SOLUCIONADO') pend[k] = (pend[k] || 0) + 1;
+        });
+        if (rep.area && !cuenta[rep.area]) rep.area = '';
+        var boton = function (key, texto, a) {
+            var n = key ? cuenta[key] : lista.length;
+            var p = key ? pend[key] || 0 : 0;
+            return '<button type="button" data-rep="filtro-area" data-area="' + key + '" aria-pressed="' + (rep.area === key) + '"' + (a ? ' style="--c:' + a.color + '"' : '') +
+                (a ? ' title="' + esc(a.nombre) + '"' : '') + '>' + (a ? '<i class="fas ' + a.icono + '"></i>' : '') + esc(texto) + ' <b>' + n + '</b>' +
+                (p ? '<span class="setp-rep-apend" title="Pendientes">' + p + '</span>' : '') + '</button>';
+        };
+        box.innerHTML = '<span class="l"><i class="fas fa-route me-1"></i>Áreas</span>' + boton('', 'Todas') +
+            cat.areas().filter(function (a) { return cuenta[a.key]; }).map(function (a) { return boton(a.key, a.corto, a); }).join('') +
+            (cuenta.SIN ? boton('SIN', 'A consideración') : '');
         box.classList.remove('d-none');
     }
 
@@ -1763,40 +1866,100 @@
     }
 
     function repCancel() {
+        repStatus('');
         rep.editing = null;
         rep.solving = false;
         rep.files = { evidencia: null, solucion: null };
         renderReport();
     }
 
+    const REP_LEYENDA = 'Favor de rellenar la información obligatoria';
+
+    // Aviso al guardar con datos obligatorios vacíos: leyenda roja con signo de
+    // interrogación debajo del renglón (y arriba, en el mensaje de la sección),
+    // y en rojo TODOS los campos que faltan, sean de escribir, de lista o la
+    // foto de la solución. El cursor va al primero. extra: indicación adicional;
+    // titulo: otra leyenda cuando el dato está lleno pero es incorrecto.
+    function repAviso(row, campos, extra, titulo) {
+        repLimpiarAviso(row);
+        var els = campos.map(function (f) {
+            if (f === 'foto-solucion') { var inp = row.querySelector('[data-file="solucion"]'); return inp && !inp.disabled ? inp.closest('label') : null; }
+            var el = row.querySelector('[data-f="' + f + '"]');
+            return el && !el.disabled ? el : null;
+        }).filter(Boolean);
+        els.forEach(function (el) { el.classList.add('is-invalid'); });
+        var texto = '<i class="fas fa-question-circle me-1"></i>' + (titulo || REP_LEYENDA) + '.' + (extra ? ' <span class="setp-rep-leyenda-extra">' + extra + '</span>' : '');
+        var aviso = document.createElement('tr');
+        aviso.className = 'setp-rep-aviso-row';
+        aviso.innerHTML = '<td colspan="' + REP_COLS + '"><div class="setp-rep-leyenda" role="alert">' + texto + '</div></td>';
+        row.after(aviso);
+        var primero = els[0];
+        if (primero) {
+            if (primero.tagName === 'LABEL') primero.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            else primero.focus();
+        }
+        repStatus('<span class="setp-rep-leyenda">' + texto + '</span>', 'danger');
+    }
+
+    function repLimpiarAviso(row) {
+        if (!row) return;
+        row.querySelectorAll('.is-invalid').forEach(function (el) { el.classList.remove('is-invalid'); });
+        var sig = row.nextElementSibling;
+        if (sig && sig.classList.contains('setp-rep-aviso-row')) sig.remove();
+    }
+
+    // Quita la marca roja del campo que ya se llenó; sin marcas, se va la leyenda.
+    function repCampoLleno(el) {
+        var marcado = el.classList.contains('is-invalid') ? el : el.closest('label.is-invalid');
+        if (!marcado) return;
+        marcado.classList.remove('is-invalid');
+        var row = marcado.closest('tr.setp-rep-edit');
+        if (row && !row.querySelector('.is-invalid')) { repLimpiarAviso(row); repStatus(''); }
+    }
+
     async function repSave(row) {
         if (rep.saving || !canEdit()) return;
+        repLimpiarAviso(row);
         var get = function (f) { var el = row.querySelector('[data-f="' + f + '"]'); return el ? el.value.trim() : ''; };
         var v = { fecha: get('fecha'), modulo: get('modulo'), nivel: get('nivel'), desc: get('desc'), solved: get('estatus') === 'SOLUCIONADO', fsol: get('fsol'), seccion: SECCIONES[repNewKind()] };
+        var prev = repNewKind() ? null : state.hallazgos.find(function (h) { return h.id === rep.editing; });
         var cat = catalogo();
-        if (cat && row.querySelector('[data-f="etiqueta"]')) {
+        var conCatalogo = !!(cat && row.querySelector('[data-f="etiqueta"]'));
+        if (conCatalogo) {
             v.local = get('local').toUpperCase();
             v.etiqueta = get('etiqueta');
             v.item = get('item');
             v.condicion = get('condicion');
             v.cantidad = Math.min(99, Math.max(1, Number(get('cantidad')) || 1));
             v.detalle = v.etiqueta ? v.desc.replace(/\s+/g, ' ') : '';
-            if (v.etiqueta) {
-                if (!v.item || !v.condicion) return repStatus('Con etiqueta, elige también el <b>item</b> y la <b>condición</b>.', 'warning');
-                if (v.item === cat.OTRO && !v.detalle) return repStatus('Con item <b>Otro</b>, describe el elemento en el detalle.', 'warning');
-                v.desc = cat.componer(v);
+        }
+        if (state.areaCol && row.querySelector('[data-f="area"]')) v.area = get('area');
+        // Todos los obligatorios vacíos de una vez, para marcarlos juntos.
+        var faltan = [];
+        var extra = '';
+        if (!v.fecha) faltan.push('fecha');
+        if (!v.modulo) faltan.push('modulo');
+        if (conCatalogo && v.etiqueta) {
+            if (!v.item) faltan.push('item');
+            if (!v.condicion) faltan.push('condicion');
+            if (v.item === cat.OTRO && !v.detalle) { faltan.push('desc'); extra = 'Con item <b>Otro</b>, describe el elemento en el detalle.'; }
+        } else if (!v.desc) faltan.push('desc');
+        if (v.solved && !v.fsol) faltan.push('fsol');
+        var sinFotoSol = v.solved && !rep.files.solucion && !(prev && prev.evidencia_solucion_url);
+        if (sinFotoSol) faltan.push('foto-solucion');
+        if (faltan.length) {
+            // Si sólo falta la foto de la solución, se abre la cámara para tomarla.
+            if (faltan.length === 1 && sinFotoSol) {
+                var camara = row.querySelector('[data-file="solucion"]');
+                if (camara && !camara.disabled) camara.click();
+                extra = 'Toma la <b>foto de la solución</b> y vuelve a presionar <b>Guardar</b>.';
             }
+            return repAviso(row, faltan, extra);
         }
+        if (v.solved && v.fsol < v.fecha) return repAviso(row, ['fsol', 'fecha'], '', 'La fecha de solución no puede ser anterior a la fecha de reporte');
+        if (conCatalogo && v.etiqueta) v.desc = cat.componer(v);
         var invalid = validateHallazgo(v);
-        if (invalid) return repStatus(invalid, 'warning');
-        var prev = repNewKind() ? null : state.hallazgos.find(function (h) { return h.id === rep.editing; });
-        // Solucionado siempre lleva la foto de la solución (se sube al bucket al
-        // guardar): si falta, se abre la cámara para tomarla.
-        if (v.solved && !rep.files.solucion && !(prev && prev.evidencia_solucion_url)) {
-            var camara = row.querySelector('[data-file="solucion"]');
-            if (camara && !camara.disabled) camara.click();
-            return repStatus('Toma la <b>foto de la solución</b> y vuelve a presionar <b>Guardar</b>.', 'warning');
-        }
+        if (invalid) return repAviso(row, [], '', invalid.replace(/\.$/, ''));
         // Seguimiento desde pendientes (✓ o lápiz): solucionado con evidencia queda
         // confirmado y pasa a Hallazgos solucionados.
         var seguimiento = !!prev && rep.editKind === 'pendientes' && v.solved;
@@ -2002,6 +2165,7 @@
 
     function bindReport(el) {
         el.addEventListener('input', function (e) {
+            if (e.target.value && e.target.value.trim()) repCampoLleno(e.target);
             if (e.target.matches('tr.setp-rep-edit [data-f="nivel"], tr.setp-rep-edit [data-f="modulo"]')) repSugerencias(e.target.closest('tr'));
         });
         el.addEventListener('click', function (e) {
@@ -2013,6 +2177,11 @@
             if (rep.saving) return;
             if (act === 'filtro') {
                 rep.etiqueta = btn.getAttribute('data-etq') || '';
+                renderReport();
+                return;
+            }
+            if (act === 'filtro-area') {
+                rep.area = btn.getAttribute('data-area') || '';
                 renderReport();
                 return;
             }
@@ -2067,10 +2236,17 @@
                 var etq = t.value;
                 fila.querySelector('[data-f="item"]').innerHTML = repItemsOpciones(etq, '');
                 fila.querySelector('[data-f="condicion"]').innerHTML = repCondOpciones(etq, '');
-                ['item', 'condicion', 'cantidad'].forEach(function (f) { fila.querySelector('[data-f="' + f + '"]').disabled = !etq; });
+                ['item', 'condicion', 'cantidad'].forEach(function (f) {
+                    var campo = fila.querySelector('[data-f="' + f + '"]');
+                    campo.disabled = !etq;
+                    if (!etq) repCampoLleno(campo);   // sin etiqueta ya no son obligatorios
+                });
                 var ta = fila.querySelector('[data-f="desc"]');
                 ta.placeholder = etq ? 'Detalle (opcional)' : 'Descripción de la incidencia';
                 ta.setAttribute('aria-label', etq ? 'Detalle' : 'Descripción de incidencia');
+                repPintarAreaEdit(fila);
+            } else if (t.matches('tr.setp-rep-edit [data-f="item"]')) {
+                repPintarAreaEdit(t.closest('tr'));
             } else if (t.matches('[data-f="estatus"]')) {
                 var row = t.closest('tr');
                 var on = t.value === 'SOLUCIONADO';
@@ -2080,6 +2256,8 @@
                 var file = row.querySelector('[data-file="solucion"]');
                 file.disabled = !on;
                 file.closest('label').classList.toggle('is-disabled', !on);
+                // Pendiente: la fecha y la foto de la solución dejan de ser obligatorias.
+                if (!on) { repCampoLleno(fsol); repCampoLleno(file); }
                 // Al marcarlo Solucionado se abre la cámara para la foto de la solución.
                 var prevH = state.hallazgos.find(function (x) { return x.id === rep.editing; });
                 if (on && !rep.files.solucion && !(prevH && prevH.evidencia_solucion_url)) file.click();
@@ -2087,6 +2265,7 @@
                 var f = t.files && t.files[0];
                 if (!f) return;
                 rep.files[t.getAttribute('data-file')] = f;
+                repCampoLleno(t);
                 var label = t.closest('label');
                 var holder = label.querySelector('.setp-rep-thumb, .setp-rep-nothumb');
                 var img = document.createElement('img');

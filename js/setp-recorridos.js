@@ -63,7 +63,9 @@
         turnoOk: true,      // false si aún no se aplica db/setp_recorridos_turno.sql
         turnoNuevo: '',     // turno elegido en el renglón "Iniciar recorrido"
         areaNueva: '',      // piso elegido en el renglón "Iniciar recorrido"
-        status: null        // aviso visible { message, type }
+        areaCol: null,      // true si setp_hallazgos tiene la columna area (Cambiar el área responsable)
+        areaElegir: false,  // lista de áreas abierta en la ventana "Descripción del hallazgo"
+        status: null       // aviso visible { message, type }
     };
 
     function $(id) { return document.getElementById(id); }
@@ -731,7 +733,7 @@
         var previa = state.pending[id];
         var captura = {};
         if (previa && previa.extra === !!extra) {
-            ['descripcion', 'etiqueta', 'item', 'condicion', 'cantidad', 'modulo', 'local', 'detalle', 'mismoQue'].forEach(function (k) { captura[k] = previa[k]; });
+            ['descripcion', 'etiqueta', 'item', 'condicion', 'cantidad', 'area', 'modulo', 'local', 'detalle', 'mismoQue'].forEach(function (k) { captura[k] = previa[k]; });
         }
         soltarPendiente(id);
         state.pending[id] = Object.assign(captura, { file: file, blob: blob, esFoto: esFoto, extra: !!extra, url: esFoto ? URL.createObjectURL(blob) : '' });
@@ -756,7 +758,7 @@
     // Columnas que pueden faltar si aún no se aplica su script SQL: se guarda sin
     // ellas. Sin "local" (db/setp_hallazgos_identificacion.sql), el local va en
     // el módulo para no perderlo.
-    const COLUMNAS_OPCIONALES = ['no_empleado', 'seccion', 'local', 'etiqueta', 'item', 'condicion', 'cantidad', 'detalle'];
+    const COLUMNAS_OPCIONALES = ['no_empleado', 'seccion', 'local', 'etiqueta', 'item', 'condicion', 'cantidad', 'detalle', 'area'];
 
     async function insertarHallazgo(sb, hallazgo) {
         var campos = 'id, folio';
@@ -812,6 +814,8 @@
             created_by: actor,
             updated_by: actor
         };
+        // Área responsable elegida a mano (columna area); si no, sale de la regla.
+        if (p.area) hallazgo.area = p.area;
         var res = await insertarHallazgo(sb, hallazgo);
         if (res.error) {
             try { await sb.storage.from(BUCKET).remove([foto.path]); } catch (_) { /* sin efecto */ }
@@ -1112,7 +1116,7 @@
     // Captura por pasos (catálogo de js/setp-catalogo.js): Etiqueta → Item →
     // Condición → Cantidad → Módulo y Local, más un detalle opcional. Al
     // presionar Guardar se buscan en la base hallazgos pendientes iguales (mismo
-    // item en el mismo local; si el objeto se mueve, en todo el nivel durante
+    // item en el mismo local; si el objeto se mueve, en todo el edificio durante
     // 24 h) y se pregunta "¿Es el mismo?" con las fotos lado a lado. Guardar
     // cierra la ventana; el hallazgo se confirma después con ✓.
 
@@ -1152,7 +1156,13 @@
             D + ' .sd-dup{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.45);}',
             D + ' .sd-dup-h{color:#fcd34d;}',
             D + ' .sd-dup-cand{background:rgba(15,23,42,.55);border-color:var(--border-color);}',
-            D + ' .sd-dup-lbl{color:var(--text-muted-color);}'
+            D + ' .sd-dup-lbl{color:var(--text-muted-color);}',
+            D + ' .sd-areabox{background:rgba(255,255,255,.04);border-color:var(--border-color);}',
+            D + ' .sd-area-h{color:#c3c9d2;}',
+            D + ' .sd-area-h .h{color:var(--text-muted-color);}',
+            D + ' .sd-area-btn{background:rgba(255,255,255,.04);border-color:var(--border-color);color:#c3c9d2;}',
+            D + ' .sd-area-nota{color:#6ee7b7;}',
+            D + ' .sd-area-nota.is-man{color:#fcd34d;}'
         ];
     }
 
@@ -1204,6 +1214,18 @@
             M + ' .sd-cant{display:inline-flex;align-items:center;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;}',
             M + ' .sd-cant button{width:38px;height:34px;border:0;background:#f8fafc;color:#334155;font-weight:800;cursor:pointer;}',
             M + ' .sd-cant span{min-width:46px;text-align:center;font-weight:800;color:#0f172a;}',
+            M + ' .sd-areabox{margin-top:14px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;}',
+            M + ' .sd-areabox:empty{display:none;}',
+            M + ' .sd-area-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.8rem;font-weight:700;color:#334155;margin-bottom:6px;}',
+            M + ' .sd-area-h .h{font-weight:400;color:#64748b;font-size:.74rem;}',
+            M + ' .sd-area-fila{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}',
+            M + ' .sd-area-fila .setp-area-chip{font-size:.8rem;padding:5px 12px;}',
+            M + ' .sd-area-btn{font:inherit;font-size:.74rem;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;}',
+            M + ' .sd-area-nota{font-size:.74rem;font-weight:600;color:#047857;margin-top:5px;}',
+            M + ' .sd-area-nota.is-man{color:#b45309;}',
+            M + ' .sd-area-lista{margin-top:8px;}',
+            M + ' .sd-area-lista button i{color:var(--c);margin-right:5px;}',
+            M + ' .sd-area-lista button[aria-checked="true"] i{color:#fff;}',
             M + ' .sd-resumen{display:flex;align-items:flex-start;gap:8px;margin:14px 0 4px;padding:9px 11px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;font-size:.82rem;color:#1e3a8a;}',
             M + ' .sd-resumen i{margin-top:2px;}',
             M + ' .sd-mod-lista{list-style:none;margin:0;padding:4px;border:1px solid #e2e8f0;border-radius:12px;max-height:168px;overflow-y:auto;background:#fff;}',
@@ -1254,18 +1276,24 @@
             '<div class="sd-et" id="setp-desc-et" role="radiogroup" aria-labelledby="setp-desc-et-lbl"></div>' +
             '<div id="setp-desc-item-wrap" hidden>' + paso(2, 'Item *', '¿qué elemento?', 'setp-desc-item-lbl') +
             '<div class="sd-items" id="setp-desc-item" role="radiogroup" aria-labelledby="setp-desc-item-lbl"></div>' +
+            // Etiqueta "Otro": la descripción se escribe aquí, justo después del item.
+            '<div id="setp-desc-otro-slot"></div>' +
             paso(3, 'Condición *', '', 'setp-desc-cond-lbl') +
             '<div class="sd-cond" id="setp-desc-cond" role="radiogroup" aria-labelledby="setp-desc-cond-lbl"></div>' +
             paso(4, 'Cantidad', 'piezas') +
-            '<div class="sd-cant"><button type="button" data-cant="-1" aria-label="Menos">−</button><span id="setp-desc-cant" aria-live="polite">1</span><button type="button" data-cant="1" aria-label="Más">+</button></div></div>' +
+            '<div class="sd-cant"><button type="button" data-cant="-1" aria-label="Menos">−</button><span id="setp-desc-cant" aria-live="polite">1</span><button type="button" data-cant="1" aria-label="Más">+</button></div>' +
+            // Área responsable: sale sola de la etiqueta y el item (js/setp-catalogo.js).
+            '<div class="sd-areabox" id="setp-desc-areabox" aria-live="polite"></div></div>' +
             paso(5, 'Módulo *', '', 'setp-desc-mod-lbl').replace('</div>', '<span class="h" id="setp-desc-mod-nivel"></span></div>') +
             '<ul class="sd-mod-lista" id="setp-desc-mod" role="radiogroup" aria-labelledby="setp-desc-mod-lbl"></ul>' +
             '<div id="setp-desc-loc-wrap" hidden>' + paso(6, 'Local *', '', 'setp-desc-loc-lbl').replace('</div>', '<span class="h" id="setp-desc-loc-mod"></span></div>') +
             '<div class="sd-loc-lista" id="setp-desc-loc" role="radiogroup" aria-labelledby="setp-desc-loc-lbl"></div></div>' +
             '<div class="sd-resumen d-none" id="setp-desc-resumen"></div>' +
+            '<div id="setp-desc-text-home" hidden></div>' +
+            '<div id="setp-desc-text-wrap">' +
             '<label for="setp-desc-text" class="mt-2" id="setp-desc-text-lbl">Detalle <span class="fw-normal text-muted">(opcional)</span></label>' +
             '<textarea id="setp-desc-text" class="form-control" maxlength="' + DESC_MAX + '" rows="2" placeholder="Ej. Respaldo roto en la fila 3"></textarea>' +
-            '<div class="sd-count"><span id="setp-desc-n">0</span>/' + DESC_MAX + '</div>' +
+            '<div class="sd-count"><span id="setp-desc-n">0</span>/' + DESC_MAX + '</div></div>' +
             '<div class="sd-note"><i class="fas fa-circle-info me-1"></i>Al guardar se revisa si ya está reportado y se cierra esta ventana. Después presiona <b>✓</b> para confirmar el hallazgo.</div>' +
             '</div>' +
             '<div id="setp-desc-dup" hidden></div>' +
@@ -1284,11 +1312,30 @@
             if (e.target.closest('[data-etq], [data-item], [data-cond], [data-modulo], [data-local]')) descAviso('');
             if ((b = e.target.closest('[data-etq]'))) {
                 var etq = b.getAttribute('data-etq');
-                if (p.etiqueta !== etq) { p.etiqueta = etq; p.item = ''; p.condicion = ''; }
+                if (p.etiqueta !== etq) { p.etiqueta = etq; p.item = ''; p.condicion = ''; p.area = ''; state.areaElegir = false; }
                 pintarCaptura();
             } else if ((b = e.target.closest('[data-item]'))) {
                 p.item = p.item === b.getAttribute('data-item') ? '' : b.getAttribute('data-item');
+                // Otro item: el área vuelve a ser la de la regla.
+                p.area = '';
+                state.areaElegir = false;
                 pintarCaptura();
+                // Etiqueta "Otro": al elegir el item se pasa a escribir la descripción.
+                if (p.etiqueta === 'OTRO' && p.item) $('setp-desc-text').focus();
+            } else if ((b = e.target.closest('[data-area-cambiar]'))) {
+                state.areaElegir = !state.areaElegir;
+                pintarArea();
+            } else if ((b = e.target.closest('[data-area-auto]'))) {
+                p.area = '';
+                state.areaElegir = false;
+                pintarArea();
+            } else if ((b = e.target.closest('[data-area-elige]'))) {
+                var cat0 = catalogo();
+                var elegida = b.getAttribute('data-area-elige');
+                // Elegir la misma que marca la regla equivale a dejarla automática.
+                p.area = cat0 && elegida === cat0.areaRegla(p.etiqueta, p.item) ? '' : elegida;
+                state.areaElegir = false;
+                pintarArea();
             } else if ((b = e.target.closest('[data-cond]'))) {
                 p.condicion = p.condicion === b.getAttribute('data-cond') ? '' : b.getAttribute('data-cond');
                 pintarCaptura();
@@ -1370,6 +1417,7 @@
                 return '<button type="button" data-cond="' + c.key + '"' + radio(p.condicion === c.key) + '>' + esc(c.texto) + '</button>';
             }).join('');
             $('setp-desc-cant').textContent = String(p.cantidad || 1);
+            pintarArea();
         }
         // 5 · Módulo y 6 · Local
         var modulos = modulosDe(r);
@@ -1391,10 +1439,58 @@
         }
         // Con item "Otro" el detalle es obligatorio (es la descripción).
         var otro = p.item === cat.OTRO;
-        $('setp-desc-text-lbl').innerHTML = otro ? 'Describe el elemento *' : 'Detalle <span class="fw-normal text-muted">(opcional)</span>';
-        $('setp-desc-text').placeholder = otro ? 'Ej. Cartel del evento desprendido' : 'Ej. Respaldo roto en la fila 3';
+        // Etiqueta "Otro": la casilla de descripción sube justo debajo del item
+        // y sale hasta elegirlo; en las demás etiquetas va al final, como siempre.
+        var etqOtro = p.etiqueta === 'OTRO';
+        var caja = $('setp-desc-text-wrap');
+        if (etqOtro) { if (caja.parentNode !== $('setp-desc-otro-slot')) $('setp-desc-otro-slot').appendChild(caja); }
+        else if (caja.previousElementSibling !== $('setp-desc-text-home')) $('setp-desc-text-home').after(caja);
+        caja.hidden = etqOtro && !p.item;
+        $('setp-desc-text-lbl').innerHTML = etqOtro ? 'Descripción *' : (otro ? 'Describe el elemento *' : 'Detalle <span class="fw-normal text-muted">(opcional)</span>');
+        $('setp-desc-text').placeholder = etqOtro ? 'Describe el hallazgo: qué es y qué tiene (ej. Cartel del evento desprendido)' : (otro ? 'Ej. Cartel del evento desprendido' : 'Ej. Respaldo roto en la fila 3');
         $('setp-desc-area').textContent = ubicacionTexto(r, p);
         pintarResumen();
+    }
+
+    // Área responsable del hallazgo: la de la regla (etiqueta + item) con cómo
+    // reportarle. "Cambiar" aparece sólo si la base ya guarda el área elegida
+    // (columna area de setp_hallazgos).
+    function pintarArea() {
+        var p = state.descFor && state.pending[state.descFor];
+        var cat = catalogo();
+        var box = $('setp-desc-areabox');
+        if (!p || !cat || !box) return;
+        if (!p.etiqueta || !cat.areaChip) { box.innerHTML = ''; return; }
+        var regla = cat.areaRegla(p.etiqueta, p.item);
+        var key = p.area || regla;
+        var manual = !!p.area && p.area !== regla;
+        var puede = state.areaCol === true;
+        var html = '<div class="sd-area-h"><i class="fas fa-route"></i>Área responsable <span class="h">· se asigna sola según la etiqueta y el item</span></div>' +
+            '<div class="sd-area-fila">' + cat.areaChip(key) +
+            (puede ? '<button type="button" class="sd-area-btn" data-area-cambiar aria-expanded="' + !!state.areaElegir + '"><i class="fas fa-pen me-1"></i>' + (key ? 'Cambiar' : 'Elegir área') + '</button>' : '') +
+            (puede && manual ? '<button type="button" class="sd-area-btn" data-area-auto><i class="fas fa-rotate-left me-1"></i>Usar la automática</button>' : '') + '</div>';
+        if (manual) html += '<div class="sd-area-nota is-man"><i class="fas fa-user-pen me-1"></i>Cambiada por el supervisor' + (regla ? ' (la regla marca ' + esc(cat.area(regla).corto) + ')' : '') + '</div>';
+        else if (key) html += '<div class="sd-area-nota"><i class="fas fa-wand-magic-sparkles me-1"></i>Asignada automáticamente</div>';
+        else html += '<div class="sd-area-nota is-man"><i class="fas fa-circle-info me-1"></i>' + (puede ? 'Las tablas de responsables no lo asignan: queda a consideración del supervisor. Elige a qué área se reporta.' : 'Las tablas de responsables no lo asignan: queda a consideración del supervisor.') + '</div>';
+        html += cat.areaInfo(key);
+        if (puede && state.areaElegir) {
+            html += '<div class="sd-cond sd-area-lista" role="radiogroup" aria-label="Área responsable">' + cat.areas().map(function (a) {
+                return '<button type="button" data-area-elige="' + a.key + '" style="--c:' + a.color + '" role="radio" aria-checked="' + (a.key === key) + '"><i class="fas ' + a.icono + '"></i>' + esc(a.corto) + '</button>';
+            }).join('') + '</div>';
+        }
+        box.innerHTML = html;
+    }
+
+    // ¿La base guarda el área elegida a mano? Se revisa una vez por sesión.
+    async function revisarColumnaArea() {
+        if (state.areaCol !== null) return;
+        state.areaCol = false;
+        try {
+            var sb = await getClient();
+            var res = await sb.from('setp_hallazgos').select('area').limit(1);
+            state.areaCol = !res.error;
+        } catch (_) { state.areaCol = false; }
+        if (state.areaCol && state.descFor) pintarArea();
     }
 
     function pintarResumen() {
@@ -1441,7 +1537,9 @@
         $('setp-desc-n').textContent = String((p.detalle || '').length);
         descAviso(aviso || '', 'info');
         vistaDuplicados(false);
+        state.areaElegir = false;
         pintarCaptura();
+        revisarColumnaArea();
         var modal = $(DESC_ID);
         modal.hidden = false;
         document.body.style.overflow = 'hidden';
@@ -1474,13 +1572,14 @@
         if (p.etiqueta && !p.condicion) f.push(['condición', '#setp-desc-cond']);
         if (!p.modulo) f.push(['módulo', '#setp-desc-mod']);
         else if (!p.local) f.push(['local', '#setp-desc-loc']);
-        if (cat && p.item === cat.OTRO && !String(p.detalle || '').trim()) f.push(['descripción del elemento', '#setp-desc-text']);
+        if (cat && p.item === cat.OTRO && !String(p.detalle || '').trim()) f.push([p.etiqueta === 'OTRO' ? 'descripción' : 'descripción del elemento', '#setp-desc-text']);
         return f;
     }
 
     // Hallazgos pendientes iguales en la base: mismo item en el mismo local
-    // (y nivel); si el objeto se mueve, en todo el nivel durante las últimas
-    // 24 h. Sin las columnas de db/setp_hallazgos_identificacion.sql no revisa.
+    // (y nivel); si el objeto se mueve (maleta, mochila…), en todos los niveles
+    // del edificio durante las últimas 24 h, porque alguien pudo cambiarlo de
+    // piso. Sin las columnas de db/setp_hallazgos_identificacion.sql no revisa.
     async function buscarDuplicados(r, p) {
         var cat = catalogo();
         if (!cat || (p.item === cat.OTRO && !cat.esMovible(p.etiqueta, p.item))) return [];
@@ -1495,8 +1594,8 @@
             var mov = cat.esMovible(p.etiqueta, p.item);
             var desde = Date.now() - MOVIBLE_HORAS * 3600 * 1000;
             return (res.data || []).filter(function (h) {
-                if (cat.nivel(h.nivel) !== nivel) return false;
                 if (mov) return new Date(h.created_at).getTime() >= desde;
+                if (cat.nivel(h.nivel) !== nivel) return false;
                 return h.local === p.local;
             });
         } catch (_) {
@@ -1519,7 +1618,7 @@
         var foto = function (url) {
             return url ? '<img class="sd-dup-foto" src="' + esc(url) + '" alt="Foto del hallazgo registrado">' : '<div class="sd-dup-foto d-flex align-items-center justify-content-center small text-muted">Sin foto</div>';
         };
-        var donde = mov ? 'en el nivel ' + esc(r.area_recorrido) + ' durante las últimas ' + MOVIBLE_HORAS + ' h' : 'en este mismo local (' + esc(p.local) + ')';
+        var donde = mov ? 'en el edificio terminal (todos los niveles) durante las últimas ' + MOVIBLE_HORAS + ' h' : 'en este mismo local (' + esc(p.local) + ')';
         $('setp-desc-dup').innerHTML = '<div class="sd-dup">' +
             '<div class="sd-dup-h"><i class="fas fa-triangle-exclamation mt-1"></i><span>' +
             (lista.length === 1 ? 'Ya hay un hallazgo pendiente igual' : 'Ya hay ' + lista.length + ' hallazgos pendientes iguales') +

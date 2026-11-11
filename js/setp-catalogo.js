@@ -7,6 +7,9 @@
     //  - Etiquetas (tipo de hallazgo), sus items y las condiciones de cada una.
     //  - componer(): arma la "Descripción de incidencia" que sale en el oficio
     //    (ej. "Butaca rota (2 piezas). Respaldo roto en la fila 3.").
+    //  - Áreas responsables: a quién se reporta cada hallazgo, según su
+    //    etiqueta e item (areaDe). Sale en la captura y en el Reporte de
+    //    hallazgos; el oficio SSO/GOET/ no cambia.
     // Lo usan js/setp-recorridos.js (ventana "Descripción del hallazgo") y
     // js/setp-formato.js (Reporte de hallazgos).
     // ============================================================
@@ -71,56 +74,122 @@
         humedad: 'Con humedad', manchado: ['Manchado', 'Manchada'], noAbre: 'No abre', noCierra: 'No cierra',
         atorado: ['Atorado', 'Atorada'], detenido: ['Detenido', 'Detenida'], sinEnergia: 'Sin energía',
         expuesto: ['Expuesto', 'Expuesta'], abandonado: ['Abandonado', 'Abandonada'], olvidado: ['Olvidado', 'Olvidada'],
+        apagado: ['Apagado', 'Apagada'], desconf: ['Desconfigurado', 'Desconfigurada'], sinSenal: 'Sin señal',
+        sinInfo: 'Sin información', falla: 'Con falla', requerido: ['Requerido', 'Requerida'], reportado: ['Reportado', 'Reportada'],
+        normativa: 'Fuera de normativa', incidente: 'Con incidente',
+        oscilando: 'Oscilando', bloqueado: ['Bloqueado', 'Bloqueada'], malFunc: 'Con mal funcionamiento', estrellado: ['Estrellado', 'Estrellada'],
+        desgastado: ['Desgastado', 'Desgastada'], malEstado: 'En mal estado', malProg: ['Mal programado', 'Mal programada'],
+        sinSistema: 'Sin sistema', insuficiente: 'Insuficiente',
         otro: 'Otro'
+    };
+
+    // Áreas responsables (tablas "Incidencia, falla o evento en"): cómo se les
+    // reporta, quiénes responden y qué atienden. Los responsables cambian:
+    // aquí se actualizan.
+    const AREAS = {
+        RMAT: { nombre: 'Gerencia de Recursos Materiales', corto: 'Recursos Materiales', color: '#059669', icono: 'fa-boxes-stacked',
+            medios: [['fa-phone', 'Vía telefónica (Webex) · Svs. Generales']],
+            responsables: [['Coordinador', 'Javier Guzmán'], ['Supervisores', 'Ing. Liceth Chavez, Lic. Alan Santiago Alarcon']],
+            atiende: 'Sanitarios con fallas, suministro de agua insuficiente, mobiliario dañado o en mal estado y limpieza de las áreas del ETP.' },
+        ELEC: { nombre: 'Gerencia de Ingeniería Electromecánica', corto: 'Ing. Electromecánica', color: '#7c3aed', icono: 'fa-gears',
+            medios: [['fa-tower-cell', 'Radio canal 5 · distintivo QUEB 2'], ['fa-phone', 'Webex']],
+            responsables: [['Equipos especiales · Coordinador', 'Rafael Castilla'], ['Supervisores', 'Ing. Lidia Martínez Álvarez, Ing. Alberto López, Ing. Marco Reséndiz, Ing. José Luis Lara'],
+                ['HVAC · Coordinador', 'Hanzel Martínez Álvarez'], ['Supervisores', 'Ing. Alan Eduin Rivera, Ing. Daniel Castellano Martínez']],
+            atiende: 'Elevadores, escaleras eléctricas, aceras móviles, puertas eléctricas y de cortesía; HVAC: bombeo de agua y filtraciones de sus tuberías.' },
+        CIVIL: { nombre: 'Gerencia de Ingeniería Civil', corto: 'Ing. Civil', color: '#b45309', icono: 'fa-helmet-safety',
+            medios: [['fa-tower-cell', 'Radio canal 5 · distintivo RA2'], ['fa-phone', 'Webex']],
+            responsables: [['Coordinador', 'Luis Javier Coronado'], ['Supervisores', 'Arq. Omar Ferrer, Arq. Ulises Arias Belman']],
+            atiende: 'Daños a infraestructura (loseta, plafones, cristales estrellados), filtraciones de agua y losetas en mal estado.' },
+        TYD: { nombre: 'Gerencia de Transformación y Distribución', corto: 'Transf. y Distribución', color: '#ca8a04', icono: 'fa-bolt',
+            medios: [['fa-tower-cell', 'Radio canal 5 · distintivo QUEB3'], ['fa-phone', 'Webex']],
+            responsables: [['Coordinador', 'Juan Carlos Gallardos, Marcos Rene Rodríguez']],
+            atiende: 'Sistema eléctrico de alta, media y baja tensión, incluida la iluminación.' },
+        CCO: { nombre: 'Centro de Control Operativo “Olimpo”', corto: 'CCO Olimpo', color: '#0284c7', icono: 'fa-tower-broadcast',
+            medios: [['fa-tower-cell', 'Radio canal 2 · distintivo Olimpo'], ['fa-phone', 'Webex']],
+            responsables: [['Jefe de Turno CCO', 'Alvaro Pacheco Aleman, Yahir Tellez']],
+            atiende: 'Pantallas de información de vuelos, bahías de documentación, sistema de anuncios (P.A.V.A.), transportación vertical y horizontal, cambio de posición, personal de aerolínea en Salas de Última Espera, cancelaciones y demoras.' },
+        TIC: { nombre: 'Subdirección de Tecnologías de la Información y Comunicación', corto: 'TIC', color: '#4f46e5', icono: 'fa-laptop-code',
+            medios: [['fa-phone', 'Vía telefónica (Webex)']],
+            responsables: [['Responsable', 'Ing. Cristian Fabian Delgado Alcantar'], ['Canal', 'Reportes Tecnologías APOC']],
+            atiende: 'E-Gates y V-Desk, quioscos informativos e interactivos, sistema de voceo (P.A.V.A.) y red Wi-Fi.' },
+        COM: { nombre: 'Gerencia Comercial y de Servicios', corto: 'Comercial y Servicios', color: '#db2777', icono: 'fa-store',
+            medios: [['fa-phone', 'Vía telefónica (Webex)']],
+            responsables: [['Gerenta', 'Miroslawa Gordillo Clemente']],
+            atiende: 'Locales comerciales sucios, que no se apegan a la normativa de imagen o con incidentes con su personal.' },
+        MKT: { nombre: 'Gerencia de Mercadotecnia · Taller de Impresión', corto: 'Mercadotecnia', color: '#e11d48', icono: 'fa-print',
+            medios: [['fa-envelope', 'Formato de solicitud de impresión por correo (folio y firma del subdirector)']],
+            responsables: [['Jefe de Taller de Impresión', 'Roberto Alejandro Vázquez']],
+            atiende: 'Solicitud de señalética y su colocación.' }
     };
 
     // Items: [nombre, género ('m' | 'f'), icono Font Awesome]. "Otro" siempre al final.
     // mov: objetos que se mueven (maleta, carrito…): los duplicados se buscan en
-    // todo el nivel durante 24 h, aunque el local sea distinto.
+    // todos los niveles del edificio durante 24 h, aunque el local sea distinto.
+    // area: área responsable de la etiqueta según la tabla donde encaja
+    // (null: a consideración del supervisor); areaPorItem: items que le tocan
+    // a otra área (null: a consideración).
+    // Iluminación va a Transformación y Distribución (sistema eléctrico de baja
+    // tensión: apagado, oscilando o fuera de servicio); puerta, cerradura y
+    // cortina a Ing. Civil (infraestructura); torniquete a Electromecánica.
+    // A consideración: banda transportadora, objetos y equipaje, y Otro.
     const ETIQUETAS = [
-        { key: 'MOBILIARIO', nombre: 'Mobiliario', icono: 'fa-chair', color: '#2563eb',
+        { key: 'MOBILIARIO', nombre: 'Mobiliario', icono: 'fa-chair', color: '#2563eb', area: 'RMAT',
             items: [['Butaca', 'f', 'fa-couch'], ['Banca', 'f', 'fa-chair'], ['Mesa', 'f', 'fa-table'], ['Bote de basura', 'm', 'fa-trash-can'],
                 ['Barandal', 'm', 'fa-grip-lines'], ['Mostrador', 'm', 'fa-cash-register'], ['Estación de carga', 'f', 'fa-charging-station']],
-            condiciones: ['danado', 'roto', 'faltante', 'sucio', 'flojo'] },
-        { key: 'LIMPIEZA', nombre: 'Limpieza', icono: 'fa-broom', color: '#059669',
+            condiciones: ['danado', 'malEstado', 'roto', 'faltante', 'sucio', 'flojo'] },
+        { key: 'LIMPIEZA', nombre: 'Limpieza', icono: 'fa-broom', color: '#059669', area: 'RMAT',
             items: [['Piso', 'm', 'fa-border-all'], ['Bote de basura', 'm', 'fa-trash-can'], ['Sanitario', 'm', 'fa-toilet'],
                 ['Vidrio', 'm', 'fa-window-maximize'], ['Mobiliario', 'm', 'fa-chair']],
             condiciones: ['sucio', 'mojado', 'basura', 'olor'] },
-        { key: 'ILUMINACION', nombre: 'Iluminación', icono: 'fa-lightbulb', color: '#d97706',
+        { key: 'ILUMINACION', nombre: 'Iluminación', icono: 'fa-lightbulb', color: '#d97706', area: 'TYD',
             items: [['Luminaria', 'f', 'fa-lightbulb'], ['Lámpara', 'f', 'fa-lightbulb'], ['Anuncio luminoso', 'm', 'fa-rectangle-ad'], ['Reflector', 'm', 'fa-sun']],
             condiciones: ['fundido', 'parpadea', 'danado', 'faltante'] },
-        { key: 'SANITARIOS', nombre: 'Sanitarios', icono: 'fa-restroom', color: '#0891b2',
+        { key: 'SANITARIOS', nombre: 'Sanitarios', icono: 'fa-restroom', color: '#0891b2', area: 'RMAT',
             items: [['Inodoro', 'm', 'fa-toilet'], ['Mingitorio', 'm', 'fa-toilet'], ['Lavabo', 'm', 'fa-sink'], ['Llave', 'f', 'fa-faucet'],
-                ['Secador de manos', 'm', 'fa-wind'], ['Dispensador', 'm', 'fa-pump-soap'], ['Puerta de cubículo', 'f', 'fa-door-closed']],
-            condiciones: ['fuera', 'fuga', 'obstruido', 'sucio', 'insumos', 'danado'] },
-        { key: 'SENALETICA', nombre: 'Señalética', icono: 'fa-signs-post', color: '#db2777',
+                ['Secador de manos', 'm', 'fa-wind'], ['Dispensador', 'm', 'fa-pump-soap'], ['Puerta de cubículo', 'f', 'fa-door-closed'], ['Suministro de agua', 'm', 'fa-droplet']],
+            condiciones: ['falla', 'fuera', 'fuga', 'obstruido', 'sucio', 'insumos', 'insuficiente', 'danado'] },
+        { key: 'SENALETICA', nombre: 'Señalética', icono: 'fa-signs-post', color: '#db2777', area: 'MKT', areaPorItem: { 'Pantalla de vuelos': 'CCO' },
             items: [['Letrero', 'm', 'fa-signs-post'], ['Pantalla de vuelos', 'f', 'fa-tv'], ['Señal de emergencia', 'f', 'fa-person-running'], ['Vinil', 'm', 'fa-note-sticky']],
-            condiciones: ['danado', 'flojo', 'faltante', 'desact', 'ilegible', 'fuera'] },
-        { key: 'CLIMA', nombre: 'Clima / A.A.', icono: 'fa-snowflake', color: '#0284c7',
-            items: [['Aire acondicionado', 'm', 'fa-snowflake'], ['Rejilla', 'f', 'fa-fan'], ['Difusor', 'm', 'fa-wind'], ['Termostato', 'm', 'fa-temperature-half']],
-            condiciones: ['fuera', 'noEnfria', 'gotea', 'ruido', 'fuga'] },
-        { key: 'FILTRACION', nombre: 'Filtración / agua', icono: 'fa-droplet', color: '#0369a1',
+            condiciones: ['danado', 'desgastado', 'flojo', 'faltante', 'requerido', 'desact', 'ilegible', 'fuera'] },
+        { key: 'CLIMA', nombre: 'Clima / A.A.', icono: 'fa-snowflake', color: '#0284c7', area: 'ELEC',
+            items: [['Aire acondicionado', 'm', 'fa-snowflake'], ['Rejilla', 'f', 'fa-fan'], ['Difusor', 'm', 'fa-wind'], ['Termostato', 'm', 'fa-temperature-half'],
+                ['Bombeo de agua', 'm', 'fa-water']],
+            condiciones: ['falla', 'apagado', 'fuera', 'noEnfria', 'gotea', 'ruido', 'fuga'] },
+        { key: 'FILTRACION', nombre: 'Filtración / agua', icono: 'fa-droplet', color: '#0369a1', area: 'CIVIL', areaPorItem: { 'Tubería': 'ELEC' },
             items: [['Techo', 'm', 'fa-cloud-rain'], ['Plafón', 'm', 'fa-square'], ['Muro', 'm', 'fa-border-all'], ['Piso', 'm', 'fa-border-all'], ['Tubería', 'f', 'fa-faucet-drip']],
             condiciones: ['fuga', 'gotea', 'encharcado', 'humedad'] },
-        { key: 'PISOS_MUROS', nombre: 'Pisos y muros', icono: 'fa-border-all', color: '#7c3aed',
+        { key: 'PISOS_MUROS', nombre: 'Pisos y muros', icono: 'fa-border-all', color: '#7c3aed', area: 'CIVIL',
             items: [['Piso', 'm', 'fa-border-all'], ['Loseta', 'f', 'fa-table-cells'], ['Muro', 'm', 'fa-square'], ['Plafón', 'm', 'fa-square'],
                 ['Zoclo', 'm', 'fa-ruler-horizontal'], ['Cristal', 'm', 'fa-window-maximize']],
-            condiciones: ['danado', 'roto', 'flojo', 'mojado', 'humedad', 'manchado'] },
-        { key: 'PUERTAS', nombre: 'Puertas y accesos', icono: 'fa-door-open', color: '#ea580c',
-            items: [['Puerta', 'f', 'fa-door-open'], ['Puerta automática', 'f', 'fa-door-closed'], ['Cerradura', 'f', 'fa-lock'],
+            condiciones: ['danado', 'roto', 'estrellado', 'faltante', 'desgastado', 'malEstado', 'flojo', 'mojado', 'humedad', 'manchado'] },
+        { key: 'PUERTAS', nombre: 'Puertas y accesos', icono: 'fa-door-open', color: '#ea580c', area: 'CIVIL', areaPorItem: { 'Puerta automática': 'ELEC', 'Puerta de cortesía': 'ELEC', 'Torniquete': 'ELEC' },
+            items: [['Puerta', 'f', 'fa-door-open'], ['Puerta automática', 'f', 'fa-door-closed'], ['Puerta de cortesía', 'f', 'fa-door-open'], ['Cerradura', 'f', 'fa-lock'],
                 ['Torniquete', 'm', 'fa-person-walking-arrow-right'], ['Cortina', 'f', 'fa-bars']],
-            condiciones: ['danado', 'noAbre', 'noCierra', 'atorado', 'fuera'] },
-        { key: 'ELEVADORES', nombre: 'Elevadores / escaleras', icono: 'fa-elevator', color: '#9333ea',
+            condiciones: ['falla', 'bloqueado', 'apagado', 'danado', 'noAbre', 'noCierra', 'atorado', 'fuera'] },
+        { key: 'ELEVADORES', nombre: 'Elevadores / escaleras', icono: 'fa-elevator', color: '#9333ea', area: 'ELEC', areaPorItem: { 'Banda transportadora': null },
             items: [['Elevador', 'm', 'fa-elevator'], ['Escalera eléctrica', 'f', 'fa-stairs'], ['Banda transportadora', 'f', 'fa-arrows-left-right'], ['Pasillo móvil', 'm', 'fa-person-walking']],
-            condiciones: ['fuera', 'detenido', 'ruido', 'danado'] },
-        { key: 'ELECTRICO', nombre: 'Eléctrico', icono: 'fa-plug', color: '#ca8a04',
-            items: [['Contacto', 'm', 'fa-plug'], ['Tablero', 'm', 'fa-bolt'], ['Cableado', 'm', 'fa-network-wired'], ['Apagador', 'm', 'fa-toggle-on']],
-            condiciones: ['sinEnergia', 'expuesto', 'danado', 'fuera'] },
-        { key: 'EQUIPAJE', nombre: 'Objetos y equipaje', icono: 'fa-suitcase-rolling', color: '#c2410c',
+            condiciones: ['falla', 'bloqueado', 'apagado', 'fuera', 'detenido', 'ruido', 'danado'] },
+        { key: 'ELECTRICO', nombre: 'Eléctrico', icono: 'fa-plug', color: '#ca8a04', area: 'TYD',
+            items: [['Contacto', 'm', 'fa-plug'], ['Tablero', 'm', 'fa-bolt'], ['Cableado', 'm', 'fa-network-wired'], ['Apagador', 'm', 'fa-toggle-on'],
+                ['Sistema de alta tensión', 'm', 'fa-bolt'], ['Sistema de media tensión', 'm', 'fa-bolt'], ['Sistema de baja tensión', 'm', 'fa-bolt']],
+            condiciones: ['apagado', 'oscilando', 'fuera', 'sinEnergia', 'expuesto', 'danado'] },
+        { key: 'TECNOLOGIA', nombre: 'Tecnología', icono: 'fa-laptop-code', color: '#4f46e5', area: 'TIC',
+            items: [['E-Gate', 'm', 'fa-id-card'], ['V-Desk', 'm', 'fa-desktop'], ['Quiosco informativo', 'm', 'fa-display'], ['Quiosco interactivo', 'm', 'fa-hand-pointer'],
+                ['Sistema de voceo', 'm', 'fa-bullhorn'], ['Red Wi-Fi', 'f', 'fa-wifi']],
+            condiciones: ['apagado', 'desconf', 'malProg', 'fuera', 'sinSistema', 'sinSenal'] },
+        { key: 'OPERACION', nombre: 'Operación (CCO)', icono: 'fa-tower-broadcast', color: '#0e7490', area: 'CCO',
+            items: [['Pantalla de información de vuelos', 'f', 'fa-tv'], ['Bahía de documentación', 'f', 'fa-suitcase'], ['Sistema de anuncios', 'm', 'fa-bullhorn'],
+                ['Cambio de posición', 'm', 'fa-right-left'], ['Personal de aerolínea en sala', 'm', 'fa-user-tie'], ['Demora o cancelación de vuelo', 'f', 'fa-plane-circle-exclamation'],
+                ['Transportación vertical', 'f', 'fa-elevator'], ['Transportación horizontal', 'f', 'fa-person-walking']],
+            condiciones: ['sinInfo', 'falla', 'malFunc', 'requerido', 'reportado'] },
+        { key: 'LOCAL', nombre: 'Locales comerciales', icono: 'fa-store', color: '#be185d', area: 'COM',
+            items: [['Local comercial', 'm', 'fa-store'], ['Imagen del local', 'f', 'fa-image'], ['Empleado del local', 'm', 'fa-user']],
+            condiciones: ['sucio', 'normativa', 'incidente'] },
+        { key: 'EQUIPAJE', nombre: 'Objetos y equipaje', icono: 'fa-suitcase-rolling', color: '#c2410c', area: null,
             items: [['Maleta', 'f', 'fa-suitcase-rolling', true], ['Mochila', 'f', 'fa-briefcase', true], ['Bolsa', 'f', 'fa-bag-shopping', true],
                 ['Carrito portaequipaje', 'm', 'fa-cart-flatbed-suitcase', true], ['Objeto olvidado', 'm', 'fa-box-open', true]],
             condiciones: ['abandonado', 'olvidado'] },
-        { key: 'OTRO', nombre: 'Otro', icono: 'fa-tag', color: '#64748b', items: [], condiciones: ['danado', 'fuera', 'otro'] }
+        { key: 'OTRO', nombre: 'Otro', icono: 'fa-tag', color: '#64748b', area: null, items: [], condiciones: ['danado', 'fuera', 'otro'] }
     ];
 
     const OTRO = 'Otro';
@@ -180,6 +249,85 @@
         return base + (d.detalle ? ' ' + oracion(d.detalle) : '');
     }
 
+    // ---------- Áreas responsables ----------
+    function area(key) {
+        return key && AREAS[key] ? Object.assign({ key: key }, AREAS[key]) : null;
+    }
+
+    // Lista para elegir (orden de las tablas de responsables).
+    function areas() {
+        return Object.keys(AREAS).map(area);
+    }
+
+    // Área que marca la regla para una etiqueta e item (null: no tiene).
+    function areaRegla(etq, nombreItem) {
+        var e = etiqueta(etq);
+        if (!e) return null;
+        // null en areaPorItem: ese item queda a consideración aunque la etiqueta tenga área.
+        if (e.areaPorItem && nombreItem && Object.prototype.hasOwnProperty.call(e.areaPorItem, nombreItem)) return e.areaPorItem[nombreItem] || null;
+        return e.area || null;
+    }
+
+    // Área responsable de un hallazgo { etiqueta, item, area }: la que eligió
+    // el supervisor (columna area, si existe) o la de la regla.
+    function areaDe(h) {
+        if (!h) return null;
+        if (h.area && AREAS[h.area]) return h.area;
+        return areaRegla(h.etiqueta, h.item);
+    }
+
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    // Estilos de la píldora y la ficha del área (captura y Reporte de hallazgos).
+    function areaEstilos() {
+        if (document.getElementById('setp-area-styles')) return;
+        var st = document.createElement('style');
+        st.id = 'setp-area-styles';
+        st.textContent = [
+            '.setp-area-chip{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:3px 10px;border-radius:999px;background:var(--c);color:#fff;font-size:.74rem;font-weight:700;line-height:1.3;white-space:normal;}',
+            '.setp-area-chip i{flex:none;}',
+            '.setp-area-chip.is-sin{background:#e2e8f0;color:#475569;}',
+            '.setp-area-info{display:grid;gap:4px;margin-top:6px;font-size:.76rem;color:#334155;}',
+            '.setp-area-info i{width:16px;text-align:center;color:#64748b;margin-right:4px;}',
+            '.setp-area-info b{font-weight:700;}',
+            '.setp-area-atiende{color:#64748b;}',
+            'details.setp-area-det summary{list-style:none;cursor:pointer;display:inline-block;max-width:100%;}',
+            'details.setp-area-det summary::-webkit-details-marker{display:none;}',
+            'details.setp-area-det summary .setp-area-chip::after{content:"\\f078";font-family:"Font Awesome 6 Free";font-weight:900;font-size:.6rem;opacity:.85;}',
+            'details.setp-area-det[open] summary .setp-area-chip::after{content:"\\f077";}',
+            '.setp-area-man{display:block;font-size:.7rem;font-weight:600;color:#b45309;margin-top:3px;}',
+            'body.dark-mode .setp-area-chip.is-sin{background:rgba(255,255,255,.1);color:#c3c9d2;}',
+            'body.dark-mode .setp-area-info{color:#c3c9d2;}',
+            'body.dark-mode .setp-area-info i,body.dark-mode .setp-area-atiende{color:var(--text-muted-color);}',
+            'body.dark-mode .setp-area-man{color:#fcd34d;}'
+        ].join('');
+        document.head.appendChild(st);
+    }
+
+    // Píldora con el nombre del área (corto: nombre corto).
+    function areaChip(key, corto) {
+        areaEstilos();
+        var a = area(key);
+        if (!a) return '<span class="setp-area-chip is-sin" title="Las tablas de responsables no lo asignan a un área"><i class="fas fa-scale-balanced"></i>A consideración</span>';
+        return '<span class="setp-area-chip" style="--c:' + a.color + '" title="' + escHtml(a.nombre) + '"><i class="fas ' + a.icono + '"></i>' + escHtml(corto ? a.corto : a.nombre) + '</span>';
+    }
+
+    // Cómo reportar y a quién (conAtiende: agrega qué atiende el área).
+    function areaInfo(key, conAtiende) {
+        areaEstilos();
+        var a = area(key);
+        if (!a) return '';
+        return '<div class="setp-area-info">' +
+            a.medios.map(function (m) { return '<div><i class="fas ' + m[0] + '"></i>' + escHtml(m[1]) + '</div>'; }).join('') +
+            a.responsables.map(function (r) { return '<div><i class="fas fa-user"></i><b>' + escHtml(r[0]) + ':</b> ' + escHtml(r[1]) + '</div>'; }).join('') +
+            (conAtiende ? '<div class="setp-area-atiende"><i class="fas fa-list-check"></i>Atiende: ' + escHtml(a.atiende) + '</div>' : '') +
+            '</div>';
+    }
+
     function esMovible(etq, nombre) {
         var it = item(etq, nombre);
         return !!(it && it.mov);
@@ -205,6 +353,12 @@
         condicionTexto: condicionTexto,
         componer: componer,
         esMovible: esMovible,
+        area: area,
+        areas: areas,
+        areaRegla: areaRegla,
+        areaDe: areaDe,
+        areaChip: areaChip,
+        areaInfo: areaInfo,
         nivel: nivel,
         modulos: modulos,
         modulosPorNivel: MODULOS_POR_NIVEL
