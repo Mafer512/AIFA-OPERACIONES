@@ -177,19 +177,11 @@
         if (!root) return;
         root.innerHTML = [
             '<div id="setp-status" class="alert d-none mb-3"></div>',
-            '<div class="setp-toolbar">',
-            '  <div class="setp-filters" role="group" aria-label="Filtros del reporte SETP">',
             // El filtro Supervisor se retiró de la pantalla: el supervisor es el usuario
             // que inició sesión (supervisorDeSesion). Este select oculto sólo guarda
-            // su No. de empleado para el resto del módulo.
-            '    <select id="setp-f-supervisor" hidden aria-hidden="true" tabindex="-1"></select>',
-            '  </div>',
-            '  <div class="setp-actions">',
-            '    <button type="button" class="btn btn-sm btn-primary d-none" id="setp-crear-usuario"><i class="fas fa-user-plus me-1"></i>Crear usuario</button>',
-            '    <button type="button" class="btn btn-sm btn-outline-primary d-none" id="setp-editar-usuario"><i class="fas fa-user-pen me-1"></i>Editar usuario</button>',
-            '    <button type="button" class="btn btn-sm btn-outline-danger d-none" id="setp-eliminar-usuario"><i class="fas fa-user-xmark me-1"></i>Eliminar usuario</button>',
-            '  </div>',
-            '</div>',
+            // su No. de empleado para el resto del módulo. Los botones Crear, Editar y
+            // Eliminar usuario también se retiraron (la barra quedó vacía).
+            '<select id="setp-f-supervisor" hidden aria-hidden="true" tabindex="-1"></select>',
             '<div class="setp-kpis" id="setp-kpis"></div>',
             '<div class="setp-panel mb-3">',
             '  <div class="setp-panel-head"><h3 class="setp-panel-title">Supervisor por turno</h3><span class="setp-panel-hint">Recorridos de supervisión</span></div>',
@@ -353,24 +345,6 @@
         var bySup = aggregateBySupervisor(rows);
         renderKpis(rows, bySup, f);
         renderDetail();
-        pintarBotonesUsuario();
-    }
-
-    // Crear, editar y eliminar usuario: sólo superadmin. Editar y eliminar
-    // actúan sobre el usuario elegido en "Detalle de registros".
-    function pintarBotonesUsuario() {
-        var superadmin = !!(window.setpRecorridos && window.setpRecorridos.puedeCrearUsuario());
-        var elegido = $('setp-detail-usuario') ? $('setp-detail-usuario').value : '';
-        ['setp-crear-usuario', 'setp-editar-usuario', 'setp-eliminar-usuario'].forEach(function (id) {
-            var btn = $(id);
-            if (btn) btn.classList.toggle('d-none', !superadmin);
-        });
-        ['setp-editar-usuario', 'setp-eliminar-usuario'].forEach(function (id) {
-            var btn = $(id);
-            if (!btn) return;
-            btn.disabled = !elegido;
-            btn.title = elegido ? '' : 'Elige un usuario en "Detalle de registros"';
-        });
     }
 
     function kpi(label, value, sub) {
@@ -486,21 +460,8 @@
     // ---------- ciclo de vida ----------
 
     function bindEvents() {
-        // Consultar el historial de otro usuario cambia el Detalle y el
-        // usuario sobre el que actúan Editar y Eliminar (superadmin).
-        $('setp-detail-usuario').addEventListener('change', function () {
-            renderDetail();
-            pintarBotonesUsuario();
-        });
-        $('setp-crear-usuario').addEventListener('click', function () {
-            if (window.setpRecorridos) window.setpRecorridos.crearUsuario();
-        });
-        $('setp-editar-usuario').addEventListener('click', function () {
-            if (window.setpRecorridos) window.setpRecorridos.editarUsuario($('setp-detail-usuario').value);
-        });
-        $('setp-eliminar-usuario').addEventListener('click', function () {
-            if (window.setpRecorridos) window.setpRecorridos.eliminarUsuario($('setp-detail-usuario').value);
-        });
+        // Consultar el historial de otro usuario cambia el Detalle.
+        $('setp-detail-usuario').addEventListener('change', renderDetail);
         // "Ver historial" de cada registro: abre el historial de su supervisor con ese registro resaltado.
         $('setp-detail').addEventListener('click', function (e) {
             var b = e.target.closest('[data-hist-no]');

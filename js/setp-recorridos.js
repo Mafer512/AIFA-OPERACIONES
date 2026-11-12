@@ -492,7 +492,7 @@
         } else if (state.error && !state.supervisores.length) {
             body = hint(state.error);
         } else if (!state.supervisores.length) {
-            body = hint('Aún no hay supervisores.' + (esSuperadmin() ? ' Usa <b>Crear usuario</b> para dar de alta al primero.' : ''));
+            body = hint('Aún no hay supervisores.');
         } else {
             var s = state.selected ? supervisor(state.selected) : null;
             // Propios: los del supervisor elegido (o de todos) que aún no salen en un formato.

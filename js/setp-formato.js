@@ -1304,7 +1304,9 @@
     // etiqueta: filtro de la barra Etiquetas ('' = todas; 'SIN' = sin etiqueta).
     // fusion: id del hallazgo que se va a unir a otro (botón Fusionar).
     const rep = { el: null, periodo: '', desde: '', hasta: '', etiqueta: '', area: '', fusion: null, editing: null, editKind: null, solveId: null, solving: false, files: { evidencia: null, solucion: null }, saving: false };
-    const REP_COLS = 10;
+    // Sin las columnas "Fecha de solución" y "Evidencia solucionada": la fecha y
+    // la foto de la solución se ven en Estatus de los solucionados (repSolHtml).
+    const REP_COLS = 8;
 
     function repStatus(message, type) {
         var box = $('setp-rep-status');
@@ -1320,7 +1322,7 @@
         style.id = 'setp-rep-styles';
         style.textContent = [
             R + '{border-top:1px solid #e2e8f0;}',
-            R + ' .setp-rep-head{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f8fafc;border-bottom:1px solid #e2e8f0;}',
+            R + ' .setp-rep-head{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f8fafc;border-top:2px solid #dbe2ea;}',
             R + ' .setp-rep-title{font-weight:800;color:#0f172a;font-size:.9rem;margin:0;}',
             R + ' .setp-rep-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}',
             R + ' .setp-rep-actions label{font-size:.72rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin:0;}',
@@ -1354,10 +1356,14 @@
             R + ' tr.setp-rep-edit .form-control,' + R + ' tr.setp-rep-edit .form-select{min-width:120px;}',
             R + ' .setp-rep-local{display:inline-flex;align-items:center;margin-left:8px;padding:1px 8px;border-radius:999px;background:#fffbeb;color:#92400e;font-weight:600;}',
             R + ' .setp-rep-ok{background:#ecfdf5;color:#047857;}',
+            R + ' .setp-rep-sol-info{display:flex;flex-direction:column;gap:4px;margin-top:6px;font-size:.78rem;color:#047857;font-weight:600;white-space:nowrap;}',
+            R + ' .setp-rep-sol{display:flex;flex-direction:column;gap:6px;margin-top:6px;}',
+            R + ' .setp-rep-sol.d-none{display:none !important;}',
+            'body.dark-mode ' + R + ' .setp-rep-sol-info{color:#6ee7b7;}',
             R + ' .setp-rep-pend{background:#fef2f2;color:#b91c1c;}',
             // Modo oscuro (body.dark-mode).
             'body.dark-mode ' + R + '{border-top-color:var(--border-color);}',
-            'body.dark-mode ' + R + ' .setp-rep-head{background:rgba(255,255,255,.03);border-bottom-color:var(--border-color);}',
+            'body.dark-mode ' + R + ' .setp-rep-head{background:rgba(255,255,255,.03);border-top-color:#5b6b82;}',
             'body.dark-mode ' + R + ' .setp-rep-title{color:var(--text-color);}',
             'body.dark-mode ' + R + ' .setp-rep-actions label,body.dark-mode ' + R + ' td.setp-rep-none{color:var(--text-muted-color);}',
             'body.dark-mode ' + R + ' tr.setp-rep-group th{background:rgba(77,171,247,.12);color:#8cc8ff;border-bottom-color:rgba(77,171,247,.3);}',
@@ -1424,8 +1430,8 @@
     // títulos de grupo como franjas. Las etiquetas siguen el orden de las columnas.
     function repEstilosResponsive(R) {
         var T = R + ' .setp-rep-table';
-        var etiquetas = ['No.', 'Fecha de reporte', 'Ubicación de incidencia', 'Descripción de incidencia', 'Área responsable', 'Evidencia fotográfica', 'Estatus', 'Fecha de solución', 'Evidencia solucionada'];
-        var areas = ['no', 'fec', 'ubi', 'des', 'are', 'evi', 'est', 'fso', 'evs', 'acc'];
+        var etiquetas = ['No.', 'Fecha de reporte', 'Ubicación de incidencia', 'Descripción de incidencia', 'Área responsable', 'Evidencia fotográfica', 'Estatus'];
+        var areas = ['no', 'fec', 'ubi', 'des', 'are', 'evi', 'est', 'acc'];
         var card = T + ' tr:not(.setp-rep-group)';
         return [
             '@container setp (max-width:999.98px){',
@@ -1436,14 +1442,14 @@
             T + ' tbody{padding:0 12px 4px;}',
             T + ' tr.setp-rep-group{display:block;margin:0 -12px 10px;}',
             T + ' tr.setp-rep-group th{display:block;white-space:normal;padding:10px 16px;line-height:1.6;}',
-            card + '{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"no fec ubi acc" "des des des des" "are are are are" "evi est fso evs";',
+            card + '{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"no fec ubi acc" "des des des des" "are are are are" "evi evi est est";',
             'gap:10px 14px;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px;margin-bottom:12px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.04);}',
             T + ' tr.setp-rep-edit{background:#f8fbff;border-color:#bfdbfe;}',
             T + ' td{display:block;border:0;padding:0;min-width:0;background:transparent !important;box-shadow:none !important;text-align:left !important;}',
             T + ' td::before{display:block;font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;margin-bottom:3px;}',
             etiquetas.map(function (e, i) { return T + ' td:nth-child(' + (i + 1) + ')::before{content:"' + e + '";}'; }).join(''),
             areas.map(function (a, i) { return card + ' td:nth-child(' + (i + 1) + '):not([colspan]){grid-area:' + a + ';}'; }).join(''),
-            T + ' td:nth-child(10){justify-self:end;align-self:start;}',
+            T + ' td:nth-child(8){justify-self:end;align-self:start;}',
             // "Sin hallazgos." y "Cargando…": aviso simple, sin etiqueta.
             T + ' td[colspan]{grid-column:1/-1;text-align:center !important;}',
             T + ' td[colspan]::before{content:none;}',
@@ -1456,7 +1462,7 @@
             'body.dark-mode ' + T + ' td::before{color:var(--text-muted-color);}',
             '}',
             '@container setp (max-width:599.98px){',
-            card + '{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"no acc" "fec ubi" "des des" "are are" "evi evs" "est fso";gap:8px 12px;padding:12px;}',
+            card + '{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"no acc" "fec ubi" "des des" "are are" "evi est";gap:8px 12px;padding:12px;}',
             R + ' .setp-rep-thumb,' + R + ' .setp-rep-nothumb{width:100%;max-width:200px;height:96px;}',
             R + ' .setp-rep-head{padding:12px;}',
             R + ' .setp-rep-actions{width:100%;}',
@@ -1469,6 +1475,14 @@
 
     function repShell() {
         return [
+            '<div id="setp-rep-status" class="d-none"></div>',
+            // Cámara (o archivo en PC) para la foto de la solución del ✓ de pendientes.
+            '<input type="file" id="setp-rep-sol-file" class="d-none" accept="image/*" capture="environment" aria-label="Foto de la solución">',
+            '<div class="setp-rep-filtro d-none" id="setp-rep-filtro" role="group" aria-label="Filtrar por etiqueta"></div>',
+            '<div class="setp-rep-filtro d-none" id="setp-rep-filtro-area" role="group" aria-label="Filtrar por área responsable"></div>',
+            '<div class="table-responsive"><table class="table table-sm mb-0 setp-table setp-rep-table" id="setp-rep-table"></table></div>',
+            // Panel del reporte (periodo y botones): al final, después de
+            // "Hallazgos pendientes por solucionar" y antes de "Detalle de registros".
             '<div class="setp-rep-head">',
             '  <div><h4 class="setp-rep-title"><i class="fas fa-clipboard-list me-1 text-primary"></i>Reporte de hallazgos del Edificio Terminal</h4><div class="setp-panel-hint" id="setp-rep-hint"></div></div>',
             '  <div class="setp-rep-actions">',
@@ -1481,12 +1495,6 @@
             '    <button type="button" class="btn btn-sm btn-outline-success" data-rep="guardados"><i class="fas fa-folder-open me-1"></i>Formatos guardados</button>',
             '  </div>',
             '</div>',
-            '<div id="setp-rep-status" class="d-none"></div>',
-            // Cámara (o archivo en PC) para la foto de la solución del ✓ de pendientes.
-            '<input type="file" id="setp-rep-sol-file" class="d-none" accept="image/*" capture="environment" aria-label="Foto de la solución">',
-            '<div class="setp-rep-filtro d-none" id="setp-rep-filtro" role="group" aria-label="Filtrar por etiqueta"></div>',
-            '<div class="setp-rep-filtro d-none" id="setp-rep-filtro-area" role="group" aria-label="Filtrar por área responsable"></div>',
-            '<div class="table-responsive"><table class="table table-sm mb-0 setp-table setp-rep-table" id="setp-rep-table"></table></div>',
             '<datalist id="setp-rep-niveles">' + NIVELES.map(function (n) { return '<option value="' + n + '">'; }).join('') + '</datalist>'
         ].join('');
     }
@@ -1608,10 +1616,14 @@
             '<td>' + repUbiHtml(h) + '</td>' +
             '<td class="setp-rep-desc">' + repDescHtml(h) + '</td>' +
             '<td class="setp-rep-area">' + repAreaHtml(h) + '</td><td>' + repThumb(h.evidencia_url) + '</td>' +
-            '<td><span class="badge ' + (solved ? 'setp-rep-ok"><i class="fas fa-check-circle me-1"></i>Solucionado' : 'setp-rep-pend"><i class="fas fa-exclamation-circle me-1"></i>Pendiente') + '</span>' + confirmadoHtml(h) + '</td>' +
-            '<td class="text-nowrap">' + (solved ? fmtDate(h.fecha_solucion) : '—') + '</td>' +
-            '<td>' + (solved ? repThumb(h.evidencia_solucion_url) : '—') + '</td>' +
+            '<td><span class="badge ' + (solved ? 'setp-rep-ok"><i class="fas fa-check-circle me-1"></i>Solucionado' : 'setp-rep-pend"><i class="fas fa-exclamation-circle me-1"></i>Pendiente') + '</span>' + confirmadoHtml(h) + (solved ? repSolHtml(h) : '') + '</td>' +
             '<td class="text-end text-nowrap">' + actions + '</td></tr>';
+    }
+
+    // Fecha y foto de la solución, debajo del estatus (antes eran dos columnas).
+    function repSolHtml(h) {
+        return '<div class="setp-rep-sol-info"><span><i class="far fa-calendar-check me-1"></i>' + fmtDate(h.fecha_solucion) + '</span>' +
+            (h.evidencia_solucion_url ? repThumb(h.evidencia_solucion_url) : '') + '</div>';
     }
 
     // Captura con etiquetas en el renglón de edición: Etiqueta, Item, Condición,
@@ -1720,9 +1732,11 @@
             '<td class="setp-rep-desc">' + repCapturaHtml(h) + '</td>' +
             '<td class="setp-rep-area">' + repAreaEditHtml(h, h && h.etiqueta, h && h.item) + '</td>' +
             '<td>' + repPhotoInput('evidencia', h && h.evidencia_url, false, 'Evidencia fotográfica') + '</td>' +
-            '<td><select class="form-select form-select-sm" data-f="estatus" aria-label="Estatus"><option value="PENDIENTE">Pendiente</option><option value="SOLUCIONADO"' + (solved ? ' selected' : '') + '>Solucionado</option></select></td>' +
-            '<td><input type="date" class="form-control form-control-sm" data-f="fsol" value="' + esc(fsol) + '"' + (kind === 'solucionados' ? limits(r) : '') + (solved ? '' : ' disabled') + ' aria-label="Fecha de solución"></td>' +
-            '<td>' + repPhotoInput('solucion', h && h.evidencia_solucion_url, !solved, 'Evidencia fotográfica solucionada') + '</td>' +
+            '<td><select class="form-select form-select-sm" data-f="estatus" aria-label="Estatus"><option value="PENDIENTE">Pendiente</option><option value="SOLUCIONADO"' + (solved ? ' selected' : '') + '>Solucionado</option></select>' +
+            // Fecha y foto de la solución: sólo con estatus Solucionado.
+            '<div class="setp-rep-sol' + (solved ? '' : ' d-none') + '">' +
+            '<input type="date" class="form-control form-control-sm" data-f="fsol" value="' + esc(fsol) + '"' + (kind === 'solucionados' ? limits(r) : '') + (solved ? '' : ' disabled') + ' aria-label="Fecha de solución" title="Fecha de solución">' +
+            repPhotoInput('solucion', h && h.evidencia_solucion_url, !solved, 'Evidencia fotográfica solucionada') + '</div></td>' +
             '<td class="text-end text-nowrap"><div class="btn-group btn-group-sm">' +
             '<button type="button" class="btn btn-primary" data-rep="save" title="Guardar"><i class="fas fa-save"></i></button>' +
             '<button type="button" class="btn btn-outline-secondary" data-rep="cancel" title="Cancelar"><i class="fas fa-times"></i></button></div></td></tr>';
@@ -1769,7 +1783,7 @@
             (state.porSupervisor && no ? ' · Detectados de <b>' + esc(nombreSupervisor(no)) + '</b> que aún no salen en un formato' : '') +
             (state.store === 'local' ? '<span class="setp-rep-local" title="Las tablas de Supabase (db/create_setp_formatos.sql) aún no están disponibles"><i class="fas fa-laptop me-1"></i>Guardado en este navegador</span>' : '');
         rep.el.querySelector('[data-rep="add"]').classList.toggle('d-none', !canEdit());        var table = $('setp-rep-table');
-        var thead = '<thead><tr><th>' + (state.identificacion ? 'No. / Folio' : 'No.') + '</th><th>Fecha de reporte</th><th>Ubicación de incidencia</th><th>Descripción de incidencia</th><th>Área responsable</th><th>Evidencia fotográfica</th><th>Estatus</th><th>Fecha de solución</th><th>Evidencia solucionada</th><th></th></tr></thead>';
+        var thead = '<thead><tr><th>' + (state.identificacion ? 'No. / Folio' : 'No.') + '</th><th>Fecha de reporte</th><th>Ubicación de incidencia</th><th>Descripción de incidencia</th><th>Área responsable</th><th>Evidencia fotográfica</th><th>Estatus</th><th></th></tr></thead>';
         var byId = {};
         state.hallazgos.forEach(function (h) { byId[h.id] = h; });
         var s = seccionesDe(rango);
@@ -2281,6 +2295,8 @@
                 var row = t.closest('tr');
                 var on = t.value === 'SOLUCIONADO';
                 var fsol = row.querySelector('[data-f="fsol"]');
+                var solBox = row.querySelector('.setp-rep-sol');
+                if (solBox) solBox.classList.toggle('d-none', !on);
                 fsol.disabled = !on;
                 if (on && !fsol.value) fsol.value = todayIso();
                 var file = row.querySelector('[data-file="solucion"]');
@@ -2416,6 +2432,8 @@
                 bootstrap.Modal.getOrCreateInstance($(GUARDADOS_ID)).hide();
             } else if (act === 'eliminar') {
                 eliminarGuardado(btn, btn.getAttribute('data-kind'), id, btn.getAttribute('data-label'));
+            } else if (act === 'ver' || act === 'rep-ver') {
+                verGuardado(btn, act === 'rep-ver' ? 'reporte' : 'formato', id, btn.getAttribute('data-label'));
             } else if (act === 'pdf' || act === 'word' || act === 'rep-pdf' || act === 'rep-word') {
                 btn.disabled = true;
                 var esRep = act.indexOf('rep-') === 0;
@@ -2523,6 +2541,7 @@
             var ym = String(o.periodo).slice(0, 7);
             return '<li><div class="setp-g-main"><div class="setp-g-name">' + esc(o.numero) + '</div>' +
                 '<div class="setp-g-sub">Periodo ' + MONTH_ABBR[Number(ym.slice(5, 7)) - 1] + ' ' + ym.slice(0, 4) + ' · Oficio del ' + fmtDate(o.fecha_oficio) + '</div></div>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" data-g="ver" data-id="' + esc(o.id) + '" data-label="' + esc(o.numero) + '"><i class="fas fa-eye me-1"></i>Ver formato</button>' +
                 '<button type="button" class="btn btn-sm btn-outline-danger" data-g="pdf" data-id="' + esc(o.id) + '"><i class="fas fa-file-pdf me-1"></i>Imprimir / PDF</button>' +
                 '<button type="button" class="btn btn-sm btn-outline-primary" data-g="word" data-id="' + esc(o.id) + '"><i class="fas fa-file-word me-1"></i>Word</button>' +
                 delBtn('formato', o.id, o.numero) + '</li>';
@@ -2533,6 +2552,7 @@
             var hora = s.guardado_en ? new Date(s.guardado_en).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
             return '<li><div class="setp-g-main"><div class="setp-g-name">' + esc(grupoLabel(s.no_empleado, s.turno)) + '</div>' +
                 '<div class="setp-g-sub">Guardado el ' + fmtDate(s.fecha || o.fecha_oficio) + (hora ? ' · ' + esc(hora) + ' hrs' : '') + ' · ' + n + (n === 1 ? ' hallazgo' : ' hallazgos') + '</div></div>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" data-g="rep-ver" data-id="' + esc(o.id) + '" data-label="' + esc(grupoLabel(s.no_empleado, s.turno)) + '"><i class="fas fa-eye me-1"></i>Ver</button>' +
                 '<button type="button" class="btn btn-sm btn-outline-danger" data-g="rep-pdf" data-id="' + esc(o.id) + '"><i class="fas fa-file-pdf me-1"></i>Imprimir / PDF</button>' +
                 '<button type="button" class="btn btn-sm btn-outline-primary" data-g="rep-word" data-id="' + esc(o.id) + '"><i class="fas fa-file-word me-1"></i>Word</button>' +
                 delBtn('reporte', o.id, grupoLabel(s.no_empleado, s.turno) + ' · ' + fmtDate(s.fecha || o.fecha_oficio) + (hora ? ' ' + hora : '')) + '</li>';
@@ -2566,16 +2586,107 @@
 
     // win: ventana de impresión abierta en el clic (si no, el navegador la bloquea tras la espera).
     async function downloadSaved(id, format, win) {
+        var g = await oficioGuardado(id);
+        if (format === 'word') downloadWord(g.datos, g.secciones);
+        else printDocument(buildDocument(g.datos, g.secciones, 'print'), win);
+    }
+
+    // Datos y secciones de un oficio guardado, con el estatus actual de cada hallazgo (seguimiento).
+    async function oficioGuardado(id) {
         var o = await getOficio(id);
         var datos = o.datos || {};
         var secciones = o.secciones || { periodo: String(o.periodo).slice(0, 7), detectados: [], solucionados: [], pendientes: [] };
-        // Se imprime con el estatus actual de cada hallazgo (seguimiento).
         try {
             await loadHallazgos();
             if (state.store === 'db') secciones = seccionesActuales(secciones, String(o.periodo).slice(0, 7));
-        } catch (_) { /* sin conexión: se imprime como se guardó */ }
-        if (format === 'word') downloadWord(datos, secciones);
-        else printDocument(buildDocument(datos, secciones, 'print'), win);
+        } catch (_) { /* sin conexión: se muestra como se guardó */ }
+        return { datos: datos, secciones: secciones };
+    }
+
+    // ---------- Ver formato ----------
+    // "Ver formato" / "Ver" de Formatos guardados: muestra el documento tal como
+    // se imprime (con el estatus actual), sin abrir la impresión. Al cerrar se
+    // regresa a Formatos guardados.
+    const VER_ID = 'setp-ver-modal';
+
+    function ensureVer() {
+        if ($(VER_ID)) return;
+        var wrap = document.createElement('div');
+        wrap.innerHTML = [
+            '<div class="modal fade" id="' + VER_ID + '" tabindex="-1" aria-labelledby="setp-ver-title" aria-hidden="true">',
+            ' <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-md-down">',
+            '  <div class="modal-content">',
+            '   <div class="modal-header gap-2">',
+            '    <h5 class="modal-title fw-bold me-auto" id="setp-ver-title"></h5>',
+            '    <button type="button" class="btn btn-sm btn-outline-danger" data-ver="pdf"><i class="fas fa-file-pdf me-1"></i>Imprimir / PDF</button>',
+            '    <button type="button" class="btn btn-sm btn-outline-primary" data-ver="word"><i class="fas fa-file-word me-1"></i>Word</button>',
+            '    <button type="button" class="btn-close ms-1" data-bs-dismiss="modal" aria-label="Cerrar"></button>',
+            '   </div>',
+            '   <div class="modal-body p-2"><iframe id="setp-ver-frame" class="setp-ver-frame" title="Vista del formato"></iframe></div>',
+            '  </div>',
+            ' </div>',
+            '</div>'
+        ].join('');
+        document.body.appendChild(wrap.firstChild);
+        var style = document.createElement('style');
+        style.textContent = '#' + VER_ID + ' .setp-ver-frame{width:100%;height:78vh;border:1px solid #cbd5e1;border-radius:10px;background:#e5e7eb;display:block;}' +
+            '@media (max-width:767.98px){#' + VER_ID + ' .setp-ver-frame{height:calc(100vh - 90px);}}' +
+            'body.dark-mode #' + VER_ID + ' .setp-ver-frame{border-color:var(--border-color);}';
+        document.head.appendChild(style);
+        // Imprimir / PDF y Word del documento que se está viendo.
+        $(VER_ID).addEventListener('click', function (e) {
+            var b = e.target.closest('[data-ver]');
+            var modal = $(VER_ID);
+            if (!b || b.disabled || !modal.dataset.id) return;
+            var formato = b.getAttribute('data-ver');
+            var win = formato === 'pdf' ? window.open('', '_blank') : null;
+            if (win) win.document.write('<p style="font-family:Arial,sans-serif;padding:24px;color:#475569">Preparando el formato…</p>');
+            b.disabled = true;
+            (modal.dataset.kind === 'reporte' ? descargarReporte(modal.dataset.id, formato, win) : downloadSaved(modal.dataset.id, formato, win))
+                .catch(function (error) { if (win && !win.closed) win.close(); alert('No se pudo abrir el formato: ' + (error && error.message ? error.message : error)); })
+                .finally(function () { b.disabled = false; });
+        });
+        // Al cerrar, de vuelta a Formatos guardados.
+        $(VER_ID).addEventListener('hidden.bs.modal', function () {
+            $('setp-ver-frame').srcdoc = '';
+            if ($(GUARDADOS_ID)) bootstrap.Modal.getOrCreateInstance($(GUARDADOS_ID)).show();
+        });
+    }
+
+    // kind: 'formato' (oficio con No.) | 'reporte' (reporte de hallazgos por usuario y turno).
+    async function verGuardado(btn, kind, id, label) {
+        btn.disabled = true;
+        var html;
+        try {
+            if (kind === 'reporte') {
+                var o = await getOficio(id);
+                try { await loadHallazgos(); } catch (_) { /* se muestra como se guardó */ }
+                // En pantalla, la hoja con margen (al imprimir se usa @page).
+                html = buildReporteDoc(o, 'print').replace('</style>', '@media screen{html{background:#e5e7eb;}body{max-width:27.94cm;margin:16px auto;padding:1.4cm;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.18);box-sizing:border-box;}}</style>');
+            } else {
+                var g = await oficioGuardado(id);
+                html = buildDocument(g.datos, g.secciones, 'screen');
+            }
+        } catch (error) {
+            guardadosStatus('No se pudo abrir el formato: ' + esc(error && error.message ? error.message : error), 'danger');
+            btn.disabled = false;
+            return;
+        }
+        btn.disabled = false;
+        ensureVer();
+        var modal = $(VER_ID);
+        modal.dataset.id = id;
+        modal.dataset.kind = kind;
+        $('setp-ver-title').innerHTML = '<i class="fas fa-eye me-2 text-primary"></i>' + esc(label || 'Formato');
+        $('setp-ver-frame').srcdoc = html;
+        // Se abre cuando Formatos guardados termina de cerrarse (no se encimen).
+        var g2 = $(GUARDADOS_ID);
+        if (g2 && g2.classList.contains('show')) {
+            g2.addEventListener('hidden.bs.modal', function () { bootstrap.Modal.getOrCreateInstance(modal).show(); }, { once: true });
+            bootstrap.Modal.getOrCreateInstance(g2).hide();
+        } else {
+            bootstrap.Modal.getOrCreateInstance(modal).show();
+        }
     }
 
     // El reporte muestra sólo los del supervisor que inició sesión.
