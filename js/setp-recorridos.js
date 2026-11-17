@@ -501,7 +501,13 @@
             // Además, los recorridos de HOY de todos los supervisores se ven siempre
             // (aunque se elija a otro o ya estén en un formato), sólo para consultar.
             var hoy = fechaLocal();
-            var visibles = state.recorridos.filter(function (r) { return propio(r) || fechaLocal(r.registrado_en) === hoy; });
+            // Al terminar, el recorrido sale de esta tabla: queda en "Detalle de
+            // registros" (historial). Sólo se queda mientras tenga una captura
+            // sin guardar o una operación en marcha, para no perderla.
+            var visibles = state.recorridos.filter(function (r) {
+                return (propio(r) || fechaLocal(r.registrado_en) === hoy) &&
+                    (!r.hora_termino || state.pending[r.id] || state.busy[r.id]);
+            });
             if (state.error) {
                 body += hint(state.error);
             } else if (!s) {
@@ -510,7 +516,7 @@
                 body += nuevoRow(s);
             }
             body += visibles.map(function (r) { return recorridoRow(r, !propio(r)); }).join('');
-            if (!visibles.length && s && !canEdit()) body += hint('Sin recorridos registrados.');
+            if (!visibles.length && s && !canEdit()) body += hint('Sin recorridos en curso. Los terminados están en <b>Detalle de registros</b>.');
         }
         state.el.innerHTML = '<div id="setp-rec-status" class="' + statusClass() + '">' + (state.status ? state.status.message : '') + '</div>' +
             '<div class="table-responsive"><table class="table table-sm mb-0 setp-table setp-rec-table" id="setp-recorridos">' +
@@ -579,12 +585,13 @@
             var ok = await confirmarBorrado(document, {
                 tono: 'ok', kicker: 'Recorrido en curso', titulo: '¿Finalizar el recorrido?',
                 filas: [['Área de recorrido', curso.area_recorrido || '—'], ['Inicio', hhmm(curso.hora_inicio) + ' hrs']],
-                aviso: 'La hora de término la pone el sistema al confirmar. Después agrega la evidencia en el renglón del recorrido.',
+                aviso: 'La hora de término la pone el sistema al confirmar. El recorrido sale de esta tabla y queda en Detalle de registros.',
                 boton: 'Finalizar'
             });
             if (!ok) return;
             await finalizar(curso.id);
-            var ev = wrap.querySelector('[data-id="' + curso.id + '"][data-rec^="evidencia"]');
+            // Si quedó en la tabla (captura sin guardar), se lleva a su renglón.
+            var ev = wrap.querySelector('[data-id="' + curso.id + '"]');
             ver(ev ? ev.closest('tr') : null);
             return;
         }
@@ -661,7 +668,7 @@
             if (fmt && fmt.guardarBorrador) {
                 try {
                     await fmt.guardarBorrador(res.data);
-                    setStatus('Recorrido finalizado. Su formato quedó guardado en <b>Formatos guardados</b> para generarlo e imprimirlo al final del día.', 'success');
+                    setStatus('Recorrido finalizado: pasó a <b>Detalle de registros</b> y su formato quedó guardado en <b>Formatos guardados</b> para generarlo e imprimirlo al final del día.', 'success');
                 } catch (e) {
                     setStatus('Recorrido finalizado, pero su formato no se pudo guardar en <b>Formatos guardados</b>: ' + errText(e), 'warning');
                 }
@@ -1413,8 +1420,10 @@
                 p.area = '';
                 state.areaElegir = false;
                 pintarCaptura();
-                // Etiqueta "Otro": al elegir el item se pasa a escribir la descripción.
-                if (p.etiqueta === 'OTRO' && p.item) $('setp-desc-text').focus();
+                // Etiqueta "Otro" o item "Otro" de cualquier etiqueta: al elegirlo
+                // se pasa a escribir la descripción (la casilla sale bajo el item).
+                var catI = catalogo();
+                if (p.item && (p.etiqueta === 'OTRO' || (catI && p.item === catI.OTRO))) $('setp-desc-text').focus();
             } else if ((b = e.target.closest('[data-area-cambiar]'))) {
                 state.areaElegir = !state.areaElegir;
                 pintarArea();
@@ -1532,11 +1541,12 @@
         }
         // Con item "Otro" el detalle es obligatorio (es la descripción).
         var otro = p.item === cat.OTRO;
-        // Etiqueta "Otro": la casilla de descripción sube justo debajo del item
-        // y sale hasta elegirlo; en las demás etiquetas va al final, como siempre.
+        // Etiqueta "Otro" o item "Otro" de cualquier etiqueta: la casilla de
+        // descripción sube justo debajo del item (con la etiqueta "Otro", sale
+        // hasta elegir el item); en lo demás va al final, como siempre.
         var etqOtro = p.etiqueta === 'OTRO';
         var caja = $('setp-desc-text-wrap');
-        if (etqOtro) { if (caja.parentNode !== $('setp-desc-otro-slot')) $('setp-desc-otro-slot').appendChild(caja); }
+        if (etqOtro || otro) { if (caja.parentNode !== $('setp-desc-otro-slot')) $('setp-desc-otro-slot').appendChild(caja); }
         else if (caja.previousElementSibling !== $('setp-desc-text-home')) $('setp-desc-text-home').after(caja);
         caja.hidden = etqOtro && !p.item;
         $('setp-desc-text-lbl').innerHTML = etqOtro ? 'Descripción *' : (otro ? 'Describe el elemento *' : 'Detalle <span class="fw-normal text-muted">(opcional)</span>');
