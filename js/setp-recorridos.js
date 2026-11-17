@@ -833,7 +833,7 @@
         var previa = state.pending[id];
         var captura = {};
         if (previa && previa.extra === !!extra) {
-            ['descripcion', 'etiqueta', 'item', 'condicion', 'cantidad', 'area', 'modulo', 'local', 'detalle', 'mismoQue'].forEach(function (k) { captura[k] = previa[k]; });
+            ['descripcion', 'etiqueta', 'item', 'condicion', 'cantidad', 'area', 'modulo', 'local', 'localOtro', 'detalle', 'mismoQue'].forEach(function (k) { captura[k] = previa[k]; });
         }
         soltarPendiente(id);
         state.pending[id] = Object.assign(captura, { file: file, blob: blob, esFoto: esFoto, extra: !!extra, url: esFoto ? URL.createObjectURL(blob) : '' });
@@ -1336,6 +1336,7 @@
             M + ' .sd-loc{font:inherit;font-size:.78rem;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;}',
             M + ' .sd-loc:hover{background:#f1f5f9;}',
             M + ' .sd-loc[aria-checked="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}',
+            M + ' .sd-loc-otro{border-style:dashed;}',
             M + ' .sd-mod-vacio{font-size:.82rem;color:#64748b;padding:10px;text-align:center;}',
             M + ' :is(.sd-chip,.sd-cond button,.sd-loc,.sd-mod-item,.sd-cant button):focus-visible{outline:3px solid rgba(37,99,235,.45);outline-offset:1px;}',
             '@media (pointer:coarse){' + M + ' .sd-loc,' + M + ' .sd-cond button{min-height:40px;padding:6px 12px;}' + M + ' .sd-mod-item,' + M + ' .sd-chip{min-height:40px;}' + M + ' .sd-cant button{width:44px;height:40px;}}',
@@ -1387,7 +1388,10 @@
             paso(5, 'Módulo *', '', 'setp-desc-mod-lbl').replace('</div>', '<span class="h" id="setp-desc-mod-nivel"></span></div>') +
             '<ul class="sd-mod-lista" id="setp-desc-mod" role="radiogroup" aria-labelledby="setp-desc-mod-lbl"></ul>' +
             '<div id="setp-desc-loc-wrap" hidden>' + paso(6, 'Local *', '', 'setp-desc-loc-lbl').replace('</div>', '<span class="h" id="setp-desc-loc-mod"></span></div>') +
-            '<div class="sd-loc-lista" id="setp-desc-loc" role="radiogroup" aria-labelledby="setp-desc-loc-lbl"></div></div>' +
+            '<div class="sd-loc-lista" id="setp-desc-loc" role="radiogroup" aria-labelledby="setp-desc-loc-lbl"></div>' +
+            // "Otro lugar": quioscos, bancas o puntos que no son un local del catálogo.
+            '<div id="setp-desc-loc-otro-wrap" hidden><input type="text" id="setp-desc-loc-otro" class="form-control mt-2" maxlength="120" autocomplete="off"' +
+            ' placeholder="Especifica el lugar (ej. Banca a un costado de las cajas de BANAMEX)" aria-label="Otro lugar"></div></div>' +
             '<div class="sd-resumen d-none" id="setp-desc-resumen"></div>' +
             '<div id="setp-desc-text-home" hidden></div>' +
             '<div id="setp-desc-text-wrap">' +
@@ -1449,10 +1453,18 @@
                 // Tocar el módulo elegido lo quita; al cambiar de módulo se limpia el local.
                 p.modulo = p.modulo === nombre ? '' : nombre;
                 p.local = '';
+                p.localOtro = false;
                 pintarCaptura();
+            } else if ((b = e.target.closest('[data-local-otro]'))) {
+                // "Otro lugar": el lugar se escribe en la casilla de abajo.
+                p.localOtro = !p.localOtro;
+                p.local = p.localOtro ? String($('setp-desc-loc-otro').value || '').trim().replace(/\s+/g, ' ') : '';
+                pintarCaptura();
+                if (p.localOtro) $('setp-desc-loc-otro').focus();
             } else if ((b = e.target.closest('[data-local]'))) {
                 var loc = b.getAttribute('data-local');
-                p.local = p.local === loc ? '' : loc;
+                p.local = p.local === loc && !p.localOtro ? '' : loc;
+                p.localOtro = false;
                 pintarCaptura();
             } else if ((b = e.target.closest('[data-dup-mismo]'))) {
                 p.mismoQue = { id: b.getAttribute('data-dup-mismo'), folio: b.getAttribute('data-dup-folio') || '' };
@@ -1469,7 +1481,7 @@
             else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); guardarDescripcion(); }
             else if (e.key === 'Tab') {
                 // El foco se queda dentro de la ventana.
-                var f = Array.prototype.filter.call(modal.querySelectorAll('button, textarea'), function (x) { return x.offsetParent !== null; });
+                var f = Array.prototype.filter.call(modal.querySelectorAll('button, textarea, input'), function (x) { return x.offsetParent !== null; });
                 var first = f[0], last = f[f.length - 1];
                 if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
                 else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
@@ -1479,6 +1491,16 @@
             var p = state.descFor && state.pending[state.descFor];
             if (p) p.detalle = e.target.value;
             $('setp-desc-n').textContent = e.target.value.length;
+            pintarResumen();
+        });
+        // Enter en "Otro lugar" no guarda la captura (se sigue con lo demás).
+        $('setp-desc-loc-otro').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) e.preventDefault(); });
+        $('setp-desc-loc-otro').addEventListener('input', function (e) {
+            var p = state.descFor && state.pending[state.descFor];
+            if (!p || !p.localOtro) return;
+            p.local = e.target.value.trim().replace(/\s+/g, ' ');
+            if (p.local) descAviso('');
+            $('setp-desc-area').textContent = ubicacionTexto(state.recorridos.find(function (x) { return x.id === state.descFor; }), p);
             pintarResumen();
         });
         $('setp-desc-form').addEventListener('submit', function (e) { e.preventDefault(); guardarDescripcion(); });
@@ -1536,9 +1558,12 @@
         if (elegido) {
             $('setp-desc-loc-mod').textContent = '· ' + elegido.nombre;
             $('setp-desc-loc').innerHTML = elegido.locales.map(function (l) {
-                return '<button type="button" class="sd-loc" data-local="' + esc(l) + '"' + radio(p.local === l) + '>' + esc(l) + '</button>';
-            }).join('');
+                return '<button type="button" class="sd-loc" data-local="' + esc(l) + '"' + radio(!p.localOtro && p.local === l) + '>' + esc(l) + '</button>';
+            }).join('') +
+                '<button type="button" class="sd-loc sd-loc-otro" data-local-otro' + radio(p.localOtro) + '><i class="fas fa-location-dot me-1"></i>Otro lugar</button>';
         }
+        $('setp-desc-loc-otro-wrap').hidden = !(elegido && p.localOtro);
+        if (elegido && p.localOtro && $('setp-desc-loc-otro').value.trim() !== (p.local || '')) $('setp-desc-loc-otro').value = p.local || '';
         // Con item "Otro" el detalle es obligatorio (es la descripción).
         var otro = p.item === cat.OTRO;
         // Etiqueta "Otro" o item "Otro" de cualquier etiqueta: la casilla de
@@ -1637,6 +1662,7 @@
         $('setp-desc-foto').src = p.url;
         $('setp-desc-fecha').textContent = (fecha(r.registrado_en) || '—') + ' · ' + hhmm(r.hora_inicio) + ' hrs' + (p.extra ? ' · evidencia adicional' : '');
         $('setp-desc-text').value = p.detalle || '';
+        $('setp-desc-loc-otro').value = p.localOtro ? (p.local || '') : '';
         $('setp-desc-n').textContent = String((p.detalle || '').length);
         descAviso(aviso || '', 'info');
         vistaDuplicados(false);
@@ -1674,7 +1700,7 @@
         else if (!p.item) f.push(['item', '#setp-desc-item']);
         if (p.etiqueta && !p.condicion) f.push(['condición', '#setp-desc-cond']);
         if (!p.modulo) f.push(['módulo', '#setp-desc-mod']);
-        else if (!p.local) f.push(['local', '#setp-desc-loc']);
+        else if (!p.local) f.push(p.localOtro ? ['el lugar (Otro lugar)', '#setp-desc-loc-otro'] : ['local', '#setp-desc-loc']);
         if (cat && p.item === cat.OTRO && !String(p.detalle || '').trim()) f.push([p.etiqueta === 'OTRO' ? 'descripción' : 'descripción del elemento', '#setp-desc-text']);
         return f;
     }
@@ -1758,7 +1784,7 @@
         if (falta.length) {
             descAviso('Falta elegir: <b>' + falta.map(function (f) { return f[0]; }).join(', ') + '</b>.');
             var el = document.querySelector('#' + DESC_ID + ' ' + falta[0][1]);
-            if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); var f = el.matches('textarea') ? el : el.querySelector('button'); if (f) f.focus({ preventScroll: true }); }
+            if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); var f = el.matches('textarea, input') ? el : el.querySelector('button'); if (f) f.focus({ preventScroll: true }); }
             return;
         }
         descAviso('');
@@ -2037,6 +2063,8 @@
         ' var w=window.open("","_blank");',
         ' if(!w){alert("El navegador bloqueó la ventana del informe. Permite las ventanas emergentes de este sitio.");return;}',
         ' var n=tr.getAttribute("data-num");',
+        // Con el aplicativo abierto, el informe sale con el formato del oficio.
+        ' if(window.__setpInforme){w.document.write("<p style=\\"font-family:Arial,sans-serif;padding:24px;color:#475569\\">Preparando el informe…</p>");window.__setpInforme(Number(n),w);return;}',
         ' var wrap=document.querySelector(".wrap").cloneNode(true);',
         ' wrap.querySelectorAll(".cards,#aviso").forEach(function(x){x.remove();});',
         ' wrap.querySelectorAll("tbody tr").forEach(function(x){if(x.getAttribute("data-num")!==n)x.remove();else{x.classList.add("imprimir");x.classList.remove("sel");x.removeAttribute("id");}});',
@@ -2209,10 +2237,46 @@
                     var r = recs.find(function (x) { return x.id === id; });
                     if (r) borrarDesdeHistorial(w, s, r, hallazgos[id]);
                 };
+                // "Ver informe" (n = No. de registro, desde 1): formato del oficio.
+                if (window.setpFormato && window.setpFormato.informeRegistro) {
+                    w.__setpInforme = function (n, win) { verInformeRegistro(win, s, recs[n - 1], hallazgos, n); };
+                }
             }
         } catch (error) {
             escribirVentana(w, historialDoc(s, null, null, errText(error)));
         }
+    }
+
+    // Informe de un registro con el formato del oficio (js/setp-formato.js):
+    // la tabla lleva los hallazgos detectados en ese recorrido. Arriba, sólo en
+    // pantalla, el botón Imprimir.
+    async function verInformeRegistro(win, s, r, hallazgos, n) {
+        if (!win || win.closed || !r) return;
+        var info = hallazgos[r.id] || { principal: null, extras: [] };
+        var hs = (info.principal ? [info.principal] : []).concat(info.extras);
+        var area = String(r.area_recorrido || '').trim();
+        var donde = /^\d+(\.\d+)?$/.test(area) ? 'en el nivel ' + area : (area ? 'en ' + area : '');
+        // Fecha como en el oficio: "17 Nov. 2026".
+        var MES = ['Ene.', 'Feb.', 'Mar.', 'Abr.', 'May.', 'Jun.', 'Jul.', 'Ago.', 'Sep.', 'Oct.', 'Nov.', 'Dic.'];
+        var f = fechaLocal(r.registrado_en).split('-');
+        var texto = 'durante el recorrido realizado el ' + f[2] + ' ' + MES[Number(f[1]) - 1] + ' ' + f[0] +
+            (r.hora_inicio ? ', de ' + hhmm(r.hora_inicio) + (r.hora_termino ? ' a ' + hhmm(r.hora_termino) : '') + ' hrs' : '') +
+            (donde ? ', ' + donde : '') + ', por ' + s.nombre;
+        var html;
+        try {
+            html = await window.setpFormato.informeRegistro({
+                recorridoId: r.id, fecha: fechaLocal(r.registrado_en), texto: texto, hallazgos: hs,
+                titulo: 'Informe · Registro #' + n + ' · ' + s.nombre
+            });
+        } catch (error) {
+            if (!win.closed) escribirVentana(win, '<p style="font-family:Arial,sans-serif;padding:24px;color:#b91c1c">No se pudo armar el informe: ' + errText(error) + '</p>');
+            return;
+        }
+        var barra = '<style>.setp-inf-barra{position:fixed;top:12px;right:16px;z-index:10;display:flex;gap:8px;}' +
+            '.setp-inf-barra button{font:600 14px system-ui,"Segoe UI",Arial,sans-serif;padding:8px 16px;border-radius:8px;border:1px solid #2a78d6;background:#2a78d6;color:#fff;cursor:pointer;}' +
+            '.setp-inf-barra button:hover{background:#1d63b8;}@media print{.setp-inf-barra{display:none !important;}}</style>' +
+            '<div class="setp-inf-barra"><button type="button" onclick="window.print()">&#128424; Imprimir / PDF</button></div>';
+        escribirVentana(win, html.replace('<body>', '<body>' + barra));
     }
 
     // Sólo superadmin: borra un registro de prueba desde el historial: el

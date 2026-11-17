@@ -78,8 +78,24 @@
         // id de hallazgo -> true si ya se guardó en un reporte ("Guardar reporte"):
         // sale de "Hallazgos detectados" (sigue en pendientes hasta su seguimiento).
         archivados: {},
+        // id de formato generado -> { id de hallazgo: true } de los hallazgos que
+        // salieron en él: dejan "Pendientes por solucionar" de la pantalla.
+        fmtHallazgos: {},
         modal: null
     };
+
+    // El hallazgo ya salió en un formato generado (como detectado o pendiente).
+    function yaEnFormato(h) {
+        if (h.oficio_id) return true;
+        return Object.keys(state.fmtHallazgos).some(function (k) { return state.fmtHallazgos[k][h.id]; });
+    }
+
+    // { id de hallazgo: true } de las secciones detectados y pendientes de un formato.
+    function idsDeSecciones(s) {
+        var m = {};
+        ((s && s.detectados) || []).concat((s && s.pendientes) || []).forEach(function (x) { if (x && x.id) m[x.id] = true; });
+        return m;
+    }
 
     // ---------- utilidades ----------
 
@@ -429,11 +445,14 @@
             return '<tr><td class="c-no">' + (i + 1) + '</td><td class="c-fecha">' + fmtDate(h[opts.fechaKey]) + '</td>' +
                 '<td class="c-ubic">' + ubicacionLines(h) + '</td><td class="c-desc">' + esc(h.descripcion) + '</td>' +
                 '<td class="c-foto">' + photoCell(h[opts.fotoKey] || (opts.fotoAlt ? h[opts.fotoAlt] : null)) + '</td></tr>';
-        }).join('') : '<tr><td colspan="5" class="vacio">Sin hallazgos en este periodo.</td></tr>';
+        }).join('') : '<tr><td colspan="5" class="vacio">' + (opts.vacio || 'Sin hallazgos en este periodo.') + '</td></tr>';
         return '<table class="hallazgos"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
     }
 
-    function buildDocument(datos, secciones, mode) {
+    // opts.registro: informe de un solo registro del historial (texto de "durante …"):
+    // mismo formato del oficio, sólo con la tabla de sus hallazgos detectados.
+    function buildDocument(datos, secciones, mode, opts) {
+        var registro = opts && opts.registro;
         var ym = secciones.periodo;
         var prevYm = prevMonth(ym);
         var logo = new URL('images/aifa-logo.png', document.baseURI).href;
@@ -478,17 +497,17 @@
             '<div class="encabezado"><div>' + esc(datos.area1) + '<br>' + esc(datos.area2) + '</div>',
             '<div class="der">' + esc(datos.lugar) + '<br>' + fmtOficioDate(datos.fecha_oficio) + '<br>No.: ' + esc(datos.numero) + '.</div></div>',
             '<div class="destinatario">' + esc(datos.destinatario) + '</div>',
-            '<p class="sangria">' + esc(datos.antecedente) + ', me permito informar a esa Superioridad, los hallazgos detectados en el Edificio Terminal de Pasajeros durante el periodo comprendido ' + periodText(ym) + ', como a continuación se indica:</p>',
-            tableHtml(secciones.detectados, { fechaLabel: 'FECHA DE REPORTE', fechaKey: 'fecha_reporte', fotoLabel: 'EVIDENCIA FOTOGRÁFICA', fotoKey: 'evidencia_url' }),
+            '<p class="sangria">' + esc(datos.antecedente) + ', me permito informar a esa Superioridad, los hallazgos detectados en el Edificio Terminal de Pasajeros ' + (registro ? esc(registro) : 'durante el periodo comprendido ' + periodText(ym)) + ', como a continuación se indica:</p>',
+            tableHtml(secciones.detectados, { fechaLabel: 'FECHA DE REPORTE', fechaKey: 'fecha_reporte', fotoLabel: 'EVIDENCIA FOTOGRÁFICA', fotoKey: 'evidencia_url', vacio: registro ? 'Sin hallazgos en este recorrido.' : '' }),
             '<p class="sangria">' + esc(datos.cierre) + '</p>',
-            '<p>Asimismo, me permito informar a esa Superioridad, los hallazgos del periodo comprendido ' + periodText(prevYm) + '; solucionados en el mes de ' + MONTH_NAMES[Number(ym.slice(5, 7)) - 1] + ', así como, los pendientes por solventar, como a continuación se indica:</p>',
-            tableHtml(secciones.solucionados, { title: 'HALLAZGOS SOLUCIONADOS.', fechaLabel: 'FECHA DE REPORTE SOLUCIONADO', fechaKey: 'fecha_solucion', fotoLabel: 'EVIDENCIA FOTOGRÁFICA SOLUCIONADA', fotoKey: 'evidencia_solucion_url', fotoAlt: 'evidencia_url' }),
-            tableHtml(secciones.pendientes, { title: 'HALLAZGOS PENDIENTES POR SOLUCIONAR.', fechaLabel: 'FECHA DE REPORTE', fechaKey: 'fecha_reporte', fotoLabel: 'EVIDENCIA FOTOGRÁFICA', fotoKey: 'evidencia_url' }),
+            registro ? '' : '<p>Asimismo, me permito informar a esa Superioridad, los hallazgos del periodo comprendido ' + periodText(prevYm) + '; solucionados en el mes de ' + MONTH_NAMES[Number(ym.slice(5, 7)) - 1] + ', así como, los pendientes por solventar, como a continuación se indica:</p>',
+            registro ? '' : tableHtml(secciones.solucionados, { title: 'HALLAZGOS SOLUCIONADOS.', fechaLabel: 'FECHA DE REPORTE SOLUCIONADO', fechaKey: 'fecha_solucion', fotoLabel: 'EVIDENCIA FOTOGRÁFICA SOLUCIONADA', fotoKey: 'evidencia_solucion_url', fotoAlt: 'evidencia_url' }),
+            registro ? '' : tableHtml(secciones.pendientes, { title: 'HALLAZGOS PENDIENTES POR SOLUCIONAR.', fechaLabel: 'FECHA DE REPORTE', fechaKey: 'fecha_reporte', fotoLabel: 'EVIDENCIA FOTOGRÁFICA', fotoKey: 'evidencia_url' }),
             '<div class="firma">' + esc(datos.despedida) + '<br>' + esc(datos.firmante_cargo) + '<div class="nombre">' + esc(datos.firmante_nombre) + '</div></div>',
             ccp.length ? '<div class="ccp">' + ccp.map(function (l) { return '<div><span>c.c.p.</span><span>' + esc(l) + '</span></div>'; }).join('') + '</div>' : '',
             datos.iniciales ? '<div class="iniciales">' + esc(datos.iniciales) + '</div>' : ''
         ].join('');
-        var title = 'Oficio ' + (datos.numero || '') + ' · Hallazgos ' + periodText(ym);
+        var title = registro && opts.titulo ? opts.titulo : 'Oficio ' + (datos.numero || '') + ' · Hallazgos ' + periodText(ym);
         if (mode === 'word') {
             // Word ignora flexbox: el membrete y el encabezado van en tablas sin borde.
             body = body
@@ -561,14 +580,17 @@
             var c4 = await sb.from(T_HALLAZGOS).select('area').limit(1);
             state.areaCol = !c4.error;
             // Hallazgos ya guardados en un reporte (Guardar reporte).
-            var arch = {};
-            var rr = await sb.from(T_OFICIOS).select('numero, secciones').like('numero', REPORTE + '%');
+            // Y los que ya salieron en un formato generado (dejan "Pendientes por solucionar").
+            var arch = {}, enFmt = {};
+            var rr = await sb.from(T_OFICIOS).select('id, numero, secciones');
             if (!rr.error) {
-                (rr.data || []).filter(esReporte).forEach(function (o) {
-                    ((o.secciones && o.secciones.hallazgos) || []).forEach(function (h) { arch[h.id] = true; });
+                (rr.data || []).forEach(function (o) {
+                    if (esReporte(o)) ((o.secciones && o.secciones.hallazgos) || []).forEach(function (h) { arch[h.id] = true; });
+                    else if (!esBorrador(o)) enFmt[o.id] = idsDeSecciones(o.secciones);
                 });
             }
             state.archivados = arch;
+            state.fmtHallazgos = enFmt;
         } catch (_) {
             state.hallazgos = readLocal();
             state.store = 'local';
@@ -1191,6 +1213,8 @@
             state.lastOficio = { numero: datos.numero, datos: datos };
             var msg = '<i class="fas fa-check-circle me-1"></i>Formato <b>' + esc(datos.numero) + '</b> guardado. Lo encuentras en <b>Formatos guardados</b>.';
             var oficioId = res.data.id;
+            // Sus hallazgos (detectados y pendientes) dejan "Pendientes por solucionar".
+            state.fmtHallazgos[oficioId] = idsDeSecciones(secciones);
             if (ids.length) {
                 // Los detectados del formato quedan ligados a él y salen del reporte del supervisor.
                 var up = await sb.from(T_HALLAZGOS).update({ oficio_id: oficioId }).in('id', ids).select('id');
@@ -1229,7 +1253,9 @@
             }
             // El filtro Supervisor se retiró: cada supervisor entra con su usuario,
             // así que ya no se limpia tras guardar el formato.
+            msg += ' <b>Hallazgos pendientes por solucionar</b> queda limpio: lo que salió en el formato ya no se muestra ahí.';
             renderLists();
+            if (rep.el) renderReport();
             setStatus(msg, 'success');
         } catch (error) {
             setStatus('No se pudo guardar el formato: ' + esc(error && error.message ? error.message : error), 'danger');
@@ -1689,8 +1715,33 @@
             if (on) esta = true;
             return '<option value="' + esc(l) + '"' + (on ? ' selected' : '') + '>' + esc(l) + '</option>';
         }).join('');
-        if (sel && !esta) html += '<option value="' + esc(sel) + '" selected>' + esc(sel) + '</option>';
+        // "Otro lugar": quioscos, bancas o puntos que no son un local del catálogo
+        // (ej. banca a un costado de las cajas de BANAMEX). Se escribe abajo.
+        if (m) html += '<option value="' + LOCAL_OTRO + '"' + (sel && !esta ? ' selected' : '') + '>Otro lugar (especificar)…</option>';
+        else if (sel && !esta) html += '<option value="' + esc(sel) + '" selected>' + esc(sel) + '</option>';
         return html;
+    }
+
+    const LOCAL_OTRO = '__otro';
+
+    // ¿El local guardado no está en el catálogo del módulo? (es un "Otro lugar").
+    function repLocalEsOtro(nivel, modulo, local) {
+        if (!local) return false;
+        var cat = catalogo();
+        var m = cat ? cat.modulos(nivel).find(function (x) { return x.nombre.toLowerCase() === String(modulo || '').toLowerCase(); }) : null;
+        return !!m && !m.locales.some(function (l) { return l.toUpperCase() === String(local).toUpperCase(); });
+    }
+
+    // Muestra la casilla "Otro lugar" sólo con esa opción elegida.
+    function repLocalOtroToggle(row) {
+        var loc = row && row.querySelector('[data-f="local"]');
+        var txt = row && row.querySelector('[data-f="local-otro"]');
+        if (!loc || !txt) return;
+        var on = loc.value === LOCAL_OTRO;
+        var antes = !txt.classList.contains('d-none');
+        txt.classList.toggle('d-none', !on);
+        if (!on) repCampoLleno(txt);
+        else if (!antes && document.activeElement === loc) txt.focus();
     }
 
     // Al cambiar el nivel se vuelven a ofrecer sus módulos; al cambiar el
@@ -1702,7 +1753,14 @@
         if (!mod || !loc || mod.tagName !== 'SELECT') return;
         var nivel = el('nivel') ? el('nivel').value.trim() : '';
         if (cambio === 'nivel') mod.innerHTML = repModuloOpciones(nivel, mod.value);
-        if (cambio === 'nivel' || cambio === 'modulo') loc.innerHTML = repLocalOpciones(nivel, mod.value, cambio === 'modulo' ? '' : loc.value);
+        if (cambio === 'nivel' || cambio === 'modulo') {
+            var otroTxt = el('local-otro');
+            // Al cambiar de nivel se conserva el "Otro lugar" escrito; al cambiar de módulo se limpia.
+            var actual = loc.value === LOCAL_OTRO ? (otroTxt ? otroTxt.value.trim() : '') : loc.value;
+            if (cambio === 'modulo' && otroTxt) otroTxt.value = '';
+            loc.innerHTML = repLocalOpciones(nivel, mod.value, cambio === 'modulo' ? '' : actual);
+        }
+        repLocalOtroToggle(row);
     }
 
     // Hallazgo nuevo en curso de captura: 'new:detectados' | 'new:solucionados' | 'new:pendientes'.
@@ -1728,7 +1786,9 @@
             '<td><input type="date" class="form-control form-control-sm" data-f="fecha" value="' + esc(fecha) + '"' + limits(kind === 'detectados' ? r : p) + ' aria-label="Fecha de reporte"></td>' +
             '<td><input type="text" class="form-control form-control-sm mb-1" data-f="nivel" list="setp-rep-niveles" placeholder="Nivel (10.50)" value="' + esc(h && h.nivel ? h.nivel : '') + '" aria-label="Nivel">' +
             '<select class="form-select form-select-sm mb-1" data-f="modulo" aria-label="Ubicación (módulo)">' + repModuloOpciones(h && h.nivel, h ? h.modulo : '') + '</select>' +
-            '<select class="form-select form-select-sm" data-f="local" aria-label="Local">' + repLocalOpciones(h && h.nivel, h ? h.modulo : '', h && h.local ? h.local : '') + '</select></td>' +
+            '<select class="form-select form-select-sm" data-f="local" aria-label="Local">' + repLocalOpciones(h && h.nivel, h ? h.modulo : '', h && h.local ? h.local : '') + '</select>' +
+            '<input type="text" class="form-control form-control-sm mt-1' + (h && repLocalEsOtro(h.nivel, h.modulo, h.local) ? '' : ' d-none') + '" data-f="local-otro" maxlength="120"' +
+            ' value="' + esc(h && repLocalEsOtro(h.nivel, h.modulo, h.local) ? h.local : '') + '" placeholder="Especifica el lugar (ej. Banca a un costado de las cajas de BANAMEX)" aria-label="Otro lugar"></td>' +
             '<td class="setp-rep-desc">' + repCapturaHtml(h) + '</td>' +
             '<td class="setp-rep-area">' + repAreaEditHtml(h, h && h.etiqueta, h && h.item) + '</td>' +
             '<td>' + repPhotoInput('evidencia', h && h.evidencia_url, false, 'Evidencia fotográfica') + '</td>' +
@@ -1787,6 +1847,12 @@
         var byId = {};
         state.hallazgos.forEach(function (h) { byId[h.id] = h; });
         var s = seccionesDe(rango);
+        // En pantalla: detectados, sólo los de hoy; pendientes, sólo los que aún
+        // no salen en un formato generado (los demás ya están en Formatos guardados).
+        // El oficio no cambia: su seguimiento sigue llevando todos los pendientes.
+        var hoy = todayIso();
+        s.detectados = s.detectados.filter(function (x) { return x.fecha_reporte === hoy || x.id === rep.editing; });
+        s.pendientes = s.pendientes.filter(function (x) { return x.id === rep.editing || !byId[x.id] || !yaEnFormato(byId[x.id]); });
         var todos = {};
         [s.detectados, s.solucionados, s.pendientes].forEach(function (l) { l.forEach(function (x) { if (byId[x.id]) todos[x.id] = byId[x.id]; }); });
         var listaTodos = Object.keys(todos).map(function (k) { return todos[k]; });
@@ -1801,9 +1867,9 @@
         };
         var full = function (list) { return list.map(function (x) { return byId[x.id]; }).filter(pasa); };
         table.innerHTML = thead +
-            repGroup('Hallazgos detectados', rangoText(rango), full(s.detectados), 'detectados') +
+            repGroup('Hallazgos detectados', 'de hoy, ' + fmtDate(hoy), full(s.detectados), 'detectados') +
             repGroup('Hallazgos solucionados', 'solucionados ' + rangoText(rango) + ', con evidencia y estatus confirmado', full(s.solucionados), 'solucionados') +
-            repGroup('Hallazgos pendientes por solucionar', 'de todos los supervisores, hasta que se les dé seguimiento', full(s.pendientes), 'pendientes');
+            repGroup('Hallazgos pendientes por solucionar', 'de todos los supervisores, que aún no salen en un formato generado', full(s.pendientes), 'pendientes');
     }
 
     // Barra "Etiquetas": Todas y las etiquetas que tienen hallazgos en el periodo.
@@ -1970,7 +2036,9 @@
         var cat = catalogo();
         var conCatalogo = !!(cat && row.querySelector('[data-f="etiqueta"]'));
         if (conCatalogo) {
-            v.local = get('local').toUpperCase();
+            // "Otro lugar": se guarda tal como se escribió (no es una clave de local).
+            v.local = get('local') === LOCAL_OTRO ? get('local-otro').replace(/\s+/g, ' ') : get('local').toUpperCase();
+            v.localOtro = get('local') === LOCAL_OTRO;
             v.etiqueta = get('etiqueta');
             v.item = get('item');
             v.condicion = get('condicion');
@@ -1983,6 +2051,7 @@
         var extra = '';
         if (!v.fecha) faltan.push('fecha');
         if (!v.modulo) faltan.push('modulo');
+        if (v.localOtro && !v.local) { faltan.push('local-otro'); extra = 'Con <b>Otro lugar</b>, escribe dónde está (ej. banca a un costado de las cajas de BANAMEX).'; }
         if (conCatalogo && v.etiqueta) {
             if (!v.item) faltan.push('item');
             if (!v.condicion) faltan.push('condicion');
@@ -2211,6 +2280,7 @@
         el.addEventListener('input', function (e) {
             if (e.target.value && e.target.value.trim()) repCampoLleno(e.target);
             if (e.target.matches('tr.setp-rep-edit [data-f="nivel"], tr.setp-rep-edit [data-f="modulo"]')) repSugerencias(e.target.closest('tr'), e.target.getAttribute('data-f'));
+            else if (e.target.matches('tr.setp-rep-edit [data-f="local"]')) repLocalOtroToggle(e.target.closest('tr'));
         });
         el.addEventListener('click', function (e) {
             var btn = e.target.closest('[data-rep]');
@@ -2477,6 +2547,9 @@
             var res = await sb.from(T_OFICIOS).delete().eq('id', id).select('id');
             if (res.error) throw res.error;
             if (!res.data || !res.data.length) throw new Error('Supabase no permitió eliminarlo (revisa los permisos de setp_oficios).');
+            // Sus hallazgos vuelven a "Pendientes por solucionar" (oficio_id queda en null).
+            delete state.fmtHallazgos[id];
+            state.hallazgos = state.hallazgos.map(function (h) { return h.oficio_id === id ? Object.assign({}, h, { oficio_id: null }) : h; });
             // Sus recorridos vuelven a la tabla (ya no están en un formato).
             if (kind === 'formato' && rec && rec.mount) {
                 var wrap = document.getElementById('setp-recorridos-wrap');
@@ -2603,6 +2676,40 @@
         return { datos: datos, secciones: secciones };
     }
 
+    // ---------- Informe de un registro del historial ----------
+    // o: { recorridoId, fecha: 'YYYY-MM-DD', texto: 'durante el recorrido …',
+    //      hallazgos: [{ id, … }], titulo }. Sale con el formato del oficio:
+    // membrete, encabezado, destinatario, la tabla de los hallazgos detectados
+    // en ese recorrido, firma y c.c.p. El No. es el del formato en el que salió
+    // el recorrido; si aún no sale en uno, queda "SSO/GOET/".
+    async function informeRegistro(o) {
+        var sb = null;
+        try { sb = await getClient(); } catch (_) { /* sin conexión */ }
+        try { if (!state.lastOficio) await loadLastOficio(); } catch (_) { /* datos por omisión */ }
+        try { if (!state.hallazgos.length) await loadHallazgos(); } catch (_) { /* como vienen del historial */ }
+        var numero = '';
+        if (sb && o.recorridoId) {
+            try {
+                var l = await sb.from('setp_oficio_recorridos').select('oficio_id').eq('recorrido_id', o.recorridoId);
+                var ids = (l.data || []).map(function (x) { return x.oficio_id; });
+                if (!l.error && ids.length) {
+                    var of = await sb.from(T_OFICIOS).select('numero, created_at').in('id', ids);
+                    var lista = (of.data || []).filter(function (x) { return !esBorrador(x); })
+                        .sort(function (a, b) { return String(b.created_at).localeCompare(String(a.created_at)); });
+                    if (!of.error && lista.length) numero = lista[0].numero;
+                }
+            } catch (_) { /* sin No. de oficio */ }
+        }
+        var byId = {};
+        state.hallazgos.forEach(function (h) { byId[h.id] = h; });
+        var rows = (o.hallazgos || []).map(function (x) { return pickHallazgo(byId[x.id] || x); });
+        var datos = Object.assign({}, DEFAULT_DATOS, state.lastOficio && state.lastOficio.datos ? state.lastOficio.datos : {});
+        datos.numero = numero || DEFAULT_DATOS.numero;
+        datos.fecha_oficio = o.fecha;
+        var secciones = { periodo: String(o.fecha).slice(0, 7), detectados: rows, solucionados: [], pendientes: [] };
+        return buildDocument(datos, secciones, 'screen', { registro: o.texto, titulo: o.titulo });
+    }
+
     // ---------- Ver formato ----------
     // "Ver formato" / "Ver" de Formatos guardados: muestra el documento tal como
     // se imprime (con el estatus actual), sin abrir la impresión. Al cerrar se
@@ -2725,6 +2832,8 @@
         guardarBorrador: guardarBorrador,
         abrirGuardados: abrirGuardados,
         // expuesto para pruebas
+        // "Ver informe" del historial (js/setp-recorridos.js): documento con el formato del oficio.
+        informeRegistro: informeRegistro,
         _computeSections: computeSections,
         _buildDocument: buildDocument
     };
