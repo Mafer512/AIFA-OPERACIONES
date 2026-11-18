@@ -33,12 +33,15 @@
     ]);
 
     // En el orden en que avanza una tarea. "cancelada" queda al final y fuera
-    // de los conteos de pendientes.
+    // de los conteos de pendientes. "por_validar": quien la hizo la entregó y
+    // falta que el Director (admin de Seguimiento) la valide para darla por
+    // terminada (db/seguimiento_validacion.sql).
     const ESTATUS = Object.freeze([
         { clave: 'pendiente',   nombre: 'Pendiente',   color: '#64748b', icono: 'circle' },
         { clave: 'en_proceso',  nombre: 'En proceso',  color: '#2563eb', icono: 'circle-half-stroke' },
         { clave: 'en_revision', nombre: 'En revisión', color: '#9333ea', icono: 'magnifying-glass' },
         { clave: 'detenida',    nombre: 'Detenida',    color: '#ea580c', icono: 'circle-pause' },
+        { clave: 'por_validar', nombre: 'Por validar', color: '#0891b2', icono: 'stamp' },
         { clave: 'completada',  nombre: 'Completada',  color: '#16a34a', icono: 'circle-check' },
         { clave: 'cancelada',   nombre: 'Cancelada',   color: '#94a3b8', icono: 'circle-xmark' },
     ]);
@@ -58,8 +61,13 @@
         { clave: 'tarea',       nombre: 'Tarea',                 icono: 'square-check' },
     ]);
 
+    // Las de días (diaria, de lunes a viernes, semanal) son para las rutinas de
+    // Diarias; las de meses, para renovaciones y certificados.
     const RECURRENCIAS = Object.freeze([
         { clave: 'ninguna',    nombre: 'No se repite', meses: 0 },
+        { clave: 'diaria',     nombre: 'Cada día',        meses: 0, dias: 1 },
+        { clave: 'laborable',  nombre: 'Lunes a viernes', meses: 0, dias: 1, laborable: true },
+        { clave: 'semanal',    nombre: 'Cada semana',     meses: 0, dias: 7 },
         { clave: 'mensual',    nombre: 'Cada mes',     meses: 1 },
         { clave: 'bimestral',  nombre: 'Cada 2 meses', meses: 2 },
         { clave: 'trimestral', nombre: 'Cada 3 meses', meses: 3 },
@@ -71,6 +79,15 @@
     // en recurrencia_meses. No va en RECURRENCIAS porque no es una opción fija.
     const PERSONALIZADA = 'personalizada';
     const MAX_MESES = 240;
+
+    /* Dos espacios: Diarias (el día a día y las rutinas) y Agenda (lo que tiene
+       fecha y seguimiento formal: órdenes, compromisos, renovaciones). Lo que no
+       trae espacio es de Agenda. */
+    const CLASES = Object.freeze([
+        { clave: 'diaria', nombre: 'Diarias', icono: 'sun', ayuda: 'El día a día: pendientes cortos y rutinas que se repiten.' },
+        { clave: 'agenda', nombre: 'Agenda', icono: 'calendar-days', ayuda: 'Órdenes, compromisos y renovaciones con fecha y seguimiento formal.' },
+    ]);
+    const claseDe = t => (t && t.clase === 'diaria' ? 'diaria' : 'agenda');
 
     const AGRUPACIONES = Object.freeze([
         { clave: 'subdireccion', nombre: 'Subdirección' },
@@ -90,7 +107,7 @@
     const RECU = Object.freeze(Object.assign({}, porClave(RECURRENCIAS),
         { [PERSONALIZADA]: { clave: PERSONALIZADA, nombre: 'Personalizado', meses: null } }));
 
-    const ABIERTOS = Object.freeze(['pendiente', 'en_proceso', 'en_revision', 'detenida']);
+    const ABIERTOS = Object.freeze(['pendiente', 'en_proceso', 'en_revision', 'detenida', 'por_validar']);
     const estaAbierta = t => ABIERTOS.includes(t && t.estatus);
 
     /* ---------- Fechas (siempre en días calendario, hora local) ---------- */
@@ -164,13 +181,16 @@
 
     /**
      * En qué situación está una tarea respecto a su fecha límite:
-     *   completada · cancelada · sin_fecha · vencida · vence_hoy · por_vencer · a_tiempo
-     * "por_vencer" es dentro de los días de aviso de la propia tarea.
+     *   completada · cancelada · por_validar · sin_fecha · vencida · vence_hoy · por_vencer · a_tiempo
+     * "por_vencer" es dentro de los días de aviso de la propia tarea. Una tarea
+     * entregada que espera validación ya no está «vencida»: el trabajo se hizo;
+     * si fue tarde, lo dice el cumplimiento a tiempo.
      */
     function situacion(t, hoy) {
         if (!t) return 'sin_fecha';
         if (t.estatus === 'completada') return 'completada';
         if (t.estatus === 'cancelada') return 'cancelada';
+        if (t.estatus === 'por_validar') return 'por_validar';
         const n = diasEntre(hoy, t.fecha_limite);
         if (n == null) return 'sin_fecha';
         if (n < 0) return 'vencida';
@@ -185,14 +205,19 @@
         por_vencer: { nombre: 'Por vencer',   color: '#d97706', orden: 2 },
         a_tiempo:   { nombre: 'A tiempo',     color: '#16a34a', orden: 3 },
         sin_fecha:  { nombre: 'Sin fecha',    color: '#64748b', orden: 4 },
-        completada: { nombre: 'Completadas',  color: '#16a34a', orden: 5 },
-        cancelada:  { nombre: 'Canceladas',   color: '#94a3b8', orden: 6 },
+        por_validar: { nombre: 'Por validar', color: '#0891b2', orden: 5 },
+        completada: { nombre: 'Completadas',  color: '#16a34a', orden: 6 },
+        cancelada:  { nombre: 'Canceladas',   color: '#94a3b8', orden: 7 },
     });
 
-    /** ¿Se completó a tiempo? null si no está completada o no tenía fecha. */
+    /** ¿Se completó a tiempo? null si no está completada o no tenía fecha. Cuenta
+        el día en que se entregó, no el de la validación: lo que tarde el visto
+        bueno no es atraso de quien la hizo. */
     function completadaATiempo(t) {
-        if (!t || t.estatus !== 'completada' || !t.fecha_limite || !t.completada_en) return null;
-        const cierre = aISO(new Date(t.completada_en));
+        if (!t || t.estatus !== 'completada' || !t.fecha_limite) return null;
+        const fin = t.entregada_en || t.completada_en;
+        if (!fin) return null;
+        const cierre = aISO(new Date(fin));
         return diasEntre(t.fecha_limite, cierre) <= 0;
     }
 
@@ -224,7 +249,41 @@
         return 'Cada ' + n + ' meses';
     }
 
-    function nombreRecurrencia(t) { return textoCada(mesesRecurrencia(t)); }
+    /** Cada cuántos días se repite una rutina (0 si no es por días). */
+    function diasRecurrencia(t) { return (t && RECU[t.recurrencia] && RECU[t.recurrencia].dias) || 0; }
+
+    /** ¿Se repite (por días o por meses)? */
+    const seRepite = t => mesesRecurrencia(t) > 0 || diasRecurrencia(t) > 0;
+
+    function nombreRecurrencia(t) {
+        return diasRecurrencia(t) ? RECU[t.recurrencia].nombre : textoCada(mesesRecurrencia(t));
+    }
+
+    /** ¿Cae de lunes a viernes? */
+    function esLaborable(iso) {
+        const d = deISO(iso);
+        return Boolean(d) && d.getDay() !== 0 && d.getDay() !== 6;
+    }
+
+    /**
+     * La fecha límite de la siguiente ocurrencia, o null si no se repite.
+     * Las de meses conservan su ciclo (una licencia renovada tarde sigue en su
+     * mismo ciclo). Las rutinas por días avanzan hasta después de hoy: si una se
+     * hizo tarde, la siguiente es mañana, no una fila de días atrasados.
+     */
+    function fechaSiguiente(t, hoy) {
+        if (!t || !t.fecha_limite) return null;
+        const r = RECU[t.recurrencia] || {};
+        if (r.dias) {
+            const tope = hoy && hoy > t.fecha_limite ? hoy : t.fecha_limite;
+            let f = sumarDias(t.fecha_limite, r.dias);
+            while (f <= tope) f = sumarDias(f, r.dias);
+            if (r.laborable) while (!esLaborable(f)) f = sumarDias(f, 1);
+            return f;
+        }
+        const meses = mesesRecurrencia(t);
+        return meses ? sumarMeses(t.fecha_limite, meses) : null;
+    }
 
     /** Lo que se guarda al elegir "cada N meses": la opción fija si existe, si no la personalizada. */
     function recurrenciaDeMeses(meses) {
@@ -234,10 +293,10 @@
         return fija ? { recurrencia: fija.clave, recurrencia_meses: null } : { recurrencia: PERSONALIZADA, recurrencia_meses: n };
     }
 
-    function siguienteOcurrencia(t) {
+    function siguienteOcurrencia(t, hoy) {
         const meses = mesesRecurrencia(t);
-        if (!meses || !t.fecha_limite) return null;
-        const limite = sumarMeses(t.fecha_limite, meses);
+        const limite = fechaSiguiente(t, hoy || hoyISO());
+        if (!limite) return null;
         const duracion = t.fecha_inicio ? diasEntre(t.fecha_inicio, t.fecha_limite) : null;
         // Las subtareas con fecha se mueven igual que la tarea: conservan su
         // distancia en días a la fecha límite.
@@ -266,6 +325,8 @@
             etiquetas: Array.isArray(t.etiquetas) ? t.etiquetas.slice() : [],
             checklist,
             tarea_origen: t.tarea_origen || t.id || null,
+            // Sigue en su mismo espacio (sólo si la base ya tiene la columna).
+            ...('clase' in t ? { clase: claseDe(t) } : {}),
         };
     }
 
@@ -349,7 +410,7 @@
         }
         if (por === 'estatus') {
             return ESTATUS.map(e => ({ clave: e.clave, nombre: e.nombre, color: e.color, icono: e.icono, tareas: lista.filter(t => t.estatus === e.clave) }))
-                .filter(g => g.tareas.length || ABIERTOS.includes(g.clave));
+                .filter(g => g.tareas.length || (ABIERTOS.includes(g.clave) && g.clave !== 'por_validar'));
         }
         if (por === 'prioridad') {
             return PRIORIDADES.map(p => ({ clave: p.clave, nombre: p.nombre, color: p.color, icono: 'flag', tareas: lista.filter(t => t.prioridad === p.clave) }))
@@ -380,7 +441,7 @@
 
     function estadisticas(tareas, hoy) {
         const lista = tareas || [];
-        const s = { total: 0, abiertas: 0, pendientes: 0, en_proceso: 0, completadas: 0, vencidas: 0, por_vencer: 0,
+        const s = { total: 0, abiertas: 0, pendientes: 0, en_proceso: 0, por_validar: 0, completadas: 0, vencidas: 0, por_vencer: 0,
                     completadas_mes: 0, a_tiempo: 0, con_fecha_cerradas: 0, cumplimiento: null };
         const mes = String(hoy || hoyISO()).slice(0, 7);
         lista.forEach(t => {
@@ -389,7 +450,9 @@
             const sit = situacion(t, hoy);
             if (estaAbierta(t)) {
                 s.abiertas++;
-                if (t.estatus === 'pendiente') s.pendientes++; else s.en_proceso++;
+                if (t.estatus === 'pendiente') s.pendientes++;
+                else if (t.estatus === 'por_validar') s.por_validar++;
+                else s.en_proceso++;
                 if (sit === 'vencida') s.vencidas++;
                 if (sit === 'por_vencer' || sit === 'vence_hoy') s.por_vencer++;
             }
@@ -408,6 +471,235 @@
     function estadisticasPorSubdireccion(tareas, hoy) {
         return SUBDIRECCIONES.map(sd => Object.assign({ clave: sd.clave, nombre: sd.nombre, corto: sd.corto, color: sd.color, icono: sd.icono },
             estadisticas((tareas || []).filter(t => t.subdireccion === sd.clave), hoy)));
+    }
+
+    /**
+     * Diarias acomodadas como una agenda personal: atrasadas, hoy, mañana, esta
+     * semana, más adelante, sin fecha, entregadas (esperan validación) y lo que
+     * se terminó hoy.
+     */
+    function agendaDelDia(tareas, hoy) {
+        const s = { atrasadas: [], hoy: [], manana: [], semana: [], despues: [], sinFecha: [], entregadas: [], hechas: [] };
+        const manana = sumarDias(hoy, 1);
+        const orden = (a, b) => pesoPrioridad(a) - pesoPrioridad(b) || String(a.titulo || '').localeCompare(String(b.titulo || ''), 'es');
+        const porFecha = (a, b) => (a.fecha_limite < b.fecha_limite ? -1 : a.fecha_limite > b.fecha_limite ? 1 : orden(a, b));
+        (tareas || []).forEach(t => {
+            if (!t || t.estatus === 'cancelada') return;
+            if (t.estatus === 'completada') {
+                if (t.completada_en && aISO(new Date(t.completada_en)) === hoy) s.hechas.push(t);
+                return;
+            }
+            if (t.estatus === 'por_validar') { s.entregadas.push(t); return; }
+            const f = t.fecha_limite;
+            if (!f) s.sinFecha.push(t);
+            else if (f < hoy) s.atrasadas.push(t);
+            else if (f === hoy) s.hoy.push(t);
+            else if (f === manana) s.manana.push(t);
+            else if (diasEntre(hoy, f) <= 7) s.semana.push(t);
+            else s.despues.push(t);
+        });
+        s.atrasadas.sort(porFecha);
+        s.semana.sort(porFecha);
+        s.despues.sort(porFecha);
+        s.hoy.sort(orden);
+        s.manana.sort(orden);
+        s.sinFecha.sort(orden);
+        s.hechas.sort(orden);
+        s.entregadas.sort((a, b) => String(a.entregada_en || '').localeCompare(String(b.entregada_en || '')));
+        return s;
+    }
+
+    /* ---------- Resumen ejecutivo (PDF y Excel) ----------
+       Lo que un jefe quiere ver de un vistazo: cómo está hoy (abiertas,
+       vencidas, por validar), qué se hizo en el periodo (terminadas, a tiempo,
+       cuánto tardaron), quién lo hizo y lo más importante dicho en palabras. */
+    const PERIODOS = Object.freeze([
+        { clave: 'mes', nombre: 'Este mes' },
+        { clave: 'mes_anterior', nombre: 'Mes anterior' },
+        { clave: '30', nombre: 'Últimos 30 días' },
+        { clave: 'trimestre', nombre: 'Este trimestre' },
+        { clave: 'anio', nombre: 'Este año' },
+        { clave: 'todo', nombre: 'Todo el historial' },
+    ]);
+
+    /** «1 al 18 de noviembre de 2026», «19 de octubre al 18 de noviembre de 2026»… */
+    function textoRango(desde, hasta) {
+        const a = deISO(desde), b = deISO(hasta);
+        if (!a || !b) return '';
+        if (a.getFullYear() !== b.getFullYear()) return fechaLarga(desde) + ' al ' + fechaLarga(hasta);
+        if (a.getMonth() !== b.getMonth()) return a.getDate() + ' de ' + MESES_LARGOS[a.getMonth()] + ' al ' + fechaLarga(hasta);
+        return a.getDate() + ' al ' + fechaLarga(hasta);
+    }
+
+    /** { clave, nombre, desde, hasta, texto } del periodo elegido (desde null = todo). */
+    function rangoPeriodo(clave, hoy, desdeLibre, hastaLibre) {
+        const d = deISO(hoy);
+        const y = d.getFullYear(), m = d.getMonth();
+        const iso = (yy, mm, dd) => aISO(new Date(yy, mm, dd, 12));
+        let desde = null, hasta = hoy, nombre = (PERIODOS.find(x => x.clave === clave) || {}).nombre || 'Periodo';
+        if (clave === 'mes') desde = iso(y, m, 1);
+        else if (clave === 'mes_anterior') { desde = iso(y, m - 1, 1); hasta = iso(y, m, 0); }
+        else if (clave === '30') desde = sumarDias(hoy, -29);
+        else if (clave === 'trimestre') desde = iso(y, Math.floor(m / 3) * 3, 1);
+        else if (clave === 'anio') desde = iso(y, 0, 1);
+        else if (clave === 'libre') {
+            nombre = 'Personalizado';
+            desde = desdeLibre || null;
+            hasta = hastaLibre || hoy;
+            if (desde && hasta < desde) { const x = desde; desde = hasta; hasta = x; }
+        }
+        const texto = desde ? textoRango(desde, hasta) : 'Todo el historial, al ' + fechaLarga(hasta);
+        return { clave, nombre, desde, hasta, texto };
+    }
+
+    const diaDe = ts => (ts ? aISO(new Date(ts)) : null);
+    const promedio = arr => (arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length * 10) / 10 : null);
+    const porciento = (n, d) => (d ? Math.round(n * 100 / d) : null);
+
+    /** Una tarea terminada, con lo que costó: días de atención, de validación y desfase contra su fecha límite. */
+    function fichaTerminada(t) {
+        const inicio = t.fecha_inicio || diaDe(t.creado_en);
+        const fin = diaDe(t.entregada_en) || diaDe(t.completada_en);
+        const validada = diaDe(t.validada_en) || diaDe(t.completada_en);
+        return {
+            tarea: t, inicio, fin, validada,
+            dias: inicio && fin ? Math.max(0, diasEntre(inicio, fin)) : null,
+            validacion: t.entregada_en && validada ? Math.max(0, diasEntre(diaDe(t.entregada_en), validada)) : null,
+            desfase: fin && t.fecha_limite ? diasEntre(t.fecha_limite, fin) : null,   // > 0: días tarde
+            aTiempo: completadaATiempo(t),
+        };
+    }
+
+    /**
+     * Todo lo que lleva el resumen ejecutivo.
+     * o: { hoy, desde, hasta } — el estado (abiertas, vencidas…) es al corte de
+     * hoy; lo que «pasó» (nuevas, entregadas, terminadas) es dentro del periodo.
+     */
+    function reporteEjecutivo(tareas, o) {
+        const hoy = o.hoy;
+        const desde = o.desde || null;
+        const hasta = o.hasta || hoy;
+        const enPeriodo = iso => Boolean(iso) && (!desde || iso >= desde) && iso <= hasta;
+        const todas = (tareas || []).filter(Boolean);
+        const lista = todas.filter(t => t.estatus !== 'cancelada');
+        const dias = t => diasEntre(hoy, t.fecha_limite);
+
+        const terminadas = lista.filter(t => t.estatus === 'completada' && enPeriodo(diaDe(t.validada_en) || diaDe(t.completada_en)))
+            .map(fichaTerminada)
+            .sort((a, b) => String(b.validada || '').localeCompare(String(a.validada || '')));
+        const abiertas = lista.filter(t => estaAbierta(t) && t.estatus !== 'por_validar');
+        const vencidas = abiertas.filter(t => situacion(t, hoy) === 'vencida')
+            .map(t => ({ tarea: t, atraso: -dias(t) }))
+            .sort((a, b) => b.atraso - a.atraso || pesoPrioridad(a.tarea) - pesoPrioridad(b.tarea));
+        const porVencer = abiertas.filter(t => ['vence_hoy', 'por_vencer'].includes(situacion(t, hoy)));
+        const proximas = abiertas.filter(t => t.fecha_limite && dias(t) >= 0 && dias(t) <= 30)
+            .map(t => ({ tarea: t, dias: dias(t) }))
+            .sort((a, b) => a.dias - b.dias || pesoPrioridad(a.tarea) - pesoPrioridad(b.tarea));
+        const porValidar = lista.filter(t => t.estatus === 'por_validar')
+            .map(t => ({ tarea: t, esperando: t.entregada_en ? Math.max(0, diasEntre(diaDe(t.entregada_en), hoy)) : null }))
+            .sort((a, b) => (b.esperando || 0) - (a.esperando || 0));
+        const renovaciones = abiertas.filter(t => (t.tipo === 'renovacion' || t.tipo === 'certificado') && t.fecha_limite && dias(t) >= 0 && dias(t) <= 90)
+            .map(t => ({ tarea: t, dias: dias(t) }))
+            .sort((a, b) => a.dias - b.dias);
+        const nuevas = lista.filter(t => enPeriodo(diaDe(t.creado_en)));
+        const entregadas = lista.filter(t => t.entregada_en && enPeriodo(diaDe(t.entregada_en)));
+        const conFecha = terminadas.filter(x => x.aTiempo != null);
+        const completadasTotal = lista.filter(t => t.estatus === 'completada').length;
+
+        const kpis = {
+            abiertas: abiertas.length, vencidas: vencidas.length, porVencer: porVencer.length, porValidar: porValidar.length,
+            nuevas: nuevas.length, entregadas: entregadas.length, terminadas: terminadas.length,
+            aTiempo: conFecha.filter(x => x.aTiempo).length, conFecha: conFecha.length,
+            aTiempoPct: porciento(conFecha.filter(x => x.aTiempo).length, conFecha.length),
+            diasPromedio: promedio(terminadas.map(x => x.dias).filter(v => v != null)),
+            validacionPromedio: promedio(terminadas.map(x => x.validacion).filter(v => v != null)),
+            avance: porciento(completadasTotal, lista.length),
+            total: lista.length, canceladas: todas.length - lista.length,
+        };
+
+        // Por responsable: lo que terminó en el periodo y lo que tiene hoy.
+        const personas = new Map();
+        const persona = t => {
+            const nombre = String(t.responsable || '').trim();
+            const k = normalizar(nombre) || '~';
+            if (!personas.has(k)) personas.set(k, { nombre: nombre || 'Sin responsable', terminadas: 0, aTiempo: 0, conFecha: 0, dias: [], abiertas: 0, vencidas: 0, porValidar: 0 });
+            return personas.get(k);
+        };
+        terminadas.forEach(x => {
+            const p = persona(x.tarea);
+            p.terminadas++;
+            if (x.aTiempo != null) { p.conFecha++; if (x.aTiempo) p.aTiempo++; }
+            if (x.dias != null) p.dias.push(x.dias);
+        });
+        abiertas.forEach(t => { const p = persona(t); p.abiertas++; if (situacion(t, hoy) === 'vencida') p.vencidas++; });
+        porValidar.forEach(x => { persona(x.tarea).porValidar++; });
+        const porResponsable = [...personas.values()].map(p => ({
+            nombre: p.nombre, terminadas: p.terminadas, aTiempo: p.aTiempo, conFecha: p.conFecha,
+            aTiempoPct: porciento(p.aTiempo, p.conFecha), diasPromedio: promedio(p.dias),
+            abiertas: p.abiertas, vencidas: p.vencidas, porValidar: p.porValidar,
+        })).sort((a, b) => (a.nombre === 'Sin responsable') - (b.nombre === 'Sin responsable')
+            || b.terminadas - a.terminadas || b.vencidas - a.vencidas || b.abiertas - a.abiertas || a.nombre.localeCompare(b.nombre, 'es'));
+
+        const porSubdireccion = SUBDIRECCIONES.map(sd => {
+            const de = arr => arr.filter(x => (x.tarea || x).subdireccion === sd.clave);
+            const term = de(terminadas);
+            const cf = term.filter(x => x.aTiempo != null);
+            const total = lista.filter(t => t.subdireccion === sd.clave);
+            return {
+                clave: sd.clave, nombre: sd.nombre, corto: sd.corto, color: sd.color,
+                abiertas: de(abiertas).length, vencidas: de(vencidas).length, porVencer: de(porVencer).length, porValidar: de(porValidar).length,
+                terminadas: term.length, aTiempoPct: porciento(cf.filter(x => x.aTiempo).length, cf.length),
+                diasPromedio: promedio(term.map(x => x.dias).filter(v => v != null)),
+                total: total.length, avance: porciento(total.filter(t => t.estatus === 'completada').length, total.length),
+            };
+        });
+
+        const estatus = ESTATUS.filter(e => e.clave !== 'cancelada')
+            .map(e => ({ clave: e.clave, nombre: e.nombre, color: e.color, n: lista.filter(t => t.estatus === e.clave).length }));
+
+        return { hoy, desde, hasta, kpis, estatus, terminadas, abiertas, vencidas, porVencer, proximas, porValidar, renovaciones, nuevas, entregadas, porResponsable, porSubdireccion };
+    }
+
+    /** Lo más importante del resumen, en frases cortas. tono: rojo · ambar · verde · azul · cian */
+    function destacadosReporte(r) {
+        const k = r.kpis;
+        const out = [];
+        const quien = t => (t.responsable ? t.responsable : 'sin responsable');
+        const dd = n => (n === 1 ? '1 día' : n + ' días');
+        if (r.vencidas.length) {
+            const peor = r.vencidas[0];
+            out.push({ tono: 'rojo', texto: (k.vencidas === 1 ? '1 tarea vencida' : k.vencidas + ' tareas vencidas') + '. La más atrasada: «' + peor.tarea.titulo + '», ' + dd(peor.atraso) + ' de atraso (' + quien(peor.tarea) + ').' });
+        } else if (k.abiertas) {
+            out.push({ tono: 'verde', texto: 'Ninguna tarea vencida a la fecha de corte.' });
+        }
+        if (k.terminadas) {
+            out.push({ tono: k.aTiempoPct == null || k.aTiempoPct >= 80 ? 'verde' : k.aTiempoPct >= 60 ? 'ambar' : 'rojo',
+                texto: (k.terminadas === 1 ? 'Se terminó 1 tarea' : 'Se terminaron ' + k.terminadas + ' tareas') + ' en el periodo' +
+                    (k.aTiempoPct != null ? '; ' + k.aTiempoPct + '% se entregó a tiempo (' + k.aTiempo + ' de ' + k.conFecha + ' con fecha límite).' : '.') });
+        } else {
+            out.push({ tono: 'azul', texto: 'En el periodo no se terminó ninguna tarea.' });
+        }
+        if (k.diasPromedio != null) out.push({ tono: 'azul', texto: 'En promedio, una tarea tardó ' + dd(k.diasPromedio) + ' desde su inicio hasta su entrega.' });
+        if (k.validacionPromedio != null || k.porValidar) {
+            out.push({ tono: k.porValidar ? 'cian' : 'azul', texto: (k.validacionPromedio != null ? 'La validación del Director tomó en promedio ' + dd(k.validacionPromedio) + '.' : '') +
+                (k.porValidar ? (k.validacionPromedio != null ? ' ' : '') + (k.porValidar === 1 ? '1 tarea espera' : k.porValidar + ' tareas esperan') + ' su validación.' : '') });
+        }
+        const conPend = r.porSubdireccion.filter(s => s.abiertas).sort((a, b) => b.vencidas - a.vencidas || b.abiertas - a.abiertas);
+        if (conPend.length && k.abiertas) {
+            const s = conPend[0];
+            out.push({ tono: s.vencidas ? 'ambar' : 'azul', texto: s.nombre + ' concentra ' + s.abiertas + ' de ' + k.abiertas + (k.abiertas === 1 ? ' pendiente' : ' pendientes') + ' (' + porciento(s.abiertas, k.abiertas) + '%)' +
+                (s.vencidas ? ', ' + (s.vencidas === 1 ? '1 vencida.' : s.vencidas + ' vencidas.') : '.') });
+        }
+        const destacada = r.porResponsable.filter(p => p.nombre !== 'Sin responsable' && p.terminadas)
+            .sort((a, b) => b.terminadas - a.terminadas || (b.aTiempoPct || 0) - (a.aTiempoPct || 0))[0];
+        if (destacada) out.push({ tono: 'verde', texto: destacada.nombre + ' terminó ' + destacada.terminadas + (destacada.terminadas === 1 ? ' tarea' : ' tareas') + (destacada.aTiempoPct != null ? ', ' + destacada.aTiempoPct + '% a tiempo' : '') + '.' });
+        const atrasado = r.porResponsable.filter(p => p.vencidas).sort((a, b) => b.vencidas - a.vencidas)[0];
+        if (atrasado && atrasado.vencidas > 1) out.push({ tono: 'ambar', texto: atrasado.nombre + ' tiene ' + atrasado.vencidas + ' tareas vencidas: conviene darle seguimiento.' });
+        if (r.renovaciones.length) {
+            const pr = r.renovaciones[0];
+            out.push({ tono: 'ambar', texto: (r.renovaciones.length === 1 ? '1 renovación o certificado vence' : r.renovaciones.length + ' renovaciones o certificados vencen') + ' en los próximos 90 días; el primero, «' + pr.tarea.titulo + '», el ' + fechaLarga(pr.tarea.fecha_limite) + '.' });
+        }
+        return out;
     }
 
     /** Avance del checklist: { hechos, total, pct }. */
@@ -641,6 +933,7 @@
             vencidas: est.vencidas,
             semana: abiertas.filter(t => dias(t) != null && dias(t) >= 0 && dias(t) <= 7).length,
             detenidas: abiertas.filter(t => t.estatus === 'detenida').length,
+            porValidar: abiertas.filter(t => t.estatus === 'por_validar').length,
             cumplimiento: est.cumplimiento,
             atencion,
             renovaciones,
@@ -824,6 +1117,91 @@
         return null;
     }
 
+    /* ---------- Archivos (evidencias y archivos de cada subtarea) ----------
+       PDF, Word, Excel e imágenes. La extensión del nombre manda: Windows
+       reporta un .csv como «application/vnd.ms-excel» y no es un Excel. */
+    const ARCHIVOS = Object.freeze({
+        pdf:  { mime: 'application/pdf', icono: 'file-pdf', color: '#dc2626', nombre: 'PDF' },
+        doc:  { mime: 'application/msword', icono: 'file-word', color: '#2563eb', nombre: 'Word' },
+        docx: { mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', icono: 'file-word', color: '#2563eb', nombre: 'Word' },
+        xls:  { mime: 'application/vnd.ms-excel', icono: 'file-excel', color: '#16a34a', nombre: 'Excel' },
+        xlsx: { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', icono: 'file-excel', color: '#16a34a', nombre: 'Excel' },
+        jpg:  { mime: 'image/jpeg', icono: 'file-image', color: '#7c3aed', nombre: 'Imagen' },
+        png:  { mime: 'image/png', icono: 'file-image', color: '#7c3aed', nombre: 'Imagen' },
+    });
+    const MAX_ARCHIVO = 25 * 1024 * 1024;
+
+    /** 'pdf', 'docx', 'xlsx', 'jpg'… o null si no es un tipo aceptado. */
+    function extensionArchivo(nombre, mime) {
+        const m = /\.([a-z0-9]+)$/i.exec(String(nombre || ''));
+        let ext = m ? m[1].toLowerCase() : '';
+        if (ext === 'jpeg') ext = 'jpg';
+        if (ARCHIVOS[ext]) return ext;
+        if (ext) return null;
+        const porMime = Object.keys(ARCHIVOS).find(k => ARCHIVOS[k].mime === mime);
+        return porMime || null;
+    }
+
+    /** Ícono y color de un archivo guardado ({ tipo }). */
+    const datosArchivo = tipo => ARCHIVOS[tipo] || { mime: 'application/octet-stream', icono: 'file', color: '#64748b', nombre: 'Archivo' };
+
+    /* Límites de lo que entra a la base. La base tiene los mismos (o más
+       holgados) en db/seguimiento_validacion.sql: aquí se avisa antes, con
+       palabras; allá se impide aunque alguien se salte la página. */
+    const LIMITES = Object.freeze({
+        archivoBytes: MAX_ARCHIVO,
+        archivosPorVez: 10,
+        evidenciasPorTarea: 30,
+        archivosPorSubtarea: 10,
+        subtareas: 60,
+        titulo: 300, descripcion: 8000, referencia: 200, responsable: 200, gerencia: 200, telefono: 30,
+        obs: 2000, comentario: 4000, nombreArchivo: 180,
+    });
+
+    /** 512 KB, 3.4 MB, 1.0 GB… */
+    function tamanoTexto(n) {
+        const b = +n || 0;
+        if (!b) return '';
+        if (b < 1024 * 1024) return Math.max(1, Math.round(b / 1024)) + ' KB';
+        const uno = v => v.toFixed(1).replace(/\.0$/, '');
+        if (b < 1024 * 1024 * 1024) return uno(b / 1024 / 1024) + ' MB';
+        return uno(b / 1024 / 1024 / 1024) + ' GB';
+    }
+
+    /** null si el archivo sirve; si no, por qué (sin el nombre: quien llama lo pone). */
+    function problemaArchivo(f) {
+        if (!f) return 'No se pudo leer el archivo.';
+        if (!extensionArchivo(f.name, f.type)) return 'Tipo no permitido: sólo se aceptan PDF, Word, Excel, JPG o PNG.';
+        if (!f.size) return 'Está vacío (0 bytes).';
+        if (f.size > MAX_ARCHIVO) return 'Pesa ' + tamanoTexto(f.size) + '; el máximo es ' + tamanoTexto(MAX_ARCHIVO) + '.';
+        return null;
+    }
+
+    /** ¿Los primeros bytes son de verdad de ese tipo? Así un programa renombrado
+        a .pdf no pasa. bytes: los primeros ~1 KB del archivo. */
+    function firmaValida(ext, bytes) {
+        const b = bytes || [];
+        const en = (firma, desde) => firma.every((v, i) => b[(desde || 0) + i] === v);
+        const zip = [0x50, 0x4B];                       // .docx / .xlsx son un ZIP
+        const ole = [0xD0, 0xCF, 0x11, 0xE0];          // .doc / .xls de Office 97-2003
+        if (ext === 'pdf') {                           // «%PDF» dentro del primer KB
+            for (let i = 0; i + 4 <= Math.min(b.length, 1024); i++) if (en([0x25, 0x50, 0x44, 0x46], i)) return true;
+            return false;
+        }
+        if (ext === 'png') return en([0x89, 0x50, 0x4E, 0x47]);
+        if (ext === 'jpg') return en([0xFF, 0xD8, 0xFF]);
+        if (ext === 'docx' || ext === 'xlsx') return en(zip);
+        if (ext === 'doc' || ext === 'xls') return en(ole) || en(zip);
+        return false;
+    }
+
+    /** Todas las rutas de archivos de una tarea: evidencias y los de sus subtareas. */
+    function rutasDeArchivos(t) {
+        const ev = ((t && t.evidencias) || []).map(e => e && e.path);
+        const ck = ((t && t.checklist) || []).flatMap(i => ((i && i.archivos) || []).map(a => a && a.path));
+        return ev.concat(ck).filter(Boolean);
+    }
+
     /* ---------- Personas ---------- */
 
     const PARTICULAS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e']);
@@ -931,6 +1309,7 @@
         if (campo === 'subdireccion') return (SUBDIR[valor] || {}).corto || valor;
         if (campo === 'tipo') return (TIPO[valor] || {}).nombre || valor;
         if (campo === 'recurrencia') return (RECU[valor] || {}).nombre || valor;
+        if (campo === 'clase') return valor === 'diaria' ? 'Diarias' : 'Agenda';
         if (campo === 'recurrencia_meses') return textoCada(valor);
         if (campo === 'fecha_limite' || campo === 'fecha_inicio') return fechaCorta(valor);
         return String(valor);
@@ -939,6 +1318,7 @@
     return Object.freeze({
         SUBDIRECCIONES, ESTATUS, PRIORIDADES, TIPOS, RECURRENCIAS, AGRUPACIONES, SITUACIONES,
         SUBDIR, EST, PRIO, TIPO, RECU, ABIERTOS,
+        CLASES, claseDe, diasRecurrencia, seRepite, esLaborable, fechaSiguiente, agendaDelDia,
         estaAbierta, aISO, hoyISO, deISO, diasEntre, sumarDias, sumarMeses, fechaCorta, fechaLarga, relativo,
         situacion, completadaATiempo, siguienteOcurrencia,
         PERSONALIZADA, MAX_MESES, mesesRecurrencia, textoCada, nombreRecurrencia, recurrenciaDeMeses,
@@ -948,6 +1328,8 @@
         inicioSubtarea, diasSubtarea, ajustarFechasSubtarea, diasCubiertos,
         posiblesDuplicadas, bloqueaDuplicado,
         alcanceDeArea, alcancesPosibles, filtrarAlcance, urgenciaMando, resumenMando, desgloseMando,
+        PERIODOS, rangoPeriodo, textoRango, fichaTerminada, reporteEjecutivo, destacadosReporte,
+        ARCHIVOS, MAX_ARCHIVO, LIMITES, tamanoTexto, firmaValida, extensionArchivo, datosArchivo, problemaArchivo, rutasDeArchivos,
         ALCANCE_DIRECCION, alcanceDeAcceso, dentroDeAlcance, subdireccionesPermitidas, gerenciasPermitidas, nombreAlcanceArea,
         areaDeColaborador, colaboradorDeCuenta,
         iniciales, colorDeNombre, telefonoWhatsApp, mensajeWhatsApp, urlWhatsApp,

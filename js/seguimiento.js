@@ -21,10 +21,9 @@
 
     const DUENO = 'isaac.lopez@aifa.operaciones';
     const BUCKET = 'seguimiento-evidencias';
-    const MAX_ARCHIVO = 10 * 1024 * 1024;
     const PREFS = 'aifa_seguimiento_prefs_v1';
-    const TIPOS_ARCHIVO = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png' };
-    const MIME = { pdf: 'application/pdf', jpg: 'image/jpeg', png: 'image/png' };
+    // PDF, Word, Excel e imágenes (C.ARCHIVOS); el selector acepta lo mismo.
+    const ACEPTA = '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,' + Object.values(C.ARCHIVOS).map(a => a.mime).join(',');
     const AVISOS = [0, 1, 3, 7, 15, 30, 60, 90];
     const VISTAS = [
         { clave: 'lista', nombre: 'Lista', icono: 'list-ul', ayuda: 'Tareas agrupadas, con todo a la vista para cambiarlo ahí mismo.' },
@@ -35,10 +34,10 @@
     ];
     const SITUACION_UNO = {
         vencida: 'Vencida', vence_hoy: 'Vence hoy', por_vencer: 'Por vencer', a_tiempo: 'A tiempo',
-        sin_fecha: 'Sin fecha', completada: 'Completada', cancelada: 'Cancelada',
+        sin_fecha: 'Sin fecha', completada: 'Completada', cancelada: 'Cancelada', por_validar: 'Por validar',
     };
     const CAMPO_NOMBRE = {
-        titulo: 'Nombre', estatus: 'Estatus', prioridad: 'Prioridad', subdireccion: 'Subdirección', gerencia: 'Gerencia',
+        clase: 'Espacio', titulo: 'Nombre', estatus: 'Estatus', prioridad: 'Prioridad', subdireccion: 'Subdirección', gerencia: 'Gerencia',
         responsable: 'Responsable', fecha_inicio: 'Inicio', fecha_limite: 'Fecha límite', recurrencia: 'Repetición', recurrencia_meses: 'Repetición', tipo: 'Tipo',
     };
     const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
@@ -55,6 +54,10 @@
     const state = {
         rol: null, revisado: false, revisando: null, sinInstalar: false, errorAcceso: null,
         sesion: { email: '', nombre: '' }, sinSesion: false,
+        conValidacion: false, subirA: null,
+        // Espacio a la vista: 'agenda' u 'diaria' (db/seguimiento_diarias.sql).
+        espacio: 'agenda', conDiarias: false,
+        diaAdd: { texto: '', para: 'hoy', sd: '', rutina: '' },
         area: C.ALCANCE_DIRECCION, directorio: null, acceso: { filas: [], conArea: true, sugerencias: [], areaTocada: false, cuentas: null, cuentasFaltan: false, q: '', sugLista: [], sugIdx: -1 },
         tareas: [], nComent: new Map(), personas: [], personasCargadas: false,
         cargado: false, cargando: null, errorCarga: null,
@@ -76,6 +79,11 @@
             if (p.orden && p.orden.campo) state.orden = { campo: String(p.orden.campo), asc: p.orden.asc !== false };
             if (p.escala === 'meses' || p.escala === 'semanas') state.gantt.escala = p.escala;
             if (typeof p.guiaOculta === 'boolean') state.guiaOculta = p.guiaOculta;
+            if (p.espacio === 'diaria' || p.espacio === 'agenda') state.espacio = p.espacio;
+            if (p.diaAdd && typeof p.diaAdd === 'object') {
+                if (['hoy', 'manana', 'sin'].includes(p.diaAdd.para)) state.diaAdd.para = p.diaAdd.para;
+                if (typeof p.diaAdd.sd === 'string') state.diaAdd.sd = p.diaAdd.sd;
+            }
         } catch (_) { /* sin almacenamiento: valores por defecto */ }
     }
     function guardarPrefs() {
@@ -83,6 +91,7 @@
             localStorage.setItem(PREFS, JSON.stringify({
                 vista: state.vista, agrupar: state.agrupar, colapsados: state.colapsados,
                 verCerradas: state.filtros.verCerradas, orden: state.orden, escala: state.gantt.escala, guiaOculta: Boolean(state.guiaOculta),
+                espacio: state.espacio, diaAdd: { para: state.diaAdd.para, sd: state.diaAdd.sd },
             }));
         } catch (_) { /* nada */ }
     }
@@ -114,6 +123,10 @@
 
     const puedeEditar = () => state.rol === 'admin' || state.rol === 'editor';
     const esAdmin = () => state.rol === 'admin';
+    /* Validación del Director: con db/seguimiento_validacion.sql, lo que marca
+       como hecho quien no es admin queda «Por validar» hasta que un admin de
+       Seguimiento (el Director de Operación) lo valida o lo regresa. */
+    const requiereValidar = () => Boolean(state.conValidacion) && !esAdmin();
     /* El área de la cuenta: un gerente trabaja su gerencia y lo de toda su
        subdirección; un subdirector, toda su subdirección; sin área, todo. La
        base aplica la misma regla (db/seguimiento_alcance_por_area.sql). */
@@ -183,7 +196,7 @@
     }
 
     const linkify = html => html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-    const tamTxt = n => !n ? '' : n < 1024 * 1024 ? Math.max(1, Math.round(n / 1024)) + ' KB' : (n / 1024 / 1024).toFixed(1) + ' MB';
+    const tamTxt = n => C.tamanoTexto(n);
     const fechaDMY = iso => { const d = C.deISO(iso); return d ? String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear() : ''; };
 
     /* ==========================================================================
@@ -211,7 +224,7 @@
             '<div class="seg-confirm" id="seg-confirm" hidden></div>' +
             '<div class="seg-toasts" id="seg-toasts" aria-live="polite"></div>' +
             '<div class="seg-tip" id="seg-tip" role="tooltip" hidden></div>' +
-            '<input type="file" id="seg-file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" multiple hidden>' +
+            '<input type="file" id="seg-file" accept="' + ACEPTA + '" multiple hidden>' +
             '</div>');
         conectarPortal();
     }
@@ -231,11 +244,12 @@
               '</div>' +
               '<div class="seg-head-actions">' +
                 '<button type="button" class="seg-btn" id="seg-btn-guia"' + tip('Guía', 'Cómo organizar tu información y dar de alta una tarea.', { ico: 'book-open' }) + '><i class="fas fa-book-open"></i>Guía</button>' +
-                '<button type="button" class="seg-btn" id="seg-btn-resumen"' + tip('Descargar resumen', 'Reporte ejecutivo en PDF o la tabla completa en Excel.', { ico: 'download' }) + '><i class="fas fa-download"></i>Descargar resumen</button>' +
+                '<button type="button" class="seg-btn" id="seg-btn-resumen"' + tip('Descargar resumen', 'Resumen ejecutivo en PDF o Excel: indicadores, quién hizo qué y cuánto tardó.', { ico: 'download' }) + '><i class="fas fa-download"></i>Descargar resumen</button>' +
                 '<button type="button" class="seg-btn" id="seg-btn-acceso" hidden' + tip('Quién puede ver Seguimiento', 'Agrega o quita cuentas y elige su rol.', { ico: 'user-lock' }) + '><i class="fas fa-user-plus"></i>Acceso</button>' +
                 '<button type="button" class="seg-btn seg-btn-primary" id="seg-btn-nueva"' + tip('Nueva tarea', 'Registra una orden, renovación, certificado o pendiente.', { kbd: 'N', ico: 'plus' }) + '><i class="fas fa-plus"></i>Nueva tarea<kbd class="seg-kbd" aria-hidden="true">N</kbd></button>' +
               '</div>' +
             '</header>' +
+            '<nav class="seg-espacios" id="seg-espacios" role="tablist" aria-label="Espacios" hidden></nav>' +
             '<div class="seg-kpis" id="seg-kpis"></div>' +
             '<div class="seg-toolbar">' +
               '<nav class="seg-views" id="seg-views" role="tablist" aria-label="Vistas">' +
@@ -250,6 +264,7 @@
               '</div>' +
             '</div>' +
             '<div class="seg-chips" id="seg-chips" role="group" aria-label="Subdirecciones"></div>' +
+            '<div class="seg-alerta is-validar" id="seg-validar"></div>' +
             '<div class="seg-alerta" id="seg-alerta"></div>' +
             '<div id="seg-body" class="seg-body"></div>';
         conectarEsqueleto();
@@ -416,11 +431,18 @@
         state.cargando = (async () => {
             const c = await sb();
             if (!c) throw new Error('Supabase no está disponible.');
-            const [t, cm] = await Promise.all([
+            const [t, cm, val, esp] = await Promise.all([
                 c.from('seguimiento_tareas').select('*').order('fecha_limite', { ascending: true, nullsFirst: false }).limit(5000),
                 c.from('seguimiento_comentarios').select('tarea_id').limit(50000),
+                // Si la columna existe, ya se corrió db/seguimiento_validacion.sql.
+                c.from('seguimiento_tareas').select('entregada_en').limit(1),
+                // Y si existe «clase», ya se corrió db/seguimiento_diarias.sql.
+                c.from('seguimiento_tareas').select('clase').limit(1),
             ]);
             if (t.error) throw t.error;
+            state.conValidacion = Boolean(val && !val.error);
+            state.conDiarias = Boolean(esp && !esp.error);
+            if (!state.conDiarias) state.espacio = 'agenda';
             state.tareas = (t.data || []).filter(x => enMiArea(x.subdireccion, x.gerencia));
             state.nComent = new Map();
             (cm.data || []).forEach(r => state.nComent.set(r.tarea_id, (state.nComent.get(r.tarea_id) || 0) + 1));
@@ -474,6 +496,13 @@
         TEXTOS_NULOS.forEach(k => { if (k in f) { const v = String(f[k] == null ? '' : f[k]).trim(); f[k] = v || null; } });
         ['fecha_inicio', 'fecha_limite'].forEach(k => { if (k in f && !f[k]) f[k] = null; });
         if ('titulo' in f) f.titulo = String(f.titulo || '').trim();
+        // Lo mismo que limita la base: nada desmedido llega a guardarse.
+        const largos = { titulo: C.LIMITES.titulo, descripcion: C.LIMITES.descripcion, referencia: C.LIMITES.referencia,
+            responsable: C.LIMITES.responsable, gerencia: C.LIMITES.gerencia, responsable_tel: C.LIMITES.telefono };
+        Object.keys(largos).forEach(k => { if (typeof f[k] === 'string' && f[k].length > largos[k]) f[k] = f[k].slice(0, largos[k]); });
+        if (Array.isArray(f.etiquetas)) f.etiquetas = f.etiquetas.slice(0, 12).map(e => String(e).slice(0, 40));
+        if (!state.conDiarias) delete f.clase;
+        else if ('clase' in f) f.clase = f.clase === 'diaria' ? 'diaria' : 'agenda';
         if ('aviso_dias' in f) f.aviso_dias = Math.max(0, Math.min(365, parseInt(f.aviso_dias, 10) || 0));
         return f;
     }
@@ -484,6 +513,8 @@
         if (/recurrencia_meses|seguimiento_tareas_recurr/i.test(m)) {
             return 'para repetir con un tiempo personalizado falta correr db/seguimiento_recurrencia_personalizada.sql en Supabase.';
         }
+        if (/limites_chk|largo_chk/i.test(m)) return 'excede un límite de la base (texto muy largo, demasiadas subtareas o archivos).';
+        if (/ya fue validada/i.test(m)) return 'esta tarea ya la validó el Director: sólo un admin de Seguimiento puede reabrirla.';
         if (/row-level security|42501/i.test(m) && areaRestringida()) return 'sólo puedes trabajar tareas de tu área (' + C.nombreAlcanceArea(state.area) + ').';
         return errTxt(e);
     }
@@ -584,6 +615,7 @@
         const o = opts || {};
         if (!puedeEditar()) { toast('Tu acceso a Seguimiento es de solo consulta.', 'error'); return null; }
         if (!enMiArea(datos.subdireccion, datos.gerencia)) { toast(fueraDeArea(), 'error'); return null; }
+        if (requiereValidar() && datos.estatus === 'completada') datos = Object.assign({}, datos, { estatus: 'por_validar', entregada_por: usuario().nombre });
         // La siguiente de una renovación lleva el mismo nombre a propósito: la anterior ya se cerró.
         if (!o.origen && !(await revisarDuplicado(datos))) return null;
         const u = usuario();
@@ -603,6 +635,17 @@
         const t = buscar(id);
         if (!t) return false;
         if (!puedeEditar()) { toast('Tu acceso a Seguimiento es de solo consulta.', 'error'); return false; }
+        if (state.conValidacion && patchIn.estatus && patchIn.estatus !== t.estatus) {
+            if (!esAdmin() && t.estatus === 'completada') {
+                toast('Esta tarea ya la validó el Director: sólo un admin de Seguimiento puede reabrirla.', 'error');
+                pintarDrawerSi(id, true);
+                return false;
+            }
+            patchIn = Object.assign({}, patchIn);
+            if (patchIn.estatus === 'completada' && !esAdmin()) patchIn.estatus = 'por_validar';
+            if (patchIn.estatus === 'por_validar') patchIn.entregada_por = usuario().nombre;
+            if (patchIn.estatus === 'completada') patchIn.validada_por = usuario().nombre;
+        }
         if (('subdireccion' in patchIn || 'gerencia' in patchIn) && !enMiArea('subdireccion' in patchIn ? patchIn.subdireccion : t.subdireccion, 'gerencia' in patchIn ? patchIn.gerencia : t.gerencia)) {
             toast(fueraDeArea(), 'error'); pintarDrawerSi(id, true); return false;
         }
@@ -619,7 +662,7 @@
         Object.keys(patch).forEach(k => { antes[k] = t[k]; });
         Object.assign(t, patch);
         renderPronto();
-        pintarDrawerSi(id);
+        if (!o.sinPintar) pintarDrawerSi(id);
         indicador('guardando');
         const c = await sb();
         const { data, error } = await c.from('seguimiento_tareas')
@@ -635,20 +678,35 @@
         }
         Object.assign(t, data);
         indicador('ok');
-        const cs = C.cambios(antes, patch);
-        if (cs.length && o.bitacora !== false) bitacora(id, 'cambio', { cambios: cs });
-        if (antes.estatus === 'completada' && patch.estatus && C.ABIERTOS.includes(patch.estatus)) {
+        // Lo que dice la base manda (la regla de validación puede cambiar el estatus).
+        const cambioEstatus = 'estatus' in patch && t.estatus !== antes.estatus;
+        const entrego = cambioEstatus && t.estatus === 'por_validar';
+        const valido = cambioEstatus && t.estatus === 'completada' && antes.estatus === 'por_validar';
+        let cs = C.cambios(antes, patch).filter(x => !['entregada_por', 'validada_por'].includes(x.campo));
+        if (entrego || valido) cs = cs.filter(x => x.campo !== 'estatus');
+        if (o.bitacora !== false) {
+            if (cs.length) bitacora(id, 'cambio', { cambios: cs });
+            if (entrego) bitacora(id, 'entrego', {});
+            if (valido) bitacora(id, 'valido', {});
+        }
+        if (antes.estatus === 'completada' && cambioEstatus && C.ABIERTOS.includes(t.estatus)) {
             await quitarSiguienteSiSobra(t);
         }
-        if (patch.estatus === 'completada' && antes.estatus !== 'completada') {
+        const previo = antes.estatus;
+        if (cambioEstatus && t.estatus === 'completada') {
             const sig = await programarSiguiente(t);
             if (!sig && !o.silencioso) {
-                const previo = antes.estatus;
-                toast('«' + recortar(t.titulo, 48) + '» completada.', 'ok', { texto: 'Deshacer', fn: () => actualizar(id, { estatus: previo }) });
+                toast('«' + recortar(t.titulo, 48) + '» ' + (valido ? 'validada: queda como terminada.' : 'completada.'), 'ok', { texto: 'Deshacer', fn: () => actualizar(id, { estatus: previo }) });
             }
         }
+        // Una rutina no espera al visto bueno: la de mañana queda lista al entregar la de hoy.
+        const sigRutina = entrego && C.diasRecurrencia(t) ? await programarSiguiente(t, { silencioso: true }) : null;
+        if (entrego && !o.silencioso) {
+            toast('«' + recortar(t.titulo, 48) + '» entregada. Queda «Por validar» hasta que el Director la revise.' +
+                (sigRutina ? ' La siguiente quedó para el ' + C.fechaLarga(sigRutina.fecha_limite) + '.' : ''), 'ok', { texto: 'Deshacer', fn: () => actualizar(id, { estatus: previo }) });
+        }
         renderPronto();
-        pintarDrawerSi(id);
+        if (!o.sinPintar) pintarDrawerSi(id);
         return true;
     }
 
@@ -680,17 +738,22 @@
                     '<button type="button" class="seg-btn seg-btn-sm" data-cf="alterno"><i class="fas fa-' + (o.alterno.icono || 'ban') + '"></i>' + esc(o.alterno.boton) + '</button></div>'
                 : '') +
             (o.nota ? '<div class="seg-confirm-nota"><i class="fas fa-triangle-exclamation"></i>' + esc(o.nota) + '</div>' : '') +
+            (o.campo ? '<textarea class="seg-confirm-campo" id="seg-cf-campo" maxlength="2000" rows="3" placeholder="' + esc(o.campo.placeholder || '') + '"' +
+                (o.campo.requerido ? ' data-requerido="1"' : '') + ' aria-label="' + esc(o.campo.etiqueta || 'Observaciones') + '"></textarea>' : '') +
             '<div class="seg-confirm-foot">' +
-              '<button type="button" class="seg-btn" data-cf="no">' + esc(o.cancelar || 'Cancelar') + '</button>' +
+              (o.soloAceptar ? '' : '<button type="button" class="seg-btn" data-cf="no">' + esc(o.cancelar || 'Cancelar') + '</button>') +
               '<button type="button" class="seg-btn ' + (tono === 'peligro' ? 'seg-cf-peligro' : 'seg-btn-primary') + '" data-cf="si"><i class="fas fa-' + (o.iconoAceptar || icono) + '"></i>' + esc(o.aceptar || 'Aceptar') + '</button>' +
             '</div></div>';
-        setTimeout(() => el.querySelector('[data-cf="no"]')?.focus(), 30);
+        setTimeout(() => (el.querySelector('#seg-cf-campo') || el.querySelector('[data-cf="no"]') || el.querySelector('[data-cf="si"]'))?.focus(), 30);
         return new Promise(res => { resolverConfirmar = res; });
     }
+    // Lo que se escribió en el campo del último diálogo (o.campo).
+    let ultimoCampo = '';
 
     function cerrarConfirmar(valor) {
         const r = resolverConfirmar;
         resolverConfirmar = null;
+        ultimoCampo = $('seg-cf-campo') ? $('seg-cf-campo').value : '';
         const el = $('seg-confirm');
         if (el) { el.hidden = true; el.innerHTML = ''; }
         if (r) r(valor);
@@ -730,8 +793,64 @@
         }
     }
 
+    /* ---------- La casilla de «hecha» y la validación del Director ----------
+       Quien no es admin, al palomear, entrega la tarea: queda «Por validar».
+       El admin valida lo entregado (queda terminada) o lo regresa con sus
+       observaciones; también puede cerrar directo lo que él mismo palomea. */
+    function alternarHecha(t) {
+        if (!t) return false;
+        if (t.estatus === 'por_validar') return esAdmin() ? validarTarea(t) : retirarEntrega(t);
+        if (t.estatus === 'completada') return actualizar(t.id, { estatus: 'pendiente' });
+        return actualizar(t.id, { estatus: 'completada' });
+    }
+
+    function validarTarea(t) {
+        if (!t || !esAdmin()) return false;
+        return actualizar(t.id, { estatus: 'completada' });
+    }
+
+    async function retirarEntrega(t) {
+        const ok = await confirmar({
+            tono: 'aviso', icono: 'rotate-left', iconoAceptar: 'rotate-left',
+            titulo: '¿Retirar la entrega?',
+            texto: 'La tarea vuelve a <b>En proceso</b> y deja de esperar la validación del Director.',
+            tarjeta: tarjetaTarea(t),
+            aceptar: 'Retirar entrega', cancelar: 'Dejarla entregada',
+        });
+        if (ok !== 'si') return false;
+        return actualizar(t.id, { estatus: 'en_proceso' });
+    }
+
+    async function regresarTarea(t) {
+        if (!t || !esAdmin()) return false;
+        const ok = await confirmar({
+            tono: 'aviso', icono: 'reply', iconoAceptar: 'reply',
+            titulo: 'Regresar para corrección',
+            texto: 'La tarea vuelve a <b>En proceso</b>. Escribe qué falta o qué hay que corregir: queda como comentario en la tarea, con tu nombre.',
+            tarjeta: tarjetaTarea(t),
+            campo: { placeholder: 'Ej. Falta el oficio firmado; la evidencia no corresponde a la subtarea 2…', requerido: true, etiqueta: 'Qué falta' },
+            aceptar: 'Regresar', cancelar: 'Cancelar',
+        });
+        if (ok !== 'si') return false;
+        const motivo = String(ultimoCampo || '').trim();
+        const hecho = await actualizar(t.id, { estatus: 'en_proceso' }, { bitacora: false, silencioso: true });
+        if (!hecho) return false;
+        bitacora(t.id, 'regreso', { motivo });
+        const c = await sb();
+        const { data, error } = await c.from('seguimiento_comentarios')
+            .insert({ tarea_id: t.id, autor: usuario().nombre, texto: '↩ Regresada para corrección: ' + motivo }).select().single();
+        if (!error && data) {
+            state.nComent.set(t.id, (state.nComent.get(t.id) || 0) + 1);
+            const dr = state.dr;
+            if (dr && dr.id === t.id && Array.isArray(dr.comentarios) && !dr.comentarios.some(x => x.id === data.id)) { dr.comentarios.push(data); pintarTab(); }
+        }
+        toast('Regresada' + (t.responsable ? ' a ' + t.responsable : '') + ' con tus observaciones.', 'ok');
+        renderPronto();
+        return true;
+    }
+
     /* Una renovación completada deja programada la siguiente, con su ciclo. */
-    async function programarSiguiente(t) {
+    async function programarSiguiente(t, opts) {
         if (t.siguiente_id) return null;
         const datos = C.siguienteOcurrencia(t);
         if (!datos) return null;
@@ -739,6 +858,7 @@
         if (!nueva) return null;
         await actualizar(t.id, { siguiente_id: nueva.id }, { bitacora: false, silencioso: true });
         bitacora(t.id, 'recurrencia', { fecha: nueva.fecha_limite, folio: C.folio(nueva.folio) });
+        if (opts && opts.silencioso) return nueva;
         const que = t.tipo === 'certificado' ? 'renovación del certificado' : t.tipo === 'renovacion' ? 'renovación' : 'ocurrencia';
         toast('Completada. La siguiente ' + que + ' quedó programada para el ' + C.fechaLarga(nueva.fecha_limite) + '.', 'ok',
             { texto: 'Abrir', fn: () => abrirTarea(nueva.id) });
@@ -759,7 +879,7 @@
         const t = buscar(id);
         if (!t || !esAdmin()) return;
         const nComent = state.nComent.get(id) || 0;
-        const nEvid = (t.evidencias || []).length;
+        const nEvid = C.rutasDeArchivos(t).length;
         const nSubs = (t.checklist || []).length;
         const decision = await confirmar({
             tono: 'peligro', icono: 'trash-can',
@@ -769,7 +889,7 @@
             lista: [
                 { ico: 'comments', txt: nComent ? plural(nComent, 'comentario', 'comentarios') : 'Sus comentarios' },
                 { ico: 'clock-rotate-left', txt: 'Su bitácora de actividad' },
-                { ico: 'paperclip', txt: nEvid ? plural(nEvid, 'evidencia', 'evidencias') + ' (PDF o fotos)' : 'Sus evidencias' },
+                { ico: 'paperclip', txt: nEvid ? plural(nEvid, 'archivo', 'archivos') + ' (evidencias y de sus subtareas)' : 'Sus evidencias' },
             ].concat(nSubs ? [{ ico: 'list-check', txt: plural(nSubs, 'subtarea', 'subtareas') }] : []),
             alterno: t.estatus !== 'cancelada' && puedeEditar() ? {
                 titulo: '¿Sólo ya no aplica?',
@@ -785,7 +905,7 @@
         }
         if (decision !== 'si') return;
         const c = await sb();
-        const rutas = (t.evidencias || []).map(e => e.path).filter(Boolean);
+        const rutas = C.rutasDeArchivos(t);
         const { error } = await c.from('seguimiento_tareas').delete().eq('id', id);
         if (error) { toast('No se pudo eliminar: ' + errTxt(error), 'error'); return; }
         if (rutas.length) c.storage.from(BUCKET).remove(rutas).catch(() => {});
@@ -798,13 +918,19 @@
     /* ==========================================================================
        Filtros y alcance
        ========================================================================== */
+    /** Las tareas del espacio a la vista (Diarias o Agenda). */
+    function delEspacio() {
+        return state.conDiarias ? state.tareas.filter(t => C.claseDe(t) === state.espacio) : state.tareas;
+    }
+    const enDiarias = () => state.conDiarias && state.espacio === 'diaria';
+    const tareasAgenda = () => (state.conDiarias ? state.tareas.filter(t => C.claseDe(t) === 'agenda') : state.tareas);
     function alcance() {
         // Todo lo que entra en subdirección, búsqueda y filtros de detalle, sin
         // importar estatus ni vencimiento: base de indicadores y resumen.
-        return C.filtrar(state.tareas, Object.assign({}, state.filtros, { situacion: '', estatus: [], verCerradas: true }), hoy());
+        return C.filtrar(delEspacio(), Object.assign({}, state.filtros, { situacion: '', estatus: [], verCerradas: true }), hoy());
     }
     function visibles() {
-        return C.ordenar(C.filtrar(state.tareas, state.filtros, hoy()), state.orden.campo, state.orden.asc);
+        return C.ordenar(C.filtrar(delEspacio(), state.filtros, hoy()), state.orden.campo, state.orden.asc);
     }
     function nFiltrosDetalle() {
         const f = state.filtros;
@@ -833,14 +959,18 @@
         if (!$('seg-body') || !state.cargado) return;
         state.sucio = false;
         if ($('seg-hoy')) $('seg-hoy').textContent = textoHoy();
-        pintarKpis();
+        pintarEspacios();
+        if (enDiarias()) pintarKpisDia(); else pintarKpis();
         pintarChips();
-        pintarAlerta();
+        pintarValidar();
+        if (enDiarias()) { const al = $('seg-alerta'); if (al) { al.className = 'seg-alerta'; al.innerHTML = ''; } } else pintarAlerta();
         pintarHerramientas();
         pintarVista();
     }
 
     function pintarHerramientas() {
+        const dia = enDiarias();
+        if ($('seg-views')) $('seg-views').hidden = dia;
         document.querySelectorAll('#seg-views .seg-view').forEach(b => {
             const on = b.dataset.vista === state.vista;
             b.classList.toggle('is-active', on);
@@ -848,7 +978,7 @@
         });
         const ag = $('seg-btn-agrupar');
         if (ag) {
-            ag.hidden = state.vista !== 'lista';
+            ag.hidden = dia || state.vista !== 'lista';
             const a = C.AGRUPACIONES.find(x => x.clave === state.agrupar);
             $('seg-agrupar-txt').textContent = a ? (a.clave === 'ninguno' ? 'Sin agrupar' : 'Por ' + a.nombre.toLowerCase()) : '';
         }
@@ -858,7 +988,7 @@
             ce.querySelector('i').className = 'fas fa-' + (state.filtros.verCerradas ? 'eye' : 'eye-slash');
             ce.dataset.tip = state.filtros.verCerradas ? 'Ocultar cerradas' : 'Mostrar cerradas';
             ce.dataset.tipSub = state.filtros.verCerradas ? 'Deja a la vista sólo lo que sigue abierto.' : 'Incluye también las completadas y canceladas.';
-            ce.hidden = state.vista === 'resumen';
+            ce.hidden = dia || state.vista === 'resumen';
         }
         const n = nFiltrosDetalle();
         const badge = $('seg-nfiltros');
@@ -887,7 +1017,7 @@
               sub: 'En proceso, revisión o detenidas', on: igual(f.estatus, enCurso),
               ayuda: 'Ya se empezaron pero no se terminan. Clic para verlas.' },
             { id: 'completadas', lbl: 'Completadas', ico: 'circle-check', c: '#16a34a', val: s.completadas,
-              sub: s.completadas_mes + ' este mes', on: igual(f.estatus, ['completada']),
+              sub: s.completadas_mes + ' este mes' + (s.por_validar ? ' · ' + s.por_validar + ' por validar' : ''), on: igual(f.estatus, ['completada']),
               ayuda: 'Tareas palomeadas como hechas. Clic para verlas.' },
             { id: 'cumplimiento', lbl: 'A tiempo', ico: 'bullseye', c: '#0891b2', val: s.cumplimiento == null ? '—' : s.cumplimiento + '%',
               sub: s.con_fecha_cerradas ? s.a_tiempo + ' de ' + s.con_fecha_cerradas + ' cerradas en fecha' : 'Aún sin cierres con fecha', on: false,
@@ -901,7 +1031,194 @@
             '<span class="seg-kpi-val">' + esc(k.val) + '</span><span class="seg-kpi-sub">' + esc(k.sub) + '</span></span></button>').join('');
     }
 
+    /* ==========================================================================
+       Espacios: Diarias y Agenda
+       ========================================================================== */
+    function pintarEspacios() {
+        const el = $('seg-espacios');
+        if (!el) return;
+        if (!state.conDiarias) {
+            el.hidden = !esAdmin();
+            el.innerHTML = esAdmin() ? '<div class="seg-esp-falta"><i class="fas fa-sun"></i><span><b>Diarias y Agenda.</b> Para separar el día a día de lo que va por agenda, ' +
+                'falta correr <code>db/seguimiento_diarias.sql</code> en Supabase (SQL Editor → Run).</span></div>' : '';
+            return;
+        }
+        el.hidden = false;
+        const h = hoy();
+        el.innerHTML = C.CLASES.map(c => {
+            const lista = state.tareas.filter(t => C.claseDe(t) === c.clave);
+            const abiertas = lista.filter(t => C.estaAbierta(t) && t.estatus !== 'por_validar');
+            const atrasadas = abiertas.filter(t => t.fecha_limite && t.fecha_limite < h).length;
+            const porValidar = esAdmin() ? lista.filter(t => t.estatus === 'por_validar').length : 0;
+            const sub = c.clave === 'diaria'
+                ? plural(abiertas.filter(t => t.fecha_limite === h).length, 'para hoy', 'para hoy') + (atrasadas ? ' · ' + plural(atrasadas, 'atrasada', 'atrasadas') : '')
+                : plural(abiertas.length, 'abierta', 'abiertas') + (atrasadas ? ' · ' + plural(atrasadas, 'vencida', 'vencidas') : '');
+            const on = state.espacio === c.clave;
+            return '<button type="button" class="seg-esp is-' + c.clave + (on ? ' is-on' : '') + '" role="tab" aria-selected="' + on + '" data-espacio="' + c.clave + '"' +
+                tip(c.nombre, c.ayuda, { ico: c.icono }) + '>' +
+                '<span class="seg-esp-ico"><i class="fas fa-' + c.icono + '"></i>' + (atrasadas ? '<span class="seg-esp-alerta" aria-hidden="true"></span>' : '') + '</span>' +
+                '<span class="seg-esp-txt"><b>' + esc(c.nombre) + '</b><small>' + esc(sub) + '</small></span>' +
+                (porValidar ? '<span class="seg-esp-val"' + tip(plural(porValidar, 'tarea espera', 'tareas esperan') + ' tu validación', 'En ' + c.nombre + '.', { ico: 'stamp', c: '#0891b2' }) + '><i class="fas fa-stamp"></i>' + porValidar + '</span>' : '') +
+                '</button>';
+        }).join('');
+    }
+
+    function cambiarEspacio(clave) {
+        if (!state.conDiarias || (clave !== 'diaria' && clave !== 'agenda') || clave === state.espacio) return;
+        state.espacio = clave;
+        Object.assign(state.filtros, { situacion: '', estatus: [] });
+        guardarPrefs();
+        renderTodo();
+    }
+
+    /** Indicadores de Diarias: lo de hoy, lo atrasado, lo entregado y lo hecho. */
+    function pintarKpisDia() {
+        const el = $('seg-kpis');
+        if (!el) return;
+        const h = hoy();
+        const d = C.agendaDelDia(alcance(), h);
+        const rutinas = alcance().filter(t => C.estaAbierta(t) && C.diasRecurrencia(t)).length;
+        const kpis = [
+            { id: 'hoy', lbl: 'Para hoy', ico: 'sun', c: '#d97706', val: d.hoy.length, sub: d.manana.length ? plural(d.manana.length, 'más mañana', 'más mañana') : 'Lo que toca hoy' },
+            { id: 'atrasadas', lbl: 'Atrasadas', ico: 'triangle-exclamation', c: '#dc2626', val: d.atrasadas.length, sub: d.atrasadas.length ? 'De días anteriores' : 'Nada atrasado' },
+            { id: 'semana', lbl: 'Esta semana', ico: 'calendar-week', c: '#2563eb', val: d.semana.length, sub: 'Los próximos 7 días' },
+            { id: 'entregadas', lbl: 'Entregadas', ico: 'stamp', c: '#0891b2', val: d.entregadas.length, sub: esAdmin() ? 'Esperan tu validación' : 'Esperan validación' },
+            { id: 'hechas', lbl: 'Hechas hoy', ico: 'circle-check', c: '#16a34a', val: d.hechas.length, sub: 'Validadas hoy' },
+            { id: 'rutinas', lbl: 'Rutinas', ico: 'repeat', c: '#7c3aed', val: rutinas, sub: 'Se repiten solas' },
+        ];
+        el.innerHTML = kpis.map(k =>
+            '<button type="button" class="seg-kpi" style="--c:' + k.c + '" data-kpi="dia:' + k.id + '"' + tip(k.lbl + ': ' + k.val, 'Clic para ir a esa parte.', { c: k.c }) + '>' +
+            '<span class="seg-kpi-ico"><i class="fas fa-' + k.ico + '"></i></span>' +
+            '<span class="seg-kpi-txt"><span class="seg-kpi-lbl">' + k.lbl + '</span>' +
+            '<span class="seg-kpi-val">' + k.val + '</span><span class="seg-kpi-sub">' + esc(k.sub) + '</span></span></button>').join('');
+    }
+
+    /** El área con la que se capturan los pendientes del día (la última elegida, si se puede). */
+    function sdDiaria() {
+        const permitidas = C.subdireccionesPermitidas(state.area);
+        if (state.diaAdd.sd && permitidas.includes(state.diaAdd.sd)) return state.diaAdd.sd;
+        return subdirUnica() || (permitidas.includes('DO') ? 'DO' : permitidas[0]);
+    }
+
+    const DIA_PARA = { hoy: { txt: 'Hoy', ico: 'sun' }, manana: { txt: 'Mañana', ico: 'cloud-sun' }, sin: { txt: 'Sin fecha', ico: 'inbox' } };
+
+    function htmlDiaAgregar() {
+        const a = state.diaAdd;
+        const sd = C.SUBDIR[sdDiaria()] || { corto: '—', color: '#64748b' };
+        const para = DIA_PARA[a.para] || DIA_PARA.hoy;
+        return '<div class="seg-dia-add">' +
+            '<i class="fas fa-plus seg-dia-add-ico"></i>' +
+            '<input type="text" id="seg-dia-nueva" maxlength="' + C.LIMITES.titulo + '" value="' + esc(a.texto) + '" placeholder="Agregar un pendiente del día… y Enter" aria-label="Nuevo pendiente del día" autocomplete="off">' +
+            '<div class="seg-dia-ops">' +
+              '<button type="button" class="seg-dia-op" data-accion="dia-op" data-dia="para"' + tip('¿Para cuándo?', 'Hoy, mañana o sin fecha.', { ico: 'calendar' }) + '><i class="fas fa-' + para.ico + '"></i>' + para.txt + '</button>' +
+              '<button type="button" class="seg-dia-op" data-accion="dia-op" data-dia="sd" style="--c:' + sd.color + '"' + tip('¿De qué área?', 'Subdirección a la que se le asigna.', { ico: 'sitemap' }) + '><span class="seg-chip-dot"></span>' + esc(sd.corto) + '</button>' +
+              '<button type="button" class="seg-dia-op' + (a.rutina ? ' is-on' : '') + '" data-accion="dia-op" data-dia="rutina"' + tip('¿Se repite?', 'Para rutinas: revisar el parte, firmar la bitácora… La siguiente se programa sola al entregarla.', { ico: 'repeat' }) + '>' +
+                '<i class="fas fa-repeat"></i>' + (a.rutina ? esc(C.RECU[a.rutina].nombre) : 'Una vez') + '</button>' +
+            '</div></div>';
+    }
+
+    const DIA_CORTO = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const diaYFecha = iso => { const d = C.deISO(iso); return d ? DIA_CORTO[d.getDay()] + ' ' + C.fechaCorta(iso).replace(/ \d{2}$/, '') : ''; };
+
+    function htmlDiaItem(t, h, sec) {
+        const sd = C.SUBDIR[t.subdireccion];
+        const ck = C.avanceChecklist(t);
+        const nC = state.nComent.get(t.id) || 0;
+        const prio = C.PRIO[t.prioridad] || C.PRIO.normal;
+        const cuando = sec === 'atrasadas' ? C.relativo(t.fecha_limite, h)
+            : sec === 'semana' || sec === 'despues' ? diaYFecha(t.fecha_limite)
+            : sec === 'entregadas' ? (t.entregada_en ? 'entregada ' + hace(t.entregada_en) : 'entregada')
+            : '';
+        const meta = [
+            sd ? '<span class="seg-dia-sd" style="--c:' + sd.color + '"><i aria-hidden="true"></i>' + esc(sd.corto) + '</span>' : '',
+            C.seRepite(t) ? '<span' + tipRepeticion(t) + '><i class="fas fa-repeat"></i>' + esc(C.nombreRecurrencia(t)) + '</span>' : '',
+            ck.total ? '<span' + tipSubtareas(t) + '><i class="fas fa-list-check"></i>' + ck.hechos + '/' + ck.total + '</span>' : '',
+            nC ? '<span><i class="far fa-comment"></i>' + nC + '</span>' : '',
+            t.prioridad === 'urgente' || t.prioridad === 'alta' ? '<span class="seg-dia-prio" style="--c:' + prio.color + '"><i class="fas fa-flag"></i>' + esc(prio.nombre) + '</span>' : '',
+        ].filter(Boolean);
+        return '<div class="seg-dia-item is-' + sec + (C.estaAbierta(t) ? '' : ' is-cerrada') + marcaAbierta(t.id) + '" data-id="' + t.id + '" tabindex="0">' +
+            htmlHecho(t, puedeEditar() ? '' : ' disabled', true) +
+            '<div class="seg-dia-main"><span class="seg-dia-tit">' + esc(t.titulo) + '</span>' +
+              (meta.length ? '<span class="seg-dia-meta">' + meta.join('') + '</span>' : '') + '</div>' +
+            (cuando ? '<span class="seg-dia-cuando">' + esc(cuando) + '</span>' : '') +
+            avatar(t.responsable, true) + '</div>';
+    }
+
+    /** Diarias: lo del día como una agenda personal. */
+    function htmlDiarias(h) {
+        const d = C.agendaDelDia(alcance(), h);
+        const sec = (clave, titulo, icono, lista, o) => {
+            const op = o || {};
+            if (!lista.length && !op.siempre) return '';
+            return '<section class="seg-dia-sec is-' + clave + '" id="seg-dia-' + clave + '">' +
+                '<h4 class="seg-dia-h"><i class="fas fa-' + icono + '"></i>' + titulo + (op.fecha ? '<small>' + esc(op.fecha) + '</small>' : '') +
+                  '<span class="seg-dia-n">' + lista.length + '</span></h4>' +
+                (lista.length ? '<div class="seg-dia-lista">' + lista.map(t => htmlDiaItem(t, h, clave)).join('') + '</div>'
+                    : '<div class="seg-dia-vacio">' + (op.vacio || 'Nada aquí.') + '</div>') +
+                '</section>';
+        };
+        const nada = !Object.values(d).some(l => l.length);
+        return '<div class="seg-dia">' +
+            (puedeEditar() ? htmlDiaAgregar() : '') +
+            (nada && !hayFiltros()
+                ? '<div class="seg-dia-bienvenida"><i class="fas fa-sun"></i><div><b>Tu día, en un solo lugar.</b>' +
+                    '<span>Anota aquí los pendientes cortos y las rutinas (revisar el parte, firmar la bitácora…). Lo que tiene seguimiento formal —órdenes, compromisos, renovaciones— va en <b>Agenda</b>.</span></div></div>'
+                : '') +
+            sec('atrasadas', 'Atrasadas', 'triangle-exclamation', d.atrasadas) +
+            sec('hoy', 'Hoy', 'sun', d.hoy, { siempre: !nada, fecha: textoHoy(), vacio: d.atrasadas.length ? 'Nada más para hoy: ponte al corriente con lo atrasado.' : 'Nada pendiente para hoy.' }) +
+            sec('manana', 'Mañana', 'cloud-sun', d.manana) +
+            sec('semana', 'Esta semana', 'calendar-week', d.semana) +
+            sec('despues', 'Más adelante', 'calendar', d.despues) +
+            sec('sinFecha', 'Sin fecha', 'inbox', d.sinFecha) +
+            sec('entregadas', esAdmin() ? 'Entregadas · por validar' : 'Entregadas · esperan validación', 'stamp', d.entregadas) +
+            sec('hechas', 'Hechas hoy', 'circle-check', d.hechas) +
+            '</div>';
+    }
+
+    async function crearDiaria(input) {
+        const titulo = String(input.value || '').trim().slice(0, C.LIMITES.titulo);
+        if (!titulo) return;
+        const a = state.diaAdd;
+        const h = hoy();
+        let fecha = a.para === 'manana' ? C.sumarDias(h, 1) : a.para === 'sin' ? null : h;
+        if (a.rutina && !fecha) fecha = h;                        // una rutina necesita su día
+        if (a.rutina === 'laborable') while (!C.esLaborable(fecha)) fecha = C.sumarDias(fecha, 1);
+        const sd = sdDiaria();
+        input.disabled = true;
+        const nueva = await crearEnBase({
+            titulo, clase: 'diaria', tipo: 'tarea', prioridad: 'normal', estatus: 'pendiente',
+            subdireccion: sd, gerencia: (state.area.tipo === 'gerencia' && sd === state.area.subdireccion) ? state.area.gerencia : null,
+            fecha_limite: fecha, recurrencia: a.rutina || 'ninguna', aviso_dias: 0,
+        });
+        input.disabled = false;
+        if (!nueva) { input.focus(); return; }
+        a.texto = '';
+        renderTodo();
+        $('seg-dia-nueva')?.focus();
+        destellar(nueva.id);
+    }
+
+    function menuDia(el) {
+        const a = state.diaAdd;
+        const cambiar = fn => v => { fn(v); guardarPrefs(); renderTodo(); $('seg-dia-nueva')?.focus(); };
+        if (el.dataset.dia === 'para') {
+            return menuSimple(el, '¿Para cuándo?', Object.keys(DIA_PARA).map(k => ({ valor: k, texto: DIA_PARA[k].txt, icono: DIA_PARA[k].ico })), a.para, cambiar(v => { a.para = v; }));
+        }
+        if (el.dataset.dia === 'sd') {
+            const permitidas = C.subdireccionesPermitidas(state.area);
+            return menuSimple(el, '¿De qué área?', C.SUBDIRECCIONES.filter(x => permitidas.includes(x.clave))
+                .map(x => ({ valor: x.clave, texto: x.nombre, icono: x.icono, color: x.color })), sdDiaria(), cambiar(v => { a.sd = v; }));
+        }
+        const op = [{ valor: '', texto: 'Una vez', icono: 'minus' }].concat(['diaria', 'laborable', 'semanal'].map(k => ({ valor: k, texto: C.RECU[k].nombre, icono: 'repeat' })));
+        return menuSimple(el, '¿Se repite?', op, a.rutina, cambiar(v => { a.rutina = v; }));
+    }
+
     function clicKpi(id) {
+        if (String(id).startsWith('dia:')) {
+            const s = document.getElementById('seg-dia-' + id.slice(4));
+            if (s && typeof s.scrollIntoView === 'function') s.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            return;
+        }
         const f = state.filtros;
         const enCurso = ['en_proceso', 'en_revision', 'detenida'];
         if (id === 'cumplimiento') { state.vista = 'resumen'; guardarPrefs(); renderTodo(); return; }
@@ -917,7 +1234,7 @@
     function pintarChips() {
         const el = $('seg-chips');
         if (!el) return;
-        const base = C.filtrar(state.tareas, Object.assign({}, state.filtros, { subdirecciones: [], situacion: '', estatus: [], verCerradas: false }), hoy());
+        const base = C.filtrar(delEspacio(), Object.assign({}, state.filtros, { subdirecciones: [], situacion: '', estatus: [], verCerradas: false }), hoy());
         if (areaRestringida()) {
             const sd = C.SUBDIR[state.area.subdireccion] || {};
             el.innerHTML = '<span class="seg-area-tag" style="--c:' + (sd.color || '#4f46e5') + '"' + tip('Tu área en Seguimiento', explicarArea(), { ico: 'lock' }) + '>' +
@@ -939,6 +1256,26 @@
                     tip(s.nombre, plural(n, 'abierta', 'abiertas') + (venc ? ' · ' + plural(venc, 'vencida', 'vencidas') : '') + '. Clic para ver sólo esta; puedes elegir varias.', { c: s.color }) + '>' +
                     '<span class="seg-chip-dot"></span>' + esc(s.corto) + '<span class="seg-chip-n">' + n + '</span></button>';
             }).join('');
+    }
+
+    /** Para el admin: cuántas tareas entregadas esperan su validación. */
+    function pintarValidar() {
+        const el = $('seg-validar');
+        if (!el) return;
+        if (!esAdmin()) { el.innerHTML = ''; return; }
+        if (!state.conValidacion) {
+            el.innerHTML = '<i class="fas fa-stamp"></i><div class="seg-alerta-txt"><b>Validación del Director.</b> Para que lo que se marca como hecho espere tu visto bueno, ' +
+                'falta correr <code>db/seguimiento_validacion.sql</code> en Supabase (SQL Editor → Run).</div>';
+            return;
+        }
+        const lista = alcance().filter(t => t.estatus === 'por_validar')
+            .sort((a, b) => String(a.entregada_en || '').localeCompare(String(b.entregada_en || '')));
+        if (!lista.length) { el.innerHTML = ''; return; }
+        const primera = lista[0];
+        el.innerHTML = '<i class="fas fa-stamp"></i><div class="seg-alerta-txt"><b>' + plural(lista.length, 'tarea entregada espera', 'tareas entregadas esperan') + ' tu validación.</b> ' +
+            'La más antigua: «' + esc(recortar(primera.titulo, 64)) + '»' + (primera.entregada_por ? ', de ' + esc(primera.entregada_por) : '') +
+            (primera.entregada_en ? ' (' + esc(hace(primera.entregada_en)) + ')' : '') + '.</div>' +
+            '<button type="button" class="seg-btn seg-btn-sm seg-btn-validar" data-validar="ver"><i class="fas fa-list-check"></i>Revisar' + (lista.length > 1 ? ' las ' + lista.length : '') + '</button>';
     }
 
     function pintarAlerta() {
@@ -972,7 +1309,8 @@
         const rapida = act && body.contains(act) && act.dataset && act.dataset.add != null
             ? { clave: act.dataset.add, valor: act.value, pos: act.selectionStart } : null;
         const h = hoy();
-        if (!state.tareas.length && state.vista !== 'resumen') {
+        if (enDiarias()) body.innerHTML = htmlDiarias(h);
+        else if (!state.tareas.length && state.vista !== 'resumen') {
             body.innerHTML = vacioInicial();
         } else if (state.vista === 'tablero') body.innerHTML = htmlTablero(h);
         else if (state.vista === 'calendario') body.innerHTML = htmlCalendario(h);
@@ -1098,9 +1436,10 @@
         if (t.gerencia) meta.push('<span>' + esc(t.gerencia) + '</span>');
         const tags = [];
         if (ck.total) tags.push('<span class="seg-tag' + (ck.hechos === ck.total ? ' is-ok' : '') + '"' + tipSubtareas(t) + '><i class="fas fa-list-check"></i>' + ck.hechos + '/' + ck.total + '</span>');
-        if (C.mesesRecurrencia(t)) tags.push('<span class="seg-tag"' + tipRepeticion(t) + '><i class="fas fa-repeat"></i>' + esc(C.nombreRecurrencia(t)) + '</span>');
-        const nEv = (t.evidencias || []).length;
-        if (nEv) tags.push('<span class="seg-tag"' + tip(plural(nEv, 'evidencia adjunta', 'evidencias adjuntas'), (t.evidencias || []).map(e => e.nombre).slice(0, 4).join(' · '), { ico: 'paperclip' }) + '><i class="fas fa-paperclip"></i>' + nEv + '</span>');
+        if (C.seRepite(t)) tags.push('<span class="seg-tag"' + tipRepeticion(t) + '><i class="fas fa-repeat"></i>' + esc(C.nombreRecurrencia(t)) + '</span>');
+        const nombresArch = (t.evidencias || []).map(e => e.nombre).concat((t.checklist || []).flatMap(i => (i.archivos || []).map(a => a.nombre)));
+        const nEv = nombresArch.length;
+        if (nEv) tags.push('<span class="seg-tag"' + tip(plural(nEv, 'archivo adjunto', 'archivos adjuntos'), nombresArch.slice(0, 4).join(' · ') + (nEv > 4 ? '…' : ''), { ico: 'paperclip' }) + '><i class="fas fa-paperclip"></i>' + nEv + '</span>');
         if (t.referencia) tags.push('<span class="seg-tag"' + tip('Referencia', t.referencia, { ico: 'file-lines' }) + '><i class="fas fa-file-lines"></i>' + esc(recortar(t.referencia, 32)) + '</span>');
         (t.etiquetas || []).slice(0, 3).forEach(e => tags.push('<span class="seg-tag is-label">#' + esc(e) + '</span>'));
         let fecha;
@@ -1108,6 +1447,7 @@
         else {
             const sub = t.estatus === 'completada'
                 ? (t.completada_en ? 'cerrada ' + C.fechaCorta(C.aISO(new Date(t.completada_en))) : 'cerrada')
+                : t.estatus === 'por_validar' ? (t.entregada_en ? 'entregada ' + C.fechaCorta(C.aISO(new Date(t.entregada_en))).replace(/ \d{2}$/, '') : 'entregada')
                 : cerrada ? '' : C.relativo(t.fecha_limite, h);
             fecha = '<span class="seg-fecha is-' + (cerrada ? 'cerrada' : sit) + '"><b>' + C.fechaCorta(t.fecha_limite) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>';
         }
@@ -1115,7 +1455,7 @@
         const waTitle = tel ? 'Enviar recordatorio por WhatsApp a ' + (t.responsable || 'el responsable') : 'Recordatorio por WhatsApp (falta el número)';
         const nombreSit = { vencida: 'Venció', vence_hoy: 'Vence hoy', por_vencer: 'Vence', a_tiempo: 'Vence' }[sit];
         const tipFecha = t.fecha_limite
-            ? tip(C.fechaLarga(t.fecha_limite), cerrada ? (t.estatus === 'completada' ? 'Ya está hecha.' : 'Cancelada.')
+            ? tip(C.fechaLarga(t.fecha_limite), t.estatus === 'por_validar' ? textoEntrega(t) + ' Espera la validación del Director.' : cerrada ? (t.estatus === 'completada' ? 'Ya está hecha.' : 'Cancelada.')
                 : (nombreSit === 'Vence hoy' ? 'Vence hoy' : nombreSit + ' ' + C.relativo(t.fecha_limite, h)) + ' · avisa ' + plural(+t.aviso_dias || 0, 'día', 'días') + ' antes.' + (ed ? ' Clic para cambiarla.' : ''),
                 { ico: 'calendar-check', c: sit === 'vencida' ? '#dc2626' : ['por_vencer', 'vence_hoy'].includes(sit) ? '#d97706' : '' })
             : tip('Sin fecha límite', ed ? 'Clic para ponerle una: así el sistema avisa antes de que venza.' : 'No tiene fecha límite.', { ico: 'calendar' });
@@ -1142,15 +1482,29 @@
     }
 
     /** La casilla para palomear que ya se hizo. */
+    const fechaDe = v => (v ? C.fechaLarga(C.aISO(new Date(v))) : '');
+    const textoEntrega = t => (t.entregada_por ? 'La entregó ' + t.entregada_por : 'Se entregó') + (t.entregada_en ? ' el ' + fechaDe(t.entregada_en) : '') + '.';
+
     function htmlHecho(t, dis, chica) {
+        if (t.estatus === 'por_validar') {
+            const adm = esAdmin();
+            return '<button type="button" class="seg-hecho is-validar' + (chica ? ' seg-hecho-sm' : '') + '" data-accion="completar"' + (dis || '') +
+                tip(adm ? 'Entregada · falta tu validación' : 'Entregada · espera validación',
+                    textoEntrega(t) + ' ' + (adm ? 'Clic para validarla y darla por terminada.' : 'El Director la revisa y la valida. Clic para retirar la entrega.'), { c: '#0891b2', ico: 'stamp' }) +
+                ' aria-label="' + (adm ? 'Validar tarea' : 'Retirar entrega') + '"><i class="fas fa-hourglass-half"></i></button>';
+        }
         const hecha = t.estatus === 'completada';
+        // Validada: sólo un admin la reabre.
+        if (hecha && requiereValidar()) dis = ' disabled';
         const txt = hecha ? 'Hecha. Clic para reabrir' : 'Marcar como hecha';
-        const cuando = hecha && t.completada_en ? 'Se completó el ' + C.fechaLarga(C.aISO(new Date(t.completada_en))) + '. ' : '';
-        const sub = hecha ? cuando + 'Clic para reabrirla.'
-            : C.mesesRecurrencia(t) && t.fecha_limite ? 'Al palomearla se programa sola la siguiente (' + C.nombreRecurrencia(t).toLowerCase() + ').'
+        const cuando = hecha ? (t.validada_por ? 'La validó ' + t.validada_por + (t.validada_en ? ' el ' + fechaDe(t.validada_en) : '') + '. '
+            : t.completada_en ? 'Se completó el ' + fechaDe(t.completada_en) + '. ' : '') : '';
+        const sub = hecha ? cuando + (requiereValidar() ? 'Sólo un admin de Seguimiento puede reabrirla.' : 'Clic para reabrirla.')
+            : requiereValidar() ? 'Al palomearla se entrega al Director para que la valide.'
+            : C.seRepite(t) && t.fecha_limite ? 'Al palomearla se programa sola la siguiente (' + C.nombreRecurrencia(t).toLowerCase() + ').'
             : 'Palomea cuando ya se cumplió.';
         return '<button type="button" class="seg-hecho' + (hecha ? ' is-done' : '') + (chica ? ' seg-hecho-sm' : '') + '" data-accion="completar"' + (dis || '') +
-            tip(hecha ? 'Hecha' : 'Marcar como hecha', dis ? '' : sub, { c: hecha ? '#16a34a' : '' }) + ' aria-label="' + txt + '" aria-pressed="' + hecha + '"><i class="fas fa-check"></i></button>';
+            tip(hecha ? (state.conValidacion ? 'Hecha y validada' : 'Hecha') : 'Marcar como hecha', dis && !hecha ? '' : sub, { c: hecha ? '#16a34a' : '' }) + ' aria-label="' + txt + '" aria-pressed="' + hecha + '"><i class="fas fa-check"></i></button>';
     }
 
     function tipSubtareas(t) {
@@ -1161,8 +1515,9 @@
     }
 
     function tipRepeticion(t) {
-        const m = C.mesesRecurrencia(t);
-        return tip('Se repite ' + C.nombreRecurrencia(t).toLowerCase(), t.fecha_limite ? 'Al completarla se programa la siguiente para el ' + C.fechaLarga(C.sumarMeses(t.fecha_limite, m)) + '.' : 'Ponle fecha límite para programar la siguiente.', { ico: 'repeat' });
+        const sig = C.fechaSiguiente(t, hoy());
+        const cuando = C.diasRecurrencia(t) ? 'Al entregarla' : 'Al completarla';
+        return tip('Se repite ' + C.nombreRecurrencia(t).toLowerCase(), sig ? cuando + ' se programa la siguiente para el ' + C.fechaLarga(sig) + '.' : 'Ponle fecha límite para programar la siguiente.', { ico: 'repeat' });
     }
 
     function tipWhatsApp(t) {
@@ -1194,7 +1549,7 @@
         const base = baseDeGrupo(clave);
         if (!base.subdireccion) { input.value = ''; nuevaTarea(Object.assign(base, { titulo })); return; }
         input.disabled = true;
-        const nueva = await crearEnBase(Object.assign({ titulo, tipo: 'orden', prioridad: 'normal', estatus: 'pendiente' }, base));
+        const nueva = await crearEnBase(Object.assign({ titulo, tipo: 'orden', prioridad: 'normal', estatus: 'pendiente', clase: 'agenda' }, base));
         input.disabled = false;
         if (!nueva) return;
         input.value = '';
@@ -1226,13 +1581,13 @@
             && t.completada_en && (Date.now() - new Date(t.completada_en).getTime()) / 864e5 <= 14);
         const tareas = vis.concat(recientes);
         const ed = puedeEditar();
-        return '<div class="seg-board">' + C.ESTATUS.filter(e => e.clave !== 'cancelada' || state.filtros.verCerradas).map(e => {
+        return '<div class="seg-board">' + C.ESTATUS.filter(e => (e.clave !== 'cancelada' || state.filtros.verCerradas) && (e.clave !== 'por_validar' || state.conValidacion)).map(e => {
             const lista = C.ordenar(tareas.filter(t => t.estatus === e.clave), state.orden.campo, state.orden.asc);
             return '<div class="seg-col" style="--c:' + e.color + '"' + (ed ? ' data-drop-estatus="' + e.clave + '"' : '') + '>' +
                 '<div class="seg-col-head"><span class="seg-pill seg-col-pill" style="--c:' + e.color + '"><i class="fas fa-' + e.icono + '" aria-hidden="true"></i>' + e.nombre + '</span><span class="seg-group-n">' + lista.length + '</span>' +
                 (e.clave === 'completada' && recientes.length ? '<span class="seg-group-n" style="margin-left:auto;font-size:.68rem">últimos 14 días</span>' : '') + '</div>' +
                 '<div class="seg-col-body">' + (lista.map(t => htmlTarjeta(t, h)).join('') || '<div class="seg-col-vacia">Arrastra aquí una tarea</div>') +
-                (ed && C.ABIERTOS.includes(e.clave) ? '<button type="button" class="seg-col-add" data-accion="col-nueva" data-estatus="' + e.clave + '"><i class="fas fa-plus me-1"></i>Agregar</button>' : '') +
+                (ed && C.ABIERTOS.includes(e.clave) && e.clave !== 'por_validar' ? '<button type="button" class="seg-col-add" data-accion="col-nueva" data-estatus="' + e.clave + '"><i class="fas fa-plus me-1"></i>Agregar</button>' : '') +
                 '</div></div>';
         }).join('') + '</div>';
     }
@@ -1253,7 +1608,7 @@
                 '<i class="fas fa-flag" style="color:' + prio.color + '"' + tip('Prioridad ' + prio.nombre.toLowerCase(), '', { c: prio.color }) + '></i>' +
                 (ck.total ? '<span' + tipSubtareas(t) + '><i class="fas fa-list-check"></i> ' + ck.hechos + '/' + ck.total + '</span>' : '') +
                 (nC ? '<span' + tip(plural(nC, 'comentario', 'comentarios'), 'Abre la tarea para leerlos.', { ico: 'comments' }) + '><i class="far fa-comment"></i> ' + nC + '</span>' : '') +
-                (C.mesesRecurrencia(t) ? '<i class="fas fa-repeat"' + tipRepeticion(t) + '></i>' : '') +
+                (C.seRepite(t) ? '<i class="fas fa-repeat"' + tipRepeticion(t) + '></i>' : '') +
               '</span>' + avatar(t.responsable, true) +
             '</div></div>';
     }
@@ -1594,9 +1949,14 @@
 
     /* Menús de propiedades: sirven igual para la lista que para el panel. */
     function menuEstatus(anchor, t, alElegir) {
+        // Sin la validación instalada no existe «Por validar»; con ella, quien no
+        // es admin no puede poner «Completada»: entrega (Por validar).
+        const lista = C.ESTATUS.filter(e => e.clave === t.estatus
+            || (e.clave === 'por_validar' ? state.conValidacion : e.clave === 'completada' ? !requiereValidar() : true));
         abrirMenu(anchor, {
             titulo: 'Estatus',
-            items: C.ESTATUS.map(e => ({ valor: e.clave, texto: e.nombre, color: e.color, icono: e.icono, sel: t.estatus === e.clave })),
+            items: lista.map(e => ({ valor: e.clave, texto: e.clave === 'por_validar' && requiereValidar() && t.estatus !== 'por_validar' ? 'Entregar · por validar' : e.nombre,
+                color: e.color, icono: e.icono, sel: t.estatus === e.clave })),
             alElegir,
         });
     }
@@ -1718,7 +2078,8 @@
             titulo: '', descripcion: '', tipo: 'orden', subdireccion: subdirUnica(), gerencia: gerenciaPorDefecto(), estatus: 'pendiente', prioridad: 'normal',
             responsable: '', responsable_num: null, responsable_tel: '', fecha_inicio: null, fecha_limite: null,
             recurrencia: 'ninguna', aviso_dias: 7, referencia: '', etiquetas: [], checklist: [], evidencias: [],
-        }, base || {});
+            clase: state.espacio,
+        }, enDiarias() ? { tipo: 'tarea', fecha_limite: hoy(), aviso_dias: 0, subdireccion: sdDiaria() } : {}, base || {});
         state.dr = { modo: 'crear', id: null, t, tab: 'comentarios', archivos: [] };
         pintarDrawer();
         mostrarDrawer(true);
@@ -1736,6 +2097,7 @@
         if (!d) return;
         d.classList.toggle('is-open', si);
         bd.classList.toggle('is-open', si);
+        if (!si) d.dataset.pintada = '';   // al volver a abrir, empieza arriba
         d.setAttribute('aria-hidden', si ? 'false' : 'true');
         document.querySelectorAll('#seg-body .is-abierta').forEach(x => x.classList.remove('is-abierta'));
         if (si && state.dr && state.dr.id) document.querySelectorAll('#seg-body [data-id="' + cssEsc(state.dr.id) + '"]').forEach(x => x.classList.add('is-abierta'));
@@ -1845,6 +2207,7 @@
                 '<ul class="seg-gc-tips">' +
                   '<li><i class="fas fa-wand-magic-sparkles"></i>¿No sabes cómo repartirlas? Captúralas sin fecha y usa <b>«Repartir en el periodo»</b>: el sistema divide los días parejo, un tramo por subtarea.</li>' +
                   '<li><i class="fas fa-square-check"></i>Palomea cada subtarea al terminarla: en el cronograma la barra de la tarea se va llenando sola.</li>' +
+                  '<li><i class="fas fa-paperclip"></i>En cada subtarea, <b>«Observaciones y archivos»</b>: anota cómo se hizo y adjunta el respaldo (Word, Excel, PDF o imagen). Así el Director ve cómo se cumplió cada paso.</li>' +
                   '<li><i class="fas fa-triangle-exclamation"></i>Si una subtarea se sale del periodo se marca en ámbar: ajusta su fecha o la de la tarea.</li>' +
                 '</ul>') +
 
@@ -1855,21 +2218,23 @@
                   '<li><b>¿A quién le toca?</b> Subdirección, gerencia, responsable y su WhatsApp.</li>' +
                   '<li><b>¿Para cuándo?</b> Inicio y fecha límite; si se repite, cada cuánto; y con cuántos días de anticipación avisar.</li>' +
                   '<li><b>Seguimiento:</b> el estatus con el que arranca, la referencia (oficio, minuta o acuerdo) y etiquetas para encontrarla.</li>' +
-                  '<li><b>Subtareas y evidencias:</b> los pasos con su inicio y fin, y los PDF o fotos que ya tengas.</li>' +
+                  '<li><b>Subtareas y evidencias:</b> los pasos con su inicio y fin, y los archivos (PDF, Word, Excel o fotos) que ya tengas.</li>' +
                   '<li><b>Crear tarea.</b> Todo lo demás se guarda solo conforme lo cambias.</li>' +
                 '</ol>') +
 
               seccion(5, 'Durante el seguimiento',
                 '<ul class="seg-gc-tips">' +
-                  '<li><i class="fas fa-circle-half-stroke"></i>Mueve el <b>estatus</b> conforme avance: Pendiente → En proceso → En revisión → Completada. Si algo la frena, ponla en <b>Detenida</b> y explica por qué en los comentarios.</li>' +
+                  '<li><i class="fas fa-circle-half-stroke"></i>Mueve el <b>estatus</b> conforme avance: Pendiente → En proceso → En revisión → Por validar → Completada. Si algo la frena, ponla en <b>Detenida</b> y explica por qué en los comentarios.</li>' +
                   '<li><i class="far fa-comments"></i>Deja en <b>comentarios</b> los acuerdos y avances: quedan con fecha y autor.</li>' +
+                  '<li><i class="fas fa-sun"></i>Lo del <b>día a día</b> (pendientes cortos y rutinas como revisar el parte) va en <b>Diarias</b>; lo que tiene seguimiento formal (órdenes, compromisos, renovaciones), en <b>Agenda</b>. Las dos pasan por la validación del Director.</li>' +
                   '<li><i class="fab fa-whatsapp"></i>Con <b>Recordar</b> le mandas al responsable un WhatsApp con lo que falta.</li>' +
                   '<li><i class="fas fa-chart-gantt"></i>En <b>Cronograma</b> ves todas las tareas en el tiempo, con sus subtareas debajo.</li>' +
                 '</ul>') +
 
               seccion(6, 'Al terminar',
                 '<ul class="seg-gc-tips">' +
-                  '<li><i class="fas fa-check"></i>Palomea <b>Hecha</b> y sube la evidencia de que se cumplió.</li>' +
+                  '<li><i class="fas fa-check"></i>Sube la evidencia, anota cómo se hizo cada subtarea y palomea <b>Hecha</b>: la tarea se entrega y queda <b>Por validar</b>.</li>' +
+                  '<li><i class="fas fa-stamp"></i>El <b>Director</b> la revisa: si está completa la <b>valida</b> y queda terminada; si falta algo, la <b>regresa</b> con sus observaciones en los comentarios.</li>' +
                   '<li><i class="fas fa-repeat"></i>Si se repite, la siguiente se programa sola, con sus subtareas recorridas a las nuevas fechas.</li>' +
                 '</ul>') +
             '</div>' +
@@ -1887,8 +2252,8 @@
               '<li><b>Elige la subdirección</b> a la que le toca. Si sabes quién lo atiende, asígnalo y pon su WhatsApp para poder recordarle.</li>' +
               '<li><b>Pon la fecha límite.</b> Si se renueva (licencias, certificados, contratos), elige cada cuánto se repite: al completarla se programa sola la siguiente.</li>' +
               '<li><b>Si son varios pasos, agrégalos como subtareas</b>, cada una con su <b>Inicio</b> y su <b>Fin</b> dentro del periodo de la tarea. Así se ven en el cronograma.</li>' +
-              '<li><b>Lo demás es opcional.</b> Puedes adjuntar PDF o fotos como evidencia desde ahora.</li>' +
-              '<li><b>Cuando se cumpla, palomea la casilla</b> de la tarea (columna «Hecha»). Si se repite, la siguiente se programa sola.</li>' +
+              '<li><b>Lo demás es opcional.</b> Puedes adjuntar PDF, Word, Excel o fotos como evidencia desde ahora.</li>' +
+              '<li><b>Cuando se cumpla, palomea la casilla</b> de la tarea (columna «Hecha»): queda <b>Por validar</b> hasta que el Director la valide. Si se repite, la siguiente se programa al validarla.</li>' +
             '</ol>' +
             '<div class="seg-guia-ley"><span><b class="seg-req">*</b> Obligatorio</span><span><span class="seg-badge-rec">Recomendado</span> Conviene llenarlo</span>' +
               '<span><span class="seg-opc">opcional</span> Puede quedar vacío</span>' +
@@ -1899,10 +2264,27 @@
     /** En el detalle: palomear que ya se hizo, grande y a la vista. */
     function htmlBarraHecho(t, ed) {
         if (t.estatus === 'completada') {
-            const cuando = t.completada_en ? C.fechaLarga(C.aISO(new Date(t.completada_en))) : '';
+            const cuando = fechaDe(t.validada_en || t.completada_en);
+            const quien = t.validada_por ? 'La validó ' + t.validada_por + (cuando ? ' el ' + cuando : '') + '.'
+                : cuando ? 'Se completó el ' + cuando + '.' : 'Ya se completó.';
+            const entrega = t.entregada_en || t.entregada_por ? ' ' + textoEntrega(t) : '';
             return '<div class="seg-barra-hecho is-done"><span class="seg-hecho is-done" aria-hidden="true"><i class="fas fa-check"></i></span>' +
-                '<div class="seg-barra-txt"><b>Hecha</b><small>' + esc(cuando ? 'Se completó el ' + cuando + '.' : 'Ya se completó.') + '</small></div>' +
-                (ed ? '<button type="button" class="seg-btn seg-btn-sm" data-dr="completar"><i class="fas fa-rotate-left"></i>Reabrir</button>' : '') + '</div>';
+                '<div class="seg-barra-txt"><b>' + (t.validada_por ? 'Hecha y validada' : 'Hecha') + '</b><small>' + esc(quien + entrega) + '</small></div>' +
+                (ed && !requiereValidar() ? '<button type="button" class="seg-btn seg-btn-sm" data-dr="completar"><i class="fas fa-rotate-left"></i>Reabrir</button>' : '') + '</div>';
+        }
+        if (t.estatus === 'por_validar') {
+            const icono = '<span class="seg-hecho is-validar" aria-hidden="true"><i class="fas fa-hourglass-half"></i></span>';
+            if (esAdmin()) {
+                return '<div class="seg-barra-hecho is-validar">' + icono +
+                    '<div class="seg-barra-txt"><b>Entregada · falta tu validación</b><small>' + esc(textoEntrega(t)) + ' Revisa las subtareas con sus observaciones y archivos, y la evidencia, antes de validarla.</small></div>' +
+                    '<div class="seg-barra-acc">' +
+                      '<button type="button" class="seg-btn seg-btn-sm" data-dr="regresar"' + tip('Regresar para corrección', 'Vuelve a En proceso con tus observaciones como comentario.', { ico: 'reply' }) + '><i class="fas fa-reply"></i>Regresar</button>' +
+                      '<button type="button" class="seg-btn seg-btn-sm seg-btn-validar" data-dr="validar"' + tip('Validar', 'Queda como terminada, con tu nombre y la fecha.', { ico: 'stamp' }) + '><i class="fas fa-stamp"></i>Validar</button>' +
+                    '</div></div>';
+            }
+            return '<div class="seg-barra-hecho is-validar">' + icono +
+                '<div class="seg-barra-txt"><b>Entregada · espera la validación del Director</b><small>' + esc(textoEntrega(t)) + ' Cuando la valide, quedará como terminada.</small></div>' +
+                (ed ? '<button type="button" class="seg-btn seg-btn-sm" data-dr="retirar"><i class="fas fa-rotate-left"></i>Retirar entrega</button>' : '') + '</div>';
         }
         if (t.estatus === 'cancelada') {
             return '<div class="seg-barra-hecho is-cancelada"><i class="fas fa-ban"></i><div class="seg-barra-txt"><b>Cancelada</b><small>Ya no aplica.</small></div>' +
@@ -1911,7 +2293,9 @@
         if (!ed) return '';
         return '<button type="button" class="seg-barra-hecho" data-dr="completar">' +
             '<span class="seg-hecho" aria-hidden="true"><i class="fas fa-check"></i></span>' +
-            '<span class="seg-barra-txt"><b>Marcar como hecha</b><small>Palomea aquí cuando ya se cumplió. Si tienes la evidencia, súbela abajo.</small></span></button>';
+            '<span class="seg-barra-txt"><b>' + (requiereValidar() ? 'Marcar como hecha y entregar' : 'Marcar como hecha') + '</b><small>' +
+              (requiereValidar() ? 'Palomea aquí cuando ya se cumplió: se entrega al Director para que la valide. Antes, sube la evidencia y anota cómo se hizo cada subtarea.'
+                : 'Palomea aquí cuando ya se cumplió. Si tienes la evidencia, súbela abajo.') + '</small></span></button>';
     }
 
     /** Lo que falta para poder crear la tarea. */
@@ -1959,7 +2343,7 @@
         const prio = C.PRIO[t.prioridad] || C.PRIO.normal;
         const sd = C.SUBDIR[t.subdireccion];
         const tipo = C.TIPO[t.tipo] || C.TIPO.orden;
-        const mesesRep = C.mesesRecurrencia(t);
+        const sigRep = C.fechaSiguiente(t, h);
         const sit = C.situacion(t, h);
         const ck = C.avanceChecklist(t);
         const nC = state.nComent.get(t.id) || 0;
@@ -1981,6 +2365,8 @@
         const paso1 = (creando
                 ? campo('Nombre de la tarea', 'pen', tituloCtl + '<div class="seg-dr-dup" id="seg-dr-dup" hidden></div>', { req: true, full: true, id: 'titulo', falta: marcadas.includes('titulo') })
                 : '') +
+            (state.conDiarias ? campo('Espacio', 'layer-group', ctlMenu('clase', '<i class="fas fa-' + (C.claseDe(t) === 'diaria' ? 'sun' : 'calendar-days') + '"></i>' +
+                (C.claseDe(t) === 'diaria' ? 'Diarias · día a día' : 'Agenda · seguimiento formal'), dis), { full: true }) : '') +
             campo('Tipo', 'shapes', ctlMenu('tipo', '<i class="fas fa-' + tipo.icono + '"></i>' + esc(tipo.nombre), dis)) +
             campo('Prioridad', 'flag', ctlMenu('prioridad', '<i class="fas fa-flag" style="color:' + prio.color + '"></i>' + esc(prio.nombre), dis)) +
             campo('Descripción', 'align-left',
@@ -2005,8 +2391,8 @@
                 '<input type="date" class="seg-ctl" data-campo="fecha_inicio" value="' + esc(t.fecha_inicio || '') + '"' + dis + '>',
                 { opc: true, ayuda: 'Para verla como barra en el cronograma.' }) +
             campo('¿Se repite?', 'repeat', ctlMenu('recurrencia', esc(C.nombreRecurrencia(t)), dis),
-                { ayuda: mesesRep && t.fecha_limite && C.estaAbierta(t)
-                    ? 'Al completarla se crea sola la siguiente, para el <b>' + esc(C.fechaLarga(C.sumarMeses(t.fecha_limite, mesesRep))) + '</b>.'
+                { ayuda: sigRep && C.estaAbierta(t)
+                    ? (C.diasRecurrencia(t) ? 'Al entregarla' : 'Al completarla') + ' se crea sola la siguiente, para el <b>' + esc(C.fechaLarga(sigRep)) + '</b>.'
                     : 'Para licencias, certificados y contratos que se renuevan.' }) +
             campo('Avisar antes', 'bell', ctlMenu('aviso', esc(aviso === 0 ? 'El mismo día' : plural(aviso, 'día antes', 'días antes')), dis),
                 { ayuda: 'Desde cuándo se marca «Por vencer».' });
@@ -2020,6 +2406,10 @@
                 '<input type="text" class="seg-ctl" data-campo="etiquetas" placeholder="Separadas por coma, ej. IFT, licencias" value="' + esc((t.etiquetas || []).join(', ')) + '" maxlength="300"' + dis + '>',
                 { opc: true, full: true });
 
+        // Si se repinta la misma tarea, se conserva el desplazamiento.
+        const pintada = dr.id || 'nueva';
+        const cuerpoAntes = el.querySelector('.seg-dr-body');
+        const arriba = cuerpoAntes && el.dataset.pintada === pintada ? cuerpoAntes.scrollTop : 0;
         el.innerHTML =
             '<div class="seg-dr-head">' +
               '<span class="seg-dr-folio">' + (creando ? 'Nueva tarea' : C.folio(t.folio)) + '</span>' +
@@ -2052,6 +2442,8 @@
               '<button type="button" class="seg-btn seg-btn-primary" data-dr="crear"><i class="fas fa-check"></i>Crear tarea</button>' +
             '</div>';
         autoAltura($('seg-dr-titulo'));
+        el.dataset.pintada = pintada;
+        if (arriba) { const cuerpo = el.querySelector('.seg-dr-body'); if (cuerpo) cuerpo.scrollTop = arriba; }
         if (creando) { pintarFalta(); pintarDuplicadoEnVivo(); }
         else pintarTab();
     }
@@ -2145,6 +2537,7 @@
                 '</div>' +
                 (ed ? parFechas(C.inicioSubtarea(i), i.fecha, ' data-ck-accion="inicio" aria-label="Inicio de la subtarea"', ' data-ck-accion="fin" aria-label="Fin de la subtarea"', etiqueta)
                     : '<div class="seg-ck-fechas is-lectura"><i class="far fa-calendar"></i>' + (i.fecha ? esc(rangoSubtarea(i)) + ' · ' + textoDias(dur) : 'Sin fecha') + '</div>') +
+                htmlCkObs(i, ed) +
                 '</div>';
         }).join('');
         return htmlPlanSubtareas(t, ed) +
@@ -2162,11 +2555,127 @@
                 : (items.length ? '' : '<div class="seg-vacio-mini" style="text-align:left;padding:4px 0">Sin subtareas.</div>'));
     }
 
+    /* Observaciones y archivos de una subtarea: cómo se hizo, con su respaldo
+       (Word, Excel, PDF o imagen). Así quien valida ve cómo se cumplió cada paso. */
+    function htmlCkObs(i, ed) {
+        const archivos = Array.isArray(i.archivos) ? i.archivos : [];
+        const obs = String(i.obs || '');
+        const dr = state.dr;
+        const abierta = obs || archivos.length || (dr && dr.ckAbiertas && dr.ckAbiertas.includes(i.id));
+        if (!abierta) {
+            return ed ? '<button type="button" class="seg-ck-obs-abrir" data-ck-accion="obs-abrir"><i class="fas fa-paperclip"></i>Observaciones y archivos</button>' : '';
+        }
+        const enCrear = dr && dr.modo === 'crear';
+        return '<div class="seg-ck-obs">' +
+            '<div class="seg-ck-obs-h"><i class="fas fa-clipboard-list"></i>Cómo se hizo' +
+              (archivos.length ? '<span class="seg-ck-obs-n"><i class="fas fa-paperclip"></i>' + archivos.length + '</span>' : '') + '</div>' +
+            (ed ? '<textarea class="seg-ck-obs-txt" data-ck-accion="obs" maxlength="2000" rows="2" placeholder="Observaciones: qué se hizo, cómo, con quién, qué quedó pendiente…" aria-label="Observaciones de la subtarea">' + esc(obs) + '</textarea>'
+                : obs ? '<div class="seg-ck-obs-leer">' + linkify(esc(obs)) + '</div>' : '') +
+            (archivos.length ? '<div class="seg-ck-files">' + archivos.map((a, k) => {
+                const d = C.datosArchivo(a.tipo);
+                return '<div class="seg-ck-file" data-ck-file="' + k + '" role="button" tabindex="0"' +
+                    tip(a.nombre, [d.nombre, tamTxt(a.tam), a.subido_por, a.subido_en ? C.fechaCorta(C.aISO(new Date(a.subido_en))) : ''].filter(Boolean).join(' · ') +
+                        (abreEnPestana(a.tipo) ? ' · clic para abrirlo' : ' · clic para descargarlo'), { ico: d.icono, c: d.color }) + '>' +
+                    iconoArch(a.tipo) + '<span class="seg-ck-file-n">' + esc(a.nombre) + '</span><small>' + esc(tamTxt(a.tam)) + '</small>' +
+                    (ed ? '<button type="button" class="seg-ck-file-x" data-ck-accion="archivo-quitar" data-k="' + k + '" aria-label="Quitar ' + esc(a.nombre) + '"><i class="fas fa-xmark"></i></button>' : '') +
+                    '</div>';
+            }).join('') + '</div>' : '') +
+            (ed ? '<div class="seg-ck-obs-pie">' + (enCrear
+                    ? '<span class="seg-ck-obs-ayuda"><i class="fas fa-circle-info"></i>Los archivos se adjuntan en cuanto se cree la tarea.</span>'
+                    : '<button type="button" class="seg-btn seg-btn-sm seg-ck-adjuntar" data-ck-accion="adjuntar"><i class="fas fa-paperclip"></i>Adjuntar archivo</button>' +
+                      '<span class="seg-ck-obs-ayuda">Word, Excel, PDF o imagen · hasta 25 MB · máximo ' + C.LIMITES.archivosPorSubtarea + '</span>') + '</div>' : '') +
+            '</div>';
+    }
+
+    /** Guarda la observación de una subtarea sin volver a pintar el panel (se está escribiendo). */
+    function guardarObsSubtarea(cid, valor) {
+        const dr = state.dr;
+        const t = tareaDelPanel();
+        if (!dr || !t) return;
+        const obs = String(valor || '').trim();
+        const actual = (t.checklist || []).find(i => i.id === cid);
+        if (!actual || String(actual.obs || '') === obs) return;
+        const items = (t.checklist || []).map(i => i.id !== cid ? i : Object.assign({}, i, { obs }));
+        if (dr.modo === 'crear') { dr.t.checklist = items; return; }
+        t.checklist = items;
+        actualizar(dr.id, { checklist: items }, { bitacora: false, sinPintar: true });
+    }
+
+    async function subirArchivosSubtarea(cid, files) {
+        const dr = state.dr;
+        if (!dr || dr.modo !== 'editar' || !puedeEditar()) return;
+        const t = buscar(dr.id);
+        const item = t && (t.checklist || []).find(i => i.id === cid);
+        if (!item) return;
+        const validos = await filtrarArchivos(files, {
+            existentes: (item.archivos || []).map(a => ({ nombre: a.nombre, tam: a.tam })), max: C.LIMITES.archivosPorSubtarea, donde: 'La subtarea',
+        });
+        if (!validos.length) return;
+        const nuevos = await subirArchivos(t, validos);
+        if (!nuevos.length) return;
+        // Se lee de nuevo: pudo cambiar mientras se subía.
+        const items = (buscar(t.id).checklist || []).map(i => i.id !== cid ? i : Object.assign({}, i, { archivos: (i.archivos || []).concat(nuevos) }));
+        const ok = await actualizar(t.id, { checklist: items }, { bitacora: false, sinPintar: true });
+        if (!ok) { sb().then(c => c.storage.from(BUCKET).remove(nuevos.map(n => n.path))).catch(() => {}); return; }
+        bitacora(t.id, 'archivo_subtarea', { subtarea: item.texto, nombres: nuevos.map(n => n.nombre) });
+        toast(nuevos.length === 1 ? 'Archivo adjuntado a la subtarea.' : nuevos.length + ' archivos adjuntados a la subtarea.', 'ok');
+        repintarChecklist();
+    }
+
+    async function quitarArchivoSubtarea(cid, k) {
+        const t = tareaDelPanel();
+        const item = t && (t.checklist || []).find(i => i.id === cid);
+        const a = item && (item.archivos || [])[k];
+        if (!a) return;
+        const quitar = await confirmar({
+            tono: 'peligro', icono: 'file-circle-minus', iconoAceptar: 'trash-can',
+            titulo: '¿Quitar este archivo?',
+            texto: '<span class="seg-confirm-archivo">' + iconoArch(a.tipo) + esc(a.nombre) + '</span> de la subtarea «' + esc(recortar(item.texto, 60)) + '».',
+            nota: 'El archivo se borra del almacenamiento. Queda anotado en la bitácora.',
+            aceptar: 'Quitar archivo',
+        });
+        if (quitar !== 'si') return;
+        const items = (tareaDelPanel().checklist || []).map(i => i.id !== cid ? i : Object.assign({}, i, { archivos: (i.archivos || []).filter((_, x) => x !== k) }));
+        const ok = await actualizar(t.id, { checklist: items }, { bitacora: false, sinPintar: true });
+        if (!ok) return;
+        sb().then(c => c.storage.from(BUCKET).remove([a.path])).catch(() => {});
+        bitacora(t.id, 'archivo_subtarea_borrado', { subtarea: item.texto, nombre: a.nombre });
+        repintarChecklist();
+    }
+
+    /** Quitar una subtarea: si tiene observaciones o archivos, se pregunta antes y se borran sus archivos. */
+    async function quitarSubtarea(cid) {
+        const t = tareaDelPanel();
+        const item = t && (t.checklist || []).find(i => i.id === cid);
+        if (!item) return;
+        const archivos = item.archivos || [];
+        if (archivos.length || String(item.obs || '').trim()) {
+            const ok = await confirmar({
+                tono: 'peligro', icono: 'trash-can', iconoAceptar: 'trash-can',
+                titulo: '¿Quitar la subtarea?',
+                texto: '«<b>' + esc(recortar(item.texto, 80)) + '</b>» tiene registrado cómo se hizo.',
+                lista: [].concat(String(item.obs || '').trim() ? [{ ico: 'clipboard-list', txt: 'Sus observaciones' }] : [],
+                    archivos.map(a => ({ ico: C.datosArchivo(a.tipo).icono, txt: esc(a.nombre) }))),
+                aceptar: 'Quitar subtarea',
+            });
+            if (ok !== 'si') return;
+        }
+        guardarChecklist((tareaDelPanel().checklist || []).filter(i => i.id !== cid));
+        if (archivos.length && state.dr && state.dr.modo === 'editar') {
+            sb().then(c => c.storage.from(BUCKET).remove(archivos.map(a => a.path))).catch(() => {});
+            bitacora(t.id, 'archivo_subtarea_borrado', { subtarea: item.texto, nombre: plural(archivos.length, 'archivo', 'archivos') });
+        }
+    }
+
     /** Agrega la subtarea del renglón «Nueva subtarea» con sus fechas. */
     function agregarSubtarea() {
         const input = $('seg-ck-nuevo');
-        const texto = input ? input.value.trim() : '';
+        const texto = input ? input.value.trim().slice(0, C.LIMITES.titulo) : '';
         if (!texto) { if (input) input.focus(); return; }
+        if ((tareaDelPanel().checklist || []).length >= C.LIMITES.subtareas) {
+            toast('Una tarea admite hasta ' + C.LIMITES.subtareas + ' subtareas. Si hay más pasos, divídela en otra tarea.', 'error');
+            return;
+        }
         const ini = ($('seg-ck-nueva-ini') || {}).value || '';
         const fin = ($('seg-ck-nueva-fin') || {}).value || '';
         let item = { id: C.idCorto(), texto, hecho: false };
@@ -2176,19 +2685,26 @@
         }
         const t = tareaDelPanel();
         guardarChecklist((t.checklist || []).concat(item), true);
+        // Se queda donde estaba: la nueva aparece justo arriba del renglón para
+        // agregar, se ilumina un momento y el cursor sigue listo para la siguiente.
+        const nueva = document.querySelector('#seg-ck [data-ck="' + cssEsc(item.id) + '"]');
+        if (nueva) { nueva.classList.add('is-nueva'); setTimeout(() => nueva.classList.remove('is-nueva'), 1800); }
+        const caja = document.querySelector('#seg-ck .seg-ck-new');
+        if (caja && typeof caja.scrollIntoView === 'function') caja.scrollIntoView({ block: 'nearest' });
     }
 
     const htmlZonaArchivos = (txt) => '<div class="seg-drop" data-dr="subir" id="seg-drop" role="button" tabindex="0">' +
-        '<i class="fas fa-paperclip"></i><b>Adjuntar PDF o fotos</b><small>' + txt + '</small></div>';
+        '<i class="fas fa-paperclip"></i><b>Adjuntar archivos</b><small>' + txt + '</small></div>';
+    const iconoArch = tipo => { const d = C.datosArchivo(tipo); return '<i class="fas fa-' + d.icono + '" style="color:' + d.color + '"></i>'; };
 
     /** Al crear: los archivos elegidos esperan y se suben en cuanto exista la tarea. */
     function htmlEvidenciasPendientes() {
         const lista = (state.dr && state.dr.archivos) || [];
         return (lista.length ? '<div class="seg-evid-list">' + lista.map((f, i) =>
-            '<div class="seg-evid is-pend"><i class="fas ' + (extArchivo(f) === 'pdf' ? 'fa-file-pdf' : 'fa-file-image') + '"></i>' +
+            '<div class="seg-evid is-pend">' + iconoArch(extArchivo(f)) +
             '<div><b>' + esc(f.name) + '</b><small>' + esc(tamTxt(f.size)) + ' · se sube al crear</small></div>' +
             '<button type="button" class="seg-icon-btn" data-dr="quitar-pendiente" data-i="' + i + '"' + tip('Quitar archivo', 'Ya no se subirá con la tarea.') + ' aria-label="Quitar archivo"><i class="fas fa-xmark"></i></button></div>').join('') + '</div>' : '') +
-            htmlZonaArchivos('Arrastra aquí o haz clic · PDF, JPG o PNG hasta 10 MB · se suben al crear la tarea');
+            htmlZonaArchivos('Arrastra aquí o haz clic · PDF, Word, Excel o imagen hasta 25 MB · se suben al crear la tarea');
     }
 
     function pintarEvidenciasPendientes() {
@@ -2196,36 +2712,86 @@
         if (cont && state.dr && state.dr.modo === 'crear') cont.innerHTML = htmlEvidenciasPendientes();
     }
 
-    function extArchivo(f) {
-        return TIPOS_ARCHIVO[f.type] || (/\.pdf$/i.test(f.name) ? 'pdf' : /\.jpe?g$/i.test(f.name) ? 'jpg' : /\.png$/i.test(f.name) ? 'png' : null);
+    const extArchivo = f => C.extensionArchivo(f && f.name, f && f.type);
+    const problemaArchivo = f => C.problemaArchivo(f);
+
+    /* ---------- Filtro de archivos: nada que no sirva llega al almacenamiento ----------
+       Antes de subir se revisa cada archivo: tipo (por su extensión y por su
+       contenido real), tamaño, que no esté vacío, cuántos van a la vez, el cupo
+       de la tarea o de la subtarea y que no esté repetido. Lo que no pasa no se
+       sube y se explica en un aviso; lo demás sigue normal. */
+    const leerInicio = f => new Promise(res => {
+        try {
+            const trozo = f.slice(0, 1024);
+            if (typeof trozo.arrayBuffer === 'function') { trozo.arrayBuffer().then(b => res(new Uint8Array(b)), () => res(null)); return; }
+            const r = new FileReader();
+            r.onload = () => res(new Uint8Array(r.result));
+            r.onerror = () => res(null);
+            r.readAsArrayBuffer(trozo);
+        } catch (_) { res(null); }
+    });
+
+    /** Los archivos que sí se pueden subir. o: { existentes: [{nombre, tam}], max, donde } */
+    async function filtrarArchivos(files, o) {
+        const lista = Array.from(files || []);
+        const existentes = o.existentes || [];
+        const cupo = Math.max(0, o.max - existentes.length);
+        const llave = (nombre, tam) => C.normalizar(nombre) + '|' + (+tam || 0);
+        const vistos = new Set(existentes.map(a => llave(a.nombre, a.tam)));
+        const ok = [];
+        const rechazados = [];
+        for (let k = 0; k < lista.length; k++) {
+            const f = lista[k];
+            const nombre = (f && f.name) || 'Archivo sin nombre';
+            let motivo = k >= C.LIMITES.archivosPorVez ? 'Se pueden adjuntar hasta ' + C.LIMITES.archivosPorVez + ' archivos a la vez.' : problemaArchivo(f);
+            if (!motivo && ok.length >= cupo) motivo = o.donde + ' ya tiene el máximo de ' + o.max + ' archivos.';
+            if (!motivo && vistos.has(llave(nombre, f.size))) motivo = 'Ya está adjunto aquí.';
+            if (!motivo) {
+                const ext = extArchivo(f);
+                const bytes = await leerInicio(f);
+                if (bytes && !C.firmaValida(ext, bytes)) motivo = 'Su contenido no es de un ' + C.datosArchivo(ext).nombre + ' (¿se le cambió la extensión?).';
+            }
+            if (motivo) rechazados.push({ nombre, motivo });
+            else { ok.push(f); vistos.add(llave(nombre, f.size)); }
+        }
+        if (rechazados.length) avisarRechazados(rechazados, ok.length);
+        return ok;
     }
 
-    /** null si el archivo sirve; si no, por qué. */
-    function problemaArchivo(f) {
-        if (!extArchivo(f)) return f.name + ': sólo se aceptan PDF, JPG o PNG.';
-        if (f.size > MAX_ARCHIVO) return f.name + ': pesa más de 10 MB.';
-        return null;
+    function avisarRechazados(lista, nOk) {
+        const uno = lista.length === 1;
+        confirmar({
+            tono: 'aviso', icono: 'file-circle-xmark', iconoAceptar: 'check', soloAceptar: true,
+            titulo: uno ? 'No se adjuntó «' + recortar(lista[0].nombre, 48) + '»' : 'No se adjuntaron ' + lista.length + ' archivos',
+            texto: (uno ? esc(lista[0].motivo) : 'No cumplen con lo que acepta el sistema, así que no se subieron.') +
+                (nOk ? ' ' + (nOk === 1 ? 'El otro archivo sí se adjunta.' : 'Los otros ' + nOk + ' sí se adjuntan.') : ''),
+            lista: uno ? [] : lista.map(r => ({ ico: 'file-circle-xmark', txt: '<b>' + esc(recortar(r.nombre, 60)) + '</b> · ' + esc(r.motivo) })),
+            listaTitulo: 'No se subieron',
+            nota: 'Se aceptan PDF, Word, Excel, JPG o PNG de hasta ' + tamTxt(C.LIMITES.archivoBytes) + ', hasta ' + C.LIMITES.archivosPorVez + ' a la vez.',
+            aceptar: 'Entendido',
+        });
     }
 
     /** Archivos elegidos o arrastrados: al crear se guardan para después; al editar se suben ya. */
-    function recibirArchivos(files) {
+    async function recibirArchivos(files) {
         const dr = state.dr;
         if (!dr || !puedeEditar()) return;
         if (dr.modo !== 'crear') { subirEvidencias(files); return; }
-        Array.from(files || []).forEach(f => {
-            const mal = problemaArchivo(f);
-            if (mal) toast(mal, 'error'); else dr.archivos.push(f);
+        const ok = await filtrarArchivos(files, {
+            existentes: dr.archivos.map(f => ({ nombre: f.name, tam: f.size })), max: C.LIMITES.evidenciasPorTarea, donde: 'La tarea',
         });
+        if (state.dr !== dr) return;
+        dr.archivos.push(...ok);
         pintarEvidenciasPendientes();
     }
 
     function htmlEvidencias(t, ed) {
         const evid = t.evidencias || [];
         return (evid.length ? '<div class="seg-evid-list">' + evid.map((ev, i) =>
-            '<div class="seg-evid" data-ev="' + i + '"' + tip(ev.nombre, 'Clic para abrirla en otra pestaña.', { ico: ev.tipo === 'pdf' ? 'file-pdf' : 'file-image' }) + '><i class="fas ' + (ev.tipo === 'pdf' ? 'fa-file-pdf' : 'fa-file-image') + '"></i>' +
+            '<div class="seg-evid" data-ev="' + i + '"' + tip(ev.nombre, abreEnPestana(ev.tipo) ? 'Clic para abrirla en otra pestaña.' : 'Clic para descargarla.', { ico: C.datosArchivo(ev.tipo).icono }) + '>' + iconoArch(ev.tipo) +
             '<div><b>' + esc(ev.nombre) + '</b><small>' + esc([tamTxt(ev.tam), ev.subido_por, C.fechaCorta(ev.subido_en)].filter(Boolean).join(' · ')) + '</small></div>' +
             (ed ? '<button type="button" class="seg-icon-btn" data-ev-borrar="' + i + '"' + tip('Quitar evidencia', 'Se borra el archivo de la tarea.') + ' aria-label="Quitar evidencia"><i class="fas fa-trash"></i></button>' : '') + '</div>').join('') + '</div>' : '') +
-            (ed ? htmlZonaArchivos('Arrastra aquí o haz clic · PDF, JPG o PNG hasta 10 MB')
+            (ed ? htmlZonaArchivos('Arrastra aquí o haz clic · PDF, Word, Excel o imagen hasta 25 MB')
                 : (evid.length ? '' : '<div class="seg-vacio-mini" style="text-align:left;padding:4px 0">Sin evidencias.</div>'));
     }
 
@@ -2257,7 +2823,8 @@
     }
 
     function iconoActividad(a) {
-        return { creo: 'plus', cambio: 'pen', whatsapp: 'paper-plane', evidencia: 'paperclip', evidencia_borrada: 'trash', recurrencia: 'repeat' }[a] || 'circle';
+        return { creo: 'plus', cambio: 'pen', whatsapp: 'paper-plane', evidencia: 'paperclip', evidencia_borrada: 'trash', recurrencia: 'repeat',
+            entrego: 'share-from-square', valido: 'stamp', regreso: 'reply', archivo_subtarea: 'paperclip', archivo_subtarea_borrado: 'trash' }[a] || 'circle';
     }
     function textoActividad(a) {
         const d = a.detalle || {};
@@ -2267,6 +2834,11 @@
             case 'whatsapp': return 'envió recordatorio por WhatsApp' + (d.a ? ' a ' + esc(d.a) : '');
             case 'evidencia': return 'adjuntó ' + esc((d.nombres || []).join(', '));
             case 'evidencia_borrada': return 'quitó la evidencia ' + esc(d.nombre || '');
+            case 'entrego': return 'entregó la tarea para que el Director la valide';
+            case 'valido': return 'validó la tarea: queda como <b>terminada</b>';
+            case 'regreso': return 'la regresó para corrección' + (d.motivo ? ': «' + esc(d.motivo) + '»' : '');
+            case 'archivo_subtarea': return 'adjuntó ' + esc((d.nombres || []).join(', ')) + ' a la subtarea «' + esc(d.subtarea || '') + '»';
+            case 'archivo_subtarea_borrado': return 'quitó ' + esc(d.nombre || 'un archivo') + ' de la subtarea «' + esc(d.subtarea || '') + '»';
             case 'recurrencia': return 'completó y programó la siguiente para el ' + esc(C.fechaLarga(d.fecha)) + (d.folio ? ' (' + esc(d.folio) + ')' : '');
             default: return esc(a.accion);
         }
@@ -2299,7 +2871,7 @@
         const dr = state.dr;
         const ta = $('seg-composer');
         if (!dr || !ta) return;
-        const texto = ta.value.trim();
+        const texto = ta.value.trim().slice(0, C.LIMITES.comentario);
         if (!texto) { ta.focus(); return; }
         ta.disabled = true;
         const c = await sb();
@@ -2437,37 +3009,57 @@
         else {
             const t = buscar(dr.id);
             if (t) t.checklist = items;
-            actualizar(dr.id, { checklist: items }, { bitacora: false });
+            actualizar(dr.id, { checklist: items }, { bitacora: false, sinPintar: true });
         }
+        repintarChecklist(enfocarNuevo);
+    }
+
+    function repintarChecklist(enfocarNuevo) {
         const t = tareaDelPanel();
         const cont = $('seg-ck');
         if (cont && t) cont.innerHTML = htmlChecklist(t, puedeEditar());
         const ck = C.avanceChecklist(t);
         const h = cont && cont.parentElement.querySelector('.seg-sec-h');
         if (h) h.innerHTML = '<i class="fas fa-list-check"></i>Subtareas <span class="seg-opc">opcional</span><span class="seg-sec-n">' + (ck.total ? ck.hechos + '/' + ck.total : '') + '</span>' + (ck.total ? '<span class="seg-mini-bar"><span style="width:' + ck.pct + '%"></span></span>' : '');
-        if (enfocarNuevo) $('seg-ck-nuevo')?.focus();
+        if (enfocarNuevo) {
+            const nuevo = $('seg-ck-nuevo');
+            if (nuevo) { try { nuevo.focus({ preventScroll: true }); } catch (_) { nuevo.focus(); } }
+        }
     }
 
     /* ---------- Evidencias ---------- */
+    /** Sube archivos a la carpeta de la tarea; devuelve sus datos para guardarlos. */
+    async function subirArchivos(t, files) {
+        const c = await sb();
+        if (!t || !c) return [];
+        const nuevas = [];
+        for (const f of Array.from(files || [])) {
+            const mal = problemaArchivo(f);
+            if (mal) { toast(f.name + ': ' + mal, 'error'); continue; }
+            const ext = extArchivo(f);
+            const path = t.id + '/' + C.idCorto() + '.' + ext;
+            toast('Subiendo ' + f.name + '…', 'info');
+            const { error } = await c.storage.from(BUCKET).upload(path, f, { contentType: C.datosArchivo(ext).mime, upsert: false });
+            if (error) { toast(f.name + ': ' + (/mime|type/i.test(errTxt(error)) ? 'la base todavía no acepta este tipo de archivo (falta correr db/seguimiento_validacion.sql).' : errTxt(error)), 'error'); continue; }
+            nuevas.push({ path, nombre: String(f.name).slice(0, C.LIMITES.nombreArchivo), tipo: ext, tam: f.size, subido_por: usuario().nombre, subido_en: new Date().toISOString() });
+        }
+        return nuevas;
+    }
+
     async function subirEvidencias(files) {
         const dr = state.dr;
         if (!dr || dr.modo !== 'editar' || !puedeEditar()) return;
         const t = buscar(dr.id);
         const c = await sb();
         if (!t || !c) return;
-        const nuevas = [];
-        for (const f of Array.from(files || [])) {
-            const mal = problemaArchivo(f);
-            if (mal) { toast(mal, 'error'); continue; }
-            const ext = extArchivo(f);
-            const path = t.id + '/' + C.idCorto() + '.' + ext;
-            toast('Subiendo ' + f.name + '…', 'info');
-            const { error } = await c.storage.from(BUCKET).upload(path, f, { contentType: MIME[ext], upsert: false });
-            if (error) { toast(f.name + ': ' + errTxt(error), 'error'); continue; }
-            nuevas.push({ path, nombre: String(f.name).slice(0, 180), tipo: ext, tam: f.size, subido_por: usuario().nombre, subido_en: new Date().toISOString() });
-        }
+        const validos = await filtrarArchivos(files, {
+            existentes: (t.evidencias || []).map(e => ({ nombre: e.nombre, tam: e.tam })), max: C.LIMITES.evidenciasPorTarea, donde: 'La tarea',
+        });
+        if (!validos.length) return;
+        const nuevas = await subirArchivos(t, validos);
         if (!nuevas.length) return;
-        const ok = await actualizar(t.id, { evidencias: (t.evidencias || []).concat(nuevas) }, { bitacora: false });
+        const fresca = buscar(t.id) || t;
+        const ok = await actualizar(t.id, { evidencias: (fresca.evidencias || []).concat(nuevas) }, { bitacora: false });
         if (!ok) { c.storage.from(BUCKET).remove(nuevas.map(n => n.path)).catch(() => {}); return; }
         bitacora(t.id, 'evidencia', { nombres: nuevas.map(n => n.nombre) });
         toast(nuevas.length === 1 ? 'Evidencia adjuntada.' : nuevas.length + ' evidencias adjuntadas.', 'ok');
@@ -2477,14 +3069,32 @@
     async function abrirEvidencia(i) {
         const t = tareaDelPanel();
         const ev = t && (t.evidencias || [])[i];
-        if (!ev) return;
+        if (ev) abrirArchivo(ev);
+    }
+
+    // PDF e imágenes se ven en el navegador; Word y Excel se descargan con su nombre.
+    const abreEnPestana = tipo => ['pdf', 'jpg', 'png'].includes(tipo);
+
+    async function abrirArchivo(a) {
+        if (!a || !a.path) return;
+        const ver = abreEnPestana(a.tipo);
         // La ventana se abre en el clic: si se abre después del await, el
         // navegador la bloquea.
-        const w = window.open('', '_blank');
+        const w = ver ? window.open('', '_blank') : null;
         const c = await sb();
-        const { data, error } = await c.storage.from(BUCKET).createSignedUrl(ev.path, 600);
-        if (error || !data) { if (w) w.close(); toast('No se pudo abrir la evidencia: ' + errTxt(error), 'error'); return; }
-        if (w) { w.opener = null; w.location.href = data.signedUrl; } else window.location.assign(data.signedUrl);
+        const { data, error } = await c.storage.from(BUCKET).createSignedUrl(a.path, 600, ver ? undefined : { download: a.nombre || true });
+        if (error || !data) { if (w) w.close(); toast('No se pudo abrir el archivo: ' + errTxt(error), 'error'); return; }
+        if (ver) {
+            if (w) { w.opener = null; w.location.href = data.signedUrl; } else window.location.assign(data.signedUrl);
+            return;
+        }
+        const enlace = document.createElement('a');
+        enlace.href = data.signedUrl;
+        enlace.download = a.nombre || '';
+        enlace.rel = 'noopener';
+        document.body.appendChild(enlace);
+        enlace.click();
+        enlace.remove();
     }
 
     async function borrarEvidencia(i) {
@@ -2511,7 +3121,7 @@
         const t = buscar(id);
         if (!t) return;
         nuevaTarea({
-            titulo: t.titulo + ' (copia)', descripcion: t.descripcion || '', tipo: t.tipo, subdireccion: t.subdireccion,
+            titulo: t.titulo + ' (copia)', descripcion: t.descripcion || '', tipo: t.tipo, subdireccion: t.subdireccion, clase: C.claseDe(t),
             gerencia: t.gerencia || '', prioridad: t.prioridad, responsable: t.responsable || '', responsable_num: t.responsable_num || null,
             responsable_tel: t.responsable_tel || '', fecha_inicio: t.fecha_inicio, fecha_limite: t.fecha_limite,
             recurrencia: t.recurrencia, aviso_dias: t.aviso_dias, referencia: t.referencia || '', etiquetas: (t.etiquetas || []).slice(),
@@ -2814,110 +3424,670 @@
     }
 
     /* ==========================================================================
-       Descargar resumen
+       Resumen ejecutivo: PDF y Excel
+       Para los jefes: cómo está hoy, qué se hizo en el periodo, quién lo hizo y
+       cuánto tardó, y lo más importante dicho en palabras. Respeta el área de
+       quien lo descarga y los filtros activos (subdirección, búsqueda…).
        ========================================================================== */
-    function filasExport() {
-        const orden = C.SUBDIRECCIONES.map(s => s.clave);
-        return C.ordenar(alcance(), 'fecha_limite', true)
-            .sort((a, b) => orden.indexOf(a.subdireccion) - orden.indexOf(b.subdireccion));
+    const REP_LOGO = 'images/aifa-logo.png';
+    const REP_TONO = { rojo: '#dc2626', ambar: '#d97706', verde: '#16a34a', azul: '#2563eb', cian: '#0891b2', gris: '#64748b' };
+    const REP_TONO_SUAVE = { rojo: '#fef2f2', ambar: '#fffbeb', verde: '#f0fdf4', azul: '#eff6ff', cian: '#ecfeff', gris: '#f1f5f9' };
+    const REP_MAX_FILAS = 40;   // en el PDF; el Excel lleva todo
+
+    /** Las tareas que entran al resumen: el espacio elegido y los filtros activos (sin estatus ni situación). */
+    function tareasParaReporte(espacio) {
+        const base = !state.conDiarias || espacio === 'ambos' ? state.tareas : state.tareas.filter(t => C.claseDe(t) === espacio);
+        return C.filtrar(base, Object.assign({}, state.filtros, { situacion: '', estatus: [], verCerradas: true }), hoy());
     }
 
-    function exportarExcel() {
-        if (typeof XLSX === 'undefined') { toast('La librería de Excel aún no carga. Intenta en unos segundos.', 'error'); return; }
+    function textoAlcance(espacio) {
+        const f = state.filtros;
+        const partes = [];
+        if (state.conDiarias) partes.push(espacio === 'ambos' ? 'Agenda y Diarias' : espacio === 'diaria' ? 'Diarias' : 'Agenda');
+        if (areaRestringida()) partes.push(C.nombreAlcanceArea(state.area));
+        else partes.push(f.subdirecciones.length ? f.subdirecciones.map(k => (C.SUBDIR[k] || {}).corto || k).join(', ') : 'Todas las subdirecciones');
+        if (f.texto) partes.push('búsqueda «' + f.texto + '»');
+        const otros = f.prioridades.length + f.tipos.length + (f.responsable ? 1 : 0);
+        if (otros) partes.push(plural(otros, 'filtro más', 'filtros más'));
+        return partes.join(' · ');
+    }
+
+    /** Todo lo que lleva el resumen, con sus datos de portada. o: { periodo, desde, hasta, espacio } */
+    function armarReporte(o) {
         const h = hoy();
-        const lista = filasExport();
-        const filas = lista.map(t => {
-            const ck = C.avanceChecklist(t);
-            const n = C.diasEntre(h, t.fecha_limite);
-            return {
-                'Folio': C.folio(t.folio), 'Tarea': t.titulo, 'Tipo': (C.TIPO[t.tipo] || {}).nombre || t.tipo,
-                'Subdirección': (C.SUBDIR[t.subdireccion] || {}).nombre || t.subdireccion, 'Gerencia': t.gerencia || '',
-                'Responsable': t.responsable || '', 'Teléfono': t.responsable_tel || '',
-                'Estatus': (C.EST[t.estatus] || {}).nombre || t.estatus, 'Prioridad': (C.PRIO[t.prioridad] || {}).nombre || t.prioridad,
-                'Inicio': fechaDMY(t.fecha_inicio), 'Fecha límite': fechaDMY(t.fecha_limite),
-                'Situación': SITUACION_UNO[C.situacion(t, h)] || '',
-                'Días para vencer': C.estaAbierta(t) && n != null ? n : '',
-                'Se repite': C.mesesRecurrencia(t) ? C.nombreRecurrencia(t) : '', 'Referencia': t.referencia || '',
-                'Etiquetas': (t.etiquetas || []).join(', '), 'Subtareas': ck.total ? ck.hechos + '/' + ck.total : '',
-                'Comentarios': state.nComent.get(t.id) || 0, 'Evidencias': (t.evidencias || []).length,
-                'Completada el': t.completada_en ? fechaDMY(C.aISO(new Date(t.completada_en))) : '',
-                'Creada por': t.creado_por || '', 'Creada el': t.creado_en ? fechaDMY(C.aISO(new Date(t.creado_en))) : '',
-                'Descripción': t.descripcion || '',
-            };
-        });
-        const res = C.estadisticasPorSubdireccion(lista, h).map(s => ({
-            'Subdirección': s.nombre, 'Total': s.total, 'Abiertas': s.abiertas, 'Vencidas': s.vencidas, 'Por vencer': s.por_vencer,
-            'Completadas': s.completadas, 'Avance %': s.avance, 'A tiempo %': s.cumplimiento == null ? '' : s.cumplimiento,
-        }));
-        const g = C.estadisticas(lista, h);
-        res.push({ 'Subdirección': 'TOTAL', 'Total': g.total, 'Abiertas': g.abiertas, 'Vencidas': g.vencidas, 'Por vencer': g.por_vencer,
-            'Completadas': g.completadas, 'Avance %': g.avance, 'A tiempo %': g.cumplimiento == null ? '' : g.cumplimiento });
-        const wb = XLSX.utils.book_new();
-        const wsR = XLSX.utils.json_to_sheet(res);
-        wsR['!cols'] = [{ wch: 44 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 11 }, { wch: 12 }, { wch: 10 }, { wch: 11 }];
-        const wsT = XLSX.utils.json_to_sheet(filas.length ? filas : [{ 'Tarea': 'Sin tareas' }]);
-        wsT['!cols'] = [10, 46, 18, 34, 30, 26, 15, 13, 10, 11, 12, 11, 9, 13, 24, 20, 10, 11, 10, 13, 22, 11, 60].map(w => ({ wch: w }));
-        XLSX.utils.book_append_sheet(wb, wsR, 'Resumen');
-        XLSX.utils.book_append_sheet(wb, wsT, 'Tareas');
-        XLSX.writeFile(wb, 'Seguimiento_DO_' + h + '.xlsx');
-        toast('Excel descargado.', 'ok');
-    }
-
-    function exportarPDF() {
-        const w = window.open('', '_blank');
-        if (!w) { toast('El navegador bloqueó la ventana del reporte. Permite ventanas emergentes.', 'error'); return; }
-        w.document.open();
-        w.document.write(htmlReporte());
-        w.document.close();
-        setTimeout(() => { try { w.focus(); w.print(); } catch (_) { /* nada */ } }, 700);
-    }
-
-    function htmlReporte() {
-        const h = hoy();
-        const lista = filasExport();
-        const g = C.estadisticas(lista, h);
-        const porSd = C.estadisticasPorSubdireccion(lista, h).filter(s => s.total);
-        const abiertas = lista.filter(C.estaAbierta);
-        const venc = abiertas.filter(t => C.situacion(t, h) === 'vencida');
-        const prox = abiertas.filter(t => { const n = C.diasEntre(h, t.fecha_limite); return n != null && n >= 0 && n <= 30; });
-        const logo = new URL('images/aifa-logo.png', location.href).href;
+        const periodo = C.rangoPeriodo(o.periodo, h, o.desde, o.hasta);
+        const lista = tareasParaReporte(o.espacio);
+        const r = C.reporteEjecutivo(lista, { hoy: h, desde: periodo.desde, hasta: periodo.hasta });
         const ahora = new Date();
-        const fila = t => '<tr><td>' + C.folio(t.folio) + '</td><td><b>' + esc(t.titulo) + '</b>' + (t.referencia ? '<br><small>' + esc(t.referencia) + '</small>' : '') + '</td>' +
-            '<td>' + esc((C.SUBDIR[t.subdireccion] || {}).corto || '') + '</td><td>' + esc(t.responsable || '—') + '</td>' +
-            '<td>' + esc(C.fechaCorta(t.fecha_limite) || '—') + '</td><td>' + esc((C.EST[t.estatus] || {}).nombre || '') + '</td>' +
-            '<td class="s-' + C.situacion(t, h) + '">' + esc(SITUACION_UNO[C.situacion(t, h)] || '') + (C.estaAbierta(t) && t.fecha_limite && t.fecha_limite !== h ? ' (' + esc(C.relativo(t.fecha_limite, h)) + ')' : '') + '</td></tr>';
-        const tabla = (arr, vacio) => arr.length
-            ? '<table><thead><tr><th>Folio</th><th>Tarea</th><th>Subdirección</th><th>Responsable</th><th>Fecha límite</th><th>Estatus</th><th>Situación</th></tr></thead><tbody>' + arr.map(fila).join('') + '</tbody></table>'
-            : '<p class="vacio">' + vacio + '</p>';
-        return '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Seguimiento DO · ' + h + '</title><style>' +
-            '@page{size:letter landscape;margin:14mm}*{box-sizing:border-box}body{font-family:"Segoe UI",Roboto,Arial,sans-serif;color:#1e293b;font-size:11px;margin:0}' +
-            'header{display:flex;align-items:center;gap:14px;border-bottom:3px solid #4f46e5;padding-bottom:10px;margin-bottom:14px}header img{height:42px}' +
-            'h1{font-size:18px;margin:0}header p{margin:2px 0 0;color:#64748b}.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px}' +
-            '.kpi{border:1px solid #e2e8f0;border-left:4px solid var(--c);border-radius:8px;padding:8px 10px}.kpi b{display:block;font-size:20px}.kpi span{color:#64748b;font-size:9.5px;text-transform:uppercase;font-weight:700;letter-spacing:.04em}' +
-            'h2{font-size:13px;margin:18px 0 6px;color:#312e81;text-transform:uppercase;letter-spacing:.05em}table{width:100%;border-collapse:collapse;page-break-inside:auto}tr{page-break-inside:avoid}' +
-            'th{background:#eef2ff;color:#312e81;text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;padding:6px}td{border-bottom:1px solid #e2e8f0;padding:5px 6px;vertical-align:top}' +
-            'td small{color:#64748b}.s-vencida{color:#dc2626;font-weight:700}.s-por_vencer,.s-vence_hoy{color:#b45309;font-weight:700}.s-a_tiempo{color:#15803d}.vacio{color:#64748b;font-style:italic}' +
-            '.bar{height:7px;background:#e2e8f0;border-radius:9px;overflow:hidden;width:110px;display:inline-block;vertical-align:middle}.bar i{display:block;height:100%;background:#16a34a}' +
-            'footer{margin-top:18px;color:#94a3b8;font-size:9px;border-top:1px solid #e2e8f0;padding-top:6px}</style></head><body>' +
-            '<header><img src="' + esc(logo) + '" alt="AIFA" onerror="this.remove()"><div><h1>Seguimiento de órdenes y pendientes — Dirección de Operación</h1>' +
-            '<p>Corte: ' + esc(C.fechaLarga(h)) + ', ' + ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }) + ' h · Generado por ' + esc(usuario().nombre) +
-            (state.filtros.subdirecciones.length ? ' · Alcance: ' + esc(state.filtros.subdirecciones.map(k => (C.SUBDIR[k] || {}).corto).join(', ')) : '') + '</p></div></header>' +
-            '<div class="kpis">' +
-            [['Abiertas', g.abiertas, '#4f46e5'], ['Vencidas', g.vencidas, '#dc2626'], ['Por vencer', g.por_vencer, '#d97706'], ['En curso', g.en_proceso, '#2563eb'],
-                ['Completadas', g.completadas, '#16a34a'], ['A tiempo', g.cumplimiento == null ? '—' : g.cumplimiento + '%', '#0891b2']]
-                .map(([l, v, c]) => '<div class="kpi" style="--c:' + c + '"><span>' + l + '</span><b>' + v + '</b></div>').join('') + '</div>' +
-            '<h2>Por subdirección</h2><table><thead><tr><th>Subdirección</th><th>Abiertas</th><th>Vencidas</th><th>Por vencer</th><th>Completadas</th><th>Avance</th><th>A tiempo</th></tr></thead><tbody>' +
-            (porSd.map(s => '<tr><td><b>' + esc(s.nombre) + '</b></td><td>' + s.abiertas + '</td><td' + (s.vencidas ? ' class="s-vencida"' : '') + '>' + s.vencidas + '</td><td>' + s.por_vencer + '</td><td>' + s.completadas + ' de ' + s.total + '</td>' +
-                '<td><span class="bar"><i style="width:' + s.avance + '%"></i></span> ' + s.avance + '%</td><td>' + (s.cumplimiento == null ? '—' : s.cumplimiento + '%') + '</td></tr>').join('') || '<tr><td colspan="7" class="vacio">Sin tareas.</td></tr>') +
-            '</tbody></table>' +
-            '<h2>Vencidas (' + venc.length + ')</h2>' + tabla(venc, 'Nada vencido a la fecha de corte.') +
-            '<h2>Vencen en los próximos 30 días (' + prox.length + ')</h2>' + tabla(prox, 'Nada vence en los próximos 30 días.') +
-            C.SUBDIRECCIONES.map(sd => {
-                const arr = abiertas.filter(t => t.subdireccion === sd.clave);
-                return arr.length ? '<h2>Pendientes · ' + esc(sd.nombre) + ' (' + arr.length + ')</h2>' + tabla(arr, '') : '';
-            }).join('') +
-            '<footer>Aeropuerto Internacional Felipe Ángeles · Dirección de Operación · Módulo Seguimiento. Documento generado automáticamente.</footer>' +
-            '</body></html>';
+        return Object.assign(r, {
+            lista, periodo, destacados: C.destacadosReporte(r),
+            meta: {
+                alcance: textoAlcance(o.espacio),
+                generadoPor: usuario().nombre,
+                corte: C.fechaLarga(h) + ', ' + ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }) + ' h',
+                archivo: 'Resumen_Seguimiento_DO_' + (periodo.desde || 'historial') + '_al_' + periodo.hasta,
+            },
+        });
+    }
+
+    const repDias = n => (n == null ? '—' : n === 1 ? '1 día' : n + ' días');
+    const repPct = n => (n == null ? '—' : n + '%');
+    const repFecha = iso => (iso ? C.fechaCorta(iso) : '—');
+    const repDia = ts => (ts ? C.aISO(new Date(ts)) : null);
+    /** «Gonzalo Sandoval González» → «Gonzalo Sandoval» (para que quepa en la tabla). */
+    const nombreCorto = n => String(n || '').trim().split(/\s+/).slice(0, 2).join(' ');
+
+    /** Cómo le fue a una tarea terminada contra su fecha límite. */
+    function resultadoTerminada(x) {
+        if (x.desfase == null) return { txt: 'Sin fecha límite', tono: 'gris' };
+        if (x.desfase > 0) return { txt: (x.desfase === 1 ? '1 día tarde' : x.desfase + ' días tarde'), tono: 'rojo' };
+        if (x.desfase < 0) return { txt: 'A tiempo · ' + (x.desfase === -1 ? '1 día antes' : -x.desfase + ' días antes'), tono: 'verde' };
+        return { txt: 'A tiempo', tono: 'verde' };
+    }
+
+    /** Dona del estado de las tareas, como imagen (se ve igual en el PDF y al imprimir). */
+    function repDona(estatus, total) {
+        const R = 40, L = 2 * Math.PI * R;
+        let off = 0;
+        const arcos = total
+            ? estatus.filter(e => e.n).map(e => {
+                const len = e.n / total * L;
+                const arco = '<circle r="' + R + '" cx="60" cy="60" fill="none" stroke="' + e.color + '" stroke-width="18" stroke-dasharray="' + len.toFixed(2) + ' ' + (L - len).toFixed(2) +
+                    '" stroke-dashoffset="' + (-off).toFixed(2) + '" transform="rotate(-90 60 60)"/>';
+                off += len;
+                return arco;
+            }).join('')
+            : '<circle r="' + R + '" cx="60" cy="60" fill="none" stroke="#e2e8f0" stroke-width="18"/>';
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 120 120">' + arcos +
+            '<text x="60" y="61" text-anchor="middle" font-family="Segoe UI,Roboto,Arial" font-size="24" font-weight="800" fill="#0f172a">' + total + '</text>' +
+            '<text x="60" y="77" text-anchor="middle" font-family="Segoe UI,Roboto,Arial" font-size="8.5" font-weight="700" fill="#64748b" letter-spacing="1.2">TAREAS</text></svg>';
+        return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    }
+
+    const REP_CSS =
+        '.rp{width:736px;font-family:"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;font-size:10.5px;line-height:1.42;background:#fff}' +
+        '.rp *{box-sizing:border-box}' +
+        '.rp-head{background:linear-gradient(120deg,#1e1b4b 0%,#312e81 45%,#4f46e5 100%);color:#fff;border-radius:14px;padding:18px 20px;display:flex;justify-content:space-between;align-items:center;gap:18px}' +
+        '.rp-brand{display:flex;gap:14px;align-items:center;min-width:0}' +
+        '.rp-logo{width:58px;height:58px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;padding:6px;flex:none}' +
+        '.rp-logo img{max-width:100%;max-height:100%}' +
+        '.rp-head small{display:block;font-size:8px;letter-spacing:.14em;text-transform:uppercase;color:#c7d2fe;font-weight:700}' +
+        '.rp-head h1{margin:4px 0 2px;font-size:21px;font-weight:800;letter-spacing:-.01em;line-height:1.15}' +
+        '.rp-head p{margin:0;color:#e0e7ff;font-size:10.5px}' +
+        '.rp-meta{display:flex;flex-direction:column;gap:5px;width:230px;flex:none}' +
+        '.rp-meta div{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);border-radius:8px;padding:5px 9px}' +
+        '.rp-meta span{display:block;font-size:7.5px;letter-spacing:.12em;text-transform:uppercase;color:#c7d2fe;font-weight:800}' +
+        '.rp-meta b{font-size:10px;font-weight:700}' +
+        '.rp-grupo{margin-top:14px}' +
+        '.rp-grupo-h{display:flex;align-items:center;gap:8px;font-size:8.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:#64748b;margin:0 0 6px}' +
+        '.rp-grupo-h:after{content:"";flex:1;height:1px;background:#e2e8f0}' +
+        '.rp-kpis{display:flex;gap:8px}' +
+        '.rp-kpi{flex:1;min-width:0;border:1px solid #e2e8f0;border-top:3px solid var(--c);border-radius:11px;padding:9px 11px;background:#fff}' +
+        '.rp-kpi span{display:block;font-size:8px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#64748b}' +
+        '.rp-kpi b{display:block;font-size:23px;font-weight:800;color:var(--c);line-height:1.12;margin-top:3px}' +
+        '.rp-kpi small{display:block;color:#94a3b8;font-size:8.5px;margin-top:1px}' +
+        '.rp-kpi b em{font-style:normal;font-size:11px;font-weight:700;margin-left:3px}' +
+        '.rp-box{border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;margin-top:14px;background:#fff;page-break-inside:avoid}' +
+        '.rp-box.is-dest{background:#f8fafc}' +
+        '.rp h2{font-size:11.5px;font-weight:800;color:#1e1b4b;margin:0 0 9px;display:flex;align-items:center;gap:8px}' +
+        '.rp h2 .n{display:inline-block;line-height:13px;font-size:8.5px;color:#fff;background:#4f46e5;border-radius:999px;padding:0 7px;font-weight:700}' +
+        '.rp h2 .n.r{background:#dc2626}.rp h2 .n.c{background:#0891b2}.rp h2 .n.v{background:#16a34a}.rp h2 .n.a{background:#d97706}' +
+        '.rp-dest{list-style:none;margin:0;padding:0}' +
+        '.rp-dest li{display:flex;gap:9px;align-items:flex-start;font-size:10.5px;padding:3px 0}' +
+        '.rp-dest i{width:8px;height:8px;border-radius:50%;background:var(--c);flex:none;margin-top:5px}' +
+        '.rp-dos{display:flex;gap:14px}.rp-dos>.rp-box{flex:1;min-width:0}' +
+        '.rp-dona{display:flex;gap:16px;align-items:center}.rp-dona img{width:120px;height:120px;flex:none}' +
+        '.rp-ley{flex:1;display:flex;flex-direction:column;gap:5px}' +
+        '.rp-ley div{display:flex;align-items:center;gap:7px;font-size:10px}' +
+        '.rp-ley i{width:9px;height:9px;border-radius:3px;background:var(--c);flex:none}.rp-ley b{margin-left:auto}' +
+        '.rp-sd{display:flex;flex-direction:column;gap:8px}' +
+        '.rp-sd-f{display:flex;align-items:center;gap:8px;font-size:9.5px}' +
+        '.rp-sd-n{width:132px;flex:none;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+        '.rp-sd-n i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c);margin-right:5px}' +
+        '.rp-barra{flex:1;height:10px;background:#f1f5f9;border-radius:9px;overflow:hidden;display:flex}' +
+        '.rp-barra i{display:block;height:100%}' +
+        '.rp-sd-v{width:96px;flex:none;text-align:right;color:#475569;white-space:nowrap}' +
+        '.rp-sd-v b{color:#0f172a}' +
+        '.rp-ley2{display:flex;gap:12px;margin-top:8px;font-size:8.5px;color:#64748b}.rp-ley2 i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:-1px}' +
+        '.rp-sec{margin-top:12px;padding-top:5px}' +
+        '.rp .nw{white-space:nowrap}' +
+        '.rp table{width:100%;border-collapse:collapse;font-size:9.5px}' +
+        '.rp th{background:#eef2ff;color:#312e81;font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;text-align:left;padding:6px 7px;font-weight:800}' +
+        '.rp th:first-child{border-radius:7px 0 0 7px}.rp th:last-child{border-radius:0 7px 7px 0}' +
+        '.rp td{padding:6px 7px;border-bottom:1px solid #eef0f4;vertical-align:top}' +
+        '.rp tr{page-break-inside:avoid}' +
+        '.rp .num{text-align:right;white-space:nowrap}' +
+        '.rp .folio{color:#64748b;font-size:8.5px;white-space:nowrap;font-weight:600}' +
+        '.rp .tit{font-weight:700;color:#0f172a}' +
+        '.rp .sub{display:block;color:#64748b;font-size:8.5px;margin-top:1px}' +
+        '.rp .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:8.5px;font-weight:700;white-space:nowrap}' +
+        '.rp .vacio{padding:10px 12px;border:1px dashed #cbd5e1;border-radius:10px;color:#64748b;font-size:10px}' +
+        '.rp .vacio.ok{border:1px solid #bbf7d0;background:#f0fdf4;color:#15803d;font-weight:600}' +
+        '.rp .mas{color:#64748b;font-size:9px;padding-top:6px;font-style:italic}' +
+        '.rp-mini{display:inline-block;position:relative;width:42px;height:6px;background:#e2e8f0;border-radius:6px;vertical-align:middle;margin-right:5px}' +
+        '.rp-mini i{position:absolute;left:0;top:0;height:6px;border-radius:6px}' +
+        '.rp-pie{margin-top:18px;color:#94a3b8;font-size:8.5px;border-top:1px solid #e2e8f0;padding-top:7px;display:flex;justify-content:space-between;gap:10px}';
+
+    /** El resumen ejecutivo como HTML (para el PDF o para imprimir). */
+    function htmlReporteEjecutivo(rep, logoUrl) {
+        const k = rep.kpis;
+        const pill = (txt, tono) => '<span class="pill" style="background:' + REP_TONO_SUAVE[tono] + ';color:' + REP_TONO[tono] + '">' + esc(txt) + '</span>';
+        const subdir = t => { const sd = C.SUBDIR[t.subdireccion]; return [sd ? sd.corto : t.subdireccion, t.gerencia].filter(Boolean).join(' · '); };
+        const tarea = t => '<span class="tit">' + esc(t.titulo) + '</span><span class="sub">' + esc(subdir(t)) + (t.referencia ? ' · ' + esc(t.referencia) : '') + '</span>';
+        const kpi = (lbl, val, sub, c, unidad) => '<div class="rp-kpi" style="--c:' + c + '"><span>' + esc(lbl) + '</span><b>' + esc(String(val)) +
+            (unidad && val !== '—' ? '<em>' + esc(unidad) + '</em>' : '') + '</b><small>' + esc(sub) + '</small></div>';
+        const tabla = (cols, filas, total) => '<table><thead><tr>' + cols.map(c => '<th' + (c.num ? ' class="num"' : '') + '>' + c.t + '</th>').join('') + '</tr></thead><tbody>' +
+            filas.join('') + '</tbody></table>' + (total > filas.length ? '<div class="mas">… y ' + (total - filas.length) + ' más. El detalle completo está en el Excel.</div>' : '');
+        const seccion = (titulo, n, tonoN, cuerpo) => '<section class="rp-sec"><h2>' + titulo + '<span class="n ' + tonoN + '">' + n + '</span></h2>' + cuerpo + '</section>';
+        const corta = arr => arr.slice(0, REP_MAX_FILAS);
+
+        const maxSd = Math.max(1, ...rep.porSubdireccion.map(s => s.abiertas + s.porValidar));
+        const sds = rep.porSubdireccion.filter(s => s.total);
+        const barraSd = s => {
+            const a = s.abiertas - s.vencidas;
+            const w = n => (n / maxSd * 100).toFixed(1) + '%';
+            return '<div class="rp-sd-f"><span class="rp-sd-n" style="--c:' + s.color + '"><i></i>' + esc(s.corto) + '</span>' +
+                '<span class="rp-barra"><i style="width:' + w(s.vencidas) + ';background:#dc2626"></i><i style="width:' + w(a) + ';background:#6366f1"></i><i style="width:' + w(s.porValidar) + ';background:#06b6d4"></i></span>' +
+                '<span class="rp-sd-v"><b>' + s.abiertas + '</b> abiertas' + (s.terminadas ? ' · ' + s.terminadas + ' ✓' : '') + '</span></div>';
+        };
+
+        const filasResp = rep.porResponsable.map(p => '<tr><td class="tit">' + esc(p.nombre) + '</td>' +
+            '<td class="num"><b>' + p.terminadas + '</b></td>' +
+            '<td>' + (p.aTiempoPct == null ? '<span class="sub">—</span>' : '<span class="rp-mini"><i style="width:' + Math.round(42 * p.aTiempoPct / 100) + 'px;background:' + (p.aTiempoPct >= 80 ? '#16a34a' : p.aTiempoPct >= 60 ? '#d97706' : '#dc2626') + '"></i></span>' + p.aTiempoPct + '%') + '</td>' +
+            '<td class="num">' + repDias(p.diasPromedio) + '</td><td class="num">' + p.abiertas + '</td>' +
+            '<td class="num">' + (p.vencidas ? pill(String(p.vencidas), 'rojo') : '0') + '</td><td class="num">' + (p.porValidar ? pill(String(p.porValidar), 'cian') : '0') + '</td></tr>');
+
+        const venc = corta(rep.vencidas).map(x => '<tr><td class="folio">' + C.folio(x.tarea.folio) + '</td><td>' + tarea(x.tarea) + '</td><td>' + esc(x.tarea.responsable || 'Sin responsable') + '</td>' +
+            '<td class="num">' + repFecha(x.tarea.fecha_limite) + '</td><td class="num">' + pill(repDias(x.atraso) + ' de atraso', 'rojo') + '</td></tr>');
+        const pv = corta(rep.porValidar).map(x => '<tr><td class="folio">' + C.folio(x.tarea.folio) + '</td><td>' + tarea(x.tarea) + '</td><td>' + esc(x.tarea.entregada_por || x.tarea.responsable || '—') + '</td>' +
+            '<td class="num">' + repFecha(repDia(x.tarea.entregada_en)) + '</td><td class="num">' + pill(x.esperando == null ? 'Entregada' : x.esperando === 0 ? 'Hoy' : repDias(x.esperando) + ' esperando', 'cian') + '</td></tr>');
+        const term = corta(rep.terminadas).map(x => {
+            const res = resultadoTerminada(x);
+            const t = x.tarea;
+            return '<tr><td class="folio">' + C.folio(t.folio) + '</td><td>' + tarea(t) + '</td>' +
+                '<td>' + esc(t.responsable || 'Sin responsable') + (t.entregada_por && C.normalizar(t.entregada_por) !== C.normalizar(t.responsable) ? '<span class="sub">Entregó ' + esc(nombreCorto(t.entregada_por)) + '</span>' : '') + '</td>' +
+                '<td class="num">' + repFecha(x.inicio) + '<span class="sub">→ ' + repFecha(x.fin) + '</span></td>' +
+                '<td class="num"><b>' + repDias(x.dias) + '</b></td>' +
+                '<td class="nw">' + esc(t.validada_por ? nombreCorto(t.validada_por) : '—') + (x.validacion != null ? '<span class="sub">' + (x.validacion === 0 ? 'el mismo día' : 'en ' + repDias(x.validacion)) + '</span>' : '') + '</td>' +
+                '<td>' + pill(res.txt, res.tono) + '</td></tr>';
+        });
+        const prox = corta(rep.proximas).map(x => '<tr><td class="folio">' + C.folio(x.tarea.folio) + '</td><td>' + tarea(x.tarea) + '</td><td>' + esc(x.tarea.responsable || 'Sin responsable') + '</td>' +
+            '<td>' + esc((C.EST[x.tarea.estatus] || {}).nombre || '') + '</td><td class="num">' + repFecha(x.tarea.fecha_limite) + '</td>' +
+            '<td class="num">' + pill(x.dias === 0 ? 'Vence hoy' : 'Faltan ' + repDias(x.dias), x.dias <= 3 ? 'ambar' : 'azul') + '</td></tr>');
+        const ren = corta(rep.renovaciones).map(x => '<tr><td class="folio">' + C.folio(x.tarea.folio) + '</td><td>' + tarea(x.tarea) + '</td><td>' + esc((C.TIPO[x.tarea.tipo] || {}).nombre || '') + '</td>' +
+            '<td>' + esc(x.tarea.responsable || 'Sin responsable') + '</td><td class="num">' + repFecha(x.tarea.fecha_limite) + '</td><td class="num">' + pill('Faltan ' + repDias(x.dias), x.dias <= 30 ? 'ambar' : 'azul') + '</td></tr>');
+
+        return '<div class="rp">' +
+            '<header class="rp-head"><div class="rp-brand">' + (logoUrl ? '<div class="rp-logo"><img src="' + esc(logoUrl) + '" alt="AIFA"></div>' : '') +
+              '<div><small>Aeropuerto Internacional Felipe Ángeles · Dirección de Operación</small><h1>Resumen ejecutivo de seguimiento</h1>' +
+              '<p>Órdenes, compromisos, renovaciones y pendientes</p></div></div>' +
+              '<div class="rp-meta"><div><span>Periodo</span><b>' + esc(rep.periodo.texto) + '</b></div><div><span>Corte</span><b>' + esc(rep.meta.corte) + '</b></div>' +
+              '<div><span>Alcance</span><b>' + esc(rep.meta.alcance) + '</b></div></div></header>' +
+
+            '<div class="rp-grupo"><div class="rp-grupo-h">Hoy, al corte</div><div class="rp-kpis">' +
+              kpi('Abiertas', k.abiertas, k.porVencer ? k.porVencer + ' por vencer' : 'En trabajo', '#4f46e5') +
+              kpi('Vencidas', k.vencidas, k.vencidas ? 'Requieren atención' : 'Nada vencido', k.vencidas ? '#dc2626' : '#16a34a') +
+              kpi('Por validar', k.porValidar, 'Esperan al Director', '#0891b2') +
+              kpi('Avance general', repPct(k.avance), k.total + ' tareas en total', '#16a34a') +
+            '</div></div>' +
+            '<div class="rp-grupo"><div class="rp-grupo-h">En el periodo · ' + esc(rep.periodo.nombre.toLowerCase()) + '</div><div class="rp-kpis">' +
+              kpi('Nuevas', k.nuevas, 'Se registraron', '#2563eb') +
+              kpi('Terminadas', k.terminadas, k.entregadas + ' entregadas', '#16a34a') +
+              kpi('A tiempo', repPct(k.aTiempoPct), k.conFecha ? k.aTiempo + ' de ' + k.conFecha + ' con fecha' : 'Sin cierres con fecha', '#0891b2') +
+              kpi('Tiempo de atención', k.diasPromedio == null ? '—' : k.diasPromedio, 'Promedio por tarea', '#7c3aed', 'días') +
+              kpi('Validación', k.validacionPromedio == null ? '—' : k.validacionPromedio, 'Promedio del Director', '#d97706', 'días') +
+            '</div></div>' +
+
+            (rep.destacados.length ? '<section class="rp-box is-dest"><h2>Lo más importante</h2><ul class="rp-dest">' +
+              rep.destacados.map(d => '<li style="--c:' + REP_TONO[d.tono] + '"><i></i><span>' + esc(d.texto) + '</span></li>').join('') + '</ul></section>' : '') +
+
+            '<div class="rp-dos">' +
+              '<section class="rp-box"><h2>Estado de las tareas</h2><div class="rp-dona"><img src="' + repDona(rep.estatus, k.total) + '" alt="">' +
+                '<div class="rp-ley">' + rep.estatus.map(e => '<div style="--c:' + e.color + '"><i></i>' + esc(e.nombre) + '<b>' + e.n + '</b></div>').join('') + '</div></div></section>' +
+              '<section class="rp-box"><h2>Por subdirección</h2>' +
+                (sds.length ? '<div class="rp-sd">' + sds.map(barraSd).join('') + '</div>' +
+                  '<div class="rp-ley2"><span><i style="background:#dc2626"></i>Vencidas</span><span><i style="background:#6366f1"></i>Abiertas</span><span><i style="background:#06b6d4"></i>Por validar</span><span>✓ terminadas en el periodo</span></div>'
+                  : '<div class="vacio">Sin tareas en el alcance.</div>') + '</section>' +
+            '</div>' +
+
+            '<section class="rp-box"><h2>Desempeño por responsable</h2>' +
+              (filasResp.length ? tabla([{ t: 'Responsable' }, { t: 'Terminadas', num: 1 }, { t: 'A tiempo' }, { t: 'Tiempo promedio', num: 1 }, { t: 'Abiertas', num: 1 }, { t: 'Vencidas', num: 1 }, { t: 'Por validar', num: 1 }], filasResp, filasResp.length)
+                : '<div class="vacio">Sin responsables con tareas en el alcance.</div>') + '</section>' +
+
+            seccion('Atención inmediata · vencidas', rep.vencidas.length, 'r', venc.length
+                ? tabla([{ t: 'Folio' }, { t: 'Tarea' }, { t: 'Responsable' }, { t: 'Venció', num: 1 }, { t: 'Atraso', num: 1 }], venc, rep.vencidas.length)
+                : '<div class="vacio ok">Nada vencido a la fecha de corte.</div>') +
+            (rep.porValidar.length ? seccion('Esperan la validación del Director', rep.porValidar.length, 'c',
+                tabla([{ t: 'Folio' }, { t: 'Tarea' }, { t: 'Entregó' }, { t: 'Entregada', num: 1 }, { t: 'Esperando', num: 1 }], pv, rep.porValidar.length)) : '') +
+            seccion('Terminadas en el periodo', rep.terminadas.length, 'v', term.length
+                ? tabla([{ t: 'Folio' }, { t: 'Tarea' }, { t: 'Responsable' }, { t: 'Inició → entregó', num: 1 }, { t: 'Tardó', num: 1 }, { t: 'Validó' }, { t: 'Resultado' }], term, rep.terminadas.length)
+                : '<div class="vacio">En el periodo no se terminó ninguna tarea.</div>') +
+            seccion('Vencen en los próximos 30 días', rep.proximas.length, 'a', prox.length
+                ? tabla([{ t: 'Folio' }, { t: 'Tarea' }, { t: 'Responsable' }, { t: 'Estatus' }, { t: 'Fecha límite', num: 1 }, { t: 'Faltan', num: 1 }], prox, rep.proximas.length)
+                : '<div class="vacio">Nada vence en los próximos 30 días.</div>') +
+            (rep.renovaciones.length ? seccion('Renovaciones y certificados · próximos 90 días', rep.renovaciones.length, 'a',
+                tabla([{ t: 'Folio' }, { t: 'Tarea' }, { t: 'Tipo' }, { t: 'Responsable' }, { t: 'Vence', num: 1 }, { t: 'Faltan', num: 1 }], ren, rep.renovaciones.length)) : '') +
+
+            '<footer class="rp-pie"><span>Generado por ' + esc(rep.meta.generadoPor) + ' · ' + esc(rep.meta.corte) + '</span><span>Módulo Seguimiento · documento generado automáticamente</span></footer>' +
+            '</div>';
+    }
+
+    /** Las hojas del Excel, ya con sus datos (el formato lo pone escribirExcel). */
+    function hojasReporte(rep) {
+        const k = rep.kpis;
+        const sd = t => (C.SUBDIR[t.subdireccion] || {}).nombre || t.subdireccion;
+        const est = t => (C.EST[t.estatus] || {}).nombre || t.estatus;
+        const sit = t => SITUACION_UNO[C.situacion(t, rep.hoy)] || '';
+        const tonoSit = t => ({ vencida: 'rojo', vence_hoy: 'ambar', por_vencer: 'ambar', a_tiempo: 'verde', por_validar: 'cian', completada: 'verde' }[C.situacion(t, rep.hoy)] || 'gris');
+        const archivos = t => C.rutasDeArchivos(t).length;
+        const resumen = {
+            titulo: 'Resumen ejecutivo de seguimiento',
+            subtitulo: 'Aeropuerto Internacional Felipe Ángeles · Dirección de Operación',
+            meta: 'Periodo: ' + rep.periodo.texto + '   ·   Corte: ' + rep.meta.corte + '   ·   Alcance: ' + rep.meta.alcance + '   ·   Generado por: ' + rep.meta.generadoPor,
+            kpisHoy: [
+                { lbl: 'Abiertas', val: k.abiertas, sub: k.porVencer ? k.porVencer + ' por vencer' : 'En trabajo', tono: 'azul' },
+                { lbl: 'Vencidas', val: k.vencidas, sub: k.vencidas ? 'Requieren atención' : 'Nada vencido', tono: k.vencidas ? 'rojo' : 'verde' },
+                { lbl: 'Por validar', val: k.porValidar, sub: 'Esperan al Director', tono: 'cian' },
+                { lbl: 'Avance general', val: k.avance == null ? '—' : k.avance / 100, pct: k.avance != null, sub: k.total + ' tareas en total', tono: 'verde' },
+            ],
+            kpisPeriodo: [
+                { lbl: 'Terminadas', val: k.terminadas, sub: k.nuevas + ' nuevas · ' + k.entregadas + ' entregadas', tono: 'verde' },
+                { lbl: 'A tiempo', val: k.aTiempoPct == null ? '—' : k.aTiempoPct / 100, pct: k.aTiempoPct != null, sub: k.conFecha ? k.aTiempo + ' de ' + k.conFecha + ' con fecha' : 'Sin cierres con fecha', tono: 'cian' },
+                { lbl: 'Tiempo de atención', val: k.diasPromedio == null ? '—' : k.diasPromedio, sub: 'Días promedio por tarea', tono: 'morado' },
+                { lbl: 'Validación', val: k.validacionPromedio == null ? '—' : k.validacionPromedio, sub: 'Días promedio del Director', tono: 'ambar' },
+            ],
+            destacados: rep.destacados,
+            subdirecciones: {
+                columnas: ['Subdirección', 'Abiertas', 'Vencidas', 'Por validar', 'Terminadas', 'A tiempo', 'Avance'],
+                filas: rep.porSubdireccion.filter(s => s.total).map(s => [s.corto, s.abiertas, s.vencidas, s.porValidar, s.terminadas,
+                    s.aTiempoPct == null ? '—' : s.aTiempoPct / 100, s.avance == null ? '—' : s.avance / 100]),
+                total: ['TOTAL', k.abiertas, k.vencidas, k.porValidar, k.terminadas, k.aTiempoPct == null ? '—' : k.aTiempoPct / 100, k.avance == null ? '—' : k.avance / 100],
+                pct: [5, 6],
+            },
+            responsables: {
+                columnas: ['Responsable', 'Terminadas', 'A tiempo', 'Días promedio', 'Abiertas', 'Vencidas', 'Por validar'],
+                filas: rep.porResponsable.map(p => [p.nombre, p.terminadas, p.aTiempoPct == null ? '—' : p.aTiempoPct / 100,
+                    p.diasPromedio == null ? '—' : p.diasPromedio, p.abiertas, p.vencidas, p.porValidar]),
+                pct: [2],
+            },
+        };
+        const c = (t, ancho, tipo) => ({ t, ancho, tipo: tipo || 'texto' });
+        const tablas = [
+            {
+                nombre: 'Terminadas', titulo: 'Terminadas en el periodo · ' + rep.periodo.texto, tonoCol: 13,
+                columnas: [c('Folio', 11), c('Tarea', 46), c('Subdirección', 32), c('Gerencia', 28), c('Responsable', 26), c('Entregó', 24), c('Validó', 24),
+                    c('Inició', 12, 'fecha'), c('Entregada', 12, 'fecha'), c('Validada', 12, 'fecha'), c('Fecha límite', 12, 'fecha'),
+                    c('Días de atención', 11, 'num'), c('Días de validación', 11, 'num'), c('Resultado', 24)],
+                filas: rep.terminadas.map(x => {
+                    const res = resultadoTerminada(x);
+                    const t = x.tarea;
+                    return { tono: res.tono, celdas: [C.folio(t.folio), t.titulo, sd(t), t.gerencia || '', t.responsable || '', t.entregada_por || '', t.validada_por || '',
+                        x.inicio, x.fin, x.validada, t.fecha_limite || null, x.dias, x.validacion, res.txt] };
+                }),
+            },
+            {
+                nombre: 'Pendientes', titulo: 'Pendientes al corte · ' + rep.meta.corte, tonoCol: 9,
+                columnas: [c('Folio', 11), c('Tarea', 46), c('Espacio', 10), c('Subdirección', 32), c('Gerencia', 28), c('Responsable', 26),
+                    c('Estatus', 13), c('Prioridad', 11), c('Fecha límite', 12, 'fecha'), c('Situación', 13), c('Días para vencer (negativo: atraso)', 14, 'num'), c('Subtareas', 10), c('Archivos', 9, 'num')],
+                filas: C.ordenar(rep.abiertas.concat(rep.porValidar.map(x => x.tarea)), 'fecha_limite', true)
+                    .map(t => {
+                        const ck = C.avanceChecklist(t);
+                        const n = C.diasEntre(rep.hoy, t.fecha_limite);
+                        return { tono: tonoSit(t), celdas: [C.folio(t.folio), t.titulo, C.claseDe(t) === 'diaria' ? 'Diarias' : 'Agenda', sd(t), t.gerencia || '', t.responsable || '',
+                            est(t), (C.PRIO[t.prioridad] || {}).nombre || t.prioridad, t.fecha_limite || null, sit(t), n, ck.total ? ck.hechos + '/' + ck.total : '', archivos(t)] };
+                    }),
+            },
+            {
+                nombre: 'Por validar', titulo: 'Esperan la validación del Director', tonoCol: 7,
+                columnas: [c('Folio', 11), c('Tarea', 46), c('Subdirección', 32), c('Responsable', 26), c('Entregó', 24), c('Entregada', 12, 'fecha'),
+                    c('Fecha límite', 12, 'fecha'), c('Días esperando', 12, 'num')],
+                filas: rep.porValidar.map(x => ({ tono: 'cian', celdas: [C.folio(x.tarea.folio), x.tarea.titulo, sd(x.tarea), x.tarea.responsable || '', x.tarea.entregada_por || '',
+                    repDia(x.tarea.entregada_en), x.tarea.fecha_limite || null, x.esperando] })),
+            },
+            {
+                nombre: 'Todas las tareas', titulo: 'Todas las tareas del alcance · ' + rep.meta.alcance, tonoCol: 11,
+                columnas: [c('Folio', 11), c('Tarea', 46), c('Espacio', 10), c('Tipo', 18), c('Subdirección', 32), c('Gerencia', 28), c('Responsable', 26),
+                    c('Estatus', 13), c('Prioridad', 11), c('Inicio', 12, 'fecha'), c('Fecha límite', 12, 'fecha'), c('Situación', 13),
+                    c('Entregó', 22), c('Entregada', 12, 'fecha'), c('Validó', 22), c('Validada', 12, 'fecha'), c('Días de atención', 11, 'num'),
+                    c('Se repite', 16), c('Referencia', 24), c('Subtareas', 10), c('Comentarios', 11, 'num'), c('Archivos', 9, 'num'),
+                    c('Creada por', 22), c('Creada', 12, 'fecha'), c('Descripción', 60)],
+                filas: C.ordenar(rep.lista, 'fecha_limite', true).map(t => {
+                    const ck = C.avanceChecklist(t);
+                    const f = t.estatus === 'completada' ? C.fichaTerminada(t) : null;
+                    return { tono: tonoSit(t), celdas: [C.folio(t.folio), t.titulo, C.claseDe(t) === 'diaria' ? 'Diarias' : 'Agenda', (C.TIPO[t.tipo] || {}).nombre || t.tipo,
+                        sd(t), t.gerencia || '', t.responsable || '', est(t), (C.PRIO[t.prioridad] || {}).nombre || t.prioridad, t.fecha_inicio || null, t.fecha_limite || null, sit(t),
+                        t.entregada_por || '', repDia(t.entregada_en), t.validada_por || '', repDia(t.validada_en) || (t.estatus === 'completada' ? repDia(t.completada_en) : null),
+                        f ? f.dias : null, C.seRepite(t) ? C.nombreRecurrencia(t) : '', t.referencia || '', ck.total ? ck.hechos + '/' + ck.total : '',
+                        state.nComent.get(t.id) || 0, archivos(t), t.creado_por || '', repDia(t.creado_en), t.descripcion || ''] };
+                }),
+            },
+        ];
+        return { resumen, tablas };
+    }
+
+    const XL = { indigo: 'FF312E81', indigo2: 'FF4F46E5', indigoSuave: 'FFEEF2FF', borde: 'FFE2E8F0', zebra: 'FFF8FAFC', gris: 'FF64748B', texto: 'FF0F172A' };
+    const XL_TONO = { rojo: 'FFDC2626', ambar: 'FFD97706', verde: 'FF16A34A', azul: 'FF4F46E5', cian: 'FF0891B2', gris: 'FF64748B', morado: 'FF7C3AED' };
+    const XL_SUAVE = { rojo: 'FFFEF2F2', ambar: 'FFFFFBEB', verde: 'FFF0FDF4', azul: 'FFEEF2FF', cian: 'FFECFEFF', gris: 'FFF1F5F9', morado: 'FFF5F3FF' };
+    const xlFecha = iso => { const d = C.deISO(iso); return d ? new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12)) : null; };
+
+    /** El libro de Excel con formato. ExcelJS se recibe para poder probarlo; logo: base64 del PNG o null. */
+    function libroExcel(rep, Excel, logo) {
+        const H = hojasReporte(rep);
+        const wb = new Excel.Workbook();
+        wb.creator = 'AIFA · Dirección de Operación · Seguimiento';
+        wb.created = new Date();
+        const fill = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+        const borde = { top: { style: 'thin', color: { argb: XL.borde } }, bottom: { style: 'thin', color: { argb: XL.borde } },
+            left: { style: 'thin', color: { argb: XL.borde } }, right: { style: 'thin', color: { argb: XL.borde } } };
+
+        // ── Hoja Resumen ──
+        const ws = wb.addWorksheet('Resumen', { views: [{ showGridLines: false }],
+            pageSetup: { paperSize: 1, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } } });
+        ws.columns = [{ width: 2 }].concat(Array.from({ length: 8 }, () => ({ width: 15 })));
+        const banda = (fila, texto, argb, fuente, alto) => {
+            ws.mergeCells(fila, 2, fila, 9);
+            const cel = ws.getCell(fila, 2);
+            cel.value = texto;
+            cel.fill = fill(argb);
+            cel.font = fuente;
+            cel.alignment = { vertical: 'middle', horizontal: 'left', indent: 1, wrapText: true };
+            ws.getRow(fila).height = alto;
+        };
+        banda(1, H.resumen.titulo, XL.indigo, { name: 'Calibri', size: 18, bold: true, color: { argb: 'FFFFFFFF' } }, 36);
+        banda(2, H.resumen.subtitulo, XL.indigo2, { name: 'Calibri', size: 10.5, color: { argb: 'FFE0E7FF' } }, 20);
+        banda(3, H.resumen.meta, XL.indigoSuave, { name: 'Calibri', size: 9, italic: true, color: { argb: 'FF3730A3' } }, 30);
+        if (logo) {
+            try {
+                const id = wb.addImage({ base64: logo, extension: 'png' });
+                ws.addImage(id, { tl: { col: 8.15, row: 0.12 }, ext: { width: 54, height: 54 } });
+            } catch (_) { /* sin logo */ }
+        }
+        let fila = 5;
+        const etiqueta = texto => {
+            ws.mergeCells(fila, 2, fila, 9);
+            const cel = ws.getCell(fila, 2);
+            cel.value = texto.toUpperCase();
+            cel.font = { name: 'Calibri', size: 9, bold: true, color: { argb: XL.gris } };
+            cel.border = { bottom: { style: 'thin', color: { argb: XL.borde } } };
+            fila++;
+        };
+        const tarjetas = lista => {
+            lista.forEach((kp, i) => {
+                const col = 2 + i * 2;
+                const tono = XL_TONO[kp.tono] || XL.indigo2;
+                const suave = XL_SUAVE[kp.tono] || XL.indigoSuave;
+                [[fila, kp.lbl.toUpperCase(), { size: 8.5, bold: true, color: { argb: XL.gris } }],
+                    [fila + 1, kp.val, { size: 22, bold: true, color: { argb: tono } }],
+                    [fila + 2, kp.sub, { size: 8.5, color: { argb: XL.gris } }]].forEach(([r, v, f]) => {
+                    ws.mergeCells(r, col, r, col + 1);
+                    const cel = ws.getCell(r, col);
+                    cel.value = v;
+                    cel.font = Object.assign({ name: 'Calibri' }, f);
+                    cel.fill = fill(suave);
+                    cel.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+                    if (r === fila + 1 && kp.pct) cel.numFmt = '0%';
+                    if (r === fila + 1 && typeof v === 'number' && !kp.pct && !Number.isInteger(v)) cel.numFmt = '0.0';
+                    cel.border = { left: { style: 'thick', color: { argb: tono } } };
+                });
+            });
+            ws.getRow(fila).height = 16;
+            ws.getRow(fila + 1).height = 32;
+            ws.getRow(fila + 2).height = 15;
+            fila += 4;
+        };
+        etiqueta('Hoy, al corte');
+        tarjetas(H.resumen.kpisHoy);
+        etiqueta('En el periodo · ' + rep.periodo.texto);
+        tarjetas(H.resumen.kpisPeriodo);
+        if (H.resumen.destacados.length) {
+            etiqueta('Lo más importante');
+            H.resumen.destacados.forEach(d => {
+                ws.mergeCells(fila, 2, fila, 9);
+                const cel = ws.getCell(fila, 2);
+                cel.value = { richText: [{ text: '●  ', font: { name: 'Calibri', size: 11, color: { argb: XL_TONO[d.tono] || XL.indigo2 } } },
+                    { text: d.texto, font: { name: 'Calibri', size: 10.5, color: { argb: XL.texto } } }] };
+                cel.alignment = { vertical: 'middle', wrapText: true, indent: 1 };
+                ws.getRow(fila).height = d.texto.length > 105 ? 30 : 18;
+                fila++;
+            });
+            fila++;
+        }
+        // Tabla dentro del resumen: la primera columna ocupa dos.
+        const tablaResumen = (titulo, t) => {
+            etiqueta(titulo);
+            const enc = ws.getRow(fila);
+            t.columnas.forEach((nom, i) => {
+                const col = i === 0 ? 2 : i + 3;
+                if (i === 0) ws.mergeCells(fila, 2, fila, 3);
+                const cel = ws.getCell(fila, col);
+                cel.value = nom;
+                cel.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FFFFFFFF' } };
+                cel.fill = fill(XL.indigo2);
+                cel.alignment = { vertical: 'middle', horizontal: i === 0 ? 'left' : 'center', indent: i === 0 ? 1 : 0 };
+            });
+            enc.height = 20;
+            fila++;
+            const pintar = (valores, extra) => {
+                valores.forEach((v, i) => {
+                    const alerta = (t.columnas[i] === 'Vencidas' && v > 0) ? { color: { argb: XL_TONO.rojo }, bold: true } : null;
+                    const col = i === 0 ? 2 : i + 3;
+                    if (i === 0) ws.mergeCells(fila, 2, fila, 3);
+                    const cel = ws.getCell(fila, col);
+                    cel.value = v;
+                    cel.font = Object.assign({ name: 'Calibri', size: 10, color: { argb: XL.texto } }, extra && extra.font, alerta);
+                    cel.alignment = { vertical: 'middle', horizontal: i === 0 ? 'left' : 'center', indent: i === 0 ? 1 : 0 };
+                    cel.border = borde;
+                    if ((t.pct || []).includes(i) && typeof v === 'number') cel.numFmt = '0%';
+                    if (typeof v === 'number' && !Number.isInteger(v) && !(t.pct || []).includes(i)) cel.numFmt = '0.0';
+                    if (extra && extra.fill) cel.fill = fill(extra.fill);
+                    else if (fila % 2 === 0) cel.fill = fill(XL.zebra);
+                });
+                fila++;
+            };
+            t.filas.forEach(v => pintar(v));
+            if (t.total) pintar(t.total, { font: { bold: true }, fill: XL.indigoSuave });
+            fila++;
+        };
+        if (H.resumen.subdirecciones.filas.length) tablaResumen('Por subdirección', H.resumen.subdirecciones);
+        if (H.resumen.responsables.filas.length) tablaResumen('Desempeño por responsable', H.resumen.responsables);
+        ws.getCell(fila, 2).value = 'Tiempo de atención: días desde el inicio de la tarea (o su registro) hasta su entrega. Validación: días desde la entrega hasta el visto bueno del Director.';
+        ws.mergeCells(fila, 2, fila, 9);
+        ws.getCell(fila, 2).font = { name: 'Calibri', size: 8.5, italic: true, color: { argb: XL.gris } };
+        ws.getCell(fila, 2).alignment = { wrapText: true, vertical: 'top' };
+        ws.getRow(fila).height = 26;
+
+        // ── Hojas de detalle ──
+        H.tablas.forEach(t => {
+            const h = wb.addWorksheet(t.nombre, { views: [{ state: 'frozen', ySplit: 3, xSplit: 2, showGridLines: false }],
+                pageSetup: { paperSize: 1, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+            h.columns = t.columnas.map(col => ({ width: col.ancho }));
+            h.mergeCells(1, 1, 1, Math.min(t.columnas.length, 8));
+            const tit = h.getCell(1, 1);
+            tit.value = t.titulo + '   (' + t.filas.length + ')';
+            tit.font = { name: 'Calibri', size: 13, bold: true, color: { argb: 'FFFFFFFF' } };
+            tit.fill = fill(XL.indigo);
+            tit.alignment = { vertical: 'middle', indent: 1 };
+            h.getRow(1).height = 26;
+            for (let i = 2; i <= t.columnas.length; i++) if (i > 8) h.getCell(1, i).fill = fill(XL.indigo);
+            const enc = h.getRow(3);
+            t.columnas.forEach((col, i) => {
+                const cel = enc.getCell(i + 1);
+                cel.value = col.t;
+                cel.font = { name: 'Calibri', size: 9.5, bold: true, color: { argb: 'FFFFFFFF' } };
+                cel.fill = fill(XL.indigo2);
+                cel.alignment = { vertical: 'middle', horizontal: col.tipo === 'texto' ? 'left' : 'center', wrapText: true };
+                cel.border = borde;
+            });
+            enc.height = 30;
+            t.filas.forEach((f, n) => {
+                const r = h.getRow(4 + n);
+                f.celdas.forEach((v, i) => {
+                    const col = t.columnas[i];
+                    const cel = r.getCell(i + 1);
+                    cel.value = col.tipo === 'fecha' ? xlFecha(v) : (v == null ? null : v);
+                    if (col.tipo === 'fecha') cel.numFmt = 'dd/mm/yyyy';
+                    cel.font = { name: 'Calibri', size: 10, color: { argb: XL.texto }, bold: i === 1 };
+                    cel.alignment = { vertical: 'top', horizontal: col.tipo === 'texto' ? 'left' : 'center', wrapText: col.ancho >= 28 };
+                    cel.border = borde;
+                    if (n % 2 === 1) cel.fill = fill(XL.zebra);
+                });
+                if (t.tonoCol != null && f.tono) {
+                    const cel = r.getCell(t.tonoCol + 1);
+                    cel.fill = fill(XL_SUAVE[f.tono] || XL.zebra);
+                    cel.font = { name: 'Calibri', size: 10, bold: true, color: { argb: XL_TONO[f.tono] || XL.texto } };
+                }
+            });
+            if (!t.filas.length) {
+                h.mergeCells(4, 1, 4, Math.min(t.columnas.length, 8));
+                h.getCell(4, 1).value = 'Sin tareas en esta parte.';
+                h.getCell(4, 1).font = { name: 'Calibri', size: 10, italic: true, color: { argb: XL.gris } };
+            } else {
+                h.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3 + t.filas.length, column: t.columnas.length } };
+            }
+        });
+        return wb;
+    }
+
+    async function logoBase64() {
+        try {
+            const r = await fetch(REP_LOGO);
+            if (!r.ok) return null;
+            const b = await r.blob();
+            return await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1] || null); fr.onerror = () => res(null); fr.readAsDataURL(b); });
+        } catch (_) { return null; }
+    }
+
+    function descargarBlob(blob, nombre) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = nombre;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+
+    async function exportarExcel(rep) {
+        if (typeof ExcelJS === 'undefined') { toast('La librería de Excel aún no carga. Intenta en unos segundos.', 'error'); return false; }
+        toast('Preparando el Excel…', 'info');
+        const wb = libroExcel(rep, ExcelJS, await logoBase64());
+        const buf = await wb.xlsx.writeBuffer();
+        descargarBlob(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), rep.meta.archivo + '.xlsx');
+        toast('Excel descargado.', 'ok');
+        return true;
+    }
+
+    /** Prepara el PDF con html2pdf (número de página incluido). Devuelve { trabajo, limpiar }. */
+    function trabajoPDF(rep, logoUrl) {
+        const hoja = document.createElement('div');
+        hoja.style.cssText = 'position:fixed;left:-10000px;top:0;width:736px;background:#fff;';
+        hoja.innerHTML = '<style>' + REP_CSS + '</style>' + htmlReporteEjecutivo(rep, logoUrl);
+        document.body.appendChild(hoja);
+        const trabajo = window.html2pdf().set({
+            margin: [10, 10, 14, 10],
+            filename: rep.meta.archivo + '.pdf',
+            image: { type: 'jpeg', quality: 0.96 },
+            html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+            jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' },
+            // Cada sección, recuadro y renglón se queda junto: no se parte entre páginas.
+            pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.rp-box', '.rp-grupo', '.rp-sec', 'h2'] },
+        }).from(hoja.querySelector('.rp')).toPdf().get('pdf').then(pdf => {
+            const n = pdf.internal.getNumberOfPages();
+            const ancho = pdf.internal.pageSize.getWidth(), alto = pdf.internal.pageSize.getHeight();
+            for (let i = 1; i <= n; i++) {
+                pdf.setPage(i);
+                pdf.setFontSize(7.5);
+                pdf.setTextColor(148, 163, 184);
+                pdf.text('AIFA · Dirección de Operación · Resumen ejecutivo de seguimiento · ' + rep.periodo.texto, 10, alto - 6);
+                pdf.text('Página ' + i + ' de ' + n, ancho - 10, alto - 6, { align: 'right' });
+            }
+        });
+        return { trabajo, limpiar: () => hoja.remove() };
+    }
+
+    /** PDF directo; si no está la librería, se abre para imprimir. */
+    async function exportarPDF(rep) {
+        const logo = new URL(REP_LOGO, location.href).href;
+        if (typeof window.html2pdf !== 'function') {
+            const w = window.open('', '_blank');
+            if (!w) { toast('El navegador bloqueó la ventana del reporte. Permite ventanas emergentes.', 'error'); return false; }
+            w.document.open();
+            w.document.write('<!doctype html><html lang="es"><head><meta charset="utf-8"><title>' + esc(rep.meta.archivo) + '</title><style>@page{size:letter portrait;margin:10mm}' +
+                'body{margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.rp{margin:0 auto}' + REP_CSS + '</style></head><body>' +
+                htmlReporteEjecutivo(rep, logo) + '</body></html>');
+            w.document.close();
+            setTimeout(() => { try { w.focus(); w.print(); } catch (_) { /* nada */ } }, 700);
+            return true;
+        }
+        toast('Preparando el PDF…', 'info');
+        const { trabajo, limpiar } = trabajoPDF(rep, logo);
+        try {
+            await trabajo.save();
+            toast('PDF descargado.', 'ok');
+            return true;
+        } catch (e) {
+            console.error('[Seguimiento] PDF:', e);
+            toast('No se pudo generar el PDF: ' + errTxt(e), 'error');
+            return false;
+        } finally {
+            limpiar();
+        }
+    }
+
+    /* ---------- Ventana para elegir periodo y espacio ---------- */
+    function abrirResumen() {
+        const m = $('seg-modal');
+        const r = state.reporte || (state.reporte = { periodo: 'mes', desde: '', hasta: '', espacio: state.espacio });
+        if (!state.conDiarias) r.espacio = 'agenda';
+        m.hidden = false;
+        m.innerHTML = '<div class="seg-modal-box seg-rep-box" role="dialog" aria-modal="true" aria-labelledby="seg-rep-t">' +
+            '<div class="seg-modal-head"><span class="seg-rep-ico"><i class="fas fa-file-export"></i></span><h3 id="seg-rep-t">Descargar resumen ejecutivo</h3>' +
+            '<button type="button" class="seg-icon-btn" data-m="cerrar" aria-label="Cerrar"><i class="fas fa-xmark"></i></button></div>' +
+            '<div class="seg-modal-body" id="seg-rep-cuerpo"></div>' +
+            '<div class="seg-rep-pie">' +
+              '<button type="button" class="seg-rep-btn is-pdf" data-rep-fmt="pdf"><i class="fas fa-file-pdf"></i><span><b>PDF ejecutivo</b><small>Para presentar o enviar a los jefes</small></span></button>' +
+              '<button type="button" class="seg-rep-btn is-xlsx" data-rep-fmt="xlsx"><i class="fas fa-file-excel"></i><span><b>Excel completo</b><small>Resumen y detalle con filtros</small></span></button>' +
+            '</div></div>';
+        pintarResumenOpciones();
+    }
+
+    function pintarResumenOpciones() {
+        const cont = $('seg-rep-cuerpo');
+        const r = state.reporte;
+        if (!cont || !r) return;
+        const rep = armarReporte(r);
+        const k = rep.kpis;
+        const chip = (grupo, valor, texto, on, icono) => '<button type="button" class="seg-opt' + (on ? ' is-on' : '') + '" data-rep="' + grupo + '" data-rv="' + valor + '">' +
+            (icono ? '<i class="fas fa-' + icono + '"></i>' : '') + esc(texto) + '</button>';
+        cont.innerHTML =
+            '<div class="seg-rep-sec"><h6>Periodo</h6><div class="seg-opts">' +
+              C.PERIODOS.map(p => chip('periodo', p.clave, p.nombre, r.periodo === p.clave)).join('') + chip('periodo', 'libre', 'Personalizado…', r.periodo === 'libre', 'calendar-days') + '</div>' +
+              (r.periodo === 'libre' ? '<div class="seg-rep-fechas"><label>Del <input type="date" data-rep-f="desde" value="' + esc(r.desde || '') + '"></label>' +
+                '<label>al <input type="date" data-rep-f="hasta" value="' + esc(r.hasta || hoy()) + '"></label></div>' : '') +
+              '<div class="seg-rep-rango"><i class="far fa-calendar"></i>' + esc(rep.periodo.texto) + '</div></div>' +
+            (state.conDiarias ? '<div class="seg-rep-sec"><h6>Espacio</h6><div class="seg-opts">' +
+              chip('espacio', 'agenda', 'Agenda', r.espacio === 'agenda', 'calendar-days') + chip('espacio', 'diaria', 'Diarias', r.espacio === 'diaria', 'sun') +
+              chip('espacio', 'ambos', 'Las dos', r.espacio === 'ambos', 'layer-group') + '</div></div>' : '') +
+            '<div class="seg-rep-vista">' +
+              '<div><b>' + k.total + '</b><span>tareas</span></div><div><b>' + k.terminadas + '</b><span>terminadas</span></div>' +
+              '<div class="' + (k.vencidas ? 'is-rojo' : '') + '"><b>' + k.vencidas + '</b><span>vencidas</span></div><div><b>' + rep.porResponsable.filter(p => p.nombre !== 'Sin responsable').length + '</b><span>responsables</span></div>' +
+            '</div>' +
+            '<div class="seg-rep-alc"><i class="fas fa-filter"></i><span><b>Alcance:</b> ' + esc(rep.meta.alcance) + '. Se respetan tu área y los filtros activos.</span></div>' +
+            '<ul class="seg-rep-incluye"><li><i class="fas fa-check"></i>Indicadores de hoy y del periodo, y lo más importante en palabras</li>' +
+              '<li><i class="fas fa-check"></i>Quién hizo cada tarea, cuánto tardó y cuánto tardó la validación</li>' +
+              '<li><i class="fas fa-check"></i>Vencidas, por validar, terminadas, próximas y renovaciones</li></ul>';
+    }
+
+    async function descargarResumen(formato, boton) {
+        const rep = armarReporte(state.reporte);
+        if (boton) boton.disabled = true;
+        try {
+            const ok = formato === 'pdf' ? await exportarPDF(rep) : await exportarExcel(rep);
+            if (ok) { const m = $('seg-modal'); m.hidden = true; m.innerHTML = ''; }
+        } finally {
+            if (boton) boton.disabled = false;
+        }
     }
 
     /* ==========================================================================
@@ -2962,14 +4132,7 @@
         $('seg-btn-nueva').addEventListener('click', () => nuevaTarea());
         $('seg-btn-guia').addEventListener('click', abrirGuiaCompleta);
         $('seg-btn-acceso').addEventListener('click', abrirAcceso);
-        $('seg-btn-resumen').addEventListener('click', e => abrirMenu(e.currentTarget, {
-            titulo: 'Descargar resumen', ancho: 250,
-            items: [
-                { valor: 'pdf', texto: 'Reporte ejecutivo (PDF)', sub: 'Indicadores, vencidas y pendientes', icono: 'file-pdf', color: '#dc2626' },
-                { valor: 'xlsx', texto: 'Tabla completa (Excel)', sub: 'Todas las tareas y su resumen', icono: 'file-excel', color: '#16a34a' },
-            ],
-            alElegir: v => (v === 'pdf' ? exportarPDF() : exportarExcel()),
-        }));
+        $('seg-btn-resumen').addEventListener('click', abrirResumen);
         $('seg-views').addEventListener('click', e => {
             const b = e.target.closest('[data-vista]');
             if (!b) return;
@@ -2995,12 +4158,20 @@
             renderTodo();
         });
         $('seg-kpis').addEventListener('click', e => { const k = e.target.closest('[data-kpi]'); if (k) clicKpi(k.dataset.kpi); });
+        $('seg-espacios').addEventListener('click', e => { const b = e.target.closest('[data-espacio]'); if (b) cambiarEspacio(b.dataset.espacio); });
         $('seg-chips').addEventListener('click', e => {
             const b = e.target.closest('[data-sd]');
             if (!b) return;
             const v = b.dataset.sd;
             const sel = state.filtros.subdirecciones;
             state.filtros.subdirecciones = !v ? [] : sel.includes(v) ? sel.filter(x => x !== v) : sel.concat(v);
+            renderTodo();
+        });
+        $('seg-validar').addEventListener('click', e => {
+            if (!e.target.closest('[data-validar]')) return;
+            Object.assign(state.filtros, { situacion: '', estatus: ['por_validar'] });
+            if (state.vista === 'resumen' || state.vista === 'calendario') state.vista = 'lista';
+            guardarPrefs();
             renderTodo();
         });
         $('seg-alerta').addEventListener('click', e => {
@@ -3020,7 +4191,13 @@
             if (e.target.closest('input, textarea, a')) return;
             abrirTarea(objetivo.dataset.id);
         });
+        body.addEventListener('input', e => { if (e.target.id === 'seg-dia-nueva') state.diaAdd.texto = e.target.value; });
         body.addEventListener('keydown', e => {
+            if (e.target.id === 'seg-dia-nueva') {
+                if (e.key === 'Enter') { e.preventDefault(); crearDiaria(e.target); }
+                else if (e.key === 'Escape') { e.target.value = ''; state.diaAdd.texto = ''; e.target.blur(); }
+                return;
+            }
             if (e.target.matches('input[data-add]')) {
                 if (e.key === 'Enter') { e.preventDefault(); crearRapida(e.target); }
                 else if (e.key === 'Escape') { e.target.value = ''; e.target.blur(); }
@@ -3067,9 +4244,9 @@
         const t = id && buscar(id);
         switch (accion) {
             case 'completar':
-                if (!t) return;
-                actualizar(id, { estatus: t.estatus === 'completada' ? 'pendiente' : 'completada' });
+                if (t) alternarHecha(t);
                 return;
+            case 'dia-op': return menuDia(el);
             case 'estatus': return t && menuEstatus(el, t, v => v !== t.estatus && actualizar(id, { estatus: v }));
             case 'prioridad': return t && menuPrioridad(el, t, v => v !== t.prioridad && actualizar(id, { prioridad: v }));
             case 'fecha': return t && menuFecha(el, t, 'fecha_limite', v => actualizar(id, { fecha_limite: v }));
@@ -3140,8 +4317,24 @@
         d.addEventListener('click', e => {
             const dupEnVivo = e.target.closest('#seg-dr-dup [data-dup-id]');
             if (dupEnVivo) { abrirTarea(dupEnVivo.dataset.dupId); return; }
-            const b = e.target.closest('[data-dr], [data-ck-accion="borrar"], [data-ck-accion="repartir"], [data-ck-accion="agregar"], [data-ck-accion="ir-fechas"], [data-ev], [data-ev-borrar], [data-coment-borrar]');
+            const b = e.target.closest('[data-dr], [data-ck-accion="borrar"], [data-ck-accion="repartir"], [data-ck-accion="agregar"], [data-ck-accion="ir-fechas"], ' +
+                '[data-ck-accion="obs-abrir"], [data-ck-accion="adjuntar"], [data-ck-accion="archivo-quitar"], [data-ck-file], [data-ev], [data-ev-borrar], [data-coment-borrar]');
             if (!b) return;
+            const ckId = b.closest('[data-ck]') && b.closest('[data-ck]').dataset.ck;
+            if (b.dataset.ckAccion === 'obs-abrir') {
+                const dr = state.dr;
+                dr.ckAbiertas = (dr.ckAbiertas || []).concat(ckId);
+                repintarChecklist();
+                document.querySelector('#seg-ck [data-ck="' + cssEsc(ckId) + '"] .seg-ck-obs-txt')?.focus();
+                return;
+            }
+            if (b.dataset.ckAccion === 'adjuntar') { state.subirA = ckId; $('seg-file').click(); return; }
+            if (b.dataset.ckAccion === 'archivo-quitar') { e.stopPropagation(); quitarArchivoSubtarea(ckId, +b.dataset.k); return; }
+            if (b.dataset.ckFile != null) {
+                const item = (tareaDelPanel().checklist || []).find(i => i.id === ckId);
+                abrirArchivo(item && (item.archivos || [])[+b.dataset.ckFile]);
+                return;
+            }
             if (b.dataset.evBorrar != null) { e.stopPropagation(); borrarEvidencia(+b.dataset.evBorrar); return; }
             if (b.dataset.comentBorrar) { borrarComentario(b.dataset.comentBorrar); return; }
             if (b.dataset.ckAccion === 'agregar') { agregarSubtarea(); return; }
@@ -3159,16 +4352,20 @@
                 guardarChecklist(C.repartirSubtareas(t.checklist || [], t.fecha_inicio, t.fecha_limite));
                 return;
             }
-            if (b.dataset.ckAccion === 'borrar') {
-                const t = tareaDelPanel();
-                const cid = b.closest('[data-ck]').dataset.ck;
-                guardarChecklist((t.checklist || []).filter(i => i.id !== cid));
-                return;
-            }
+            if (b.dataset.ckAccion === 'borrar') { quitarSubtarea(ckId); return; }
             if (b.dataset.ev != null) { abrirEvidencia(+b.dataset.ev); return; }
             accionPanel(b.dataset.dr, b);
         });
         d.addEventListener('input', e => {
+            if (e.target.dataset.ckAccion === 'obs') {
+                const cid = e.target.closest('[data-ck]').dataset.ck;
+                const el = e.target;
+                const p = state.drTimers['obs:' + cid] || (state.drTimers['obs:' + cid] = {});
+                clearTimeout(p.timer);
+                p.fn = () => { delete state.drTimers['obs:' + cid]; guardarObsSubtarea(cid, el.value); };
+                p.timer = setTimeout(p.fn, 800);
+                return;
+            }
             const c = e.target.dataset.campo;
             if (e.target.id === 'seg-dr-titulo') {
                 autoAltura(e.target);
@@ -3213,6 +4410,11 @@
             }
         });
         d.addEventListener('focusout', e => {
+            if (e.target.dataset && e.target.dataset.ckAccion === 'obs') {
+                const p = state.drTimers['obs:' + e.target.closest('[data-ck]').dataset.ck];
+                if (p && p.fn) { clearTimeout(p.timer); p.fn(); }
+                return;
+            }
             const c = e.target.dataset && e.target.dataset.campo;
             if (c && state.drTimers[c]) { const p = state.drTimers[c]; clearTimeout(p.timer); p.fn(); }
         });
@@ -3240,14 +4442,34 @@
             z.classList.remove('is-over');
             recibirArchivos(e.dataTransfer.files);
         });
-        $('seg-file').addEventListener('change', e => { recibirArchivos(e.target.files); e.target.value = ''; });
+        $('seg-file').addEventListener('change', e => {
+            const destino = state.subirA;
+            state.subirA = null;
+            if (destino) subirArchivosSubtarea(destino, e.target.files); else recibirArchivos(e.target.files);
+            e.target.value = '';
+        });
 
         $('seg-confirm').addEventListener('click', e => {
             const b = e.target.closest('[data-cf]');
+            const campo = $('seg-cf-campo');
+            if (b && b.dataset.cf === 'si' && campo && campo.dataset.requerido && !campo.value.trim()) {
+                campo.classList.add('is-falta');
+                campo.focus();
+                return;
+            }
             if (b) { cerrarConfirmar(b.dataset.cf === 'si' ? 'si' : b.dataset.cf === 'alterno' ? 'alterno' : false); return; }
             if (e.target === e.currentTarget) cerrarConfirmar(false);
         });
         $('seg-modal').addEventListener('click', e => {
+            const opRep = e.target.closest('[data-rep]');
+            if (opRep && state.reporte) {
+                state.reporte[opRep.dataset.rep] = opRep.dataset.rv;
+                if (opRep.dataset.rep === 'periodo' && opRep.dataset.rv === 'libre' && !state.reporte.desde) state.reporte.desde = C.sumarDias(hoy(), -29);
+                pintarResumenOpciones();
+                return;
+            }
+            const fmt = e.target.closest('[data-rep-fmt]');
+            if (fmt) { descargarResumen(fmt.dataset.repFmt, fmt); return; }
             const dup = e.target.closest('[data-dup]');
             if (dup) { terminarDuplicado(dup.dataset.dup === 'abrir' ? 'abrir:' + dup.dataset.dupId : dup.dataset.dup); return; }
             if (resolverDuplicado && (e.target === e.currentTarget || e.target.closest('[data-m="cerrar"]'))) { terminarDuplicado('cancelar'); return; }
@@ -3274,6 +4496,7 @@
             }
         });
         $('seg-modal').addEventListener('change', e => {
+            if (e.target.dataset.repF && state.reporte) { state.reporte[e.target.dataset.repF] = e.target.value; pintarResumenOpciones(); return; }
             if (e.target.id === 'seg-acc-area') { state.acceso.areaTocada = true; sugerirAreaNueva(); return; }
             const ar = e.target.closest('[data-acc-area]');
             if (ar) { guardarArea(ar.dataset.accArea, leerArea(ar.value)).then(ok => ok && cargarAcceso()); return; }
@@ -3347,9 +4570,18 @@
                 });
             }
             case 'responsable': return menuResponsable(el, t, p => cambiarDesdePanel(patchResponsable(t, p)));
+            case 'clase':
+                return menuSimple(el, '¿En qué espacio va?', C.CLASES.map(x => ({ valor: x.clave, texto: x.nombre, sub: x.ayuda, icono: x.icono })), C.claseDe(t), v => {
+                    if (v === C.claseDe(t)) return;
+                    cambiarDesdePanel({ clase: v });
+                    if (dr.modo === 'editar') toast('Se movió a ' + (v === 'diaria' ? 'Diarias' : 'Agenda') + '.', 'ok', { texto: 'Ir allá', fn: () => cambiarEspacio(v) });
+                });
             case 'tipo': return menuSimple(el, 'Tipo', C.TIPOS.map(x => ({ valor: x.clave, texto: x.nombre, icono: x.icono })), t.tipo, v => cambiarDesdePanel({ tipo: v }));
             case 'recurrencia': return menuRepeticion(el, t);
-            case 'completar': return actualizar(t.id, { estatus: t.estatus === 'completada' ? 'pendiente' : 'completada' });
+            case 'completar': return alternarHecha(t);
+            case 'validar': return validarTarea(t);
+            case 'regresar': return regresarTarea(t);
+            case 'retirar': return retirarEntrega(t);
             case 'reabrir': return actualizar(t.id, { estatus: 'pendiente' });
             case 'aviso':
                 return menuSimple(el, 'Avisar antes del vencimiento', AVISOS.map(n => ({ valor: n, texto: n === 0 ? 'El mismo día' : plural(n, 'día antes', 'días antes'), icono: 'bell' })), +t.aviso_dias, v => cambiarDesdePanel({ aviso_dias: v }));
@@ -3368,7 +4600,7 @@
                 return;
             }
             case 'comentar': return enviarComentario();
-            case 'subir': return $('seg-file').click();
+            case 'subir': state.subirA = null; return $('seg-file').click();
             case 'quitar-pendiente':
                 dr.archivos = (dr.archivos || []).filter((_, k) => k !== +el.dataset.i);
                 pintarEvidenciasPendientes();
@@ -3408,8 +4640,12 @@
 
     function menuRepeticion(anchor, t) {
         const actual = C.mesesRecurrencia(t);
-        const siguiente = m => m && t.fecha_limite ? 'Siguiente: ' + C.fechaCorta(C.sumarMeses(t.fecha_limite, m)) : '';
-        const items = C.RECURRENCIAS.map(r => ({ valor: r.clave, texto: r.nombre, icono: r.meses ? 'repeat' : 'minus', sub: siguiente(r.meses),
+        const siguiente = clave => { const f = C.fechaSiguiente(Object.assign({}, t, { recurrencia: clave, recurrencia_meses: null }), hoy()); return f ? 'Siguiente: ' + C.fechaCorta(f) : ''; };
+        // Primero lo que más se usa en cada espacio: rutinas en Diarias, ciclos largos en Agenda.
+        const porDias = C.RECURRENCIAS.filter(r => r.dias);
+        const porMeses = C.RECURRENCIAS.filter(r => r.meses);
+        const orden = [C.RECURRENCIAS[0]].concat(C.claseDe(t) === 'diaria' ? porDias.concat(porMeses) : porMeses.concat(porDias));
+        const items = orden.map(r => ({ valor: r.clave, texto: r.nombre, icono: r.clave === 'ninguna' ? 'minus' : 'repeat', sub: siguiente(r.clave),
             sel: t.recurrencia === r.clave }));
         items.push({ sep: true });
         items.push({ valor: '__otro__', texto: t.recurrencia === C.PERSONALIZADA ? C.textoCada(actual) + ' (personalizado)' : 'Personalizado…',
@@ -3698,13 +4934,17 @@
         if (!el || !state.cargado || !state.rol) return;
         const h = hoy();
         const alc = mando.alcance || C.alcancesPosibles(null)[0];
-        const r = C.resumenMando(C.filtrarAlcance(state.tareas, alc), h);
-        const desglose = C.desgloseMando(state.tareas, alc, h);
+        // El tablero es de lo que va por Agenda; Diarias tiene su propio acceso.
+        const formales = tareasAgenda();
+        const r = C.resumenMando(C.filtrarAlcance(formales, alc), h);
+        const desglose = C.desgloseMando(formales, alc, h);
+        const diariasHoy = state.conDiarias ? C.filtrarAlcance(state.tareas, alc).filter(t => C.claseDe(t) === 'diaria' && C.estaAbierta(t)
+            && t.estatus !== 'por_validar' && t.fecha_limite && t.fecha_limite <= h).length : 0;
         const opciones = opcionesMando();
         const verArea = alc.tipo === 'todo';
-        const alDia = !r.vencidas && !r.semana && !r.detenidas;
+        const alDia = !r.vencidas && !r.semana && !r.detenidas && !(esAdmin() && state.conValidacion && r.porValidar);
         // Lo siguiente que vence, para que el detalle nunca quede vacío.
-        const proximas = r.atencion.length ? [] : C.filtrarAlcance(state.tareas, alc)
+        const proximas = r.atencion.length ? [] : C.filtrarAlcance(formales, alc)
             .filter(t => C.estaAbierta(t) && t.fecha_limite && C.diasEntre(h, t.fecha_limite) >= 0)
             .sort((a, b) => (a.fecha_limite < b.fecha_limite ? -1 : 1))
             .slice(0, 4)
@@ -3762,7 +5002,9 @@
                     ? '<span class="seg-mando-ok"><i class="fas fa-circle-check"></i>Todo al día</span>'
                     : chip('vencida', r.vencidas, 'vencida', 'vencidas', 'rojo', 'triangle-exclamation') +
                       chip('semana', r.semana, 'vence esta semana', 'vencen esta semana', 'ambar', 'hourglass-half') +
-                      chip('detenida', r.detenidas, 'detenida', 'detenidas', 'naranja', 'circle-pause')) +
+                      chip('detenida', r.detenidas, 'detenida', 'detenidas', 'naranja', 'circle-pause') +
+                      (esAdmin() && state.conValidacion ? chip('validar', r.porValidar, 'por validar', 'por validar', 'cian', 'stamp') : '')) +
+                chip('diarias', diariasHoy, 'diaria para hoy', 'diarias para hoy', 'sol', 'sun') +
                 '<span class="seg-mando-dato">' + (r.abiertas ? plural(r.abiertas, 'abierta', 'abiertas') : 'Sin tareas abiertas') +
                   (r.cumplimiento == null ? '' : ' · <b>' + r.cumplimiento + '%</b> a tiempo') + '</span>' +
               '</div>' +
@@ -3798,7 +5040,7 @@
               '</div>' +
             '</div>';
         // El globo del menú cuenta las vencidas de su propia área.
-        pintarInsignia(C.resumenMando(C.filtrarAlcance(state.tareas, mando.alcanceBase || alc), h).vencidas);
+        pintarInsignia(C.resumenMando(C.filtrarAlcance(formales, mando.alcanceBase || alc), h).vencidas);
     }
 
     function abrirDetalleMando(si) {
@@ -3817,6 +5059,8 @@
         const extra = Object.assign({}, cambios || {});
         const vista = extra.vista;
         delete extra.vista;
+        if (state.conDiarias) state.espacio = extra.espacio === 'diaria' ? 'diaria' : 'agenda';
+        delete extra.espacio;
         state.filtros = Object.assign({}, state.filtros, {
             texto: alc.tipo === 'gerencia' ? alc.gerencia : '', subdirecciones: alc.subdireccion ? [alc.subdireccion] : [],
             estatus: [], prioridades: [], tipos: [], responsable: '', situacion: '',
@@ -3846,13 +5090,15 @@
         }
         if (acc === 'instruccion') {
             const a = mando.alcance || {};
-            nuevaTarea({ tipo: 'orden', subdireccion: a.subdireccion || subdirUnica(), gerencia: a.gerencia || gerenciaPorDefecto() });
+            nuevaTarea({ tipo: 'orden', clase: 'agenda', subdireccion: a.subdireccion || subdirUnica(), gerencia: a.gerencia || gerenciaPorDefecto() });
             return;
         }
         if (acc === 'abrir') { abrirSeguimiento(); return; }
         if (acc === 'filtro') {
             const f = b.dataset.filtro;
             abrirSeguimiento(f === 'vencida' ? { situacion: 'vencida' } : f === 'semana' ? { situacion: 'por_vencer' }
+                : f === 'validar' ? { estatus: ['por_validar'] }
+                : f === 'diarias' ? { espacio: 'diaria' }
                 : f === 'detenida' ? { estatus: ['detenida'] } : f === 'cumplimiento' ? { vista: 'resumen' } : {});
             return;
         }
@@ -3924,5 +5170,7 @@
         nueva: nuevaTarea,
         recargar: () => { state.cargado = false; return entrar(); },
         revisarAcceso,
+        // El resumen ejecutivo, para revisarlo sin descargar (pruebas).
+        resumen: Object.freeze({ armar: armarReporte, html: htmlReporteEjecutivo, hojas: hojasReporte, libro: libroExcel, pdf: trabajoPDF, css: REP_CSS }),
     });
 })();

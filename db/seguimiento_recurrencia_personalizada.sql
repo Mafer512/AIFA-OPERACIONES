@@ -16,7 +16,7 @@ COMMENT ON COLUMN public.seguimiento_tareas.recurrencia_meses IS
 
 ALTER TABLE public.seguimiento_tareas DROP CONSTRAINT IF EXISTS seguimiento_tareas_recurr_chk;
 ALTER TABLE public.seguimiento_tareas ADD CONSTRAINT seguimiento_tareas_recurr_chk
-  CHECK (recurrencia IN ('ninguna', 'mensual', 'bimestral', 'trimestral', 'semestral', 'anual', 'bienal', 'personalizada'));
+  CHECK (recurrencia IN ('ninguna', 'diaria', 'laborable', 'semanal', 'mensual', 'bimestral', 'trimestral', 'semestral', 'anual', 'bienal', 'personalizada'));
 
 ALTER TABLE public.seguimiento_tareas DROP CONSTRAINT IF EXISTS seguimiento_tareas_recurr_meses_chk;
 ALTER TABLE public.seguimiento_tareas ADD CONSTRAINT seguimiento_tareas_recurr_meses_chk

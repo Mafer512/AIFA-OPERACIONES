@@ -11,7 +11,7 @@
 --   editor → crea, edita y comenta
 --   lector → consulta y comenta
 --
--- Las evidencias (PDF, JPG, PNG) van a un bucket PRIVADO y se abren con
+-- Las evidencias (PDF, Word, Excel, JPG, PNG) van a un bucket PRIVADO y se abren con
 -- enlaces firmados que vencen.
 --
 -- Es idempotente: se puede correr de nuevo. No toca tablas de otros módulos.
@@ -106,9 +106,9 @@ CREATE TABLE IF NOT EXISTS public.seguimiento_tareas (
   CONSTRAINT seguimiento_tareas_titulo_chk     CHECK (length(btrim(titulo)) BETWEEN 1 AND 300),
   CONSTRAINT seguimiento_tareas_tipo_chk       CHECK (tipo IN ('orden', 'renovacion', 'certificado', 'compromiso', 'tarea')),
   CONSTRAINT seguimiento_tareas_subdir_chk     CHECK (subdireccion IN ('DO', 'SSO', 'SSA', 'SSC', 'SI', 'SGE')),
-  CONSTRAINT seguimiento_tareas_estatus_chk    CHECK (estatus IN ('pendiente', 'en_proceso', 'en_revision', 'detenida', 'completada', 'cancelada')),
+  CONSTRAINT seguimiento_tareas_estatus_chk    CHECK (estatus IN ('pendiente', 'en_proceso', 'en_revision', 'detenida', 'por_validar', 'completada', 'cancelada')),
   CONSTRAINT seguimiento_tareas_prioridad_chk  CHECK (prioridad IN ('urgente', 'alta', 'normal', 'baja')),
-  CONSTRAINT seguimiento_tareas_recurr_chk     CHECK (recurrencia IN ('ninguna', 'mensual', 'bimestral', 'trimestral', 'semestral', 'anual', 'bienal', 'personalizada')),
+  CONSTRAINT seguimiento_tareas_recurr_chk     CHECK (recurrencia IN ('ninguna', 'diaria', 'laborable', 'semanal', 'mensual', 'bimestral', 'trimestral', 'semestral', 'anual', 'bienal', 'personalizada')),
   CONSTRAINT seguimiento_tareas_recurr_meses_chk CHECK (recurrencia <> 'personalizada' OR recurrencia_meses BETWEEN 1 AND 240),
   CONSTRAINT seguimiento_tareas_aviso_chk      CHECK (aviso_dias BETWEEN 0 AND 365),
   CONSTRAINT seguimiento_tareas_fechas_chk     CHECK (fecha_inicio IS NULL OR fecha_limite IS NULL OR fecha_limite >= fecha_inicio),
@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS public.seguimiento_tareas (
 ALTER TABLE public.seguimiento_tareas ADD COLUMN IF NOT EXISTS recurrencia_meses integer;
 ALTER TABLE public.seguimiento_tareas DROP CONSTRAINT IF EXISTS seguimiento_tareas_recurr_chk;
 ALTER TABLE public.seguimiento_tareas ADD CONSTRAINT seguimiento_tareas_recurr_chk
-  CHECK (recurrencia IN ('ninguna', 'mensual', 'bimestral', 'trimestral', 'semestral', 'anual', 'bienal', 'personalizada'));
+  CHECK (recurrencia IN ('ninguna', 'diaria', 'laborable', 'semanal', 'mensual', 'bimestral', 'trimestral', 'semestral', 'anual', 'bienal', 'personalizada'));
 ALTER TABLE public.seguimiento_tareas DROP CONSTRAINT IF EXISTS seguimiento_tareas_recurr_meses_chk;
 ALTER TABLE public.seguimiento_tareas ADD CONSTRAINT seguimiento_tareas_recurr_meses_chk
   CHECK (recurrencia <> 'personalizada' OR recurrencia_meses BETWEEN 1 AND 240);
@@ -240,8 +240,10 @@ VALUES (
   'seguimiento-evidencias',
   'seguimiento-evidencias',
   false,
-  10485760,  -- 10 MB
-  ARRAY['application/pdf', 'image/jpeg', 'image/png']
+  26214400,  -- 25 MB
+  ARRAY['application/pdf', 'image/jpeg', 'image/png',
+        'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
 )
 ON CONFLICT (id) DO UPDATE SET
   public             = EXCLUDED.public,
@@ -252,7 +254,7 @@ DROP POLICY IF EXISTS "seguimiento_evidencias_select" ON storage.objects;
 DROP POLICY IF EXISTS "seguimiento_evidencias_insert" ON storage.objects;
 DROP POLICY IF EXISTS "seguimiento_evidencias_delete" ON storage.objects;
 
--- Ruta que genera la aplicación: <id de la tarea>/<aleatorio>.<pdf|jpg|png>
+-- Ruta que genera la aplicación: <id de la tarea>/<aleatorio>.<pdf|jpg|png|doc|docx|xls|xlsx>
 CREATE POLICY "seguimiento_evidencias_select" ON storage.objects
   FOR SELECT TO authenticated
   USING (bucket_id = 'seguimiento-evidencias' AND public.seguimiento_puede_ver());
@@ -262,7 +264,7 @@ CREATE POLICY "seguimiento_evidencias_insert" ON storage.objects
   WITH CHECK (
     bucket_id = 'seguimiento-evidencias'
     AND public.seguimiento_puede_editar()
-    AND name ~ '^[0-9a-f-]{36}/[A-Za-z0-9_-]{6,64}\.(pdf|jpg|png)$'
+    AND name ~ '^[0-9a-f-]{36}/[A-Za-z0-9_-]{6,64}\.(pdf|jpg|png|doc|docx|xls|xlsx)$'
   );
 
 CREATE POLICY "seguimiento_evidencias_delete" ON storage.objects

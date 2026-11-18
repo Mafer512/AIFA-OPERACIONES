@@ -156,7 +156,7 @@ CREATE POLICY "seguimiento_evidencias_insert" ON storage.objects
   WITH CHECK (
     bucket_id = 'seguimiento-evidencias'
     AND public.seguimiento_puede_editar()
-    AND name ~ '^[0-9a-f-]{36}/[A-Za-z0-9_-]{6,64}\.(pdf|jpg|png)$'
+    AND name ~ '^[0-9a-f-]{36}/[A-Za-z0-9_-]{6,64}\.(pdf|jpg|png|doc|docx|xls|xlsx)$'
     AND public.seguimiento_ruta_en_alcance(name)
   );
 CREATE POLICY "seguimiento_evidencias_delete" ON storage.objects
