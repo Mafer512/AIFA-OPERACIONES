@@ -66,6 +66,10 @@ const FUNCTIONS = [
   '    async function _mirrorRowsToEditableTables(',
   '    async function saveToDatabase(',
   '    async function updateExistingFlights(',
+  '    async function _importLotesResilientes(',
+  '    function _importRowKey(',
+  '    function _importRechazadosCsv(',
+  '    function _importDescargarRechazados(',
 ];
 
 // Reconstruye el módulo con sus funciones reales y stubs para todo lo que toca
@@ -86,7 +90,7 @@ function buildImporter() {
     'let _flightProbeCache = null;',
     'async function loadFlights() { _flightProbeCache = null; }',
     ...FUNCTIONS.map(extractBlock),
-    'return { importCsvFromFile, movementIdentityKey, scheduledSlotKey, HEADERS };',
+    'return { importCsvFromFile, movementIdentityKey, scheduledSlotKey, HEADERS, _importRechazadosCsv };',
   ].join('\n');
   return new Function(code)();
 }
@@ -163,7 +167,10 @@ const REFERENCE_DATE = new Date(2026, 7, 11, 12, 0, 0, 0);
 
 // Cliente Supabase en memoria: replica el trigger _aifa_sync_aodb_movement_identity
 // y los índices UNIQUE (llave de movimiento, hora programada) de la migración 022.
-function createFakeSupabase(seedRows = []) {
+// options.failMultiRowInsert: un INSERT de varias filas falla completo (como
+// Postgres cuando una sola fila del lote viola una restricción) y obliga al
+// importador a reintentar fila por fila.
+function createFakeSupabase(seedRows = [], options = {}) {
   const tables = {
     vuelos_parte_operaciones_csv: [],
     itinerario_vuelos_editable: [],
@@ -236,6 +243,11 @@ function createFakeSupabase(seedRows = []) {
       delete() { tables[table] = []; rows = tables[table]; filtered = []; return builder; },
       insert(payload) {
         const list = Array.isArray(payload) ? payload : [payload];
+        if (options.failMultiRowInsert && list.length > 1) {
+          error = { message: 'lote rechazado' };
+          filtered = [];
+          return builder;
+        }
         const inserted = [];
         for (const item of list) {
           const row = applyIdentityTrigger({ ...item, id: nextId++ });
@@ -281,8 +293,8 @@ function createFakeSupabase(seedRows = []) {
   return { from: query, __tables: tables };
 }
 
-async function runImport(csvRows, seedRows = []) {
-  const supabase = createFakeSupabase(seedRows);
+async function runImport(csvRows, seedRows = [], options = {}) {
+  const supabase = createFakeSupabase(seedRows, options);
   window.supabaseClient = supabase;
   const alerts = [];
   window.alert = message => alerts.push(String(message));
@@ -361,5 +373,98 @@ describe('importación del itinerario con doble rotación del mismo vuelo', () =
     expect(rows[0]['[Arr] SIBT']).toBe('10AUG 02:10');
     expect(rows[0]['[Arr] Stand']).toBe('109B');
     expect(rows[0].arr_movement_slot).toBe('02:10');
+  });
+});
+
+// Visits_09NOV26: el AODB unió en una sola visita la llegada y la salida de
+// AC 7246 que el archivo del 06NOV traía sueltas y ya canceladas. Esa fila
+// abortaba el archivo completo y se perdían los vuelos de las demás
+// aerolíneas. Ahora cada problema se rechaza solo, con su línea y motivo.
+describe('importación del itinerario: un problema no tumba el archivo', () => {
+  const AC_LLEGADA_SUELTA = flightRow({
+    'Status': 'Cancelled',
+    '[Arr] Airline code': 'AC',
+    '[Arr] Flight Designator': 'AC 7246',
+    '[Arr] SIBT': '10AUG 02:10',
+    'Routing': 'YYZ-NLU',
+  });
+  const AC_SALIDA_SUELTA = flightRow({
+    'Status': 'Cancelled',
+    'Routing': 'NLU-GDL',
+    '[Dep] Airline code': 'AC',
+    '[Dep] Flight Designator': 'AC 7246',
+    '[Dep] SOBT': '10AUG 04:15',
+  });
+  const AC_UNIDO = flightRow({
+    ...AC_LLEGADA_SUELTA,
+    'Routing': 'YYZ-NLU-GDL',
+    '[Dep] Airline code': 'AC',
+    '[Dep] Flight Designator': 'AC 7246',
+    '[Dep] SOBT': '10AUG 04:15',
+  });
+
+  test('dos medias visitas canceladas que el AODB une no abortan la importación', async () => {
+    const { alerts, rows, supabase } = await runImport(
+      [AC_UNIDO, OTRO_VUELO],
+      [AC_LLEGADA_SUELTA, AC_SALIDA_SUELTA]
+    );
+
+    expect(alerts.some(message => /No se pudo importar/i.test(message))).toBe(false);
+    expect(alerts.some(message => /Rechazados/.test(message))).toBe(false);
+    expect(rows.filter(row => row['[Arr] Flight Designator'] === 'VB 9235')).toHaveLength(1);
+    expect(supabase.__tables.manifiestos_vuelos_editable
+      .filter(row => row['[Arr] Flight Designator'] === 'VB 9235')).toHaveLength(1);
+    // La visita unida queda en un solo registro con sus dos movimientos.
+    const unidos = rows.filter(row => row.arr_movement_key && row.dep_movement_key
+      && row['[Arr] Flight Designator'] === 'AC 7246');
+    expect(unidos).toHaveLength(1);
+    expect(rows.filter(row => row.dep_movement_key && /\|7246\|/.test(row.dep_movement_key))).toHaveLength(1);
+  });
+
+  test('una fila sin llave se rechaza con su línea y el resto se guarda', async () => {
+    const fechaDeExcel = flightRow({ ...SEGUNDA_ROTACION, '[Arr] SIBT': '10/08/2026 23:05' });
+    const { alerts, rows } = await runImport([PRIMERA_ROTACION, fechaDeExcel, OTRO_VUELO]);
+
+    expect(alerts.some(message => /No se pudo importar/i.test(message))).toBe(false);
+    expect(rows).toHaveLength(2);
+    const resumen = alerts.find(message => /Resumen de la importación/.test(message));
+    expect(resumen).toMatch(/3 filas leídas · 6 vuelos detectados/);
+    expect(resumen).toMatch(/1\s*Rechazados/);
+    expect(alerts.some(message => /Importación completada con rechazados/.test(message))).toBe(true);
+  });
+
+  test('un lote que la base rechaza se reintenta fila por fila', async () => {
+    const { alerts, rows, supabase } = await runImport(
+      [PRIMERA_ROTACION, SEGUNDA_ROTACION, OTRO_VUELO], [], { failMultiRowInsert: true }
+    );
+
+    expect(alerts.some(message => /No se pudo importar|Rechazados/i.test(message))).toBe(false);
+    expect(rows).toHaveLength(3);
+    expect(supabase.__tables.manifiestos_vuelos_editable).toHaveLength(3);
+  });
+
+  test('la misma visita repetida como vigente y "Not operating" conserva la vigente', async () => {
+    const llegada = flightRow({
+      'Status': 'Flight scheduled',
+      '[Arr] Airline code': 'VB',
+      '[Arr] Flight Designator': 'VB 9405',
+      '[Arr] SIBT': '11AUG 01:50',
+      'Routing': 'MTY-NLU',
+    });
+    const { rows } = await runImport([llegada, flightRow({ ...llegada, 'Status': 'Not operating' })]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].Status).toBe('Flight scheduled');
+  });
+
+  test('la lista de rechazados trae línea, vuelo y motivo', () => {
+    const csv = importer._importRechazadosCsv([
+      { line: 7, row: OTRO_VUELO, reason: 'motivo "x"' },
+      { line: 3, row: PRIMERA_ROTACION, reason: 'otro' },
+    ]);
+    const lineas = csv.replace(/^﻿/, '').trim().split('\r\n');
+    expect(lineas[0]).toMatch(/^"Línea","Status"/);
+    expect(lineas[1]).toMatch(/^"3","Take off","XN 1107"/);
+    expect(lineas[2]).toMatch(/"VB 9235".*"motivo ""x"""$/);
   });
 });

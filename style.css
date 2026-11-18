@@ -15657,6 +15657,8 @@ body.navdeck-mode .si-nav > a.si-link.si-quick--demo { --qc: #ef4444; --qcb: rgb
 body.navdeck-mode .si-nav > a.si-link.si-quick--conci { --qc: #f97316; --qcb: rgba(249, 115, 22, .16); }
 /* Aviación General · FBO — cian, el mismo acento de la página de la terminal. */
 body.navdeck-mode .si-nav > a.si-link.si-quick--agen { --qc: #0891b2; --qcb: rgba(8, 145, 178, .16); }
+/* SMS — verde institucional de S.A.G.A.; abre la aplicación en otra pestaña. */
+body.navdeck-mode .si-nav > a.si-link.si-quick--sms { --qc: #078C72; --qcb: rgba(7, 140, 114, .16); }
 
 /* Accesos rápidos deshabilitados temporalmente. El !important es necesario
    porque el modo navdeck fuerza .si-link a display:flex !important. */

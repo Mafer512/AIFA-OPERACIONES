@@ -17,10 +17,6 @@
         { key: 'VESPERTINO', label: 'Vespertino', color: '#eb6834' },
         { key: 'NOCTURNO', label: 'Nocturno', color: '#1baf7a' }
     ];
-    // Filtros Mes y Año inhabilitados por el momento (se ven, pero no se usan
-    // ni filtran). Cambiar a true para activarlos.
-    const FILTROS_FECHA = false;
-    const FILTRO_FECHA_ATTR = FILTROS_FECHA ? '' : ' disabled title="Inhabilitado por el momento"';
     const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
     const state = {
@@ -98,6 +94,11 @@
         style.id = 'setp-styles';
         style.textContent = [
             R + '{--setp-surface:#fff;--setp-ink:#0f172a;--setp-ink-2:#475569;--setp-muted:#64748b;--setp-line:#e2e8f0;}',
+            // Modo oscuro (body.dark-mode, script.js): colores del aplicativo.
+            'body.dark-mode ' + R + '{--setp-surface:var(--card-bg);--setp-ink:var(--text-color);--setp-ink-2:#c3c9d2;--setp-muted:var(--text-muted-color);--setp-line:var(--border-color);}',
+            'body.dark-mode ' + R + ' .setp-kpi,body.dark-mode ' + R + ' .setp-panel{box-shadow:0 6px 16px rgba(0,0,0,.25);}',
+            'body.dark-mode ' + R + ' .setp-hist-dot--curso{background:var(--card-bg);box-shadow:inset 0 0 0 2px #fbbf24;}',
+            'body.dark-mode ' + R + ' .setp-hist-tag--curso{color:#fbbf24;}',
             R + ' .setp-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:end;justify-content:space-between;margin-bottom:14px;}',
             R + ' .setp-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:end;}',
             R + ' .setp-filters .form-select{min-width:140px;}',
@@ -176,18 +177,11 @@
         if (!root) return;
         root.innerHTML = [
             '<div id="setp-status" class="alert d-none mb-3"></div>',
-            '<div class="setp-toolbar">',
-            '  <div class="setp-filters" role="group" aria-label="Filtros del reporte SETP">',
-            '    <div><label for="setp-f-supervisor">Supervisor</label><select id="setp-f-supervisor" class="form-select form-select-sm"></select></div>',
-            '    <div><label for="setp-f-month">Mes</label><select id="setp-f-month" class="form-select form-select-sm"' + FILTRO_FECHA_ATTR + '></select></div>',
-            '    <div><label for="setp-f-year">Año</label><select id="setp-f-year" class="form-select form-select-sm"' + FILTRO_FECHA_ATTR + '></select></div>',
-            '  </div>',
-            '  <div class="setp-actions">',
-            '    <button type="button" class="btn btn-sm btn-primary d-none" id="setp-crear-usuario"><i class="fas fa-user-plus me-1"></i>Crear usuario</button>',
-            '    <button type="button" class="btn btn-sm btn-outline-primary d-none" id="setp-editar-usuario"><i class="fas fa-user-pen me-1"></i>Editar usuario</button>',
-            '    <button type="button" class="btn btn-sm btn-outline-danger d-none" id="setp-eliminar-usuario"><i class="fas fa-user-xmark me-1"></i>Eliminar usuario</button>',
-            '  </div>',
-            '</div>',
+            // El filtro Supervisor se retiró de la pantalla: el supervisor es el usuario
+            // que inició sesión (supervisorDeSesion). Este select oculto sólo guarda
+            // su No. de empleado para el resto del módulo. Los botones Crear, Editar y
+            // Eliminar usuario también se retiraron (la barra quedó vacía).
+            '<select id="setp-f-supervisor" hidden aria-hidden="true" tabindex="-1"></select>',
             '<div class="setp-kpis" id="setp-kpis"></div>',
             '<div class="setp-panel mb-3">',
             '  <div class="setp-panel-head"><h3 class="setp-panel-title">Supervisor por turno</h3><span class="setp-panel-hint">Recorridos de supervisión</span></div>',
@@ -239,43 +233,51 @@
         state.rows = all;
     }
 
+    // Los filtros Mes, Año y Supervisor se retiraron.
     function fillFilters() {
-        var years = Array.from(new Set(state.rows.map(function (r) { return Number(String(r.fecha).slice(0, 4)); })))
-            .filter(Boolean).sort(function (a, b) { return b - a; });
-
-        var yearSel = $('setp-f-year');
-        var prevYear = yearSel.value;
-        yearSel.innerHTML = '<option value="">--Seleccionar--</option>' + years.map(function (y) { return '<option value="' + y + '">' + y + '</option>'; }).join('');
-        yearSel.value = !FILTROS_FECHA ? '' : prevYear && years.indexOf(Number(prevYear)) >= 0 ? prevYear : (years[0] ? String(years[0]) : '');
-
-        var monthSel = $('setp-f-month');
-        var prevMonth = monthSel.value;
-        monthSel.innerHTML = '<option value="">--Seleccionar--</option>' + MONTH_NAMES.map(function (m, i) {
-            return '<option value="' + (i + 1) + '">' + m.charAt(0).toUpperCase() + m.slice(1) + '</option>';
-        }).join('');
-        monthSel.value = FILTROS_FECHA ? prevMonth : '';
-
         fillSupervisores();
     }
 
+    function palabras(value) {
+        return plain(value).replace(/[^A-Z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean);
+    }
+
+    // Supervisor de setp_supervisores que corresponde al usuario que inició
+    // sesión: todas las palabras de su nombre están en el nombre del perfil
+    // (sin acentos, mayúsculas ni orden). Si hay varios, el más completo.
+    // '' = el usuario no es supervisor (p. ej. un superadmin): ve a todos.
+    function supervisorDeSesion(list) {
+        var yo = [];
+        try { yo = palabras(sessionStorage.getItem('user_fullname')); } catch (_) { }
+        if (!yo.length) return '';
+        var mejor = null, largo = 0;
+        (list || []).forEach(function (s) {
+            var p = palabras(s.nombre);
+            if (p.length > largo && p.every(function (w) { return yo.indexOf(w) >= 0; })) { mejor = s; largo = p.length; }
+        });
+        return mejor ? mejor.no_empleado : '';
+    }
+
     // Supervisores dados de alta en setp_supervisores (js/setp-recorridos.js).
-    // El valor de cada opción es el No. de empleado.
-    function fillSupervisores(selectNo) {
+    // El valor de cada opción es el No. de empleado; queda elegido el del usuario.
+    // detalleNo: usuario a mostrar en "Detalle de registros" (el recién creado
+    // o editado); si no se da, el Detalle muestra al propio usuario.
+    function fillSupervisores(detalleNo) {
         var list = window.setpRecorridos ? window.setpRecorridos.supervisores() : [];
         var supSel = $('setp-f-supervisor');
-        var prevSup = selectNo || supSel.value;
-        supSel.innerHTML = '<option value="">--Seleccionar--</option>' + list.map(function (s) {
+        var propio = supervisorDeSesion(list);
+        supSel.innerHTML = '<option value=""></option>' + list.map(function (s) {
             return '<option value="' + esc(s.no_empleado) + '">' + esc(s.nombre) + '</option>';
         }).join('');
-        supSel.value = list.some(function (s) { return s.no_empleado === prevSup; }) ? prevSup : '';
-        fillUsuarioDetalle(list, supSel.value);
-        if (window.setpRecorridos) window.setpRecorridos.select(supSel.value);
+        supSel.value = propio;
+        fillUsuarioDetalle(list, detalleNo || propio);
+        if (window.setpRecorridos) window.setpRecorridos.select(propio);
     }
 
     // "Detalle de registros" tiene su propio selector de usuario: cualquiera
     // puede consultar el historial de otro (Luis el de Tania y viceversa) sin
     // cambiar el supervisor que captura en "Supervisor × turno".
-    // Al cambiar el filtro Supervisor, este selector lo sigue.
+    // Arranca en el propio usuario.
     function fillUsuarioDetalle(list, valor) {
         var sel = $('setp-detail-usuario');
         if (!sel) return;
@@ -296,8 +298,8 @@
         var supSel = $('setp-f-supervisor');
         var supOpt = supSel.selectedIndex > 0 ? supSel.options[supSel.selectedIndex] : null;
         return {
-            year: FILTROS_FECHA ? $('setp-f-year').value : '',
-            month: FILTROS_FECHA ? $('setp-f-month').value : '',
+            year: '', // filtros Mes y Año retirados
+            month: '',
             turno: '', // filtro Turno eliminado
             supervisor: supOpt ? supOpt.textContent : '',
             noEmpleado: supSel.value
@@ -343,20 +345,6 @@
         var bySup = aggregateBySupervisor(rows);
         renderKpis(rows, bySup, f);
         renderDetail();
-        // Crear, editar y eliminar usuario: sólo superadmin. Editar y eliminar
-        // actúan sobre el supervisor elegido en el filtro.
-        var superadmin = !!(window.setpRecorridos && window.setpRecorridos.puedeCrearUsuario());
-        var elegido = $('setp-f-supervisor').value;
-        ['setp-crear-usuario', 'setp-editar-usuario', 'setp-eliminar-usuario'].forEach(function (id) {
-            var btn = $(id);
-            if (btn) btn.classList.toggle('d-none', !superadmin);
-        });
-        ['setp-editar-usuario', 'setp-eliminar-usuario'].forEach(function (id) {
-            var btn = $(id);
-            if (!btn) return;
-            btn.disabled = !elegido;
-            btn.title = elegido ? '' : 'Elige un supervisor en el filtro';
-        });
     }
 
     function kpi(label, value, sub) {
@@ -472,34 +460,15 @@
     // ---------- ciclo de vida ----------
 
     function bindEvents() {
-        ['setp-f-year', 'setp-f-month', 'setp-f-supervisor'].forEach(function (id) {
-            $(id).addEventListener('change', render);
-        });
-        // Al elegir supervisor, "Supervisor × turno" se llena con sus datos
-        // y el Detalle de registros muestra su historial.
-        $('setp-f-supervisor').addEventListener('change', function (e) {
-            fillUsuarioDetalle(null, e.target.value);
-            renderDetail();
-            if (window.setpRecorridos) window.setpRecorridos.select(e.target.value);
-        });
-        // Consultar el historial de otro usuario sólo cambia el Detalle.
+        // Consultar el historial de otro usuario cambia el Detalle.
         $('setp-detail-usuario').addEventListener('change', renderDetail);
-        $('setp-crear-usuario').addEventListener('click', function () {
-            if (window.setpRecorridos) window.setpRecorridos.crearUsuario();
-        });
-        $('setp-editar-usuario').addEventListener('click', function () {
-            if (window.setpRecorridos) window.setpRecorridos.editarUsuario($('setp-f-supervisor').value);
-        });
-        $('setp-eliminar-usuario').addEventListener('click', function () {
-            if (window.setpRecorridos) window.setpRecorridos.eliminarUsuario($('setp-f-supervisor').value);
-        });
         // "Ver historial" de cada registro: abre el historial de su supervisor con ese registro resaltado.
         $('setp-detail').addEventListener('click', function (e) {
             var b = e.target.closest('[data-hist-no]');
             if (b && window.setpRecorridos) window.setpRecorridos.abrirHistorial(b.getAttribute('data-hist-no'), b.getAttribute('data-hist-id'));
         });
-        // El usuario recién creado o editado queda elegido en el filtro;
-        // al eliminarlo, el filtro vuelve a "--Seleccionar--".
+        // El usuario recién creado o editado queda elegido en el Detalle;
+        // al eliminarlo, el Detalle vuelve al propio usuario.
         ['setp:supervisor-creado', 'setp:supervisor-editado', 'setp:supervisor-eliminado'].forEach(function (name) {
             document.addEventListener(name, function (e) {
                 fillSupervisores(name === 'setp:supervisor-eliminado' ? '' : e.detail && e.detail.no_empleado);
@@ -549,6 +518,8 @@
 
     async function activateModule() {
         init();
+        // Sección exclusiva (script.js, SETP_PERSONAS_CON_ACCESO): no cargar datos a nadie más.
+        if (typeof window.puedeVerSetp === 'function' && !window.puedeVerSetp()) return;
         if (!isSectionVisible()) return;
         await refresh();
     }

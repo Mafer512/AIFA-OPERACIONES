@@ -3,7 +3,7 @@
 
     // ============================================================
     // SETP · Supervisor × turno (recorridos de supervisión)
-    // Al elegir un supervisor en el filtro, su No. de empleado, nombre y
+    // El supervisor es el usuario que inició sesión; su No. de empleado, nombre y
     // cargo se llenan solos. "Iniciar recorrido" fija la hora de inicio y
     // "Finalizar recorrido" la de término (las pone el servidor). La
     // evidencia es una foto (cámara del celular) o un archivo de la PC.
@@ -17,8 +17,21 @@
     const MODAL_ID = 'setp-usuario-modal';
     const MAX_FILE = 10 * 1024 * 1024;
     const LIST_LIMIT = 100;
-    const COLS = 7;
+    // Sin "No. de empleado" ni "Nombre y apellido" (se retiraron de la pantalla;
+    // los datos siguen guardados y el historial los muestra).
+    const COLS = 5;
     const ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx';
+    // Celular o tableta (no computadora): ahí el + abre directo la cámara.
+    // Se ve el navegador y no la pantalla táctil, para que una laptop con
+    // pantalla táctil siga como computadora. El iPad moderno se presenta como
+    // Mac, por eso se revisa también si tiene pantalla táctil.
+    const ES_MOVIL_O_TABLETA = (function () {
+        var nav = window.navigator || {};
+        if (nav.userAgentData && nav.userAgentData.mobile) return true;
+        var ua = nav.userAgent || '';
+        if (/Android|iPhone|iPad|iPod|Mobi|Tablet|Silk|Kindle/i.test(ua)) return true;
+        return /Macintosh/i.test(ua) && (nav.maxTouchPoints || 0) > 1;
+    })();
     // Turno que elige el supervisor al iniciar (columna turno, db/setp_recorridos_turno.sql).
     const TURNOS_REC = [
         { key: 'MATUTINO', label: 'Matutino' },
@@ -27,6 +40,9 @@
     ];
     // Pisos que se eligen como "Área de recorrido".
     const PISOS = ['0.00', '5.25', '10.50'];
+    // Módulos, locales, etiquetas, items y condiciones: js/setp-catalogo.js.
+    function catalogo() { return window.setpCatalogo; }
+    function moduloTexto(m) { return m.nombre + (m.zona ? ' (' + m.zona + ')' : ''); }
     // Selector de turno debajo del área de recorrido (false lo oculta sin borrarlo).
     const SELECTOR_TURNO = true;
 
@@ -49,7 +65,9 @@
         turnoOk: true,      // false si aún no se aplica db/setp_recorridos_turno.sql
         turnoNuevo: '',     // turno elegido en el renglón "Iniciar recorrido"
         areaNueva: '',      // piso elegido en el renglón "Iniciar recorrido"
-        status: null        // aviso visible { message, type }
+        areaCol: null,      // true si setp_hallazgos tiene la columna area (Cambiar el área responsable)
+        areaElegir: false,  // lista de áreas abierta en la ventana "Descripción del hallazgo"
+        status: null       // aviso visible { message, type }
     };
 
     function $(id) { return document.getElementById(id); }
@@ -223,6 +241,8 @@
             // queda dentro del desplazamiento de la tabla y no ensancha la página en celular.
             R + ' .table-responsive{position:relative;}',
             R + ' .setp-rec-table td{vertical-align:middle;}',
+            // Hora de inicio y de término centradas (en celular y tableta son tarjetas: se quedan a la izquierda).
+            '@container setp (min-width:1000px){' + R + ' .setp-rec-table th:nth-child(3),' + R + ' .setp-rec-table th:nth-child(4),' + R + ' .setp-rec-table td:nth-child(3),' + R + ' .setp-rec-table td:nth-child(4){text-align:center;}}',
             R + ' .setp-rec-area{min-width:180px;}',
             R + ' .setp-rec-hora{font-weight:700;font-variant-numeric:tabular-nums;color:#0f172a;}',
             R + ' .setp-rec-dia{display:block;font-size:.72rem;color:#64748b;}',
@@ -237,7 +257,29 @@
             R + ' .setp-rec-thumb--pend{border:2px dashed #b45309;}',
             R + ' .setp-rec-mas{width:48px;height:48px;border-style:dashed;display:inline-flex;align-items:center;justify-content:center;}',
             R + ' .setp-rec-pend{color:#b45309;font-weight:600;}',
-            R + ' .setp-rec-desc-btn{font-size:.72rem;text-decoration:none;}'
+            R + ' .setp-rec-desc-btn{font-size:.72rem;text-decoration:none;}',
+            // Botón flotante fijo para iniciar o finalizar el recorrido (pintarFab).
+            // Encima del botón "Sugerencias" (#fb-fab-wrap, style.css), que ocupa la misma esquina.
+            '#setp-rec-fab{position:fixed;right:calc(1.6rem + env(safe-area-inset-right,0px));bottom:calc(1.6rem + 64px + env(safe-area-inset-bottom,0px));z-index:1045;',
+            'display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border:0;border-radius:999px;font:inherit;font-weight:700;font-size:.95rem;',
+            'color:#fff;box-shadow:0 10px 24px rgba(15,23,42,.28);cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;}',
+            '#setp-rec-fab.is-ini{background:#198754;}',
+            '#setp-rec-fab.is-fin{background:#dc3545;}',
+            '#setp-rec-fab:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 14px 28px rgba(15,23,42,.34);}',
+            '#setp-rec-fab:focus-visible{outline:3px solid #93c5fd;outline-offset:3px;}',
+            '#setp-rec-fab:disabled{opacity:.85;cursor:progress;}',
+            // Dentro de una sección del menú de tarjetas "Sugerencias" se oculta (style.css): baja a la esquina.
+            'body.navdeck-mode.navdeck-active #setp-rec-fab{bottom:calc(1.6rem + env(safe-area-inset-bottom,0px));}',
+            'body.dark-mode #setp-rec-fab{box-shadow:0 10px 24px rgba(0,0,0,.5);}',
+            '@media (max-width:599.98px){#setp-rec-fab{padding:12px 16px;}}',
+            // Modo oscuro (body.dark-mode).
+            'body.dark-mode ' + R + ' .setp-rec-hora{color:var(--text-color);}',
+            'body.dark-mode ' + R + ' .setp-rec-dia,body.dark-mode ' + R + ' .setp-rec-hint td{color:var(--text-muted-color);}',
+            'body.dark-mode ' + R + ' .setp-rec-nuevo td{background:rgba(77,171,247,.08);}',
+            'body.dark-mode ' + R + ' .setp-rec-curso td{background:rgba(251,191,36,.08);}',
+            'body.dark-mode ' + R + ' .setp-rec-thumb{border-color:var(--border-color);}',
+            'body.dark-mode ' + R + ' .setp-rec-thumb--pend{border-color:#f59e0b;}',
+            'body.dark-mode ' + R + ' .setp-rec-pend{color:#fbbf24;}'
         ].concat(estilosResponsive(R)).join('');
         document.head.appendChild(style);
     }
@@ -249,8 +291,8 @@
     // Las etiquetas salen del orden de las columnas de la tabla.
     function estilosResponsive(R) {
         var T = R + ' .setp-rec-table';
-        var etiquetas = ['No. de empleado', 'Nombre y apellido', 'Cargo', 'Área de recorrido', 'Hora de inicio', 'Hora de término', 'Evidencia'];
-        var areas = ['no', 'nom', 'car', 'area', 'ini', 'fin', 'ev', 'acc'];
+        var etiquetas = ['Cargo', 'Área de recorrido', 'Hora de inicio', 'Hora de término', 'Evidencia'];
+        var areas = ['car', 'area', 'ini', 'fin', 'ev', 'acc'];
         return [
             '@container setp (max-width:999.98px){',
             R + ' .table-responsive{overflow:visible;}',
@@ -258,7 +300,7 @@
             T + ',' + T + ' tbody{display:block;width:100%;}',
             T + ' thead{display:none;}',
             T + ' tbody{padding:12px;}',
-            T + ' tr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"no nom car acc" "area area ini fin" "ev ev ev ev";',
+            T + ' tr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"car car car acc" "area area ini fin" "ev ev ev ev";',
             'gap:10px 14px;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px;margin-bottom:12px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.04);}',
             T + ' tr:last-child{margin-bottom:0;}',
             T + ' tr.setp-rec-curso{background:#fffbeb;border-color:#fcd34d;}',
@@ -270,16 +312,21 @@
             T + ' tr.setp-rec-hint td::before{content:none;}',
             etiquetas.map(function (e, i) { return T + ' td:nth-child(' + (i + 1) + ')::before{content:"' + e + '";}'; }).join(''),
             areas.map(function (a, i) { return T + ' tr:not(.setp-rec-hint) td:nth-child(' + (i + 1) + '){grid-area:' + a + ';}'; }).join(''),
-            T + ' td:nth-child(8){justify-self:end;align-self:start;}',
+            T + ' td:nth-child(6){justify-self:end;align-self:start;}',
             R + ' .setp-rec-area,' + R + ' .setp-rec-turno{min-width:0;max-width:none;width:100%;}',
             R + ' .setp-rec-turno{margin-top:6px;}',
             R + ' .setp-rec-file{max-width:100%;}',
+            'body.dark-mode ' + T + ' tr{background:var(--card-bg);border-color:var(--border-color);box-shadow:0 4px 12px rgba(0,0,0,.25);}',
+            'body.dark-mode ' + T + ' tr.setp-rec-curso{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.45);}',
+            'body.dark-mode ' + T + ' tr.setp-rec-nuevo{background:rgba(77,171,247,.08);border-color:rgba(77,171,247,.4);}',
+            'body.dark-mode ' + T + ' tr.setp-rec-hint{box-shadow:none;}',
+            'body.dark-mode ' + T + ' td::before{color:var(--text-muted-color);}',
             '}',
             '@container setp (max-width:599.98px){',
             T + ' tbody{padding:10px;}',
-            T + ' tr{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"nom acc" "no car" "area area" "ini fin" "ev ev";gap:8px 12px;padding:12px;}',
+            T + ' tr{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"car acc" "area area" "ini fin" "ev ev";gap:8px 12px;padding:12px;}',
             // Botones de captura a todo lo ancho de la tarjeta (fáciles de tocar).
-            T + ' td:nth-child(5) .btn,' + T + ' td:nth-child(6) .btn,' + T + ' td:nth-child(7) > .btn:not(.btn-link){width:100%;}',
+            T + ' td:nth-child(3) .btn,' + T + ' td:nth-child(4) .btn,' + T + ' td:nth-child(5) > .btn:not(.btn-link){width:100%;}',
             R + ' .setp-rec-thumb{width:120px;height:80px;}',
             '}'
         ];
@@ -295,7 +342,9 @@
     }
 
     function avisoPendiente(r, p) {
-        return '<span class="setp-rec-dia setp-rec-pend">Sin guardar · presiona ✓</span>' + (p.esFoto
+        return '<span class="setp-rec-dia setp-rec-pend">Sin guardar · presiona ✓</span>' +
+            (p.esFoto && p.descripcion ? '<span class="setp-rec-dia">' + esc(p.descripcion) + (p.mismoQue ? ' · se une a <b>' + esc(p.mismoQue.folio || 'un hallazgo registrado') + '</b>' : '') + '</span>' : '') +
+            (p.esFoto
             ? '<button type="button" class="btn btn-link p-0 setp-rec-desc-btn" data-rec="descripcion" data-id="' + esc(r.id) + '"><i class="fas fa-pen me-1"></i>' +
               (p.descripcion ? 'Editar descripción' : 'Agregar descripción') + '</button>'
             : '');
@@ -320,7 +369,7 @@
         var html = '<div class="setp-rec-evs">';
         if (busy === 'guardar') html += '<span class="spinner-border spinner-border-sm text-primary"></span>';
         else if (p) html += evidenciaPendiente(r, p);
-        else html += '<button type="button" class="btn btn-sm btn-outline-primary setp-rec-mas" data-rec="evidencia-mas" data-id="' + esc(r.id) + '" title="Agregar otra evidencia (foto)" aria-label="Agregar otra evidencia"><i class="fas fa-plus"></i></button>';
+        else html += '<button type="button" class="btn btn-sm btn-outline-primary setp-rec-mas" data-rec="evidencia-mas" data-id="' + esc(r.id) + '" title="Tomar otra foto de evidencia" aria-label="Tomar otra foto de evidencia"><i class="fas fa-plus"></i></button>';
         html += '</div>';
         if (p && busy !== 'guardar') html += avisoPendiente(r, p);
         return html;
@@ -346,10 +395,9 @@
         return '<td class="text-end text-nowrap">' + html + '</td>';
     }
 
+    // "No. de empleado" y "Nombre y apellido" se retiraron de la tabla: sólo queda Cargo.
     function datosSupervisor(s) {
-        return '<td class="text-nowrap fw-semibold">' + esc(s ? s.no_empleado : '') + '</td>' +
-            '<td>' + esc(s ? s.nombre : '') + '</td>' +
-            '<td>' + (s && s.cargo ? esc(s.cargo) : '—') + '</td>';
+        return '<td>' + (s && s.cargo ? esc(s.cargo) : '—') + '</td>';
     }
 
     function turnoLabel(key) {
@@ -407,7 +455,8 @@
             (state.enFormato[r.id] ? '<span class="setp-rec-dia text-success"><i class="fas fa-file-signature me-1"></i>En formato guardado</span>' : '');
         else if (!canEdit() || consulta) termino = '<span class="badge text-bg-warning">En curso</span>';
         else if (state.busy[r.id] === 'finalizar') termino = '<span class="spinner-border spinner-border-sm text-danger"></span>';
-        else termino = '<button type="button" class="btn btn-sm btn-danger" data-rec="finalizar" data-id="' + esc(r.id) + '"><i class="fas fa-flag-checkered me-1"></i>Finalizar recorrido</button>';
+        // Se finaliza con el botón flotante (pintarFab): aquí ya no se repite el botón.
+        else termino = '<span class="badge text-bg-warning">En curso</span><span class="setp-rec-dia">Finalízalo con el botón de la esquina</span>';
         return '<tr' + (enCurso ? ' class="setp-rec-curso"' : '') + '>' + datosSupervisor(s) +
             '<td>' + area + '</td>' +
             '<td><span class="setp-rec-hora">' + hhmm(r.hora_inicio) + '</span><span class="setp-rec-dia">' + fecha(r.registrado_en) + '</span></td>' +
@@ -421,16 +470,17 @@
         return '<tr class="setp-rec-nuevo">' + datosSupervisor(s) +
             '<td>' + areaSelect(state.areaNueva, 'id="setp-rec-area-nueva"' + (busy ? ' disabled' : '')) +
             (conTurno() ? turnoSelect(state.turnoNuevo, 'id="setp-rec-turno-nuevo"' + (busy ? ' disabled' : '')) : '') + '</td>' +
+            // Se inicia con el botón flotante (pintarFab): aquí ya no se repite el botón.
             '<td>' + (busy
                 ? '<span class="spinner-border spinner-border-sm text-success"></span>'
-                : '<button type="button" class="btn btn-sm btn-success" data-rec="iniciar"><i class="fas fa-play me-1"></i>Iniciar recorrido</button>') + '</td>' +
+                : '<span class="text-muted small">Elige área y turno, y presiona <b>Iniciar recorrido</b> en la esquina</span>') + '</td>' +
             '<td><span class="text-muted">—</span></td>' +
             '<td><span class="text-muted small">Al iniciar</span></td>' + (conAcciones() ? '<td></td>' : '') + '</tr>';
     }
 
     function render() {
         if (!state.el) return;
-        var thead = '<thead><tr><th>No. de empleado</th><th>Nombre y apellido</th><th>Cargo</th><th>Área de recorrido</th>' +
+        var thead = '<thead><tr><th>Cargo</th><th>Área de recorrido</th>' +
             '<th>Hora de inicio de recorrido</th><th>Hora de término de recorrido</th>' +
             '<th title="Fotografía o archivo">Evidencia <span class="fw-normal text-lowercase">(foto o archivo)</span></th>' +
             (conAcciones() ? '<th><span class="visually-hidden">Acciones</span></th>' : '') + '</tr></thead>';
@@ -442,7 +492,7 @@
         } else if (state.error && !state.supervisores.length) {
             body = hint(state.error);
         } else if (!state.supervisores.length) {
-            body = hint('Aún no hay supervisores.' + (esSuperadmin() ? ' Usa <b>Crear usuario</b> para dar de alta al primero.' : ''));
+            body = hint('Aún no hay supervisores.');
         } else {
             var s = state.selected ? supervisor(state.selected) : null;
             // Propios: los del supervisor elegido (o de todos) que aún no salen en un formato.
@@ -451,16 +501,22 @@
             // Además, los recorridos de HOY de todos los supervisores se ven siempre
             // (aunque se elija a otro o ya estén en un formato), sólo para consultar.
             var hoy = fechaLocal();
-            var visibles = state.recorridos.filter(function (r) { return propio(r) || fechaLocal(r.registrado_en) === hoy; });
+            // Al terminar, el recorrido sale de esta tabla: queda en "Detalle de
+            // registros" (historial). Sólo se queda mientras tenga una captura
+            // sin guardar o una operación en marcha, para no perderla.
+            var visibles = state.recorridos.filter(function (r) {
+                return (propio(r) || fechaLocal(r.registrado_en) === hoy) &&
+                    (!r.hora_termino || state.pending[r.id] || state.busy[r.id]);
+            });
             if (state.error) {
                 body += hint(state.error);
             } else if (!s) {
-                body += hint('<i class="fas fa-hand-pointer me-1"></i>Selecciona un supervisor en el filtro <b>Supervisor</b> para registrar su recorrido.');
+                body += hint('<i class="fas fa-circle-info me-1"></i>Tu usuario no está dado de alta como supervisor, así que no puedes registrar recorridos. El nombre de tu perfil debe coincidir con el de un supervisor.');
             } else if (canEdit() && !lista.some(function (r) { return !r.hora_termino; })) {
                 body += nuevoRow(s);
             }
             body += visibles.map(function (r) { return recorridoRow(r, !propio(r)); }).join('');
-            if (!visibles.length && s && !canEdit()) body += hint('Sin recorridos registrados.');
+            if (!visibles.length && s && !canEdit()) body += hint('Sin recorridos en curso. Los terminados están en <b>Detalle de registros</b>.');
         }
         state.el.innerHTML = '<div id="setp-rec-status" class="' + statusClass() + '">' + (state.status ? state.status.message : '') + '</div>' +
             '<div class="table-responsive"><table class="table table-sm mb-0 setp-table setp-rec-table" id="setp-recorridos">' +
@@ -468,6 +524,81 @@
             '<input type="file" id="setp-rec-file" class="d-none" accept="' + ACCEPT + '">';
         // "Detalle de registros" (js/setp-reportes.js) muestra el historial compacto.
         document.dispatchEvent(new CustomEvent('setp:recorridos-actualizados'));
+        pintarFab();
+    }
+
+    // ---------- botón flotante ----------
+    // Botón fijo en la esquina inferior derecha para iniciar el recorrido propio
+    // o, si hay uno en curso, finalizarlo. Vive dentro de #setp-section, así que
+    // sólo se ve en SETP. Lo ven quienes tienen acceso a SETP: las personas de
+    // SETP_PERSONAS_CON_ACCESO (script.js) y los superadmin.
+    var FAB_ID = 'setp-rec-fab';
+
+    function recorridoEnCurso() {
+        var s = state.selected ? supervisor(state.selected) : null;
+        if (!s) return null;
+        return state.recorridos.find(function (r) { return r.no_empleado === s.no_empleado && !r.hora_termino; }) || null;
+    }
+
+    function pintarFab() {
+        var host = $('setp-section');
+        if (!host) return;
+        var fab = $(FAB_ID);
+        var visible = state.loaded && (typeof window.puedeVerSetp !== 'function' || window.puedeVerSetp());
+        if (!visible) { if (fab) fab.remove(); return; }
+        if (!fab) {
+            fab = document.createElement('button');
+            fab.type = 'button';
+            fab.id = FAB_ID;
+            fab.addEventListener('click', clickFab);
+            host.appendChild(fab);
+        }
+        var curso = recorridoEnCurso();
+        var busy = curso ? state.busy[curso.id] : state.busy.new;
+        fab.className = curso ? 'is-fin' : 'is-ini';
+        fab.disabled = !!busy;
+        fab.innerHTML = busy
+            ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>' + (curso ? 'Finalizando…' : 'Iniciando…') + '</span>'
+            : curso
+                ? '<i class="fas fa-flag-checkered" aria-hidden="true"></i><span>Finalizar recorrido</span>'
+                : '<i class="fas fa-play" aria-hidden="true"></i><span>Iniciar recorrido</span>';
+        fab.title = curso ? 'Finalizar el recorrido en curso (' + (curso.area_recorrido || '') + ', inició ' + hhmm(curso.hora_inicio) + ' hrs)' : 'Iniciar un recorrido';
+    }
+
+    async function clickFab() {
+        var wrap = state.el;
+        if (!wrap) return;
+        var ver = function (el) { (el || wrap).scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+        var s = state.selected ? supervisor(state.selected) : null;
+        if (!s) {
+            setStatus('Tu usuario no está dado de alta como supervisor, así que no puedes iniciar recorridos. El nombre de tu perfil debe coincidir con el de un supervisor.', 'warning');
+            ver();
+            return;
+        }
+        if (!canEdit()) {
+            setStatus('Tu nivel en SETP es de consulta. Para iniciar recorridos pide el nivel de captura en Vistas.', 'warning');
+            ver();
+            return;
+        }
+        var curso = recorridoEnCurso();
+        if (curso) {
+            var ok = await confirmarBorrado(document, {
+                tono: 'ok', kicker: 'Recorrido en curso', titulo: '¿Finalizar el recorrido?',
+                filas: [['Área de recorrido', curso.area_recorrido || '—'], ['Inicio', hhmm(curso.hora_inicio) + ' hrs']],
+                aviso: 'La hora de término la pone el sistema al confirmar. El recorrido sale de esta tabla y queda en Detalle de registros.',
+                boton: 'Finalizar'
+            });
+            if (!ok) return;
+            await finalizar(curso.id);
+            // Si quedó en la tabla (captura sin guardar), se lleva a su renglón.
+            var ev = wrap.querySelector('[data-id="' + curso.id + '"]');
+            ver(ev ? ev.closest('tr') : null);
+            return;
+        }
+        // Sin recorrido en curso: lleva al renglón para iniciar. Si ya eligió
+        // área y turno lo inicia; si falta alguno, iniciar() lo pide y lo enfoca.
+        ver(wrap.querySelector('tr.setp-rec-nuevo'));
+        await iniciar();
     }
 
     // ---------- acciones ----------
@@ -537,7 +668,7 @@
             if (fmt && fmt.guardarBorrador) {
                 try {
                     await fmt.guardarBorrador(res.data);
-                    setStatus('Recorrido finalizado. Su formato quedó guardado en <b>Formatos guardados</b> para generarlo e imprimirlo al final del día.', 'success');
+                    setStatus('Recorrido finalizado: pasó a <b>Detalle de registros</b> y su formato quedó guardado en <b>Formatos guardados</b> para generarlo e imprimirlo al final del día.', 'success');
                 } catch (e) {
                     setStatus('Recorrido finalizado, pero su formato no se pudo guardar en <b>Formatos guardados</b>: ' + errText(e), 'warning');
                 }
@@ -698,10 +829,14 @@
         if (extra && !esFoto) return setStatus('Las evidencias adicionales deben ser fotos, porque cada una se agrega como hallazgo en <b>Hallazgos detectados</b>.', 'warning');
         var blob = esFoto ? await compressImage(file) : file;
         if (blob.size > MAX_FILE) return setStatus('El archivo pesa más de 10 MB. Elige uno más ligero.', 'warning');
+        // Al cambiar la foto se conserva lo ya capturado (etiqueta, item, módulo…).
         var previa = state.pending[id];
-        var descripcion = previa && previa.extra === !!extra ? previa.descripcion : '';
+        var captura = {};
+        if (previa && previa.extra === !!extra) {
+            ['descripcion', 'etiqueta', 'item', 'condicion', 'cantidad', 'area', 'modulo', 'local', 'localOtro', 'detalle', 'mismoQue'].forEach(function (k) { captura[k] = previa[k]; });
+        }
         soltarPendiente(id);
-        state.pending[id] = { file: file, blob: blob, esFoto: esFoto, extra: !!extra, descripcion: descripcion, url: esFoto ? URL.createObjectURL(blob) : '' };
+        state.pending[id] = Object.assign(captura, { file: file, blob: blob, esFoto: esFoto, extra: !!extra, url: esFoto ? URL.createObjectURL(blob) : '' });
         setStatus(esFoto ? '' : 'Presiona <b>✓</b> para guardar la evidencia.', 'info');
         render();
         if (esFoto) abrirDescripcion(id);
@@ -720,56 +855,126 @@
         return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
     }
 
-    // La ruta de la foto lleva el id del recorrido (y "-x" si es evidencia
-    // adicional): así el historial y la tabla ligan el hallazgo con su recorrido.
-    async function crearHallazgoDetectado(sb, r, p, descripcion) {
-        var fechaRep = fechaLocal(r.registrado_en);
+    // Columnas que pueden faltar si aún no se aplica su script SQL: se guarda sin
+    // ellas. Sin "local" (db/setp_hallazgos_identificacion.sql), el local va en
+    // el módulo para no perderlo.
+    const COLUMNAS_OPCIONALES = ['no_empleado', 'seccion', 'local', 'etiqueta', 'item', 'condicion', 'cantidad', 'detalle', 'area'];
+
+    async function insertarHallazgo(sb, hallazgo) {
+        var campos = 'id, folio';
+        var res;
+        for (var intento = 0; intento <= COLUMNAS_OPCIONALES.length + 1; intento++) {
+            res = await sb.from('setp_hallazgos').insert([hallazgo]).select(campos).single();
+            if (!res.error) break;
+            var msg = res.error.message || '';
+            // Sin la columna folio: sólo se pide el id.
+            if (campos !== 'id' && /folio/.test(msg)) { campos = 'id'; continue; }
+            var col = COLUMNAS_OPCIONALES.find(function (c) { return c in hallazgo && new RegExp("'" + c + "'|\\b" + c + '\\b').test(msg); });
+            if (!col) break;
+            if (col === 'local' && hallazgo.local) hallazgo.modulo += ' (' + hallazgo.local + ')';
+            delete hallazgo[col];
+        }
+        return res;
+    }
+
+    async function subirFotoHallazgo(sb, r, p, fechaRep) {
         var path = rutaEvidencia('hallazgos/' + fechaRep.slice(0, 7), 'rec-' + r.id + (p.extra ? '-x' : '') + '.jpg');
         var up = await sb.storage.from(BUCKET).upload(path, p.blob, { contentType: 'image/jpeg', upsert: false });
         if (up.error) throw up.error;
         var pub = sb.storage.from(BUCKET).getPublicUrl(path);
+        return { path: path, url: pub && pub.data ? pub.data.publicUrl : null };
+    }
+
+    // La ruta de la foto lleva el id del recorrido (y "-x" si es evidencia
+    // adicional): así el historial y la tabla ligan el hallazgo con su recorrido.
+    async function crearHallazgoDetectado(sb, r, p) {
+        var fechaRep = fechaLocal(r.registrado_en);
+        var foto = await subirFotoHallazgo(sb, r, p, fechaRep);
         var actor = sessionStorage.getItem('user_role') || 'authenticated';
+        var descripcion = p.descripcion;
         var hallazgo = {
             fecha_reporte: fechaRep,
-            modulo: r.area_recorrido,
-            nivel: null,
+            // Ubicación exacta: módulo y local de la captura; el nivel es el piso del recorrido.
+            modulo: p.modulo || r.area_recorrido,
+            nivel: p.modulo ? r.area_recorrido : null,
             descripcion: descripcion,
-            evidencia_url: pub && pub.data ? pub.data.publicUrl : null,
-            evidencia_path: path,
+            evidencia_url: foto.url,
+            evidencia_path: foto.path,
             estatus: 'PENDIENTE',
             seccion: 'DETECTADOS',
             // Supervisor del recorrido (db/setp_hallazgos_por_supervisor.sql).
             no_empleado: r.no_empleado,
+            // Identificación (db/setp_hallazgos_identificacion.sql).
+            local: p.local || null,
+            etiqueta: p.etiqueta || null,
+            item: p.item || null,
+            condicion: p.condicion || null,
+            cantidad: Number(p.cantidad) || 1,
+            detalle: p.detalle || null,
             created_by: actor,
             updated_by: actor
         };
-        // Si aún no se aplica db/setp_hallazgos_por_supervisor.sql (o
-        // db/setp_hallazgos_secciones.sql), se guarda sin esa columna.
-        var res;
-        for (var intento = 0; intento < 3; intento++) {
-            res = await sb.from('setp_hallazgos').insert([hallazgo]).select('id').single();
-            var msg = res.error && res.error.message || '';
-            if (/no_empleado/.test(msg) && 'no_empleado' in hallazgo) delete hallazgo.no_empleado;
-            else if (/seccion/.test(msg) && 'seccion' in hallazgo) delete hallazgo.seccion;
-            else break;
-        }
+        // Área responsable elegida a mano (columna area); si no, sale de la regla.
+        if (p.area) hallazgo.area = p.area;
+        var res = await insertarHallazgo(sb, hallazgo);
         if (res.error) {
-            try { await sb.storage.from(BUCKET).remove([path]); } catch (_) { /* sin efecto */ }
+            try { await sb.storage.from(BUCKET).remove([foto.path]); } catch (_) { /* sin efecto */ }
             throw res.error;
         }
         return {
             ym: fechaRep.slice(0, 7),
-            hallazgo: { id: res.data && res.data.id, descripcion: descripcion, evidencia_url: hallazgo.evidencia_url, evidencia_path: path }
+            fecha: fechaRep,
+            folio: res.data && res.data.folio,
+            hallazgo: { id: res.data && res.data.id, descripcion: descripcion, evidencia_url: foto.url, evidencia_path: foto.path }
         };
+    }
+
+    // "Es el mismo · agregar mi foto": no crea otro hallazgo; suma un reporte
+    // al existente y guarda la foto (función setp_sumar_reporte de
+    // db/setp_hallazgos_identificacion.sql; sin ella, se actualiza directo).
+    async function sumarAHallazgo(sb, r, p) {
+        var fechaRep = fechaLocal(r.registrado_en);
+        var foto = await subirFotoHallazgo(sb, r, p, fechaRep);
+        var extra = { url: foto.url, path: foto.path, no_empleado: r.no_empleado, fecha: fechaRep, recorrido_id: r.id, descripcion: p.descripcion };
+        var res = await sb.rpc('setp_sumar_reporte', { p_hallazgo: p.mismoQue.id, p_foto: extra });
+        if (res.error) {
+            var cur = await sb.from('setp_hallazgos').select('veces, fotos_extra').eq('id', p.mismoQue.id).single();
+            if (cur.error) {
+                try { await sb.storage.from(BUCKET).remove([foto.path]); } catch (_) { /* sin efecto */ }
+                throw cur.error;
+            }
+            res = await sb.from('setp_hallazgos').update({
+                veces: (Number(cur.data.veces) || 1) + 1,
+                fotos_extra: (cur.data.fotos_extra || []).concat([extra]),
+                updated_at: new Date().toISOString()
+            }).eq('id', p.mismoQue.id).select('id').single();
+            if (res.error) {
+                try { await sb.storage.from(BUCKET).remove([foto.path]); } catch (_) { /* sin efecto */ }
+                throw res.error;
+            }
+        }
+        return { ym: fechaRep.slice(0, 7), fecha: fechaRep, folio: p.mismoQue.folio, mismo: true, hallazgo: null };
+    }
+
+    // ✓ de una foto: crea el hallazgo o, si se eligió "Es el mismo", lo suma al existente.
+    function registrarHallazgo(sb, r, p) {
+        return p.mismoQue ? sumarAHallazgo(sb, r, p) : crearHallazgoDetectado(sb, r, p);
+    }
+
+    function avisoRegistrado(out) {
+        return out.mismo
+            ? 'Tu foto se agregó al hallazgo <b>' + esc(out.folio || 'registrado') + '</b> (no se creó otro).'
+            : 'El hallazgo' + (out.folio ? ' <b>' + esc(out.folio) + '</b>' : '') + ' se agregó a <b>Hallazgos detectados</b> de ' + esc(mesDe(out.ym)) + '.';
     }
 
     function mesDe(ym) {
         return new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 1, 1).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
     }
 
-    // Reporte de hallazgos (js/setp-formato.js): muestra el mes del hallazgo.
-    function mostrarEnReporte(ym) {
-        if (window.setpFormato && window.setpFormato.reloadReport) window.setpFormato.reloadReport(ym);
+    // Reporte de hallazgos (js/setp-formato.js): si la fecha del hallazgo queda
+    // fuera del periodo elegido, muestra su mes completo.
+    function mostrarEnReporte(fecha) {
+        if (window.setpFormato && window.setpFormato.reloadReport) window.setpFormato.reloadReport(fecha);
     }
 
     // ✓ de una evidencia adicional: sólo crea su hallazgo (el recorrido ya tiene su evidencia).
@@ -778,11 +983,11 @@
         render();
         try {
             var sb = await getClient();
-            var out = await crearHallazgoDetectado(sb, r, p, p.descripcion);
-            state.extras[r.id] = (state.extras[r.id] || []).concat([out.hallazgo]);
+            var out = await registrarHallazgo(sb, r, p);
+            if (out.hallazgo) state.extras[r.id] = (state.extras[r.id] || []).concat([out.hallazgo]);
             soltarPendiente(r.id);
-            setStatus('Evidencia agregada. El hallazgo se agregó a <b>Hallazgos detectados</b> de ' + esc(mesDe(out.ym)) + '.', 'success');
-            mostrarEnReporte(out.ym);
+            setStatus('Evidencia agregada. ' + avisoRegistrado(out), 'success');
+            mostrarEnReporte(out.fecha);
         } catch (error) {
             setStatus('No se pudo guardar la evidencia adicional: ' + errText(error), 'danger');
         } finally {
@@ -796,9 +1001,8 @@
         var p = state.pending[id];
         if (!r || !p || !canEdit() || state.busy[id]) return;
         // Las fotos necesitan su descripción (ventana "Descripción del hallazgo").
-        if (p.esFoto && !p.descripcion) return abrirDescripcion(id, 'Escribe la descripción del hallazgo y presiona <b>Guardar</b>. Después confirma con <b>✓</b>.');
+        if (p.esFoto && !p.descripcion) return abrirDescripcion(id, 'Elige etiqueta, item, condición, módulo y local, y presiona <b>Guardar</b>. Después confirma con <b>✓</b>.');
         if (p.extra) return guardarEvidenciaExtra(r, p);
-        var descripcion = p.descripcion;
         var ext = p.esFoto ? 'jpg' : (String(p.file.name).split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
         var path = rutaEvidencia('recorridos/' + String(r.no_empleado).replace(/[^\w-]+/g, '_'), ext);
         state.busy[id] = 'guardar';
@@ -830,9 +1034,9 @@
             setStatus('Evidencia guardada.', 'success');
         } else {
             try {
-                var out = await crearHallazgoDetectado(sb, r, p, descripcion);
-                setStatus('Evidencia guardada. El hallazgo se agregó a <b>Hallazgos detectados</b> de ' + esc(mesDe(out.ym)) + '. Usa <b>+</b> si hay más evidencias.', 'success');
-                mostrarEnReporte(out.ym);
+                var out = await registrarHallazgo(sb, r, p);
+                setStatus('Evidencia guardada. ' + avisoRegistrado(out) + ' Usa <b>+</b> si hay más evidencias.', 'success');
+                mostrarEnReporte(out.fecha);
             } catch (error) {
                 setStatus('La evidencia se guardó en el recorrido, pero no se pudo agregar a Hallazgos detectados: ' + errText(error), 'warning');
             }
@@ -857,6 +1061,12 @@
                 state.evidenciaExtra = act === 'evidencia-mas';
                 var input = $('setp-rec-file');
                 input.accept = state.evidenciaExtra ? 'image/*' : ACCEPT;
+                // Las evidencias adicionales son sólo fotos: en celular y tableta
+                // abren directo la cámara trasera cada vez, en vez de la galería.
+                // En computadora se sigue eligiendo el archivo como siempre, y la
+                // primera evidencia sigue permitiendo foto o archivo (PDF, Word…).
+                if (state.evidenciaExtra && ES_MOVIL_O_TABLETA) input.setAttribute('capture', 'environment');
+                else input.removeAttribute('capture');
                 input.value = '';
                 input.click();
             }
@@ -919,7 +1129,20 @@
         '#' + CF_ID + '.cf-tono-ok .cf-icon{background:#ecfdf5;color:#059669;}',
         '#' + CF_ID + '.cf-tono-ok .cf-aviso{color:#065f46;background:#ecfdf5;}',
         '#' + CF_ID + '.cf-tono-ok .cf-si{background:#16a34a;border-color:#16a34a;}#' + CF_ID + '.cf-tono-ok .cf-si:hover{background:#15803d;}',
-        '@media (prefers-reduced-motion:reduce){#' + CF_ID + ',#' + CF_ID + ' .cf-card{transition:none;}}'
+        '@media (prefers-reduced-motion:reduce){#' + CF_ID + ',#' + CF_ID + ' .cf-card{transition:none;}}',
+        // Modo oscuro del aplicativo (en la ventana del historial no aplica: no tiene body.dark-mode).
+        'body.dark-mode #' + CF_ID + '{background:rgba(0,0,0,.55);}',
+        'body.dark-mode #' + CF_ID + ' .cf-card{background:rgba(30,39,57,.97);border-color:var(--border-color);color:var(--text-color);box-shadow:0 24px 60px rgba(0,0,0,.5);}',
+        'body.dark-mode #' + CF_ID + ' .cf-head,body.dark-mode #' + CF_ID + ' .cf-foot{border-color:var(--border-color);}',
+        'body.dark-mode #' + CF_ID + ' .cf-foot{background:rgba(255,255,255,.03);}',
+        'body.dark-mode #' + CF_ID + ' .cf-kicker,body.dark-mode #' + CF_ID + ' .cf-info dt{color:var(--text-muted-color);}',
+        'body.dark-mode #' + CF_ID + ' .cf-info{background:rgba(255,255,255,.04);border-color:var(--border-color);}',
+        'body.dark-mode #' + CF_ID + ' .cf-icon{background:rgba(248,113,113,.15);color:#f87171;}',
+        'body.dark-mode #' + CF_ID + ' .cf-aviso{background:rgba(248,113,113,.12);color:#fca5a5;}',
+        'body.dark-mode #' + CF_ID + ' .cf-no{background:transparent;color:#c3c9d2;border-color:rgba(148,163,184,.5);}',
+        'body.dark-mode #' + CF_ID + ' .cf-no:hover{background:rgba(255,255,255,.06);}',
+        'body.dark-mode #' + CF_ID + '.cf-tono-ok .cf-icon{background:rgba(16,185,129,.15);color:#34d399;}',
+        'body.dark-mode #' + CF_ID + '.cf-tono-ok .cf-aviso{background:rgba(16,185,129,.12);color:#6ee7b7;}'
     ].join('');
 
     const ICONO_CONFIRMAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
@@ -990,42 +1213,154 @@
     }
 
     // ---------- Ventana "Descripción del hallazgo" ----------
-    // Reemplaza al window.prompt: fondo con desenfoque, vista previa de la foto
-    // y "Guardar", que cierra la ventana; el hallazgo se confirma después con ✓.
+    // Captura por pasos (catálogo de js/setp-catalogo.js): Etiqueta → Item →
+    // Condición → Cantidad → Módulo y Local, más un detalle opcional. Al
+    // presionar Guardar se buscan en la base hallazgos pendientes iguales (mismo
+    // item en el mismo local; si el objeto se mueve, en todo el edificio durante
+    // 24 h) y se pregunta "¿Es el mismo?" con las fotos lado a lado. Guardar
+    // cierra la ventana; el hallazgo se confirma después con ✓.
 
     const DESC_ID = 'setp-desc-modal';
     const DESC_MAX = 500;
+    const MOVIBLE_HORAS = 24;
+
+    // Modo oscuro (body.dark-mode, script.js): mismas variables que el resto del aplicativo.
+    function descEstilosOscuros(D) {
+        return [
+            D + '{background:rgba(0,0,0,.55);}',
+            D + ' .sd-card{background:rgba(30,39,57,.97);border-color:var(--border-color);color:var(--text-color);box-shadow:0 24px 60px rgba(0,0,0,.5);}',
+            D + ' .sd-head,' + D + ' .sd-foot{border-color:var(--border-color);}',
+            D + ' .sd-foot{background:rgba(255,255,255,.03);}',
+            D + ' .sd-icon{background:rgba(77,171,247,.14);color:var(--primary-color);}',
+            D + ' .sd-kicker,' + D + ' .sd-lbl,' + D + ' .sd-count,' + D + ' .sd-note,' + D + ' .sd-mod-vacio,' + D + ' .sd-paso .h,' + D + ' .sd-dup-sub{color:var(--text-muted-color);}',
+            D + ' .sd-title,' + D + ' .sd-val,' + D + ' .sd-dup-tit{color:var(--text-color);}',
+            D + ' label,' + D + ' .sd-paso{color:#c3c9d2;}',
+            D + ' .sd-paso .n{background:rgba(77,171,247,.18);color:#8cc8ff;}',
+            D + ' .sd-info{background:rgba(255,255,255,.04);border-color:var(--border-color);}',
+            D + ' .sd-info img,' + D + ' .sd-dup-foto{border-color:var(--border-color);}',
+            D + ' .btn-close{filter:invert(1) grayscale(100%) brightness(2);}',
+            D + ' .sd-mod-lista,' + D + ' .sd-loc-lista{background:rgba(15,23,42,.55);border-color:var(--border-color);}',
+            D + ' .sd-mod-item{color:var(--text-color);}',
+            D + ' .sd-mod-item i{color:var(--text-muted-color);}',
+            D + ' .sd-mod-item[aria-checked="true"] i{color:inherit;}',
+            D + ' .sd-mod-item:hover,' + D + ' .sd-loc:hover,' + D + ' .sd-chip:hover,' + D + ' .sd-cond button:hover{background:rgba(255,255,255,.06);}',
+            D + ' .sd-mod-item[aria-checked="true"]{background:rgba(77,171,247,.16);color:#8cc8ff;}',
+            D + ' .sd-loc,' + D + ' .sd-chip,' + D + ' .sd-cond button,' + D + ' .sd-cant button{background:rgba(255,255,255,.04);border-color:var(--border-color);color:#c3c9d2;}',
+            D + ' .sd-loc[aria-checked="true"],' + D + ' .sd-cond button[aria-checked="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}',
+            D + ' .sd-chip[aria-checked="true"]{background:color-mix(in srgb,var(--c) 30%,transparent);border-color:var(--c);color:#fff;}',
+            D + ' .sd-chip[aria-checked="true"] i{color:#fff;}',
+            D + ' .sd-cant{border-color:var(--border-color);}',
+            D + ' .sd-cant span{color:var(--text-color);}',
+            D + ' .sd-resumen{background:rgba(77,171,247,.08);border-color:rgba(77,171,247,.3);color:#cfe6ff;}',
+            D + ' .sd-resumen b{color:#fff;}',
+            D + ' .sd-dup{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.45);}',
+            D + ' .sd-dup-h{color:#fcd34d;}',
+            D + ' .sd-dup-cand{background:rgba(15,23,42,.55);border-color:var(--border-color);}',
+            D + ' .sd-dup-lbl{color:var(--text-muted-color);}',
+            D + ' .sd-areabox{background:rgba(255,255,255,.04);border-color:var(--border-color);}',
+            D + ' .sd-area-h{color:#c3c9d2;}',
+            D + ' .sd-area-h .h{color:var(--text-muted-color);}',
+            D + ' .sd-area-btn{background:rgba(255,255,255,.04);border-color:var(--border-color);color:#c3c9d2;}',
+            D + ' .sd-area-nota{color:#6ee7b7;}',
+            D + ' .sd-area-nota.is-man{color:#fcd34d;}'
+        ];
+    }
 
     function ensureDescModal() {
         if ($(DESC_ID)) return;
         var style = document.createElement('style');
         style.id = 'setp-desc-styles';
+        var M = '#' + DESC_ID;
         style.textContent = [
-            '#' + DESC_ID + '{position:fixed;inset:0;z-index:1085;display:flex;align-items:center;justify-content:center;padding:16px;',
+            M + '{position:fixed;inset:0;z-index:1085;display:flex;align-items:center;justify-content:center;padding:16px;',
             'background:rgba(15,23,42,.38);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);opacity:0;transition:opacity .18s ease;}',
-            '#' + DESC_ID + '.is-open{opacity:1;}',
-            '#' + DESC_ID + '[hidden]{display:none;}',
-            '#' + DESC_ID + ' .sd-card{width:100%;max-width:520px;background:rgba(255,255,255,.96);border:1px solid #e2e8f0;border-radius:18px;',
+            M + '.is-open{opacity:1;}',
+            M + '[hidden]{display:none;}',
+            M + ' .sd-card{width:100%;max-width:560px;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;',
+            'background:rgba(255,255,255,.96);border:1px solid #e2e8f0;border-radius:18px;',
             'box-shadow:0 24px 60px rgba(15,23,42,.28);transform:translateY(8px) scale(.98);transition:transform .18s ease;overflow:hidden;}',
-            '#' + DESC_ID + '.is-open .sd-card{transform:none;}',
-            '#' + DESC_ID + ' .sd-head{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid #e2e8f0;}',
-            '#' + DESC_ID + ' .sd-icon{width:40px;height:40px;border-radius:12px;background:#eff6ff;color:#2563eb;display:flex;align-items:center;justify-content:center;flex:none;}',
-            '#' + DESC_ID + ' .sd-kicker{font-size:.68rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;}',
-            '#' + DESC_ID + ' .sd-title{font-size:1.05rem;font-weight:800;color:#0f172a;margin:0;}',
-            '#' + DESC_ID + ' .sd-head .btn-close{margin-left:auto;}',
-            '#' + DESC_ID + ' .sd-body{padding:16px 18px;}',
-            '#' + DESC_ID + ' .sd-info{display:flex;gap:14px;align-items:center;padding:10px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;margin-bottom:14px;}',
-            '#' + DESC_ID + ' .sd-info img{width:112px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;flex:none;}',
-            '#' + DESC_ID + ' .sd-lbl{font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;}',
-            '#' + DESC_ID + ' .sd-val{font-size:.88rem;font-weight:600;color:#0f172a;margin-bottom:6px;overflow-wrap:anywhere;}',
-            '#' + DESC_ID + ' label{font-size:.8rem;font-weight:700;color:#334155;margin-bottom:4px;}',
-            '#' + DESC_ID + ' textarea{resize:vertical;min-height:96px;}',
-            '#' + DESC_ID + ' .sd-count{font-size:.72rem;color:#64748b;text-align:right;margin-top:4px;}',
-            '#' + DESC_ID + ' .sd-note{font-size:.76rem;color:#64748b;margin-top:8px;}',
-            '#' + DESC_ID + ' .sd-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid #e2e8f0;background:#f8fafc;}',
-            '@media (prefers-reduced-motion:reduce){#' + DESC_ID + ',#' + DESC_ID + ' .sd-card{transition:none;}}'
-        ].join('');
+            M + '.is-open .sd-card{transform:none;}',
+            M + ' .sd-head{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid #e2e8f0;flex:none;}',
+            M + ' .sd-icon{width:40px;height:40px;border-radius:12px;background:#eff6ff;color:#2563eb;display:flex;align-items:center;justify-content:center;flex:none;}',
+            M + ' .sd-kicker{font-size:.68rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#64748b;}',
+            M + ' .sd-title{font-size:1.05rem;font-weight:800;color:#0f172a;margin:0;}',
+            M + ' .sd-head .btn-close{margin-left:auto;}',
+            M + ' .sd-body{padding:16px 18px;overflow-y:auto;flex:1 1 auto;min-height:0;}',
+            M + ' .sd-info{display:flex;gap:14px;align-items:center;padding:10px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc;margin-bottom:12px;}',
+            M + ' .sd-info img{width:112px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;flex:none;}',
+            M + ' .sd-lbl{font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b;}',
+            M + ' .sd-val{font-size:.88rem;font-weight:600;color:#0f172a;margin-bottom:6px;overflow-wrap:anywhere;}',
+            M + ' label{font-size:.8rem;font-weight:700;color:#334155;margin-bottom:4px;}',
+            M + ' textarea{resize:vertical;min-height:64px;}',
+            M + ' .sd-count{font-size:.72rem;color:#64748b;text-align:right;margin-top:4px;}',
+            M + ' .sd-note{font-size:.76rem;color:#64748b;margin-top:8px;}',
+            // Pasos
+            M + ' .sd-paso{display:flex;align-items:center;gap:8px;margin:14px 0 6px;font-size:.8rem;font-weight:700;color:#334155;}',
+            M + ' .sd-paso:first-child{margin-top:0;}',
+            M + ' .sd-paso .n{width:20px;height:20px;border-radius:50%;background:#dbeafe;color:#1d4ed8;font-size:.7rem;display:inline-flex;align-items:center;justify-content:center;flex:none;}',
+            M + ' .sd-paso .h{font-weight:400;color:#64748b;font-size:.76rem;}',
+            M + ' .sd-et{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:6px;}',
+            M + ' .sd-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px;}',
+            M + ' .sd-chip{display:flex;align-items:center;gap:7px;font:inherit;font-size:.78rem;font-weight:600;padding:7px 9px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;color:#334155;text-align:left;cursor:pointer;line-height:1.2;}',
+            M + ' .sd-chip i{width:16px;text-align:center;color:var(--c);flex:none;}',
+            M + ' .sd-items .sd-chip{flex-direction:column;justify-content:center;text-align:center;padding:9px 6px;gap:4px;}',
+            M + ' .sd-items .sd-chip i{font-size:1.05rem;width:auto;}',
+            M + ' .sd-chip:hover{background:#f1f5f9;}',
+            M + ' .sd-chip[aria-checked="true"]{background:color-mix(in srgb,var(--c) 12%,#fff);border-color:var(--c);color:#0f172a;font-weight:700;}',
+            M + ' .sd-cond{display:flex;flex-wrap:wrap;gap:6px;}',
+            M + ' .sd-cond button{font:inherit;font-size:.78rem;font-weight:600;padding:5px 12px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;}',
+            M + ' .sd-cond button:hover{background:#f1f5f9;}',
+            M + ' .sd-cond button[aria-checked="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}',
+            M + ' .sd-cant{display:inline-flex;align-items:center;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;}',
+            M + ' .sd-cant button{width:38px;height:34px;border:0;background:#f8fafc;color:#334155;font-weight:800;cursor:pointer;}',
+            M + ' .sd-cant span{min-width:46px;text-align:center;font-weight:800;color:#0f172a;}',
+            M + ' .sd-areabox{margin-top:14px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;}',
+            M + ' .sd-areabox:empty{display:none;}',
+            M + ' .sd-area-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.8rem;font-weight:700;color:#334155;margin-bottom:6px;}',
+            M + ' .sd-area-h .h{font-weight:400;color:#64748b;font-size:.74rem;}',
+            M + ' .sd-area-fila{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}',
+            M + ' .sd-area-fila .setp-area-chip{font-size:.8rem;padding:5px 12px;}',
+            M + ' .sd-area-btn{font:inherit;font-size:.74rem;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;}',
+            M + ' .sd-area-nota{font-size:.74rem;font-weight:600;color:#047857;margin-top:5px;}',
+            M + ' .sd-area-nota.is-man{color:#b45309;}',
+            M + ' .sd-area-lista{margin-top:8px;}',
+            M + ' .sd-area-lista button i{color:var(--c);margin-right:5px;}',
+            M + ' .sd-area-lista button[aria-checked="true"] i{color:#fff;}',
+            M + ' .sd-resumen{display:flex;align-items:flex-start;gap:8px;margin:14px 0 4px;padding:9px 11px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;font-size:.82rem;color:#1e3a8a;}',
+            M + ' .sd-resumen i{margin-top:2px;}',
+            M + ' .sd-mod-lista{list-style:none;margin:0;padding:4px;border:1px solid #e2e8f0;border-radius:12px;max-height:168px;overflow-y:auto;background:#fff;}',
+            M + ' .sd-mod-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font:inherit;font-size:.86rem;padding:7px 10px;border:0;border-radius:8px;background:transparent;color:#0f172a;cursor:pointer;}',
+            M + ' .sd-mod-item:hover{background:#f1f5f9;}',
+            M + ' .sd-mod-item[aria-checked="true"]{background:#eff6ff;color:#1d4ed8;font-weight:700;}',
+            M + ' .sd-loc-lista{display:flex;flex-wrap:wrap;gap:6px;max-height:132px;overflow-y:auto;padding:4px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;}',
+            M + ' .sd-loc{font:inherit;font-size:.78rem;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;}',
+            M + ' .sd-loc:hover{background:#f1f5f9;}',
+            M + ' .sd-loc[aria-checked="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}',
+            M + ' .sd-loc-otro{border-style:dashed;}',
+            M + ' .sd-mod-vacio{font-size:.82rem;color:#64748b;padding:10px;text-align:center;}',
+            M + ' :is(.sd-chip,.sd-cond button,.sd-loc,.sd-mod-item,.sd-cant button):focus-visible{outline:3px solid rgba(37,99,235,.45);outline-offset:1px;}',
+            '@media (pointer:coarse){' + M + ' .sd-loc,' + M + ' .sd-cond button{min-height:40px;padding:6px 12px;}' + M + ' .sd-mod-item,' + M + ' .sd-chip{min-height:40px;}' + M + ' .sd-cant button{width:44px;height:40px;}}',
+            // ¿Es el mismo?
+            M + ' .sd-dup{border:1px solid #fcd34d;background:#fffbeb;border-radius:14px;padding:12px;}',
+            M + ' .sd-dup-h{display:flex;gap:8px;align-items:flex-start;font-size:.84rem;color:#92400e;font-weight:700;margin-bottom:10px;}',
+            M + ' .sd-dup-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start;}',
+            M + ' .sd-dup-lbl{font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;margin-bottom:4px;}',
+            M + ' .sd-dup-foto{width:100%;height:120px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;display:block;background:#e2e8f0;}',
+            M + ' .sd-dup-tit{font-size:.8rem;font-weight:700;color:#0f172a;margin-top:6px;overflow-wrap:anywhere;}',
+            M + ' .sd-dup-sub{font-size:.74rem;color:#64748b;overflow-wrap:anywhere;}',
+            M + ' .sd-dup-lista{display:flex;flex-direction:column;gap:10px;max-height:340px;overflow-y:auto;}',
+            M + ' .sd-dup-cand{border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:8px;}',
+            M + ' .sd-dup-cand .btn{width:100%;margin-top:8px;}',
+            M + ' .sd-dup-btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}',
+            M + ' .sd-dup-btns .btn{flex:1 1 160px;}',
+            '@media (max-width:480px){' + M + ' .sd-dup-grid{grid-template-columns:1fr;}}',
+            M + ' .sd-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid #e2e8f0;background:#f8fafc;flex:none;}',
+            '@media (prefers-reduced-motion:reduce){' + M + ',' + M + ' .sd-card{transition:none;}}'
+        ].concat(descEstilosOscuros('body.dark-mode ' + M)).join('');
         document.head.appendChild(style);
+        var paso = function (n, texto, ayuda, id) {
+            return '<div class="sd-paso"' + (id ? ' id="' + id + '"' : '') + '><span class="n">' + n + '</span>' + texto + (ayuda ? ' <span class="h">· ' + ayuda + '</span>' : '') + '</div>';
+        };
         var wrap = document.createElement('div');
         wrap.innerHTML = '<div id="' + DESC_ID + '" role="dialog" aria-modal="true" aria-labelledby="setp-desc-title" hidden>' +
             '<form class="sd-card" id="setp-desc-form" novalidate>' +
@@ -1037,35 +1372,268 @@
             '<div><div class="sd-lbl">Ubicación</div><div class="sd-val" id="setp-desc-area"></div>' +
             '<div class="sd-lbl">Recorrido</div><div class="sd-val mb-0" id="setp-desc-fecha"></div></div></div>' +
             '<div id="setp-desc-aviso" class="d-none"></div>' +
-            '<label for="setp-desc-text">Descripción *</label>' +
-            '<textarea id="setp-desc-text" class="form-control" maxlength="' + DESC_MAX + '" placeholder="Ej. Butaca dañada en sala de última espera"></textarea>' +
-            '<div class="sd-count"><span id="setp-desc-n">0</span>/' + DESC_MAX + '</div>' +
-            '<div class="sd-note"><i class="fas fa-circle-info me-1"></i>Al guardar se cierra esta ventana. Después presiona <b>✓</b> para confirmar el hallazgo.</div>' +
+            '<div id="setp-desc-captura">' +
+            paso(1, 'Etiqueta *', 'tipo de hallazgo', 'setp-desc-et-lbl') +
+            '<div class="sd-et" id="setp-desc-et" role="radiogroup" aria-labelledby="setp-desc-et-lbl"></div>' +
+            '<div id="setp-desc-item-wrap" hidden>' + paso(2, 'Item *', '¿qué elemento?', 'setp-desc-item-lbl') +
+            '<div class="sd-items" id="setp-desc-item" role="radiogroup" aria-labelledby="setp-desc-item-lbl"></div>' +
+            // Etiqueta "Otro": la descripción se escribe aquí, justo después del item.
+            '<div id="setp-desc-otro-slot"></div>' +
+            paso(3, 'Condición *', '', 'setp-desc-cond-lbl') +
+            '<div class="sd-cond" id="setp-desc-cond" role="radiogroup" aria-labelledby="setp-desc-cond-lbl"></div>' +
+            paso(4, 'Cantidad', 'piezas') +
+            '<div class="sd-cant"><button type="button" data-cant="-1" aria-label="Menos">−</button><span id="setp-desc-cant" aria-live="polite">1</span><button type="button" data-cant="1" aria-label="Más">+</button></div>' +
+            // Área responsable: sale sola de la etiqueta y el item (js/setp-catalogo.js).
+            '<div class="sd-areabox" id="setp-desc-areabox" aria-live="polite"></div></div>' +
+            paso(5, 'Módulo *', '', 'setp-desc-mod-lbl').replace('</div>', '<span class="h" id="setp-desc-mod-nivel"></span></div>') +
+            '<ul class="sd-mod-lista" id="setp-desc-mod" role="radiogroup" aria-labelledby="setp-desc-mod-lbl"></ul>' +
+            '<div id="setp-desc-loc-wrap" hidden>' + paso(6, 'Local *', '', 'setp-desc-loc-lbl').replace('</div>', '<span class="h" id="setp-desc-loc-mod"></span></div>') +
+            '<div class="sd-loc-lista" id="setp-desc-loc" role="radiogroup" aria-labelledby="setp-desc-loc-lbl"></div>' +
+            // "Otro lugar": quioscos, bancas o puntos que no son un local del catálogo.
+            '<div id="setp-desc-loc-otro-wrap" hidden><input type="text" id="setp-desc-loc-otro" class="form-control mt-2" maxlength="120" autocomplete="off"' +
+            ' placeholder="Especifica el lugar (ej. Banca a un costado de las cajas de BANAMEX)" aria-label="Otro lugar"></div></div>' +
+            '<div class="sd-resumen d-none" id="setp-desc-resumen"></div>' +
+            '<div id="setp-desc-text-home" hidden></div>' +
+            '<div id="setp-desc-text-wrap">' +
+            '<label for="setp-desc-text" class="mt-2" id="setp-desc-text-lbl">Detalle <span class="fw-normal text-muted">(opcional)</span></label>' +
+            '<textarea id="setp-desc-text" class="form-control" maxlength="' + DESC_MAX + '" rows="2" placeholder="Ej. Respaldo roto en la fila 3"></textarea>' +
+            '<div class="sd-count"><span id="setp-desc-n">0</span>/' + DESC_MAX + '</div></div>' +
+            '<div class="sd-note"><i class="fas fa-circle-info me-1"></i>Al guardar se revisa si ya está reportado y se cierra esta ventana. Después presiona <b>✓</b> para confirmar el hallazgo.</div>' +
             '</div>' +
-            '<div class="sd-foot"><button type="button" class="btn btn-outline-secondary" data-desc="cerrar">Cancelar</button>' +
-            '<button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Guardar</button></div>' +
+            '<div id="setp-desc-dup" hidden></div>' +
+            '</div>' +
+            '<div class="sd-foot" id="setp-desc-foot"><button type="button" class="btn btn-outline-secondary" data-desc="cerrar">Cancelar</button>' +
+            '<button type="submit" class="btn btn-primary" id="setp-desc-guardar"><i class="fas fa-save me-1"></i>Guardar</button></div>' +
             '</form></div>';
         var modal = wrap.firstChild;
         document.body.appendChild(modal);
         modal.addEventListener('click', function (e) {
-            if (e.target === modal || e.target.closest('[data-desc="cerrar"]')) cerrarDescripcion();
+            if (e.target === modal || e.target.closest('[data-desc="cerrar"]')) return cerrarDescripcion();
+            var p = state.descFor && state.pending[state.descFor];
+            if (!p) return;
+            var b;
+            // Al elegir algo se quita el aviso de "Falta elegir…".
+            if (e.target.closest('[data-etq], [data-item], [data-cond], [data-modulo], [data-local]')) descAviso('');
+            if ((b = e.target.closest('[data-etq]'))) {
+                var etq = b.getAttribute('data-etq');
+                if (p.etiqueta !== etq) { p.etiqueta = etq; p.item = ''; p.condicion = ''; p.area = ''; state.areaElegir = false; }
+                pintarCaptura();
+            } else if ((b = e.target.closest('[data-item]'))) {
+                p.item = p.item === b.getAttribute('data-item') ? '' : b.getAttribute('data-item');
+                // Otro item: el área vuelve a ser la de la regla.
+                p.area = '';
+                state.areaElegir = false;
+                pintarCaptura();
+                // Etiqueta "Otro" o item "Otro" de cualquier etiqueta: al elegirlo
+                // se pasa a escribir la descripción (la casilla sale bajo el item).
+                var catI = catalogo();
+                if (p.item && (p.etiqueta === 'OTRO' || (catI && p.item === catI.OTRO))) $('setp-desc-text').focus();
+            } else if ((b = e.target.closest('[data-area-cambiar]'))) {
+                state.areaElegir = !state.areaElegir;
+                pintarArea();
+            } else if ((b = e.target.closest('[data-area-auto]'))) {
+                p.area = '';
+                state.areaElegir = false;
+                pintarArea();
+            } else if ((b = e.target.closest('[data-area-elige]'))) {
+                var cat0 = catalogo();
+                var elegida = b.getAttribute('data-area-elige');
+                // Elegir la misma que marca la regla equivale a dejarla automática.
+                p.area = cat0 && elegida === cat0.areaRegla(p.etiqueta, p.item) ? '' : elegida;
+                state.areaElegir = false;
+                pintarArea();
+            } else if ((b = e.target.closest('[data-cond]'))) {
+                p.condicion = p.condicion === b.getAttribute('data-cond') ? '' : b.getAttribute('data-cond');
+                pintarCaptura();
+            } else if ((b = e.target.closest('[data-cant]'))) {
+                p.cantidad = Math.min(99, Math.max(1, (Number(p.cantidad) || 1) + Number(b.getAttribute('data-cant'))));
+                pintarCaptura();
+            } else if ((b = e.target.closest('[data-modulo]'))) {
+                var nombre = b.getAttribute('data-modulo');
+                // Tocar el módulo elegido lo quita; al cambiar de módulo se limpia el local.
+                p.modulo = p.modulo === nombre ? '' : nombre;
+                p.local = '';
+                p.localOtro = false;
+                pintarCaptura();
+            } else if ((b = e.target.closest('[data-local-otro]'))) {
+                // "Otro lugar": el lugar se escribe en la casilla de abajo.
+                p.localOtro = !p.localOtro;
+                p.local = p.localOtro ? String($('setp-desc-loc-otro').value || '').trim().replace(/\s+/g, ' ') : '';
+                pintarCaptura();
+                if (p.localOtro) $('setp-desc-loc-otro').focus();
+            } else if ((b = e.target.closest('[data-local]'))) {
+                var loc = b.getAttribute('data-local');
+                p.local = p.local === loc && !p.localOtro ? '' : loc;
+                p.localOtro = false;
+                pintarCaptura();
+            } else if ((b = e.target.closest('[data-dup-mismo]'))) {
+                p.mismoQue = { id: b.getAttribute('data-dup-mismo'), folio: b.getAttribute('data-dup-folio') || '' };
+                terminarDescripcion();
+            } else if (e.target.closest('[data-dup="otro"]')) {
+                p.mismoQue = null;
+                terminarDescripcion();
+            } else if (e.target.closest('[data-dup="volver"]')) {
+                vistaDuplicados(false);
+            }
         });
         modal.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') { e.preventDefault(); cerrarDescripcion(); }
             else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); guardarDescripcion(); }
             else if (e.key === 'Tab') {
                 // El foco se queda dentro de la ventana.
-                var f = modal.querySelectorAll('button, textarea');
+                var f = Array.prototype.filter.call(modal.querySelectorAll('button, textarea, input'), function (x) { return x.offsetParent !== null; });
                 var first = f[0], last = f[f.length - 1];
                 if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
                 else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
             }
         });
         $('setp-desc-text').addEventListener('input', function (e) {
+            var p = state.descFor && state.pending[state.descFor];
+            if (p) p.detalle = e.target.value;
             $('setp-desc-n').textContent = e.target.value.length;
-            if (e.target.value.trim()) descAviso('');
+            pintarResumen();
+        });
+        // Enter en "Otro lugar" no guarda la captura (se sigue con lo demás).
+        $('setp-desc-loc-otro').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) e.preventDefault(); });
+        $('setp-desc-loc-otro').addEventListener('input', function (e) {
+            var p = state.descFor && state.pending[state.descFor];
+            if (!p || !p.localOtro) return;
+            p.local = e.target.value.trim().replace(/\s+/g, ' ');
+            if (p.local) descAviso('');
+            $('setp-desc-area').textContent = ubicacionTexto(state.recorridos.find(function (x) { return x.id === state.descFor; }), p);
+            pintarResumen();
         });
         $('setp-desc-form').addEventListener('submit', function (e) { e.preventDefault(); guardarDescripcion(); });
+    }
+
+    // Módulos del nivel (área de recorrido) del recorrido abierto.
+    function modulosDe(r) {
+        var cat = catalogo();
+        return cat ? cat.modulos(r.area_recorrido) : [];
+    }
+
+    // Texto de ubicación: "10.50 · Módulo E4 · SEIE4-12".
+    function ubicacionTexto(r, p) {
+        var m = modulosDe(r).find(function (x) { return x.nombre === p.modulo; });
+        return [r.area_recorrido, m ? moduloTexto(m) : '', p.local].filter(Boolean).join(' · ');
+    }
+
+    function pintarCaptura() {
+        var r = state.descFor && state.recorridos.find(function (x) { return x.id === state.descFor; });
+        var p = state.descFor && state.pending[state.descFor];
+        var cat = catalogo();
+        if (!r || !p || !cat || !$('setp-desc-et')) return;
+        var radio = function (on) { return ' role="radio" aria-checked="' + !!on + '"'; };
+        // 1 · Etiqueta
+        $('setp-desc-et').innerHTML = cat.etiquetas.map(function (e) {
+            return '<button type="button" class="sd-chip" style="--c:' + e.color + '" data-etq="' + e.key + '"' + radio(p.etiqueta === e.key) + '>' +
+                '<i class="fas ' + e.icono + '"></i>' + esc(e.nombre) + '</button>';
+        }).join('');
+        // 2 · Item, 3 · Condición, 4 · Cantidad
+        var etq = cat.etiqueta(p.etiqueta);
+        $('setp-desc-item-wrap').hidden = !etq;
+        if (etq) {
+            $('setp-desc-item').innerHTML = cat.items(etq.key).map(function (i) {
+                return '<button type="button" class="sd-chip" style="--c:' + etq.color + '" data-item="' + esc(i.nombre) + '"' + radio(p.item === i.nombre) + '>' +
+                    '<i class="fas ' + i.icono + '"></i>' + esc(i.nombre) + '</button>';
+            }).join('');
+            $('setp-desc-cond').innerHTML = cat.condiciones(etq.key).map(function (c) {
+                return '<button type="button" data-cond="' + c.key + '"' + radio(p.condicion === c.key) + '>' + esc(c.texto) + '</button>';
+            }).join('');
+            $('setp-desc-cant').textContent = String(p.cantidad || 1);
+            pintarArea();
+        }
+        // 5 · Módulo y 6 · Local
+        var modulos = modulosDe(r);
+        $('setp-desc-mod-nivel').textContent = '· Nivel ' + r.area_recorrido;
+        $('setp-desc-mod').innerHTML = modulos.length
+            ? modulos.map(function (m) {
+                var on = p.modulo === m.nombre;
+                return '<li><button type="button" class="sd-mod-item" data-modulo="' + esc(m.nombre) + '"' + radio(on) + '>' +
+                    '<i class="' + (on ? 'fas fa-circle-dot' : 'far fa-circle') + '"></i>' + esc(moduloTexto(m)) + '</button></li>';
+            }).join('')
+            : '<li class="sd-mod-vacio">Aún no hay módulos para el nivel ' + esc(r.area_recorrido) + '.</li>';
+        var elegido = modulos.find(function (m) { return m.nombre === p.modulo; });
+        $('setp-desc-loc-wrap').hidden = !elegido;
+        if (elegido) {
+            $('setp-desc-loc-mod').textContent = '· ' + elegido.nombre;
+            $('setp-desc-loc').innerHTML = elegido.locales.map(function (l) {
+                return '<button type="button" class="sd-loc" data-local="' + esc(l) + '"' + radio(!p.localOtro && p.local === l) + '>' + esc(l) + '</button>';
+            }).join('') +
+                '<button type="button" class="sd-loc sd-loc-otro" data-local-otro' + radio(p.localOtro) + '><i class="fas fa-location-dot me-1"></i>Otro lugar</button>';
+        }
+        $('setp-desc-loc-otro-wrap').hidden = !(elegido && p.localOtro);
+        if (elegido && p.localOtro && $('setp-desc-loc-otro').value.trim() !== (p.local || '')) $('setp-desc-loc-otro').value = p.local || '';
+        // Con item "Otro" el detalle es obligatorio (es la descripción).
+        var otro = p.item === cat.OTRO;
+        // Etiqueta "Otro" o item "Otro" de cualquier etiqueta: la casilla de
+        // descripción sube justo debajo del item (con la etiqueta "Otro", sale
+        // hasta elegir el item); en lo demás va al final, como siempre.
+        var etqOtro = p.etiqueta === 'OTRO';
+        var caja = $('setp-desc-text-wrap');
+        if (etqOtro || otro) { if (caja.parentNode !== $('setp-desc-otro-slot')) $('setp-desc-otro-slot').appendChild(caja); }
+        else if (caja.previousElementSibling !== $('setp-desc-text-home')) $('setp-desc-text-home').after(caja);
+        caja.hidden = etqOtro && !p.item;
+        $('setp-desc-text-lbl').innerHTML = etqOtro ? 'Descripción *' : (otro ? 'Describe el elemento *' : 'Detalle <span class="fw-normal text-muted">(opcional)</span>');
+        $('setp-desc-text').placeholder = etqOtro ? 'Describe el hallazgo: qué es y qué tiene (ej. Cartel del evento desprendido)' : (otro ? 'Ej. Cartel del evento desprendido' : 'Ej. Respaldo roto en la fila 3');
+        $('setp-desc-area').textContent = ubicacionTexto(r, p);
+        pintarResumen();
+    }
+
+    // Área responsable del hallazgo: la de la regla (etiqueta + item) con cómo
+    // reportarle. "Cambiar" aparece sólo si la base ya guarda el área elegida
+    // (columna area de setp_hallazgos).
+    function pintarArea() {
+        var p = state.descFor && state.pending[state.descFor];
+        var cat = catalogo();
+        var box = $('setp-desc-areabox');
+        if (!p || !cat || !box) return;
+        if (!p.etiqueta || !cat.areaChip) { box.innerHTML = ''; return; }
+        var regla = cat.areaRegla(p.etiqueta, p.item);
+        var key = p.area || regla;
+        var manual = !!p.area && p.area !== regla;
+        var puede = state.areaCol === true;
+        var html = '<div class="sd-area-h"><i class="fas fa-route"></i>Área responsable <span class="h">· se asigna sola según la etiqueta y el item</span></div>' +
+            '<div class="sd-area-fila">' + cat.areaChip(key) +
+            (puede ? '<button type="button" class="sd-area-btn" data-area-cambiar aria-expanded="' + !!state.areaElegir + '"><i class="fas fa-pen me-1"></i>' + (key ? 'Cambiar' : 'Elegir área') + '</button>' : '') +
+            (puede && manual ? '<button type="button" class="sd-area-btn" data-area-auto><i class="fas fa-rotate-left me-1"></i>Usar la automática</button>' : '') + '</div>';
+        if (manual) html += '<div class="sd-area-nota is-man"><i class="fas fa-user-pen me-1"></i>Cambiada por el supervisor' + (regla ? ' (la regla marca ' + esc(cat.area(regla).corto) + ')' : '') + '</div>';
+        else if (key) html += '<div class="sd-area-nota"><i class="fas fa-wand-magic-sparkles me-1"></i>Asignada automáticamente</div>';
+        else html += '<div class="sd-area-nota is-man"><i class="fas fa-circle-info me-1"></i>' + (puede ? 'Las tablas de responsables no lo asignan: queda a consideración del supervisor. Elige a qué área se reporta.' : 'Las tablas de responsables no lo asignan: queda a consideración del supervisor.') + '</div>';
+        html += cat.areaInfo(key);
+        if (puede && state.areaElegir) {
+            html += '<div class="sd-cond sd-area-lista" role="radiogroup" aria-label="Área responsable">' + cat.areas().map(function (a) {
+                return '<button type="button" data-area-elige="' + a.key + '" style="--c:' + a.color + '" role="radio" aria-checked="' + (a.key === key) + '"><i class="fas ' + a.icono + '"></i>' + esc(a.corto) + '</button>';
+            }).join('') + '</div>';
+        }
+        box.innerHTML = html;
+    }
+
+    // ¿La base guarda el área elegida a mano? Se revisa una vez por sesión.
+    async function revisarColumnaArea() {
+        if (state.areaCol !== null) return;
+        state.areaCol = false;
+        try {
+            var sb = await getClient();
+            var res = await sb.from('setp_hallazgos').select('area').limit(1);
+            state.areaCol = !res.error;
+        } catch (_) { state.areaCol = false; }
+        if (state.areaCol && state.descFor) pintarArea();
+    }
+
+    function pintarResumen() {
+        var r = state.descFor && state.recorridos.find(function (x) { return x.id === state.descFor; });
+        var p = state.descFor && state.pending[state.descFor];
+        var cat = catalogo();
+        var box = $('setp-desc-resumen');
+        if (!r || !p || !cat || !box) return;
+        var etq = cat.etiqueta(p.etiqueta);
+        var texto = p.item && p.condicion ? cat.componer(p) : '';
+        box.classList.toggle('d-none', !texto);
+        if (!texto) return;
+        var lugar = p.local ? ubicacionTexto(r, p) : '';
+        box.innerHTML = '<i class="fas fa-clipboard-check"></i><div>Se registrará: <b>' + esc(texto) + '</b>' +
+            '<div class="small">' + esc(etq ? etq.nombre : '') + (lugar ? ' · ' + esc(lugar) : '') + '</div></div>';
     }
 
     function descAviso(html, tipo) {
@@ -1074,23 +1642,41 @@
         box.innerHTML = html || '';
     }
 
+    function vistaDuplicados(on) {
+        $('setp-desc-captura').hidden = !!on;
+        $('setp-desc-dup').hidden = !on;
+        $('setp-desc-foot').hidden = !!on;
+        $('setp-desc-title').textContent = on ? '¿Es el mismo hallazgo?' : 'Descripción del hallazgo';
+        if (!on) $('setp-desc-dup').innerHTML = '';
+        var body = document.querySelector('#' + DESC_ID + ' .sd-body');
+        if (body) body.scrollTop = 0;
+    }
+
     function abrirDescripcion(id, aviso) {
         var r = state.recorridos.find(function (x) { return x.id === id; });
         var p = state.pending[id];
         if (!r || !p || !p.esFoto) return;
         ensureDescModal();
         state.descFor = id;
+        if (!p.cantidad) p.cantidad = 1;
         $('setp-desc-foto').src = p.url;
-        $('setp-desc-area').textContent = r.area_recorrido;
         $('setp-desc-fecha').textContent = (fecha(r.registrado_en) || '—') + ' · ' + hhmm(r.hora_inicio) + ' hrs' + (p.extra ? ' · evidencia adicional' : '');
-        $('setp-desc-text').value = p.descripcion || '';
-        $('setp-desc-n').textContent = String((p.descripcion || '').length);
+        $('setp-desc-text').value = p.detalle || '';
+        $('setp-desc-loc-otro').value = p.localOtro ? (p.local || '') : '';
+        $('setp-desc-n').textContent = String((p.detalle || '').length);
         descAviso(aviso || '', 'info');
+        vistaDuplicados(false);
+        state.areaElegir = false;
+        pintarCaptura();
+        revisarColumnaArea();
         var modal = $(DESC_ID);
         modal.hidden = false;
         document.body.style.overflow = 'hidden';
         requestAnimationFrame(function () { modal.classList.add('is-open'); });
-        setTimeout(function () { $('setp-desc-text').focus(); }, 30);
+        setTimeout(function () {
+            var foco = modal.querySelector('.sd-chip[aria-checked="true"]') || modal.querySelector('.sd-chip');
+            if (foco) foco.focus();
+        }, 30);
     }
 
     function cerrarDescripcion() {
@@ -1106,19 +1692,123 @@
         if (back) back.focus();
     }
 
-    function guardarDescripcion() {
-        var p = state.descFor && state.pending[state.descFor];
-        if (!p) return cerrarDescripcion();
-        var texto = $('setp-desc-text').value.trim().replace(/\s+/g, ' ');
-        if (!texto) {
-            descAviso('Escribe la descripción del hallazgo para guardarla.');
-            $('setp-desc-text').focus();
+    // Lo que falta por capturar (el primer paso pendiente recibe el foco).
+    function faltantes(p) {
+        var cat = catalogo();
+        var f = [];
+        if (!p.etiqueta) f.push(['etiqueta', '#setp-desc-et']);
+        else if (!p.item) f.push(['item', '#setp-desc-item']);
+        if (p.etiqueta && !p.condicion) f.push(['condición', '#setp-desc-cond']);
+        if (!p.modulo) f.push(['módulo', '#setp-desc-mod']);
+        else if (!p.local) f.push(p.localOtro ? ['el lugar (Otro lugar)', '#setp-desc-loc-otro'] : ['local', '#setp-desc-loc']);
+        if (cat && p.item === cat.OTRO && !String(p.detalle || '').trim()) f.push([p.etiqueta === 'OTRO' ? 'descripción' : 'descripción del elemento', '#setp-desc-text']);
+        return f;
+    }
+
+    // Hallazgos pendientes iguales en la base: mismo item en el mismo local
+    // (y nivel); si el objeto se mueve (maleta, mochila…), en todos los niveles
+    // del edificio durante las últimas 24 h, porque alguien pudo cambiarlo de
+    // piso. Sin las columnas de db/setp_hallazgos_identificacion.sql no revisa.
+    async function buscarDuplicados(r, p) {
+        var cat = catalogo();
+        if (!cat || (p.item === cat.OTRO && !cat.esMovible(p.etiqueta, p.item))) return [];
+        try {
+            var sb = await getClient();
+            var res = await sb.from('setp_hallazgos')
+                .select('id, folio, fecha_reporte, created_at, modulo, local, nivel, etiqueta, item, condicion, cantidad, descripcion, evidencia_url, no_empleado, veces')
+                .eq('estatus', 'PENDIENTE').is('duplicado_de', null).eq('etiqueta', p.etiqueta).eq('item', p.item)
+                .order('created_at', { ascending: false }).limit(40);
+            if (res.error) return [];
+            var nivel = cat.nivel(r.area_recorrido);
+            var mov = cat.esMovible(p.etiqueta, p.item);
+            var desde = Date.now() - MOVIBLE_HORAS * 3600 * 1000;
+            return (res.data || []).filter(function (h) {
+                if (mov) return new Date(h.created_at).getTime() >= desde;
+                if (cat.nivel(h.nivel) !== nivel) return false;
+                return h.local === p.local;
+            });
+        } catch (_) {
+            return [];
+        }
+    }
+
+    function fechaHora(ts) {
+        var d = ts ? new Date(ts) : null;
+        if (!d || isNaN(d)) return '';
+        return d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' +
+            d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+    }
+
+    function pintarDuplicados(r, p, lista) {
+        var cat = catalogo();
+        var etq = cat.etiqueta(p.etiqueta);
+        var mov = cat.esMovible(p.etiqueta, p.item);
+        var yo = supervisor(r.no_empleado);
+        var foto = function (url) {
+            return url ? '<img class="sd-dup-foto" src="' + esc(url) + '" alt="Foto del hallazgo registrado">' : '<div class="sd-dup-foto d-flex align-items-center justify-content-center small text-muted">Sin foto</div>';
+        };
+        var donde = mov ? 'en el edificio terminal (todos los niveles) durante las últimas ' + MOVIBLE_HORAS + ' h' : 'en este mismo local (' + esc(p.local) + ')';
+        $('setp-desc-dup').innerHTML = '<div class="sd-dup">' +
+            '<div class="sd-dup-h"><i class="fas fa-triangle-exclamation mt-1"></i><span>' +
+            (lista.length === 1 ? 'Ya hay un hallazgo pendiente igual' : 'Ya hay ' + lista.length + ' hallazgos pendientes iguales') +
+            ': <b>' + esc(etq ? etq.nombre : '') + ' › ' + esc(p.item) + '</b> ' + donde + '.</span></div>' +
+            '<div class="sd-dup-grid">' +
+            '<div><div class="sd-dup-lbl">Tu foto · ahora</div>' + foto(p.url) +
+            '<div class="sd-dup-tit">' + esc(cat.componer(p)) + '</div>' +
+            '<div class="sd-dup-sub">' + esc(yo ? yo.nombre : r.no_empleado) + ' · ' + esc(ubicacionTexto(r, p)) + '</div></div>' +
+            '<div class="sd-dup-lista">' + lista.map(function (h) {
+                var s = supervisor(h.no_empleado);
+                return '<div class="sd-dup-cand"><div class="sd-dup-lbl">' + esc(h.folio || 'Registrado') + ' · pendiente</div>' + foto(h.evidencia_url) +
+                    '<div class="sd-dup-tit">' + esc(h.descripcion) + '</div>' +
+                    '<div class="sd-dup-sub">' + esc([h.nivel, h.modulo, h.local].filter(Boolean).join(' · ')) + '</div>' +
+                    '<div class="sd-dup-sub">' + esc(s ? s.nombre : (h.no_empleado || '')) + ' · ' + esc(fechaHora(h.created_at) || h.fecha_reporte) +
+                    (h.veces > 1 ? ' · reportado ' + h.veces + ' veces' : '') + '</div>' +
+                    '<button type="button" class="btn btn-warning btn-sm" data-dup-mismo="' + esc(h.id) + '" data-dup-folio="' + esc(h.folio || '') + '"><i class="fas fa-link me-1"></i>Es el mismo · agregar mi foto</button></div>';
+            }).join('') + '</div></div>' +
+            '<div class="small mt-2" style="color:inherit"><i class="fas fa-circle-info me-1"></i>Compara las fotos. Si es el mismo, tu foto se agrega a ese hallazgo y no se crea otro.</div>' +
+            '<div class="sd-dup-btns"><button type="button" class="btn btn-outline-secondary btn-sm" data-dup="volver"><i class="fas fa-arrow-left me-1"></i>Regresar</button>' +
+            '<button type="button" class="btn btn-primary btn-sm" data-dup="otro"><i class="fas fa-plus me-1"></i>Es otro hallazgo</button></div></div>';
+        vistaDuplicados(true);
+        var b = $('setp-desc-dup').querySelector('[data-dup-mismo]');
+        if (b) b.focus();
+    }
+
+    async function guardarDescripcion() {
+        var id = state.descFor;
+        var p = id && state.pending[id];
+        var r = id && state.recorridos.find(function (x) { return x.id === id; });
+        if (!p || !r) return cerrarDescripcion();
+        if (!catalogo()) return descAviso('No se cargó el catálogo de hallazgos (js/setp-catalogo.js). Recarga la página.', 'danger');
+        p.detalle = $('setp-desc-text').value.trim().replace(/\s+/g, ' ');
+        var falta = faltantes(p);
+        if (falta.length) {
+            descAviso('Falta elegir: <b>' + falta.map(function (f) { return f[0]; }).join(', ') + '</b>.');
+            var el = document.querySelector('#' + DESC_ID + ' ' + falta[0][1]);
+            if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); var f = el.matches('textarea, input') ? el : el.querySelector('button'); if (f) f.focus({ preventScroll: true }); }
             return;
         }
-        p.descripcion = texto;
+        descAviso('');
+        p.mismoQue = null;
+        var btn = $('setp-desc-guardar');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Revisando…';
+        var lista = await buscarDuplicados(r, p);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-save me-1"></i>Guardar';
+        if (state.descFor !== id) return; // se cerró mientras revisaba
+        if (lista.length) return pintarDuplicados(r, p, lista);
+        terminarDescripcion();
+    }
+
+    function terminarDescripcion() {
+        var p = state.descFor && state.pending[state.descFor];
+        if (!p) return cerrarDescripcion();
+        p.descripcion = catalogo().componer(p);
         render();
         cerrarDescripcion();
-        setStatus('Descripción guardada. Presiona <b>✓</b> para confirmar la evidencia y agregar el hallazgo a <b>Hallazgos detectados</b>.', 'info');
+        setStatus(p.mismoQue
+            ? 'Tu foto se agregará al hallazgo <b>' + esc(p.mismoQue.folio || 'registrado') + '</b> (no se crea otro). Presiona <b>✓</b> para confirmar.'
+            : 'Descripción guardada. Presiona <b>✓</b> para confirmar la evidencia y agregar el hallazgo a <b>Hallazgos detectados</b>.', 'info');
     }
 
     // ---------- Crear usuario (supervisor) ----------
@@ -1215,7 +1905,7 @@
             }
             state.supervisores = ordenarSupervisores(state.supervisores.concat([res.data]));
             bootstrap.Modal.getOrCreateInstance($(MODAL_ID)).hide();
-            // El filtro Supervisor (js/setp-reportes.js) se actualiza y lo selecciona.
+            // "Detalle de registros" (js/setp-reportes.js) se actualiza y lo muestra.
             document.dispatchEvent(new CustomEvent('setp:supervisor-creado', { detail: res.data }));
         } catch (error) {
             modalStatus('No se pudo crear el usuario: ' + errText(error));
@@ -1373,6 +2063,8 @@
         ' var w=window.open("","_blank");',
         ' if(!w){alert("El navegador bloqueó la ventana del informe. Permite las ventanas emergentes de este sitio.");return;}',
         ' var n=tr.getAttribute("data-num");',
+        // Con el aplicativo abierto, el informe sale con el formato del oficio.
+        ' if(window.__setpInforme){w.document.write("<p style=\\"font-family:Arial,sans-serif;padding:24px;color:#475569\\">Preparando el informe…</p>");window.__setpInforme(Number(n),w);return;}',
         ' var wrap=document.querySelector(".wrap").cloneNode(true);',
         ' wrap.querySelectorAll(".cards,#aviso").forEach(function(x){x.remove();});',
         ' wrap.querySelectorAll("tbody tr").forEach(function(x){if(x.getAttribute("data-num")!==n)x.remove();else{x.classList.add("imprimir");x.classList.remove("sel");x.removeAttribute("id");}});',
@@ -1545,10 +2237,46 @@
                     var r = recs.find(function (x) { return x.id === id; });
                     if (r) borrarDesdeHistorial(w, s, r, hallazgos[id]);
                 };
+                // "Ver informe" (n = No. de registro, desde 1): formato del oficio.
+                if (window.setpFormato && window.setpFormato.informeRegistro) {
+                    w.__setpInforme = function (n, win) { verInformeRegistro(win, s, recs[n - 1], hallazgos, n); };
+                }
             }
         } catch (error) {
             escribirVentana(w, historialDoc(s, null, null, errText(error)));
         }
+    }
+
+    // Informe de un registro con el formato del oficio (js/setp-formato.js):
+    // la tabla lleva los hallazgos detectados en ese recorrido. Arriba, sólo en
+    // pantalla, el botón Imprimir.
+    async function verInformeRegistro(win, s, r, hallazgos, n) {
+        if (!win || win.closed || !r) return;
+        var info = hallazgos[r.id] || { principal: null, extras: [] };
+        var hs = (info.principal ? [info.principal] : []).concat(info.extras);
+        var area = String(r.area_recorrido || '').trim();
+        var donde = /^\d+(\.\d+)?$/.test(area) ? 'en el nivel ' + area : (area ? 'en ' + area : '');
+        // Fecha como en el oficio: "17 Nov. 2026".
+        var MES = ['Ene.', 'Feb.', 'Mar.', 'Abr.', 'May.', 'Jun.', 'Jul.', 'Ago.', 'Sep.', 'Oct.', 'Nov.', 'Dic.'];
+        var f = fechaLocal(r.registrado_en).split('-');
+        var texto = 'durante el recorrido realizado el ' + f[2] + ' ' + MES[Number(f[1]) - 1] + ' ' + f[0] +
+            (r.hora_inicio ? ', de ' + hhmm(r.hora_inicio) + (r.hora_termino ? ' a ' + hhmm(r.hora_termino) : '') + ' hrs' : '') +
+            (donde ? ', ' + donde : '') + ', por ' + s.nombre;
+        var html;
+        try {
+            html = await window.setpFormato.informeRegistro({
+                recorridoId: r.id, fecha: fechaLocal(r.registrado_en), texto: texto, hallazgos: hs,
+                titulo: 'Informe · Registro #' + n + ' · ' + s.nombre
+            });
+        } catch (error) {
+            if (!win.closed) escribirVentana(win, '<p style="font-family:Arial,sans-serif;padding:24px;color:#b91c1c">No se pudo armar el informe: ' + errText(error) + '</p>');
+            return;
+        }
+        var barra = '<style>.setp-inf-barra{position:fixed;top:12px;right:16px;z-index:10;display:flex;gap:8px;}' +
+            '.setp-inf-barra button{font:600 14px system-ui,"Segoe UI",Arial,sans-serif;padding:8px 16px;border-radius:8px;border:1px solid #2a78d6;background:#2a78d6;color:#fff;cursor:pointer;}' +
+            '.setp-inf-barra button:hover{background:#1d63b8;}@media print{.setp-inf-barra{display:none !important;}}</style>' +
+            '<div class="setp-inf-barra"><button type="button" onclick="window.print()">&#128424; Imprimir / PDF</button></div>';
+        escribirVentana(win, html.replace('<body>', '<body>' + barra));
     }
 
     // Sólo superadmin: borra un registro de prueba desde el historial: el
@@ -1618,7 +2346,7 @@
     window.setpRecorridos = {
         mount: mount,
         supervisores: function () { return state.supervisores.slice(); },
-        // Supervisor elegido en el filtro ('' = todos).
+        // Supervisor del usuario que inició sesión ('' = todos).
         select: function (no) {
             var cambio = state.selected !== (no || '');
             state.selected = no || '';
