@@ -21,7 +21,7 @@
     // los datos siguen guardados y el historial los muestra).
     const COLS = 5;
     const ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx';
-    // Celular o tableta (no computadora): ahí el + abre directo la cámara.
+    // Celular o tableta (no computadora): ahí «Evidencia» y + abren directo la cámara.
     // Se ve el navegador y no la pantalla táctil, para que una laptop con
     // pantalla táctil siga como computadora. El iPad moderno se presenta como
     // Mac, por eso se revisa también si tiene pantalla táctil.
@@ -1157,12 +1157,13 @@
                 state.evidenciaFor = id;
                 state.evidenciaExtra = act === 'evidencia-mas';
                 var input = $('setp-rec-file');
-                input.accept = state.evidenciaExtra ? 'image/*' : ACCEPT;
-                // Las evidencias adicionales son sólo fotos: en celular y tableta
-                // abren directo la cámara trasera cada vez, en vez de la galería.
-                // En computadora se sigue eligiendo el archivo como siempre, y la
-                // primera evidencia sigue permitiendo foto o archivo (PDF, Word…).
-                if (state.evidenciaExtra && ES_MOVIL_O_TABLETA) input.setAttribute('capture', 'environment');
+                // En celular y tableta, «Evidencia» y «+» abren directo la cámara
+                // trasera (sin el panel de Cámara / Archivos / Google Fotos).
+                // En computadora se sigue eligiendo el archivo como siempre: la
+                // primera evidencia permite foto o archivo (PDF, Word…) y la
+                // adicional, sólo fotos.
+                input.accept = state.evidenciaExtra || ES_MOVIL_O_TABLETA ? 'image/*' : ACCEPT;
+                if (ES_MOVIL_O_TABLETA) input.setAttribute('capture', 'environment');
                 else input.removeAttribute('capture');
                 input.value = '';
                 input.click();
