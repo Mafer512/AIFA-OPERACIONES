@@ -139,7 +139,8 @@
             const flecha = pct > 0 ? '⬆️' : pct < 0 ? '⬇️' : '➡️';
             return `(${flecha} ${Math.abs(pct).toFixed(2)}%)`;
         };
-        const periodo = `del 01 de Enero al ${dos(dia)} ${MES_LARGO[mes - 1]} ${anio}`;
+        // Como en los mensajes enviados: "del 1 de enero al 23 noviembre 2026".
+        const periodo = `del 1 de enero al ${dia} ${MES_LARGO[mes - 1].toLowerCase()} ${anio}`;
 
         return [
             'Se envía la información correspondiente (carga y pasajeros) al:',
