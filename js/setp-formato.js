@@ -2118,6 +2118,28 @@
         rep.saving = true;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        // Hallazgo nuevo con foto: antes de crearlo se revisa si ya está
+        // reportado y se comparan las fotos (js/setp-comparar.js).
+        if (!prev && !v.solved && conCatalogo && v.etiqueta && v.item && rep.files.evidencia && state.store !== 'local' && window.setpComparar) {
+            var dec = { accion: 'otro' };
+            try {
+                dec = await window.setpComparar.preguntar({
+                    sb: await getClient(),
+                    q: { etiqueta: v.etiqueta, item: v.item, nivel: v.nivel, modulo: v.modulo, local: v.local },
+                    foto: rep.files.evidencia,
+                    tit: v.desc,
+                    sub: [v.nivel, v.modulo, v.local].filter(Boolean).join(' · '),
+                    nombre: nombreSupervisor
+                });
+            } catch (_) { /* sin revisión: se guarda como nuevo */ }
+            if (dec.accion !== 'otro') {
+                rep.saving = false;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save"></i>';
+                if (dec.accion === 'mismo') await repSumarAHallazgo(dec, v, rep.files.evidencia, btn);
+                return;
+            }
+        }
         try {
             var saved = await persistHallazgo(prev, v, rep.files);
             rep.editing = null;
@@ -2134,6 +2156,49 @@
             renderReport();
         } catch (error) {
             repStatus('No se pudo guardar el hallazgo: ' + hallazgoErr(error), 'danger');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save"></i>';
+        } finally {
+            rep.saving = false;
+        }
+    }
+
+    // "Es el mismo · agregar mi foto" desde Agregar hallazgo: no crea otro;
+    // suma un reporte y la foto al existente (setp_sumar_reporte de
+    // db/setp_hallazgos_identificacion.sql; sin ella, se actualiza directo).
+    async function repSumarAHallazgo(dest, v, file, btn) {
+        if (rep.saving) return;
+        rep.saving = true;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        var foto = null;
+        try {
+            var sb = await getClient();
+            foto = await uploadPhoto(file, v.fecha, 'e');
+            var extra = { url: foto.url, path: foto.path, no_empleado: (state.porSupervisor && supervisorActual()) || null, fecha: v.fecha, descripcion: v.desc };
+            var res = await sb.rpc('setp_sumar_reporte', { p_hallazgo: dest.id, p_foto: extra });
+            if (res.error) {
+                var cur = await sb.from(T_HALLAZGOS).select('veces, fotos_extra').eq('id', dest.id).single();
+                if (cur.error) throw cur.error;
+                res = await sb.from(T_HALLAZGOS).update({
+                    veces: (Number(cur.data.veces) || 1) + 1,
+                    fotos_extra: (cur.data.fotos_extra || []).concat([extra]),
+                    updated_at: new Date().toISOString()
+                }).eq('id', dest.id).select('*').single();
+                if (res.error) throw res.error;
+            }
+            var fila = res.data && res.data.id ? res.data : null;
+            if (fila) {
+                var ya = state.hallazgos.some(function (h) { return h.id === fila.id; });
+                state.hallazgos = ya ? state.hallazgos.map(function (h) { return h.id === fila.id ? fila : h; }) : state.hallazgos.concat([fila]);
+            }
+            rep.editing = null;
+            rep.files = { evidencia: null, solucion: null };
+            repStatus('<i class="fas fa-link me-1"></i>Tu foto se agregó al hallazgo <b>' + esc(dest.folio || 'registrado') + '</b> (no se creó otro).', 'success');
+            renderReport();
+        } catch (error) {
+            if (foto) removePhotos([foto.path]);
+            repStatus('No se pudo agregar la foto al hallazgo: ' + hallazgoErr(error), 'danger');
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-save"></i>';
         } finally {

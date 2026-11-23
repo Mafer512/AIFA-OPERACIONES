@@ -1319,7 +1319,6 @@
 
     const DESC_ID = 'setp-desc-modal';
     const DESC_MAX = 500;
-    const MOVIBLE_HORAS = 24;
 
     // Modo oscuro (body.dark-mode, script.js): mismas variables que el resto del aplicativo.
     function descEstilosOscuros(D) {
@@ -1329,12 +1328,12 @@
             D + ' .sd-head,' + D + ' .sd-foot{border-color:var(--border-color);}',
             D + ' .sd-foot{background:rgba(255,255,255,.03);}',
             D + ' .sd-icon{background:rgba(77,171,247,.14);color:var(--primary-color);}',
-            D + ' .sd-kicker,' + D + ' .sd-lbl,' + D + ' .sd-count,' + D + ' .sd-note,' + D + ' .sd-mod-vacio,' + D + ' .sd-paso .h,' + D + ' .sd-dup-sub{color:var(--text-muted-color);}',
-            D + ' .sd-title,' + D + ' .sd-val,' + D + ' .sd-dup-tit{color:var(--text-color);}',
+            D + ' .sd-kicker,' + D + ' .sd-lbl,' + D + ' .sd-count,' + D + ' .sd-note,' + D + ' .sd-mod-vacio,' + D + ' .sd-paso .h{color:var(--text-muted-color);}',
+            D + ' .sd-title,' + D + ' .sd-val{color:var(--text-color);}',
             D + ' label,' + D + ' .sd-paso{color:#c3c9d2;}',
             D + ' .sd-paso .n{background:rgba(77,171,247,.18);color:#8cc8ff;}',
             D + ' .sd-info{background:rgba(255,255,255,.04);border-color:var(--border-color);}',
-            D + ' .sd-info img,' + D + ' .sd-dup-foto{border-color:var(--border-color);}',
+            D + ' .sd-info img{border-color:var(--border-color);}',
             D + ' .btn-close{filter:invert(1) grayscale(100%) brightness(2);}',
             D + ' .sd-mod-lista,' + D + ' .sd-loc-lista{background:rgba(15,23,42,.55);border-color:var(--border-color);}',
             D + ' .sd-mod-item{color:var(--text-color);}',
@@ -1350,10 +1349,6 @@
             D + ' .sd-cant span{color:var(--text-color);}',
             D + ' .sd-resumen{background:rgba(77,171,247,.08);border-color:rgba(77,171,247,.3);color:#cfe6ff;}',
             D + ' .sd-resumen b{color:#fff;}',
-            D + ' .sd-dup{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.45);}',
-            D + ' .sd-dup-h{color:#fcd34d;}',
-            D + ' .sd-dup-cand{background:rgba(15,23,42,.55);border-color:var(--border-color);}',
-            D + ' .sd-dup-lbl{color:var(--text-muted-color);}',
             D + ' .sd-areabox{background:rgba(255,255,255,.04);border-color:var(--border-color);}',
             D + ' .sd-area-h{color:#c3c9d2;}',
             D + ' .sd-area-h .h{color:var(--text-muted-color);}',
@@ -1437,20 +1432,6 @@
             M + ' .sd-mod-vacio{font-size:.82rem;color:#64748b;padding:10px;text-align:center;}',
             M + ' :is(.sd-chip,.sd-cond button,.sd-loc,.sd-mod-item,.sd-cant button):focus-visible{outline:3px solid rgba(37,99,235,.45);outline-offset:1px;}',
             '@media (pointer:coarse){' + M + ' .sd-loc,' + M + ' .sd-cond button{min-height:40px;padding:6px 12px;}' + M + ' .sd-mod-item,' + M + ' .sd-chip{min-height:40px;}' + M + ' .sd-cant button{width:44px;height:40px;}}',
-            // ¿Es el mismo?
-            M + ' .sd-dup{border:1px solid #fcd34d;background:#fffbeb;border-radius:14px;padding:12px;}',
-            M + ' .sd-dup-h{display:flex;gap:8px;align-items:flex-start;font-size:.84rem;color:#92400e;font-weight:700;margin-bottom:10px;}',
-            M + ' .sd-dup-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start;}',
-            M + ' .sd-dup-lbl{font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;margin-bottom:4px;}',
-            M + ' .sd-dup-foto{width:100%;height:120px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;display:block;background:#e2e8f0;}',
-            M + ' .sd-dup-tit{font-size:.8rem;font-weight:700;color:#0f172a;margin-top:6px;overflow-wrap:anywhere;}',
-            M + ' .sd-dup-sub{font-size:.74rem;color:#64748b;overflow-wrap:anywhere;}',
-            M + ' .sd-dup-lista{display:flex;flex-direction:column;gap:10px;max-height:340px;overflow-y:auto;}',
-            M + ' .sd-dup-cand{border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:8px;}',
-            M + ' .sd-dup-cand .btn{width:100%;margin-top:8px;}',
-            M + ' .sd-dup-btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}',
-            M + ' .sd-dup-btns .btn{flex:1 1 160px;}',
-            '@media (max-width:480px){' + M + ' .sd-dup-grid{grid-template-columns:1fr;}}',
             M + ' .sd-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid #e2e8f0;background:#f8fafc;flex:none;}',
             '@media (prefers-reduced-motion:reduce){' + M + ',' + M + ' .sd-card{transition:none;}}'
         ].concat(descEstilosOscuros('body.dark-mode ' + M)).join('');
@@ -1756,6 +1737,8 @@
         ensureDescModal();
         state.descFor = id;
         if (!p.cantidad) p.cantidad = 1;
+        // Modelos para comparar fotos: se descargan mientras se captura.
+        if (window.setpComparar) window.setpComparar.precargar();
         $('setp-desc-foto').src = p.url;
         $('setp-desc-fecha').textContent = (fecha(r.registrado_en) || '—') + ' · ' + hhmm(r.hora_inicio) + ' hrs' + (p.extra ? ' · evidencia adicional' : '');
         $('setp-desc-text').value = p.detalle || '';
@@ -1802,72 +1785,35 @@
         return f;
     }
 
-    // Hallazgos pendientes iguales en la base: mismo item en el mismo local
-    // (y nivel); si el objeto se mueve (maleta, mochila…), en todos los niveles
-    // del edificio durante las últimas 24 h, porque alguien pudo cambiarlo de
-    // piso. Sin las columnas de db/setp_hallazgos_identificacion.sql no revisa.
+    // Hallazgos pendientes que pueden ser el mismo (js/setp-comparar.js):
+    // mismo item; si el objeto se mueve (maleta, mochila…), en todo el
+    // edificio durante las últimas 24 h; si no, en el mismo nivel y local o
+    // módulo. Sin las columnas de db/setp_hallazgos_identificacion.sql no revisa.
+    function consultaDuplicados(r, p) {
+        return { etiqueta: p.etiqueta, item: p.item, nivel: r.area_recorrido, modulo: p.modulo, local: p.local };
+    }
+
     async function buscarDuplicados(r, p) {
-        var cat = catalogo();
-        if (!cat || (p.item === cat.OTRO && !cat.esMovible(p.etiqueta, p.item))) return [];
+        if (!window.setpComparar) return [];
         try {
-            var sb = await getClient();
-            var res = await sb.from('setp_hallazgos')
-                .select('id, folio, fecha_reporte, created_at, modulo, local, nivel, etiqueta, item, condicion, cantidad, descripcion, evidencia_url, no_empleado, veces')
-                .eq('estatus', 'PENDIENTE').is('duplicado_de', null).eq('etiqueta', p.etiqueta).eq('item', p.item)
-                .order('created_at', { ascending: false }).limit(40);
-            if (res.error) return [];
-            var nivel = cat.nivel(r.area_recorrido);
-            var mov = cat.esMovible(p.etiqueta, p.item);
-            var desde = Date.now() - MOVIBLE_HORAS * 3600 * 1000;
-            return (res.data || []).filter(function (h) {
-                if (mov) return new Date(h.created_at).getTime() >= desde;
-                if (cat.nivel(h.nivel) !== nivel) return false;
-                return h.local === p.local;
-            });
+            return await window.setpComparar.buscar(await getClient(), consultaDuplicados(r, p));
         } catch (_) {
             return [];
         }
     }
 
-    function fechaHora(ts) {
-        var d = ts ? new Date(ts) : null;
-        if (!d || isNaN(d)) return '';
-        return d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' +
-            d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
-    }
-
+    // "¿Es el mismo hallazgo?": candidatos con % de parecido de la foto.
     function pintarDuplicados(r, p, lista) {
-        var cat = catalogo();
-        var etq = cat.etiqueta(p.etiqueta);
-        var mov = cat.esMovible(p.etiqueta, p.item);
         var yo = supervisor(r.no_empleado);
-        var foto = function (url) {
-            return url ? '<img class="sd-dup-foto" src="' + esc(url) + '" alt="Foto del hallazgo registrado">' : '<div class="sd-dup-foto d-flex align-items-center justify-content-center small text-muted">Sin foto</div>';
-        };
-        var donde = mov ? 'en el edificio terminal (todos los niveles) durante las últimas ' + MOVIBLE_HORAS + ' h' : 'en este mismo local (' + esc(p.local) + ')';
-        $('setp-desc-dup').innerHTML = '<div class="sd-dup">' +
-            '<div class="sd-dup-h"><i class="fas fa-triangle-exclamation mt-1"></i><span>' +
-            (lista.length === 1 ? 'Ya hay un hallazgo pendiente igual' : 'Ya hay ' + lista.length + ' hallazgos pendientes iguales') +
-            ': <b>' + esc(etq ? etq.nombre : '') + ' › ' + esc(p.item) + '</b> ' + donde + '.</span></div>' +
-            '<div class="sd-dup-grid">' +
-            '<div><div class="sd-dup-lbl">Tu foto · ahora</div>' + foto(p.url) +
-            '<div class="sd-dup-tit">' + esc(cat.componer(p)) + '</div>' +
-            '<div class="sd-dup-sub">' + esc(yo ? yo.nombre : r.no_empleado) + ' · ' + esc(ubicacionTexto(r, p)) + '</div></div>' +
-            '<div class="sd-dup-lista">' + lista.map(function (h) {
-                var s = supervisor(h.no_empleado);
-                return '<div class="sd-dup-cand"><div class="sd-dup-lbl">' + esc(h.folio || 'Registrado') + ' · pendiente</div>' + foto(h.evidencia_url) +
-                    '<div class="sd-dup-tit">' + esc(h.descripcion) + '</div>' +
-                    '<div class="sd-dup-sub">' + esc([h.nivel, h.modulo, h.local].filter(Boolean).join(' · ')) + '</div>' +
-                    '<div class="sd-dup-sub">' + esc(s ? s.nombre : (h.no_empleado || '')) + ' · ' + esc(fechaHora(h.created_at) || h.fecha_reporte) +
-                    (h.veces > 1 ? ' · reportado ' + h.veces + ' veces' : '') + '</div>' +
-                    '<button type="button" class="btn btn-warning btn-sm" data-dup-mismo="' + esc(h.id) + '" data-dup-folio="' + esc(h.folio || '') + '"><i class="fas fa-link me-1"></i>Es el mismo · agregar mi foto</button></div>';
-            }).join('') + '</div></div>' +
-            '<div class="small mt-2" style="color:inherit"><i class="fas fa-circle-info me-1"></i>Compara las fotos. Si es el mismo, tu foto se agrega a ese hallazgo y no se crea otro.</div>' +
-            '<div class="sd-dup-btns"><button type="button" class="btn btn-outline-secondary btn-sm" data-dup="volver"><i class="fas fa-arrow-left me-1"></i>Regresar</button>' +
-            '<button type="button" class="btn btn-primary btn-sm" data-dup="otro"><i class="fas fa-plus me-1"></i>Es otro hallazgo</button></div></div>';
+        var id = state.descFor;
         vistaDuplicados(true);
-        var b = $('setp-desc-dup').querySelector('[data-dup-mismo]');
-        if (b) b.focus();
+        window.setpComparar.pintar($('setp-desc-dup'), {
+            q: consultaDuplicados(r, p),
+            lista: lista,
+            mia: { url: p.url, tit: catalogo().componer(p), sub: (yo ? yo.nombre : r.no_empleado) + ' · ' + ubicacionTexto(r, p) },
+            nombre: function (no) { var s = supervisor(no); return s ? s.nombre : (no || ''); },
+            sigue: function () { return state.descFor === id && !$('setp-desc-dup').hidden; }
+        });
     }
 
     async function guardarDescripcion() {
