@@ -60,7 +60,8 @@
         evidenciaExtra: false, // el archivo elegido es una evidencia adicional (+)
         extras: {},         // id de recorrido -> hallazgos de sus evidencias adicionales
         descFor: null,      // recorrido cuya descripción se está capturando
-        resumen: [],        // todos los recorridos (id, no_empleado, turno) para la tarjeta de turnos
+        resumen: [],        // recorridos del periodo (id, no_empleado, turno) para la tarjeta de turnos
+        desdeCargado: '',   // inicio del periodo cargado ('' = todo el histórico)
         enFormato: {},      // id de recorrido -> true si ya salió en un formato guardado
         turnoOk: true,      // false si aún no se aplica db/setp_recorridos_turno.sql
         turnoNuevo: '',     // turno elegido en el renglón "Iniciar recorrido"
@@ -96,6 +97,54 @@
     // "Crear usuario" sólo para superadmin (mismo criterio que el resto del aplicativo).
     function esSuperadmin() {
         try { return sessionStorage.getItem('user_role') === 'superadmin'; } catch (_) { return false; }
+    }
+
+    // Modo administración: un superadmin no es supervisor ni elige a ninguno.
+    // Ve y gestiona los recorridos de todos (área, turno, evidencia, finalizar
+    // y borrar) y también hace sus propios recorridos con el botón de inicio:
+    // quedan a su nombre (ver miSupervisorSa / asegurarSupervisorSa).
+    function modoGestion() {
+        return esSuperadmin() && !(state.selected && supervisor(state.selected));
+    }
+
+    function palabrasNombre(v) {
+        return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase().replace(/[^A-Z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean);
+    }
+
+    function nombreSesion() {
+        try { return String(sessionStorage.getItem('user_fullname') || '').trim().replace(/\s+/g, ' '); } catch (_) { return ''; }
+    }
+
+    // Registro del propio superadmin en setp_supervisores: el que lleva su
+    // nombre de perfil (si además es supervisor, es ese mismo).
+    function miSupervisorSa() {
+        var yo = palabrasNombre(nombreSesion());
+        if (!yo.length) return null;
+        var mejor = null, largo = 0;
+        state.supervisores.forEach(function (x) {
+            var p = palabrasNombre(x.nombre);
+            if (p.length > largo && p.every(function (w) { return yo.indexOf(w) >= 0; })) { mejor = x; largo = p.length; }
+        });
+        return mejor;
+    }
+
+    // Al iniciar su primer recorrido, el superadmin queda dado de alta solo
+    // (No. de empleado SA-…, cargo Superadmin). Nadie elige nada.
+    async function asegurarSupervisorSa(sb) {
+        var ya = miSupervisorSa();
+        if (ya) return ya;
+        var nombre = nombreSesion();
+        if (!nombre) throw new Error('tu perfil no tiene nombre; captúralo en tu usuario para registrar recorridos.');
+        var u = await sb.auth.getUser();
+        var uid = u && u.data && u.data.user ? u.data.user.id : '';
+        if (!uid) throw new Error('no se pudo identificar tu sesión. Vuelve a iniciar sesión.');
+        var datos = { no_empleado: 'SA-' + uid.replace(/-/g, '').slice(0, 8).toUpperCase(), nombre: nombre, cargo: 'Superadmin' };
+        var res = await sb.from(T_SUPERVISORES).insert([datos]).select('no_empleado, nombre, cargo').single();
+        if (res.error && res.error.code === '23505') res = await sb.from(T_SUPERVISORES).select('no_empleado, nombre, cargo').eq('no_empleado', datos.no_empleado).single();
+        if (res.error) throw res.error;
+        if (!supervisor(res.data.no_empleado)) state.supervisores = ordenarSupervisores(state.supervisores.concat([res.data]));
+        return res.data;
     }
 
     function supervisor(no) {
@@ -136,11 +185,17 @@
             var sup = await sb.from(T_SUPERVISORES).select('no_empleado, nombre, cargo').order('nombre', { ascending: true });
             if (sup.error) throw sup.error;
             state.supervisores = sup.data || [];
-            // Todos los recorridos de todos los usuarios (por páginas de 1000):
-            // "Detalle de registros" conserva el historial completo de cada uno.
+            // Recorridos de todos los usuarios (por páginas de 1000) del periodo
+            // de la pantalla (js/setp-reportes.js: últimos 3 meses, más o todo),
+            // y los que siguen en curso aunque sean anteriores. "Ver historial"
+            // de cada supervisor siempre trae su historial completo.
+            var desde = periodoDesde();
+            state.desdeCargado = desde;
             var rec = { data: [], error: null };
             for (var from = 0; ; from += 1000) {
-                var pag = await sb.from(T_RECORRIDOS).select('*').order('registrado_en', { ascending: false }).range(from, from + 999);
+                var qr = sb.from(T_RECORRIDOS).select('*');
+                if (desde) qr = qr.or('registrado_en.gte.' + desde + ',hora_termino.is.null');
+                var pag = await qr.order('registrado_en', { ascending: false }).range(from, from + 999);
                 if (pag.error) { rec.error = pag.error; break; }
                 rec.data = rec.data.concat(pag.data || []);
                 if (!pag.data || pag.data.length < 1000) break;
@@ -164,6 +219,13 @@
         state.loaded = true;
     }
 
+    // Fecha 'YYYY-MM-DD' desde la que se cargan los datos ('' = todo el histórico).
+    function periodoDesde() {
+        var p = window.setpPeriodo;
+        var d = p && typeof p.desde === 'function' ? p.desde() : '';
+        return /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '';
+    }
+
     // Recorridos que ya salieron en un formato guardado (setp_oficio_recorridos):
     // siguen en la base y en el historial, pero ya no se muestran en la tabla.
     async function cargarEnFormato(sb) {
@@ -180,8 +242,16 @@
     // Evidencias adicionales: hallazgos cuya foto lleva "-rec-<id del recorrido>-x.jpg".
     async function cargarExtras(sb) {
         var map = {};
-        var res = await sb.from('setp_hallazgos').select('id, descripcion, evidencia_url, evidencia_path')
-            .like('evidencia_path', '%-rec-%-x.jpg').order('created_at', { ascending: true });
+        var qx = sb.from('setp_hallazgos').select('id, descripcion, evidencia_url, evidencia_path')
+            .like('evidencia_path', '%-rec-%-x.jpg');
+        // Del periodo cargado (un día antes, por la diferencia de hora con UTC).
+        var desde = state.desdeCargado;
+        if (desde) {
+            var d = new Date(desde + 'T00:00:00');
+            d.setDate(d.getDate() - 1);
+            qx = qx.gte('created_at', d.toISOString().slice(0, 10));
+        }
+        var res = await qx.order('created_at', { ascending: true });
         if (res.error) return map; // sin evidencias adicionales no se detiene la captura
         (res.data || []).forEach(function (h) {
             var m = /-rec-(.+)-x\.jpg$/.exec(h.evidencia_path || '');
@@ -190,13 +260,16 @@
         return map;
     }
 
-    // Todos los recorridos (no sólo los últimos 100) con su turno, para la
-    // tarjeta "Turno con más recorridos" de cada supervisor.
+    // Recorridos del periodo cargado con su turno, para la tarjeta
+    // "Turno con más recorridos" de cada supervisor.
     async function cargarResumen(sb) {
         var cols = 'id, no_empleado, turno';
         var all = [];
+        var desde = state.desdeCargado;
         for (var from = 0; ; from += 1000) {
-            var res = await sb.from(T_RECORRIDOS).select(cols).range(from, from + 999);
+            var qs = sb.from(T_RECORRIDOS).select(cols);
+            if (desde) qs = qs.gte('registrado_en', desde);
+            var res = await qs.range(from, from + 999);
             if (res.error && cols.indexOf('turno') >= 0 && /turno/.test(res.error.message || '')) {
                 // Sin la columna turno todavía: la captura sigue sin elegir turno.
                 state.turnoOk = false;
@@ -397,8 +470,11 @@
 
     // "No. de empleado" y "Nombre y apellido" se retiraron de la tabla: sólo queda Cargo.
     function datosSupervisor(s) {
+        // En modo administración hay recorridos de varios: se muestra quién es.
+        if (modoGestion() && s && s.nombre) return '<td><b>' + esc(s.nombre) + '</b>' + (s.cargo ? '<span class="setp-rec-dia">' + esc(s.cargo) + '</span>' : '') + '</td>';
         return '<td>' + (s && s.cargo ? esc(s.cargo) : '—') + '</td>';
     }
+
 
     function turnoLabel(key) {
         var t = TURNOS_REC.find(function (x) { return x.key === key; });
@@ -455,6 +531,7 @@
             (state.enFormato[r.id] ? '<span class="setp-rec-dia text-success"><i class="fas fa-file-signature me-1"></i>En formato guardado</span>' : '');
         else if (!canEdit() || consulta) termino = '<span class="badge text-bg-warning">En curso</span>';
         else if (state.busy[r.id] === 'finalizar') termino = '<span class="spinner-border spinner-border-sm text-danger"></span>';
+        else if (modoGestion()) termino = '<span class="badge text-bg-warning">En curso</span> <button type="button" class="btn btn-sm btn-outline-danger ms-1" data-rec="finalizar" data-id="' + esc(r.id) + '"><i class="fas fa-flag-checkered me-1"></i>Finalizar</button>';
         // Se finaliza con el botón flotante (pintarFab): aquí ya no se repite el botón.
         else termino = '<span class="badge text-bg-warning">En curso</span><span class="setp-rec-dia">Finalízalo con el botón de la esquina</span>';
         return '<tr' + (enCurso ? ' class="setp-rec-curso"' : '') + '>' + datosSupervisor(s) +
@@ -510,6 +587,9 @@
             });
             if (state.error) {
                 body += hint(state.error);
+            } else if (modoGestion()) {
+                body += hint('<i class="fas fa-user-shield me-1"></i><b>Administración:</b> ves y gestionas los recorridos, hallazgos y formatos de todos los supervisores.');
+                if (canEdit() && !recorridoEnCurso()) body += nuevoRow(miSupervisorSa() || { nombre: nombreSesion(), cargo: 'Superadmin' });
             } else if (!s) {
                 body += hint('<i class="fas fa-circle-info me-1"></i>Tu usuario no está dado de alta como supervisor, así que no puedes registrar recorridos. El nombre de tu perfil debe coincidir con el de un supervisor.');
             } else if (canEdit() && !lista.some(function (r) { return !r.hora_termino; })) {
@@ -536,6 +616,7 @@
 
     function recorridoEnCurso() {
         var s = state.selected ? supervisor(state.selected) : null;
+        if (!s && modoGestion()) s = miSupervisorSa();
         if (!s) return null;
         return state.recorridos.find(function (r) { return r.no_empleado === s.no_empleado && !r.hora_termino; }) || null;
     }
@@ -570,7 +651,7 @@
         if (!wrap) return;
         var ver = function (el) { (el || wrap).scrollIntoView({ behavior: 'smooth', block: 'center' }); };
         var s = state.selected ? supervisor(state.selected) : null;
-        if (!s) {
+        if (!s && !modoGestion()) {
             setStatus('Tu usuario no está dado de alta como supervisor, así que no puedes iniciar recorridos. El nombre de tu perfil debe coincidir con el de un supervisor.', 'warning');
             ver();
             return;
@@ -604,10 +685,11 @@
     // ---------- acciones ----------
 
     async function iniciar() {
-        var s = supervisor(state.selected);
+        var gestion = modoGestion();
+        var s = gestion ? null : supervisor(state.selected);
         var area = ($('setp-rec-area-nueva') || {}).value || '';
         area = area.trim().replace(/\s+/g, ' ');
-        if (!s || !canEdit() || state.busy.new) return;
+        if ((!s && !gestion) || !canEdit() || state.busy.new) return;
         if (!area) {
             setStatus('Elige el área de recorrido antes de iniciar.', 'warning');
             var input = $('setp-rec-area-nueva');
@@ -626,6 +708,7 @@
         render();
         try {
             var sb = await getClient();
+            if (gestion) s = await asegurarSupervisorSa(sb);
             // La hora de inicio la fija el servidor (db/setp_recorridos_captura.sql).
             var nuevo = { no_empleado: s.no_empleado, area_recorrido: area, hora_inicio: new Date().toTimeString().slice(0, 8) };
             if (turno) nuevo.turno = turno;
@@ -647,6 +730,20 @@
             delete state.busy.new;
             render();
         }
+    }
+
+    // Botón «Finalizar» del renglón (modo administración): pide confirmación como el botón flotante.
+    async function finalizarConfirmado(id) {
+        var r = state.recorridos.find(function (x) { return String(x.id) === String(id); });
+        if (!r) return;
+        var s = supervisor(r.no_empleado);
+        var ok = await confirmarBorrado(document, {
+            tono: 'ok', kicker: 'Recorrido en curso', titulo: '¿Finalizar el recorrido?',
+            filas: [['Supervisor', s ? s.nombre : r.no_empleado], ['Área de recorrido', r.area_recorrido || '—'], ['Inicio', hhmm(r.hora_inicio) + ' hrs']],
+            aviso: 'La hora de término la pone el sistema al confirmar. El recorrido sale de esta tabla y queda en Detalle de registros.',
+            boton: 'Finalizar'
+        });
+        if (ok) await finalizar(id);
     }
 
     async function finalizar(id) {
@@ -1052,7 +1149,7 @@
             var act = btn.getAttribute('data-rec');
             var id = btn.getAttribute('data-id');
             if (act === 'iniciar') iniciar();
-            else if (act === 'finalizar') finalizar(id);
+            else if (act === 'finalizar') finalizarConfirmado(id);
             else if (act === 'borrar') borrar(id);
             else if (act === 'guardar') guardarEvidencia(id);
             else if (act === 'descripcion') abrirDescripcion(id);
@@ -2369,7 +2466,8 @@
         },
         // Recorridos cargados, más recientes primero (null mientras cargan).
         recorridos: function () { return state.loaded ? state.recorridos.slice() : null; },
-        recorridosCompletos: function () { return true; }, // load() trae todos los recorridos
+        // false si load() trajo sólo el periodo reciente (barra de periodo de SETP).
+        recorridosCompletos: function () { return !state.desdeCargado; },
         enFormato: function (id) { return !!state.enFormato[id]; },
         // Todos los recorridos con su turno (null mientras cargan) y si ya existe la columna turno.
         resumen: function () { return state.loaded ? state.resumen.slice() : null; },
