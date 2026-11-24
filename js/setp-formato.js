@@ -59,6 +59,7 @@
 
     const state = {
         hallazgos: [],
+        desdeCargado: '',   // inicio de los hallazgos cargados ('' = todos); los pendientes siempre se cargan
         lastOficio: null,
         periodo: '',
         editingId: null,
@@ -557,16 +558,45 @@
 
     // Si Supabase o la tabla no están disponibles, trabaja con los hallazgos
     // guardados en este navegador (state.store = 'local').
+    // Periodo cargado (barra de periodo, js/setp-reportes.js): sólo los hallazgos
+    // reportados o solucionados desde esa fecha, más TODOS los que siguen sin
+    // seguimiento (pendientes), sin importar su fecha. Si el reporte o el formato
+    // piden un mes anterior (su seguimiento es el mes previo), se carga desde ahí.
+    function desdeCarga() {
+        var p = window.setpPeriodo;
+        var g = p && typeof p.desde === 'function' ? p.desde() : '';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(g || '')) return '';
+        var lista = [g];
+        if (/^\d{4}-\d{2}$/.test(rep.periodo || '')) lista.push(monthRange(prevMonth(rep.periodo)).start);
+        if (rep.desde) lista.push(rep.desde);
+        if (/^\d{4}-\d{2}$/.test(state.periodo || '')) lista.push(monthRange(prevMonth(state.periodo)).start);
+        return lista.sort()[0];
+    }
+
+    // true si la fecha queda antes de lo cargado y hay que volver a cargar.
+    function faltaCargar(fecha) {
+        return state.store === 'db' && !!state.desdeCargado && !!fecha && fecha < state.desdeCargado;
+    }
+
     async function loadHallazgos() {
         try {
             var sb = await getClient();
+            var desde = desdeCarga();
             var all = [];
             for (var from = 0; ; from += 1000) {
-                var res = await sb.from(T_HALLAZGOS).select('*').order('fecha_reporte', { ascending: true }).range(from, from + 999);
+                var qh = sb.from(T_HALLAZGOS).select('*');
+                if (desde) {
+                    qh = qh.or('fecha_reporte.gte.' + desde + ',fecha_solucion.gte.' + desde +
+                        ',estatus.is.null,estatus.neq.SOLUCIONADO,evidencia_solucion_url.is.null,confirmado_en.is.null');
+                }
+                var res = await qh.order('fecha_reporte', { ascending: true }).range(from, from + 999);
+                // Si el filtro falla (columna faltante), se cargan todos, como antes.
+                if (res.error && desde) { desde = ''; all = []; from = -1000; continue; }
                 if (res.error) throw res.error;
                 all = all.concat(res.data || []);
                 if (!res.data || res.data.length < 1000) break;
             }
+            state.desdeCargado = desde;
             state.hallazgos = all;
             state.store = 'db';
             // Columnas de db/setp_hallazgos_por_supervisor.sql.
@@ -593,6 +623,7 @@
             state.fmtHallazgos = enFmt;
         } catch (_) {
             state.hallazgos = readLocal();
+            state.desdeCargado = '';
             state.store = 'local';
             state.porSupervisor = false;
             state.identificacion = false;
@@ -1278,9 +1309,15 @@
         modal.querySelectorAll('[data-step]').forEach(function (b) {
             b.addEventListener('click', function () { showStep(b.getAttribute('data-step')); });
         });
-        $('setp-fmt-periodo').addEventListener('change', function (e) {
+        $('setp-fmt-periodo').addEventListener('change', async function (e) {
             if (!/^\d{4}-\d{2}$/.test(e.target.value)) return;
             state.periodo = e.target.value;
+            // Un mes anterior a lo cargado: se cargan sus hallazgos primero.
+            if (faltaCargar(monthRange(prevMonth(state.periodo)).start)) {
+                $('setp-fmt-lists').innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-2"></span>Cargando hallazgos…</div>';
+                await loadHallazgos();
+                if (state.periodo !== e.target.value) return;
+            }
             renderLists();
             if (!modal.querySelector('[data-pane="preview"]').classList.contains('d-none')) renderPreview();
         });
@@ -2081,6 +2118,28 @@
         rep.saving = true;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        // Hallazgo nuevo con foto: antes de crearlo se revisa si ya está
+        // reportado y se comparan las fotos (js/setp-comparar.js).
+        if (!prev && !v.solved && conCatalogo && v.etiqueta && v.item && rep.files.evidencia && state.store !== 'local' && window.setpComparar) {
+            var dec = { accion: 'otro' };
+            try {
+                dec = await window.setpComparar.preguntar({
+                    sb: await getClient(),
+                    q: { etiqueta: v.etiqueta, item: v.item, nivel: v.nivel, modulo: v.modulo, local: v.local },
+                    foto: rep.files.evidencia,
+                    tit: v.desc,
+                    sub: [v.nivel, v.modulo, v.local].filter(Boolean).join(' · '),
+                    nombre: nombreSupervisor
+                });
+            } catch (_) { /* sin revisión: se guarda como nuevo */ }
+            if (dec.accion !== 'otro') {
+                rep.saving = false;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save"></i>';
+                if (dec.accion === 'mismo') await repSumarAHallazgo(dec, v, rep.files.evidencia, btn);
+                return;
+            }
+        }
         try {
             var saved = await persistHallazgo(prev, v, rep.files);
             rep.editing = null;
@@ -2097,6 +2156,49 @@
             renderReport();
         } catch (error) {
             repStatus('No se pudo guardar el hallazgo: ' + hallazgoErr(error), 'danger');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save"></i>';
+        } finally {
+            rep.saving = false;
+        }
+    }
+
+    // "Es el mismo · agregar mi foto" desde Agregar hallazgo: no crea otro;
+    // suma un reporte y la foto al existente (setp_sumar_reporte de
+    // db/setp_hallazgos_identificacion.sql; sin ella, se actualiza directo).
+    async function repSumarAHallazgo(dest, v, file, btn) {
+        if (rep.saving) return;
+        rep.saving = true;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        var foto = null;
+        try {
+            var sb = await getClient();
+            foto = await uploadPhoto(file, v.fecha, 'e');
+            var extra = { url: foto.url, path: foto.path, no_empleado: (state.porSupervisor && supervisorActual()) || null, fecha: v.fecha, descripcion: v.desc };
+            var res = await sb.rpc('setp_sumar_reporte', { p_hallazgo: dest.id, p_foto: extra });
+            if (res.error) {
+                var cur = await sb.from(T_HALLAZGOS).select('veces, fotos_extra').eq('id', dest.id).single();
+                if (cur.error) throw cur.error;
+                res = await sb.from(T_HALLAZGOS).update({
+                    veces: (Number(cur.data.veces) || 1) + 1,
+                    fotos_extra: (cur.data.fotos_extra || []).concat([extra]),
+                    updated_at: new Date().toISOString()
+                }).eq('id', dest.id).select('*').single();
+                if (res.error) throw res.error;
+            }
+            var fila = res.data && res.data.id ? res.data : null;
+            if (fila) {
+                var ya = state.hallazgos.some(function (h) { return h.id === fila.id; });
+                state.hallazgos = ya ? state.hallazgos.map(function (h) { return h.id === fila.id ? fila : h; }) : state.hallazgos.concat([fila]);
+            }
+            rep.editing = null;
+            rep.files = { evidencia: null, solucion: null };
+            repStatus('<i class="fas fa-link me-1"></i>Tu foto se agregó al hallazgo <b>' + esc(dest.folio || 'registrado') + '</b> (no se creó otro).', 'success');
+            renderReport();
+        } catch (error) {
+            if (foto) removePhotos([foto.path]);
+            repStatus('No se pudo agregar la foto al hallazgo: ' + hallazgoErr(error), 'danger');
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-save"></i>';
         } finally {
@@ -2343,6 +2445,8 @@
                 rep.periodo = rep.desde.slice(0, 7);
                 rep.editing = null;
                 repStatus('');
+                // Un periodo anterior a lo cargado: se cargan sus hallazgos primero.
+                if (faltaCargar(rep.desde) || faltaCargar(monthRange(prevMonth(rep.periodo)).start)) { mountReport(rep.el); return; }
                 renderReport();
             } else if (t.matches('[data-f="etiqueta"]')) {
                 // Al cambiar la etiqueta se ofrecen sus items y condiciones.

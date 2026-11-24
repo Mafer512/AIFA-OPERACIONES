@@ -73,8 +73,8 @@ const MENSAJE_ORIGINAL = [
   '',
   'Porcentaje de variación en acumulados anuales (2025 vs 2026):',
   '',
-  'A.\tAcumulado Pasajeros del 01 de Enero al 27 Septiembre 2026: 5,575,873 (⬆️ 9.31%)',
-  'B.\tAcumulado Carga del 01 de Enero al 27 Septiembre 2026: 308,408 (⬆️ 6.53%)'
+  'A.\tAcumulado Pasajeros del 1 de enero al 27 septiembre 2026: 5,575,873 (⬆️ 9.31%)',
+  'B.\tAcumulado Carga del 1 de enero al 27 septiembre 2026: 308,408 (⬆️ 6.53%)'
 ].join('\n');
 
 const t = (total, nacional, internacional) => ({ total, nacional, internacional });
@@ -184,8 +184,8 @@ describe('el texto', () => {
       anioAnterior: { pax: 1000, carga: 0 }
     });
     expect(baja).toContain('A. Acumulado del mes de Mar. 2026');
-    expect(baja).toContain('A.\tAcumulado Pasajeros del 01 de Enero al 05 Marzo 2026: 900 (⬇️ 10.00%)');
-    expect(baja).toContain('B.\tAcumulado Carga del 01 de Enero al 05 Marzo 2026: 50 (sin dato de 2025)');
+    expect(baja).toContain('A.\tAcumulado Pasajeros del 1 de enero al 5 marzo 2026: 900 (⬇️ 10.00%)');
+    expect(baja).toContain('B.\tAcumulado Carga del 1 de enero al 5 marzo 2026: 50 (sin dato de 2025)');
   });
 
   test('la comparación es contra el mismo día del año anterior; el 29 de febrero cae en el 28', () => {
@@ -229,8 +229,8 @@ describe('las cifras salen de los oficios a la Subsecretaría', () => {
     // El año anterior, solo hasta el mismo día: el 1 de octubre de 2025 no entra.
     expect(r.anioAnterior).toEqual({ pax: 400, carga: 2 });
     const texto = api.componer(r);
-    expect(texto).toContain('A.\tAcumulado Pasajeros del 01 de Enero al 27 Septiembre 2026: 650 (⬆️ 62.50%)');
-    expect(texto).toContain('B.\tAcumulado Carga del 01 de Enero al 27 Septiembre 2026: 16 (⬆️ 700.00%)');
+    expect(texto).toContain('A.\tAcumulado Pasajeros del 1 de enero al 27 septiembre 2026: 650 (⬆️ 62.50%)');
+    expect(texto).toContain('B.\tAcumulado Carga del 1 de enero al 27 septiembre 2026: 16 (⬆️ 700.00%)');
   });
 });
 
