@@ -4,12 +4,15 @@
   const { $, html, mount, on } = SIGEC.use('core/dom');
   const { relative, initials } = SIGEC.use('core/format');
   const session = SIGEC.use('core/session');
+  const { conectar, salir } = SIGEC.use('core/conexion');
   const { initTheme, toggleTheme, isDark, onThemeChange } = SIGEC.use('core/theme');
   const { startRouter, rerender } = SIGEC.use('core/router');
   const { toast } = SIGEC.use('core/ui');
   const { getNotificaciones, contarPendientes } = SIGEC.use('data/api');
   const { NOTIF_KEYS } = SIGEC.use('data/catalogs');
-  const u = session.user();
+  const cfg = window.SIGEC_CONFIG || {};
+  const delSistema = cfg.sesionDelSistema === true && !window.SIGEC_ENV.embed;
+  let u = session.user();
 
   function init() {
     initTheme();
@@ -19,7 +22,8 @@
     startRouter({ user: u, can: session.can });
     loadNotifications();
     refreshBadge();
-    session.watchIdle(() => toast('Tu sesión se cerrará en menos de un minuto por inactividad. Mueve el cursor o presiona una tecla para continuar.', 'warn', 9000));
+    // Con la sesión de AIFA Operaciones, el cierre por inactividad lo decide el sistema.
+    if (!delSistema) session.watchIdle(() => toast('Tu sesión se cerrará en menos de un minuto por inactividad. Mueve el cursor o presiona una tecla para continuar.', 'warn', 9000));
     onThemeChange(() => { syncThemeLabel(); rerender(); });
     syncThemeLabel();
   }
@@ -58,7 +62,7 @@
     window.addEventListener('hashchange', () => setNav(false));
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setNav(false); });
 
-    on(document, 'click', '[data-action="logout"]', () => session.signOut());
+    on(document, 'click', '[data-action="logout"]', () => (delSistema ? salir() : session.signOut()));
     on(document, 'click', '[data-action="toggle-theme"]', () => toggleTheme());
     on(document, 'click', '[data-action="notif-read-all"]', () => {
       readIds = new Set(notifs.map((n) => n.id));
@@ -117,7 +121,35 @@
     b.title = `${n} incidencias pendientes`;
   }
 
+  /** Aviso a pantalla completa cuando no se puede entrar (sin acceso, falta el SQL…). */
+  function aviso(titulo, texto) {
+    document.title = 'Calidad · SIGEC · AIFA';
+    mount($('#view'), html`<div class="card-x">${SIGEC.use('core/ui').empty(titulo, texto, 'bi-shield-lock')}
+      <div class="text-center pb-4"><a class="btn btn-brand" href="${window.SIGEC_CONFIG.portalUrl || '../index.html'}"><i class="bi bi-arrow-left" aria-hidden="true"></i>Volver a AIFA Operaciones</a></div></div>`);
+    $('#nav-list').hidden = true;
+  }
+
+  async function arrancar() {
+    if (delSistema) {
+      const pie = $('#footer-mode');
+      if (pie && pie.lastChild) pie.lastChild.textContent = ' Sesión de AIFA Operaciones';
+      let r;
+      try { r = await conectar(); } catch (e) { r = { estado: 'error', error: e }; }
+      if (r.estado === 'sin-sesion') { window.SIGEC_ENV.goLogin(''); return; }
+      if (r.estado === 'sin-acceso') { aviso('Sin acceso a Calidad', 'Tu cuenta no tiene este módulo. Solicítalo al administrador de AIFA Operaciones.'); return; }
+      if (r.estado !== 'ok') {
+        const falta = /calidad_mi_rol|could not find the function|PGRST202|42883/i.test(`${r.error?.code || ''} ${r.error?.message || ''}`);
+        aviso('No fue posible abrir Calidad', falta
+          ? 'Calidad aún no está instalado en la base de datos: falta correr db/calidad_sigec.sql en Supabase.'
+          : 'No hay conexión con la base de datos. Revisa tu red y recarga la página.');
+        return;
+      }
+      u = session.user();
+    }
+    if (!u) session.signOut();
+    else init();
+  }
+
   // Arranque (al final: las declaraciones de módulo ya están inicializadas)
-  if (!u) session.signOut();
-  else init();
+  arrancar();
 })();

@@ -53,11 +53,6 @@
   };
   Object.defineProperty(window, 'SIGEC_ENV', { value: Object.freeze(ENV) });
 
-  // Módulo que solo vive dentro del sistema anfitrión: abierto suelto, se va allá.
-  if (cfg.soloIncrustado === true && !embed && safe(cfg.portalUrl)) {
-    window.location.replace(new URL(safe(cfg.portalUrl), window.location.href).href);
-    return;
-  }
 
   function read(key) {
     try { return window.localStorage.getItem(key); } catch (e) { return null; }
@@ -85,5 +80,6 @@
       if (!ok) window.sessionStorage.removeItem('sigec.session');
     } catch (e) { ok = false; }
   }
-  if (!ok) ENV.goLogin(raw ? 'inactividad' : '');
+  // Con la sesión del sistema, app.js la toma de AIFA Operaciones al arrancar.
+  if (!ok && !(cfg.sesionDelSistema === true && !embed)) ENV.goLogin(raw ? 'inactividad' : '');
 })();

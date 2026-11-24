@@ -3,31 +3,32 @@
  * Es público (lo descarga el navegador): no pongas aquí contraseñas ni la
  * llave service_role de Supabase.
  *
- * Integrado en AIFA Operaciones (Edificio Terminal → Calidad): la sesión, el
- * rol y la conexión a la base los entrega el sistema; ver js/calidad-host.js.
+ * Integrado en AIFA Operaciones: el menú Edificio Terminal → Calidad (SIGEC)
+ * abre esta página en una pestaña nueva (js/calidad-host.js). La cuenta, el rol
+ * y la conexión a la base son los de AIFA Operaciones (js/core/conexion.js).
  */
 window.SIGEC_CONFIG = {
   // true  = login de demostración (acepta cualquier contraseña). SOLO para pruebas.
   // false = exige `autenticar` o una sesión entregada por el sistema anfitrión.
   modoDemo: false,
 
-  // Minutos de inactividad antes de cerrar la sesión. Dentro de AIFA Operaciones
-  // la renueva el sistema mientras su sesión siga abierta.
+  // true = la sesión es la de AIFA Operaciones en este navegador: no se pide
+  // contraseña; sin sesión se va a loginUrl. El rol lo da la base (calidad_mi_rol).
+  sesionDelSistema: true,
+
+  // Minutos de inactividad antes de cerrar la sesión (con sesionDelSistema, la
+  // gobierna AIFA Operaciones).
   minutosInactividad: 15,
 
   // Página a la que se envía a quien no tiene sesión. null = login.html del módulo.
   loginUrl: '../index.html',
 
   // Enlace "Volver" del menú lateral. null = oculto.
-  portalUrl: '../index.html#calidad',
+  portalUrl: '../index.html',
   portalNombre: 'AIFA Operaciones',
 
-  // true = el módulo solo funciona dentro de AIFA Operaciones: si se abre suelto
-  // (calidad/index.html), se envía a portalUrl.
-  soloIncrustado: true,
-
-  // Cliente de Supabase con la sesión ya iniciada. El módulo vive en un iframe
-  // del mismo sitio, así que usa el del sistema: mismo usuario, mismas reglas (RLS).
+  // Cliente de Supabase. Suelto: el de ../js/supabase-client.js (misma base y
+  // misma sesión que AIFA Operaciones). Incrustado en un iframe: el del sistema.
   supabase: function () {
     try {
       if (window.parent && window.parent !== window && window.parent.supabaseClient) return window.parent.supabaseClient;

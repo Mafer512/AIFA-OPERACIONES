@@ -1,6 +1,6 @@
 # Integrar el módulo SIGEC · Calidad
 
-Ya está integrado en AIFA Operaciones (ver [README.md](README.md)). Esta guía queda para entender las piezas o repetir la integración en otro sistema.
+Ya está integrado en AIFA Operaciones como **pestaña propia** (ver [README.md](README.md)): el menú abre `calidad/index.html` y la página toma la sesión de Supabase del sitio (`sesionDelSistema: true`). Esta guía describe además la opción de incrustarlo en un iframe.
 
 ## 1. La carpeta
 
@@ -31,8 +31,6 @@ calidad.desmontar();             // al salir
 SigecCalidad.cerrarSesion();     // al cerrar sesión en el sistema
 ```
 
-En AIFA Operaciones todo esto lo hace `js/calidad-host.js`.
-
 El contenedor necesita una altura definida, por ejemplo `.vista-calidad { height: calc(100vh - 190px); }`. También se puede pasar `alto: '800px'` a `montar`.
 
 El módulo se muestra en un `<iframe>` del mismo sitio. En este modo se ocultan su encabezado y su menú lateral, y la navegación queda en una barra superior.
@@ -46,7 +44,7 @@ El módulo se muestra en un `<iframe>` del mismo sitio. En este modo se ocultan 
 |---|---|
 | `modoDemo` | `true` acepta cualquier contraseña en `login.html`. Debe quedar en `false`. |
 | `supabase` | Función que devuelve el cliente de Supabase con la sesión iniciada. Por defecto, el del sistema anfitrión (`window.parent.supabaseClient`). |
-| `soloIncrustado` | `true`: abierta suelta, la página se va a `portalUrl`. |
+| `sesionDelSistema` | `true`: la cuenta es la de la sesión de Supabase del sitio; el rol lo da `calidad_mi_rol()`. |
 | `loginUrl` | Página a la que se envía a quien no tiene sesión. |
 | `portalUrl`, `portalNombre` | Enlace "Volver a …" del menú lateral. |
 | `minutosInactividad` | Minutos antes de cerrar la sesión (el anfitrión la renueva). |

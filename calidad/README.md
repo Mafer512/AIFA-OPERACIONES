@@ -4,8 +4,8 @@ Plataforma de calidad del Edificio Terminal: incidencias de equipaje, encuestas 
 
 ## Cómo está integrado en AIFA Operaciones
 
-- **Menú:** Edificio Terminal (GOET) → **Calidad (SIGEC)**. La sección `#calidad-section` de `index.html` monta esta carpeta en un `<iframe>` del mismo sitio con `calidad/modulo.js`, así sus estilos y su Bootstrap no chocan con los del sistema.
-- **Sesión:** la entrega `js/calidad-host.js`, con la cuenta conectada en AIFA Operaciones. Mientras esa sesión siga abierta, la del módulo no caduca; al cerrarla, el módulo se cierra con ella. Abierta suelta (`calidad/index.html`), la página regresa al sistema (`soloIncrustado` en `js/config.js`).
+- **Menú:** Edificio Terminal (GOET) → **Calidad (SIGEC)** abre `calidad/index.html` en su propia pestaña (`js/calidad-host.js`), con su diseño completo. Si ya estaba abierta, solo se trae al frente.
+- **Sesión:** la misma cuenta con la que se entró a AIFA Operaciones en ese navegador: la página usa `../js/supabase-client.js` (misma base) y la sesión que Supabase guarda para el sitio (`js/core/conexion.js`). No pide contraseña; sin sesión manda al inicio de AIFA Operaciones. Al cerrar sesión en el sistema (en cualquier pestaña), Calidad se cierra; «Cerrar sesión» en Calidad cierra la de todo el sistema.
 - **Rol:** lo calcula la base con `calidad_mi_rol()`, a partir del nivel del módulo «Calidad (SIGEC)» en Administración de usuarios:
 
   | Nivel en Administración de usuarios | Rol en Calidad | Qué puede hacer |
@@ -52,4 +52,4 @@ vendor/                     Bootstrap 5.3.3, Bootstrap Icons 1.11.3, Chart.js 4.
 
 ## Desarrollo suelto
 
-`npm run dev` levanta un servidor local (http://127.0.0.1:8080) con las mismas cabeceras de seguridad que producción. Con `soloIncrustado: true` la página regresa a AIFA Operaciones; para probarla sola, ponlo en `false` y entrega un cliente de Supabase en `supabase` y un `autenticar` en `js/config.js`.
+Para probarla, sirve la raíz del repositorio (necesita `../js/supabase-client.js`) e inicia sesión primero en AIFA Operaciones. `calidad/modulo.js` sigue permitiendo incrustarla en un iframe si algún día se prefiere (ver INTEGRACION.md).

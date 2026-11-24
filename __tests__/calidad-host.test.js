@@ -1,7 +1,7 @@
 /**
- * Calidad (SIGEC) en Edificio Terminal: el menú lo muestra en GOET, la sección
- * monta calidad/ en un iframe con la cuenta conectada y el rol que da la base,
- * y la sesión del módulo vive y muere con la de AIFA Operaciones.
+ * Calidad (SIGEC) en Edificio Terminal: el menú lo muestra en GOET y lo abre en
+ * su propia pestaña. Allí la cuenta es la de AIFA Operaciones (misma sesión de
+ * Supabase) y el rol lo da la base.
  */
 const fs = require('fs');
 const path = require('path');
@@ -17,14 +17,13 @@ describe('piezas en su lugar', () => {
     const goet = index.slice(index.indexOf('id="sg-goet"'), index.indexOf('<!-- GSO -->'));
     expect(goet).toContain('data-section="calidad"');
     expect(goet.indexOf('data-section="calidad"')).toBeGreaterThan(goet.indexOf('data-section="setp"'));
-    expect(index).toMatch(/<div id="calidad-section" class="content-section">[\s\S]*?<div id="vista-calidad" class="vista-calidad"><\/div>/);
+    // Si el navegador bloquea la pestaña, la sección ofrece abrirla con un enlace.
+    expect(index).toMatch(/<div id="calidad-section" class="content-section">[\s\S]*?href="calidad\/index.html#\/inicio" target="aifa-calidad"/);
   });
 
-  test('carga el cargador del módulo antes del archivo que lo monta', () => {
-    const a = index.indexOf('<script src="calidad/modulo.js');
-    const b = index.indexOf('<script src="js/calidad-host.js');
-    expect(a).toBeGreaterThan(0);
-    expect(b).toBeGreaterThan(a);
+  test('carga el archivo que abre la pestaña; ya no incrusta el módulo', () => {
+    expect(index).toContain('<script src="js/calidad-host.js');
+    expect(index).not.toContain('<script src="calidad/modulo.js');
   });
 
   test('es un módulo que se asigna en Administración de usuarios (GOET dentro de SSO)', () => {
@@ -47,9 +46,12 @@ describe('piezas en su lugar', () => {
     expect(html).toContain("img-src 'self' data: blob: https://*.supabase.co");
     const srcs = [...html.matchAll(/<script src="([^"]+)"/g)].map((m) => m[1]);
     srcs.forEach((s) => expect(fs.existsSync(path.join(raiz, 'calidad', s))).toBe(true));
+    // Supabase local (la CSP no permite CDN) y la misma configuración que AIFA Operaciones.
+    expect(srcs).toEqual(expect.arrayContaining(['vendor/supabase/supabase.js', '../js/supabase-client.js', 'js/core/conexion.js']));
+    expect(srcs.indexOf('../js/supabase-client.js')).toBeGreaterThan(srcs.indexOf('vendor/supabase/supabase.js'));
     const cfg = leer('calidad/js/config.js');
     expect(cfg).toMatch(/modoDemo: false/);
-    expect(cfg).toMatch(/soloIncrustado: true/);
+    expect(cfg).toMatch(/sesionDelSistema: true/);
     expect(cfg).not.toMatch(/eyJ[a-zA-Z0-9_-]{20,}/);   // ninguna llave en el archivo público
     expect(fs.existsSync(path.join(raiz, 'calidad/js/data/mock.js'))).toBe(false);
   });
@@ -65,116 +67,98 @@ describe('piezas en su lugar', () => {
   });
 });
 
-// ── El montaje ──────────────────────────────────────────────────────────────
-function anfitrion({ rol = 'capturista', rpcFalla = false, nivel = 'read' } = {}) {
-  const dom = new JSDOM(`<!doctype html><html><head></head><body>
-    <div id="calidad-section" class="content-section"><div id="vista-calidad" class="vista-calidad"></div></div>
+// ── El menú abre una pestaña ────────────────────────────────────────────────
+function anfitrion({ bloqueada = false } = {}) {
+  const dom = new JSDOM(`<!doctype html><html><body>
+    <nav><a class="menu-item" href="#" data-section="calidad"><span>Calidad (SIGEC)</span></a>
+         <a class="menu-item" href="#" data-section="setp">SETP</a></nav>
+    <div id="calidad-section" class="content-section"></div>
   </body></html>`, { url: 'http://localhost/index.html', runScripts: 'outside-only' });
   const w = dom.window;
-  const intervalos = [];
-  const esperas = [];
-  w.setInterval = (fn) => { intervalos.push(fn); return intervalos.length; };
-  w.clearInterval = () => {};
-  w.setTimeout = (fn) => { esperas.push(fn); return esperas.length; };
-  w.sessionStorage.setItem('currentUser', 'ana.ruiz@aifa.operaciones');
-  w.sessionStorage.setItem('user_fullname', 'Ana Ruiz Gómez');
-  w.sessionStorage.setItem('user_role', 'viewer');
-  w.sessionStorage.setItem('user_area', 'GOET');
-  const llamadas = [];
-  w.supabaseClient = {
-    rpc: async (nombre) => {
-      llamadas.push(nombre);
-      return rpcFalla ? { data: null, error: { code: 'PGRST202', message: 'Could not find the function' } } : { data: rol, error: null };
-    },
-  };
-  w.sectionLevel = () => nivel;
-  Object.defineProperty(w.document, 'currentScript', { configurable: true, get: () => ({ src: 'http://localhost/calidad/modulo.js?v=20261123' }) });
-  w.eval(leer('calidad/modulo.js'));
+  const abiertas = [];
+  const secciones = [];
+  w.open = (url, nombre) => { abiertas.push([url, nombre]); return bloqueada ? null : { focus() {} }; };
+  w.showSection = (k) => secciones.push(k);
+  // El manejador del menú del sistema (se registra antes, como en script.js).
+  w.document.addEventListener('click', (e) => {
+    const a = e.target.closest('[data-section]');
+    if (a) w.showSection(a.dataset.section);
+  });
   w.eval(leer('js/calidad-host.js'));
-  const activar = async () => {
-    w.document.getElementById('calidad-section').classList.add('active');
-    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
-  };
-  const sesion = () => JSON.parse(w.sessionStorage.getItem('sigec.session') || 'null');
-  const iframe = () => w.document.querySelector('#vista-calidad iframe');
-  return { w, activar, sesion, iframe, intervalos, esperas, llamadas };
+  const clic = (sel) => w.document.querySelector(sel).dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
+  return { w, abiertas, secciones, clic };
 }
 
-describe('al abrir la sección', () => {
-  test('monta el módulo con la cuenta conectada y el rol que da la base', async () => {
-    const h = anfitrion({ rol: 'capturista' });
-    expect(h.iframe()).toBeNull();                    // nada hasta abrir la sección
-    await h.activar();
-    expect(h.llamadas).toEqual(['calidad_mi_rol']);
-    expect(h.iframe().src).toBe('http://localhost/calidad/index.html?embed=1#/inicio');
-    expect(h.sesion().user).toEqual({ username: 'ana.ruiz@aifa.operaciones', name: 'Ana Ruiz Gómez', role: 'capturista', area: 'GOET' });
-  });
-
-  test('al recargar en #calidad espera a que se restaure la sesión', async () => {
+describe('el enlace del menú', () => {
+  test('abre Calidad en su propia pestaña sin cambiar la pantalla del sistema', () => {
     const h = anfitrion();
-    h.w.sessionStorage.removeItem('currentUser');
-    await h.activar();
-    expect(h.iframe()).toBeNull();
-    expect(h.esperas).toHaveLength(1);
-    h.w.sessionStorage.setItem('currentUser', 'ana.ruiz@aifa.operaciones');
-    h.esperas.shift()();
-    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
-    expect(h.iframe()).not.toBeNull();
+    h.clic('[data-section="calidad"] span');
+    expect(h.abiertas).toEqual([['calidad/index.html#/inicio', 'aifa-calidad']]);
+    expect(h.secciones).toEqual([]);
   });
 
-  test('volver a la sección no recarga el módulo', async () => {
+  test('los demás módulos siguen igual', () => {
     const h = anfitrion();
-    await h.activar();
-    const primero = h.iframe();
-    h.w.document.getElementById('calidad-section').classList.remove('active');
-    await h.activar();
-    expect(h.iframe()).toBe(primero);
+    h.clic('[data-section="setp"]');
+    expect(h.abiertas).toEqual([]);
+    expect(h.secciones).toEqual(['setp']);
   });
 
-  test('sin acceso en la base, un aviso en lugar del módulo', async () => {
-    const h = anfitrion({ rol: null });
-    await h.activar();
-    expect(h.iframe()).toBeNull();
-    expect(h.w.document.querySelector('.vista-calidad__aviso').textContent).toContain('Sin acceso a Calidad');
-    expect(h.sesion()).toBeNull();
-  });
-
-  test('sin la función en la base (falta el SQL), usa el nivel del menú', async () => {
-    const h = anfitrion({ rpcFalla: true, nivel: 'edit' });
-    await h.activar();
-    expect(h.sesion().user.role).toBe('supervisor');
-    expect(h.iframe()).not.toBeNull();
+  test('si el navegador bloquea la pestaña, muestra la sección con el botón para abrirla', () => {
+    const h = anfitrion({ bloqueada: true });
+    h.clic('[data-section="calidad"]');
+    expect(h.secciones).toEqual(['calidad']);
   });
 });
 
-describe('la sesión del módulo sigue a la de AIFA Operaciones', () => {
-  test('mientras siga abierta, la renueva', async () => {
-    const h = anfitrion();
-    await h.activar();
-    const s = h.sesion();
-    s.lastActivity = 1;
-    h.w.sessionStorage.setItem('sigec.session', JSON.stringify(s));
-    h.intervalos.forEach((fn) => fn());
-    expect(h.sesion().lastActivity).toBeGreaterThan(1);
+// ── En la pestaña de Calidad: la sesión sale de AIFA Operaciones ────────────
+function pestana({ user = { id: 'u1', email: 'ana.ruiz@aifa.operaciones', user_metadata: { full_name: 'Ana Ruiz Gómez' } }, rol = 'capturista', rpcError = null } = {}) {
+  const w = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/calidad/index.html', runScripts: 'outside-only' }).window;
+  const eventos = [];
+  const destinos = [];
+  const cliente = {
+    auth: {
+      getSession: async () => ({ data: { session: user ? { user } : null }, error: null }),
+      onAuthStateChange: (fn) => { eventos.push(fn); return { data: { subscription: { unsubscribe() {} } } }; },
+      signOut: async () => ({ error: null }),
+    },
+    rpc: async () => (rpcError ? { data: null, error: rpcError } : { data: rol, error: null }),
+    from: () => ({ select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: { full_name: 'Ana del Perfil' }, error: null }) }),
+  };
+  w.SIGEC_CONFIG = { sesionDelSistema: true, supabase: () => cliente };
+  w.SIGEC_ENV = { embed: false, goLogin: (r) => destinos.push(r) };
+  w.eval(leer('calidad/js/sigec.js'));
+  w.eval(leer('calidad/js/core/conexion.js'));
+  const sesion = () => JSON.parse(w.sessionStorage.getItem('sigec.session') || 'null');
+  return { w, conexion: w.SIGEC.use('core/conexion'), sesion, eventos, destinos };
+}
+
+describe('la pestaña de Calidad toma la sesión de AIFA Operaciones', () => {
+  test('misma cuenta, sin pedir contraseña, con el rol que da la base', async () => {
+    const p = pestana();
+    expect(await p.conexion.conectar()).toEqual({ estado: 'ok' });
+    expect(p.sesion().user).toMatchObject({ username: 'ana.ruiz@aifa.operaciones', name: 'Ana Ruiz Gómez', role: 'capturista' });
   });
 
-  test('al cerrar sesión en AIFA Operaciones, Calidad se cierra con ella', async () => {
-    const h = anfitrion();
-    await h.activar();
-    h.w.sessionStorage.removeItem('currentUser');     // lo que hace performLogout
-    h.intervalos.forEach((fn) => fn());
-    expect(h.iframe()).toBeNull();
-    expect(h.sesion()).toBeNull();
+  test('sin nombre en la cuenta, lo toma de su perfil', async () => {
+    const p = pestana({ user: { id: 'u1', email: 'ana.ruiz@aifa.operaciones', user_metadata: {} } });
+    await p.conexion.conectar();
+    expect(p.sesion().user.name).toBe('Ana del Perfil');
   });
 
-  test('si el módulo se queda sin sesión, se le vuelve a entregar sin recargar todo el sistema', async () => {
-    const h = anfitrion();
-    await h.activar();
-    h.w.sessionStorage.removeItem('sigec.session');
-    expect(typeof h.iframe().sigecAlSalir).toBe('function');
-    h.iframe().sigecAlSalir('inactividad');
-    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
-    expect(h.sesion().user.username).toBe('ana.ruiz@aifa.operaciones');
-    expect(h.iframe()).not.toBeNull();
+  test('sin sesión en el sistema, o sin el módulo, no entra', async () => {
+    expect(await pestana({ user: null }).conexion.conectar()).toEqual({ estado: 'sin-sesion' });
+    const p = pestana({ rol: null });
+    expect(await p.conexion.conectar()).toEqual({ estado: 'sin-acceso' });
+    expect(p.sesion()).toBeNull();
+    expect((await pestana({ rpcError: { code: 'PGRST202' } }).conexion.conectar()).estado).toBe('error');
+  });
+
+  test('al cerrar sesión en AIFA Operaciones (en otra pestaña), Calidad se cierra', async () => {
+    const p = pestana();
+    await p.conexion.conectar();
+    p.eventos.forEach((fn) => fn('SIGNED_OUT'));
+    expect(p.sesion()).toBeNull();
+    expect(p.destinos).toEqual(['']);
   });
 });

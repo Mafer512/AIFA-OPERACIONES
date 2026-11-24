@@ -147,7 +147,10 @@ describe('descargar el resumen', () => {
         expect(escrito).toContain('Plan de ayudas visuales');
         expect(escrito).toContain('A tiempo · 1 día antes');
         expect(escrito).toContain('3 días tarde');
-        expect(escrito).toContain('6 días de atraso');
+        // La pantalla usa la fecha real: el atraso de «Manual SMS» (venció el 12/11) crece cada día.
+        const hoyLocal = new Date(); hoyLocal.setHours(0, 0, 0, 0);
+        const atraso = Math.round((hoyLocal - new Date(2026, 10, 12)) / 86400000);
+        expect(escrito).toContain(`${atraso} días de atraso`);
         expect(modal().hidden).toBe(true);   // se cierra al descargar
     });
 

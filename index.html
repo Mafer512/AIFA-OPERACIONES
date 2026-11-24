@@ -6983,15 +6983,22 @@ FF
                     <div id="setp-root"></div>
                 </div>
 
-                <!-- Calidad · SIGEC: la página vive en calidad/ y se monta en un iframe (js/calidad-host.js) -->
+                <!-- Calidad · SIGEC: se abre en su propia pestaña (calidad/, js/calidad-host.js).
+                     Esta sección solo aparece si el navegador bloqueó la pestaña o se llega por #calidad. -->
                 <div id="calidad-section" class="content-section">
-                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
-                        <div>
-                            <h2 class="section-heading mb-0"><i class="fas fa-award me-2"></i>Calidad · SIGEC</h2>
-                            <small class="text-muted">Gerencia de Operaciones · Edificio Terminal — incidencias de equipaje, encuestas y documentación</small>
+                    <div class="mb-3">
+                        <h2 class="section-heading mb-0"><i class="fas fa-award me-2"></i>Calidad · SIGEC</h2>
+                        <small class="text-muted">Gerencia de Operaciones · Edificio Terminal — incidencias de equipaje, encuestas y documentación</small>
+                    </div>
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body text-center py-5">
+                            <i class="fas fa-up-right-from-square fa-2x text-muted mb-3"></i>
+                            <p class="mb-3">Calidad se abre en una pestaña aparte, con la misma cuenta.</p>
+                            <a class="btn btn-primary" href="calidad/index.html#/inicio" target="aifa-calidad">
+                                <i class="fas fa-award me-2"></i>Abrir Calidad (SIGEC)
+                            </a>
                         </div>
                     </div>
-                    <div id="vista-calidad" class="vista-calidad"></div>
                 </div>
 
                 <!-- FIDS Section -->
@@ -41938,8 +41945,7 @@ FF
     <script src="js/setp-reportes.js?v=33"></script>
     <script src="js/setp-recorridos.js?v=67"></script>
     <script src="js/setp-formato.js?v=43"></script>
-    <script src="calidad/modulo.js?v=20261123"></script>
-    <script src="js/calidad-host.js?v=20261123"></script>
+    <script src="js/calidad-host.js?v=20261124"></script>
 
     <script src="js/miscelanea.js?v=1"></script>
     <script src="js/marca-agua.js?v=1"></script>
