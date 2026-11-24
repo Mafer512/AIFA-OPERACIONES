@@ -35654,6 +35654,7 @@ async function _conciSaveBulkEdits() {
         { key: 'fids',                 label: 'FIDS',                    icon: 'tv',                group: 'Módulos' },
         { key: 'bhs',                  label: 'BHS',                     icon: 'conveyor-belt',     group: 'Módulos' },
         { key: 'setp',                 label: 'Supervisores de Edificio Terminal', icon: 'user-tie', group: 'Módulos' },
+        { key: 'calidad',              label: 'Calidad (SIGEC)',         icon: 'award',             group: 'Módulos' },
         { key: 'ssei-derrames',        label: 'SSEI · Derrames',         icon: 'fire-extinguisher', group: 'Módulos' },
         { key: 'ssei-emergencias',     label: 'SSEI · Emergencias',      icon: 'triangle-exclamation', group: 'Módulos' },
         { key: 'personal-capacitado-prestadores', label: 'Personal capacitado', icon: 'user-graduate', group: 'Módulos' },
@@ -35712,7 +35713,7 @@ async function _conciSaveBulkEdits() {
                 // GOPA
                 'abordadores-mecanicos', 'biblioteca',
                 // GOET
-                'bhs', 'setp',
+                'bhs', 'setp', 'calidad',
                 // GSO
                 'fauna', 'ssei-derrames', 'ssei-emergencias',
                 // GSM
