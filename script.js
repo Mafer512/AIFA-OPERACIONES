@@ -20827,6 +20827,237 @@ function _conciRowIsCargo(row, optypeCol, airlineCol) {
     return false;
 }
 
+// ── Aerolíneas MIXTAS y cómo cuenta cada fila en los totales ─────────────────
+//
+// Mixtas: aerolíneas de pasajeros que también llevan carga (Volaris,
+// Aeroméxico, Viva Aerobus, Mexicana y Conviasa). La lista es la del catálogo
+// de carga (js/conci-carga-catalogo.js, grupo 'mixta'), la misma del oficio de
+// carga.
+//
+// Regla de las tarjetas de la tabla. Sólo aplica a las mixtas; las cargueras y
+// las demás aerolíneas siguen igual (carguera: operación de carga y kilos):
+//   · Cada fila de mixta es un vuelo: UNA operación de pasajeros, sus
+//     pasajeros y sus kilos de carga (aunque no traiga pasajeros, como el
+//     carguero de una mixta o el vuelo aún sin capturar). Nunca cuenta
+//     operación de carga.
+//   · Excepción: la fila SIN pasajeros que es la carga aparte de un vuelo de
+//     pasajeros ya contado: misma aerolínea, número, fecha y sentido, y la
+//     MISMA hora de slot (las dos filas deben traerla). Sólo suma sus kilos,
+//     sin operación, y se queda en la tabla. Si hay más de un vuelo así, no se
+//     elige: cuenta como vuelo y se marca para revisión.
+//   · Los vuelos de una mixta con el mismo número, fecha y sentido cuentan
+//     todos, pero si dos comparten la hora de slot o a alguno le falta, se
+//     marcan para revisión: un vuelo diario retrasado puede caer el mismo día
+//     que el del día siguiente.
+//   · Las filas "Solo Vuelos" (itinerario sin manifiesto) y las marcadas
+//     INFORMATIVO quedan fuera de esta regla.
+
+// Fecha de corte (AAAA-MM-DD, contra la FECHA de operación de cada fila) de la
+// regla de mixtas, la marca "Revisar" y la sección INFORMATIVOS. Las filas
+// anteriores, o sin FECHA legible, se cuentan y se muestran exactamente como
+// antes: los días ya cerrados no cambian. null = la regla nueva todavía no
+// aplica a ninguna fecha.
+// Confirmada: 25/11/2026.
+const _CONCI_REGLA_MIXTAS_DESDE = '2026-11-25';
+
+// Nombre de la mixta en el catálogo de carga, o '' si la aerolínea no es mixta.
+function _conciAerolineaMixta(row, airlineCol, cache) {
+    const catalogo = window.ConciCargaCatalogo;
+    if (!row || !catalogo || typeof catalogo.entradaDe !== 'function') return '';
+    // Al cerrar se congela la aerolínea que se reportó (066): si está, manda.
+    const bruto = String(row.cierre_aerolinea_reportada || (airlineCol ? row[airlineCol] : '') || '').trim();
+    if (!bruto) return '';
+    if (cache && cache.has(bruto)) return cache.get(bruto);
+    let nombre = '';
+    try {
+        const meta = typeof _conciResolveAirlineMeta === 'function' ? _conciResolveAirlineMeta(bruto) : null;
+        const entrada = catalogo.entradaDe(meta && meta.name ? meta.name : bruto, meta && meta.iata ? meta.iata : '');
+        nombre = entrada && entrada.grupo === 'mixta' ? entrada.nombre : '';
+    } catch (_) {
+        nombre = '';
+    }
+    if (cache) cache.set(bruto, nombre);
+    return nombre;
+}
+
+function _conciEsAerolineaMixta(row, airlineCol) {
+    return !!_conciAerolineaMixta(row, airlineCol);
+}
+
+// Columnas que usa la regla, resueltas una vez por cálculo.
+function _conciColumnasDeTotales(columns) {
+    const cols = columns || [];
+    return {
+        airlineCol: _conciSummaryFindColumn(cols, key => key.includes('AEROLINEA') || key.includes('AIRLINE')),
+        optypeCol: _conciSummaryFindColumn(cols, key =>
+            (key.includes('TIPO') && key.includes('OPER')) || key.includes('SERVICETYPE')
+        ),
+        totalPaxCol: _conciSummaryFindColumn(cols, key => key === 'TOTALPAX' || key.includes('TOTALPAX')),
+        cargoCols: _conciSummaryCargoColumns(cols),
+        vueloCol: _conciSummaryFindColumn(cols, key => key === 'DEVUELO'),
+        fechaCol: _conciSummaryFindColumn(cols, key => key === 'FECHA'),
+        tipoCol: _conciSummaryFindColumn(cols, key => key.includes('TIPO') && key.includes('MANIF')),
+        slotCol: _conciSummaryFindColumn(cols, key => key === 'SLOTASIGNADO'),
+    };
+}
+
+// Llave del vuelo: aerolínea (código IATA del catálogo o el texto capturado),
+// número sin prefijo ni ceros a la izquierda, fecha y sentido. Aparte, la
+// hora del slot (HH:MM, como _aifa_movement_slot de la base: "22NOV 23:35" y
+// "23/11/2026 23:35" dan "23:35"). null si falta alguna parte de la llave.
+function _conciLlaveVueloMixta(row, ctx) {
+    const aerolineaTexto = String((ctx.airlineCol ? row[ctx.airlineCol] : '') ?? '').trim();
+    if (!aerolineaTexto) return null;
+    let aerolinea = aerolineaTexto.toUpperCase();
+    try {
+        const meta = typeof _conciResolveAirlineMeta === 'function' ? _conciResolveAirlineMeta(aerolineaTexto) : null;
+        if (meta && meta.iata) aerolinea = String(meta.iata).toUpperCase();
+    } catch (_) { /* sin catálogo se queda el texto capturado */ }
+    const numero = String(_conciNumeroDeVuelo(ctx.vueloCol ? row[ctx.vueloCol] : '', aerolineaTexto) || '')
+        .toUpperCase().replace(/[^A-Z0-9]+/g, '').replace(/^0+(?=\d)/, '');
+    const fecha = _conciFechaIsoMixta(row, ctx);
+    const tipo = String((ctx.tipoCol ? row[ctx.tipoCol] : '') ?? '');
+    const sentido = /lleg|arr/i.test(tipo) ? 'A' : (/sal|dep/i.test(tipo) ? 'D' : '');
+    if (!numero || !fecha || !sentido) return null;
+    const hora = String((ctx.slotCol ? row[ctx.slotCol] : '') ?? '').match(/(\d{1,2}):(\d{2})/);
+    return {
+        clave: [aerolinea, numero, fecha, sentido].join('|'),
+        slot: hora ? `${hora[1].padStart(2, '0')}:${hora[2]}` : '',
+    };
+}
+
+// FECHA de operación de la fila en AAAA-MM-DD, o '' si no se puede leer.
+// (No confundir con _conciFechaIsoDeFila(tr), que lee la fila pintada.)
+function _conciFechaIsoMixta(row, ctx) {
+    const partes = ctx.fechaCol ? _conciParseDateTimeParts(row[ctx.fechaCol], ctx.anio) : null;
+    return partes
+        ? _conciIsoDateKey(Number.isFinite(partes.year) ? partes.year : ctx.anio, partes.month, partes.day)
+        : '';
+}
+
+// ¿La fila es de la fecha de corte en adelante? (_CONCI_REGLA_MIXTAS_DESDE)
+function _conciReglaNuevaAplica(row, ctx) {
+    if (!row || !ctx || !ctx.desde) return false;
+    const fecha = _conciFechaIsoMixta(row, ctx);
+    return !!fecha && fecha >= ctx.desde;
+}
+
+// Contexto de los totales de un conjunto de filas: las columnas, la fecha de
+// corte, los vuelos de pasajeros de las mixtas (para reconocer la carga aparte
+// de cada uno) y las filas de mixtas que hay que revisar.
+function _conciContextoTotales(rows, columns, desde = _CONCI_REGLA_MIXTAS_DESDE) {
+    const filas = Array.isArray(rows) ? rows : [];
+    const ctx = _conciColumnasDeTotales(Array.isArray(columns) && columns.length ? columns : Object.keys(filas[0] || {}));
+    ctx.desde = desde || null;
+    ctx.anio = (typeof _conciEditFallbackYear !== 'undefined' && Number(_conciEditFallbackYear)) || new Date().getFullYear();
+    ctx.mixtas = new Map();          // aerolínea capturada → nombre de la mixta, o ''
+    ctx.vuelosMixtas = new Map();    // llave → horas de slot de sus vuelos CON pasajeros
+    ctx.revisar = new Set();         // filas de mixtas marcadas para revisión
+
+    // 1) Los vuelos con pasajeros: contra ellos se reconoce la carga aparte.
+    for (const row of filas) {
+        if (_conciEstadoFilaMixta(row, ctx) !== 'vuelo-pax') continue;
+        const llave = _conciLlaveVueloMixta(row, ctx);
+        if (!llave) continue;
+        if (!ctx.vuelosMixtas.has(llave.clave)) ctx.vuelosMixtas.set(llave.clave, []);
+        ctx.vuelosMixtas.get(llave.clave).push(llave.slot);
+    }
+
+    // 2) Las filas que cuentan como vuelo, por llave. Dos de la misma llave
+    //    se revisan si comparten la hora de slot o a alguna le falta.
+    const contados = new Map();
+    for (const row of filas) {
+        const estado = _conciEstadoFilaMixta(row, ctx);
+        if (!estado || estado === 'carga-de-vuelo') continue;
+        if (estado === 'ambigua') ctx.revisar.add(row);
+        const llave = _conciLlaveVueloMixta(row, ctx);
+        if (!llave) continue;
+        if (!contados.has(llave.clave)) contados.set(llave.clave, []);
+        contados.get(llave.clave).push({ row, slot: llave.slot });
+    }
+    for (const grupo of contados.values()) {
+        for (let i = 0; i < grupo.length; i++) {
+            for (let j = i + 1; j < grupo.length; j++) {
+                const a = grupo[i];
+                const b = grupo[j];
+                if (!a.slot || !b.slot || a.slot === b.slot) {
+                    ctx.revisar.add(a.row);
+                    ctx.revisar.add(b.row);
+                }
+            }
+        }
+    }
+    return ctx;
+}
+
+// Qué es una fila de mixta:
+//   null              no aplica (anterior a la fecha de corte, no es mixta,
+//                     informativo o "Solo Vuelos"): se cuenta como antes;
+//   'vuelo-pax'       trae pasajeros: es el vuelo;
+//   'carga-de-vuelo'  sin pasajeros, carga aparte de UN vuelo de pasajeros
+//                     con la misma llave y la misma hora de slot;
+//   'ambigua'         como la anterior, pero con más de un vuelo posible;
+//   'vuelo'           sin pasajeros y sin ese vuelo: es el vuelo.
+function _conciEstadoFilaMixta(row, ctx) {
+    if (!row || !ctx || _conciEsInformativo(row) || row._fuente === 'Solo Vuelos') return null;
+    if (!_conciReglaNuevaAplica(row, ctx)) return null;
+    if (!_conciAerolineaMixta(row, ctx.airlineCol, ctx.mixtas)) return null;
+    if (ctx.totalPaxCol && _conciSummaryNumber(row[ctx.totalPaxCol]) > 0) return 'vuelo-pax';
+    const llave = _conciLlaveVueloMixta(row, ctx);
+    if (!llave || !llave.slot) return 'vuelo';
+    const mismos = (ctx.vuelosMixtas.get(llave.clave) || []).filter(slot => slot === llave.slot);
+    if (!mismos.length) return 'vuelo';
+    return mismos.length === 1 ? 'carga-de-vuelo' : 'ambigua';
+}
+
+// ¿La fila de mixta quedó marcada para revisión? (ver _conciContextoTotales)
+function _conciFilaMixtaARevisar(row, ctx) {
+    return !!(ctx && ctx.revisar && ctx.revisar.has(row));
+}
+
+// Cómo entra UNA fila a los totales (ctx = _conciContextoTotales):
+//   'informativo'  marcada INFORMATIVO en la base (070): no suma nada.
+//   'carga-mixta'  carga aparte de un vuelo de mixta ya contado: sólo kilos.
+//   'carga'        carguera: operación de carga y kilos.
+//   'pax'          operación de pasajeros, sus pasajeros y sus kilos. Toda
+//                  fila de mixta que no sea la anterior es un vuelo y cae aquí.
+function _conciTipoParaTotales(row, ctx) {
+    if (_conciEsInformativo(row)) return 'informativo';
+    const estado = _conciEstadoFilaMixta(row, ctx);
+    if (estado === 'carga-de-vuelo') return 'carga-mixta';
+    if (estado) return 'pax';
+    return _conciRowIsCargo(row, ctx.optypeCol, ctx.airlineCol) ? 'carga' : 'pax';
+}
+
+// Deja los vuelos marcados INFORMATIVO (070) al final, en el mismo orden en
+// que venían. Sólo los de la fecha de corte en adelante: los anteriores se
+// quedan donde estaban, como antes. `desde` es el índice del primero de
+// ellos, o -1 si no hay.
+function _conciSepararInformativos(data, ctx) {
+    const filas = Array.isArray(data) ? data : [];
+    const principales = [];
+    const informativas = [];
+    filas.forEach(row => (_conciEsInformativo(row) && _conciReglaNuevaAplica(row, ctx) ? informativas : principales).push(row));
+    if (!informativas.length) return { filas, desde: -1 };
+    return { filas: principales.concat(informativas), desde: principales.length };
+}
+
+// Encabezado de la sección INFORMATIVOS. Es una fila de la misma tabla (sin
+// data-row-index, como el aviso de "sin coincidencias"): así las filas de la
+// sección conservan la captura, el teclado, los filtros y el guardado.
+function _conciFilaEncabezadoInformativos(cantidad) {
+    const tr = document.createElement('tr');
+    tr.className = 'conci-seccion-informativos';
+    const td = document.createElement('td');
+    td.colSpan = 100;
+    const aviso = document.createElement('div');
+    aviso.className = 'conci-aviso-tabla';
+    aviso.textContent = `INFORMATIVOS (${cantidad}) · Vuelos marcados como informativos: no cuentan en ninguna suma.`;
+    td.appendChild(aviso);
+    tr.appendChild(td);
+    return tr;
+}
+
 // Convierte un movimiento del itinerario en una fila de la tabla, escrita
 // siempre en las columnas reales de "Conciliación Manifiestos". Antes había un
 // segundo juego de columnas sintéticas para el caso "sin esquema", pero esos
@@ -22371,6 +22602,16 @@ function _conciTopeFilasReveladas(table) {
     return Math.max(600, Math.ceil(hasta / 24) + 100);
 }
 
+// El encabezado de la sección INFORMATIVOS (_conciFilaEncabezadoInformativos)
+// se oculta cuando los filtros dejan la sección sin filas visibles.
+function _conciSyncEncabezadoInformativos(tbody) {
+    const encabezado = tbody ? tbody.querySelector('tr.conci-seccion-informativos') : null;
+    if (!encabezado) return;
+    const alguna = [...tbody.querySelectorAll('tr[data-conci-seccion="informativos"]')]
+        .some(tr => tr.style.display !== 'none');
+    encabezado.style.display = alguna ? '' : 'none';
+}
+
 // Muestra, en orden, hasta `n` filas diferidas. Devuelve si había alguna.
 function _conciRevelarDiferidas(tbody, n) {
     const filas = tbody ? tbody.querySelectorAll('tr[data-conci-diferida]') : [];
@@ -22378,6 +22619,7 @@ function _conciRevelarDiferidas(tbody, n) {
         filas[i].removeAttribute('data-conci-diferida');
         filas[i].style.display = '';
     }
+    if (filas.length) _conciSyncEncabezadoInformativos(tbody);
     return filas.length > 0;
 }
 
@@ -22450,6 +22692,7 @@ function _conciApplyPillFilter(filasNuevas) {
     } else if (emptyRow) {
         emptyRow.style.display = 'none';
     }
+    _conciSyncEncabezadoInformativos(tbody);
     _conciUpdatePillActiveStyles();
     _conciProgramarConteoFilas();
 }
@@ -24915,29 +25158,24 @@ function _updateManifiestosSummaryStrip(data, columns) {
     const cols = columns || (rows.length ? Object.keys(rows[0]) : []);
     if (!rows.length) { strip.classList.add('d-none'); return; }
 
-    const airlineCol = _conciSummaryFindColumn(cols, key => key.includes('AEROLINEA') || key.includes('AIRLINE'));
-    const optypeCol = _conciSummaryFindColumn(cols, key =>
-        (key.includes('TIPO') && key.includes('OPER')) || key.includes('SERVICETYPE')
-    );
-    const totalPaxCol = _conciSummaryFindColumn(cols, key => key === 'TOTALPAX' || key.includes('TOTALPAX'));
-    const cargoCols = _conciSummaryCargoColumns(cols);
+    const c = _conciContextoTotales(rows, cols);
 
     let paxOps = 0, totalPax = 0, cargoOps = 0, kgsCarga = 0;
     let kgsCapturados = false;
     for (const row of rows) {
-        if (_conciEsInformativo(row)) continue;   // no cuenta en ninguna suma (070)
-        const isCargoByType = _conciRowIsCargo(row, optypeCol, airlineCol);
-        const paxValue = totalPaxCol ? _conciSummaryNumber(row[totalPaxCol]) : 0;
-        const kgs = _conciSummaryCargoKgs(row, cargoCols);
-
-        if (isCargoByType) {
-            cargoOps++;
-        } else {
+        // Una sola regla para todos los totales (ver _conciTipoParaTotales).
+        const tipo = _conciTipoParaTotales(row, c);
+        if (tipo === 'informativo') continue;   // no cuenta en ninguna suma (070)
+        if (tipo === 'pax') {
             paxOps++;
-            totalPax += paxValue;
+            totalPax += c.totalPaxCol ? _conciSummaryNumber(row[c.totalPaxCol]) : 0;
+        } else if (tipo === 'carga') {
+            cargoOps++;
         }
-        // Los KGS son una métrica independiente; no cambian la categoría ni
-        // el número de operaciones.
+        // 'carga-mixta' (la carga de un vuelo de mixta en fila aparte) no es
+        // operación de ningún tipo: sólo aporta sus kilos. Los KGS son una
+        // métrica independiente: los de un vuelo de pasajeros también suman.
+        const kgs = _conciSummaryCargoKgs(row, c.cargoCols);
         kgsCarga += kgs.kgs;
         if (kgs.captured) kgsCapturados = true;
     }
@@ -25309,6 +25547,14 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         data = _conciOrdenarFilas(_conciManifestosAllData);
         _conciManifestosAllData = data;
     }
+    // Contexto de la regla de mixtas (fecha de corte y filas a revisar) y
+    // sección INFORMATIVOS al final de la tabla: los vuelos marcados como
+    // informativos desde la fecha de corte.
+    const _contextoTotales = _conciContextoTotales(_conciManifestosAllData, _conciManifestosSummaryColumns);
+    const _seccionInformativos = _conciSepararInformativos(_conciManifestosAllData, _contextoTotales);
+    data = _seccionInformativos.filas;
+    _conciManifestosAllData = data;
+    const _inicioInformativos = _seccionInformativos.desde;
 
     _conciUpdateResumen(data, columns);
     _conciBindCountPills();
@@ -25675,9 +25921,21 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
 
         for (; idx < end; idx++) {
             const row = data[idx];
+            if (idx === _inicioInformativos) {
+                frag.appendChild(_conciFilaEncabezadoInformativos(data.length - _inicioInformativos));
+            }
             const tr = document.createElement('tr');
             const tone = idx % rowToneCount;
             tr.classList.add(`conci-row-tone-${tone}`);
+            if (_inicioInformativos >= 0 && idx >= _inicioInformativos) {
+                tr.dataset.conciSeccion = 'informativos';
+            } else if (_conciFilaMixtaARevisar(row, _contextoTotales)) {
+                // Mismo número, fecha y sentido que otro vuelo de la mixta, con
+                // la misma hora de slot o sin ella: se cuenta y se revisa.
+                tr.classList.add('conci-row-revisar-mixta');
+                tr.title = 'Revisar: hay otra fila de esta aerolínea mixta con el mismo número de vuelo, fecha y sentido, '
+                    + 'y la misma hora de slot o sin slot. Cada una cuenta como operación de pasajeros.';
+            }
             const _rowId = row.id !== undefined && row.id !== null ? String(row.id) : '';
             const _rowFuente = row['_fuente'] || '';
             tr.dataset.rowId = _rowId;
@@ -25900,7 +26158,8 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
 
             frag.appendChild(tr);
         }
-        const filasDelLote = [...frag.children]; // para filtrar solo este lote (abajo)
+        // Para filtrar solo este lote (abajo). El encabezado de INFORMATIVOS no es una fila de datos.
+        const filasDelLote = [...frag.children].filter(tr => tr.dataset.rowIndex !== undefined);
 
         // Fondo azul grisáceo en las celdas con dato; el observador cubre los cambios después.
         frag.querySelectorAll('td[data-col]').forEach(_conciMarcarCeldaConDato);
@@ -34769,7 +35028,9 @@ function _conciAddBlankRow() {
         actionTd.appendChild(remove);
         tr.appendChild(actionTd);
     }
-    tbody.appendChild(tr);
+    // Una fila nueva va con las principales, nunca dentro de la sección
+    // INFORMATIVOS (sin sección, insertBefore con null la deja al final).
+    tbody.insertBefore(tr, tbody.querySelector('tr.conci-seccion-informativos'));
     tbody.scrollTop = tbody.scrollHeight;
     _conciBindRowActions();
     // MES/FECHA quedan bloqueados en una fila nueva (se completan solos con

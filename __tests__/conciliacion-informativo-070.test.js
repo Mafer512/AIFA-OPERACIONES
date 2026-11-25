@@ -76,8 +76,11 @@ describe('tabla de Manifiestos', () => {
   });
 
   test('las tarjetas de la tabla no cuentan los informativos', () => {
+    // La regla única de los totales (mixtas, 073) empieza por los informativos.
+    const regla = bloque(scriptJs, 'function _conciTipoParaTotales(', '\n}\n');
+    expect(regla).toMatch(/\{\s+if \(_conciEsInformativo\(row\)\) return 'informativo';/);
     const strip = bloque(scriptJs, 'function _updateManifiestosSummaryStrip(', '\n}\n');
-    expect(strip).toMatch(/for \(const row of rows\) \{\s+if \(_conciEsInformativo\(row\)\) continue;/);
+    expect(strip).toMatch(/for \(const row of rows\) \{[\s\S]*?const tipo = _conciTipoParaTotales\(row, c\);\s+if \(tipo === 'informativo'\) continue;/);
     const resumen = bloque(scriptJs, 'function _conciUpdateResumen(', '\n}\n');
     expect(resumen).toMatch(/for \(const r of \(data \|\| \[\]\)\) \{\s+if \(_conciEsInformativo\(r\)\) continue;/);
   });

@@ -17846,6 +17846,26 @@ body.dark-mode #table-conci-manifiestos tbody tr.conci-row-informativo>td.conci-
    background-color: #3a3f44 !important;
    color: #9aa1a8 !important;
 }
+/* Encabezado de la sección INFORMATIVOS, al final de la tabla: vuelos
+   marcados como informativos y carga aparte de aerolíneas mixtas. */
+#table-conci-manifiestos tbody tr.conci-seccion-informativos>td {
+   background-color: #6c757d !important;
+   color: #fff !important;
+   font-weight: 600;
+   padding: .4rem .5rem;
+}
+body.dark-mode #table-conci-manifiestos tbody tr.conci-seccion-informativos>td {
+   background-color: #495057 !important;
+   color: #f1f3f5 !important;
+}
+/* Fila de aerolínea mixta sin pasajeros con más de un vuelo de pasajeros
+   posible: cuenta como operación de pasajeros y queda marcada para revisión. */
+#table-conci-manifiestos tbody tr.conci-row-revisar-mixta>td:first-child {
+   box-shadow: inset 4px 0 0 #f0ad4e;
+}
+body.dark-mode #table-conci-manifiestos tbody tr.conci-row-revisar-mixta>td:first-child {
+   box-shadow: inset 4px 0 0 #ffc107;
+}
 #table-conci-manifiestos td.conci-informativo-cell {
    vertical-align: middle;
 }
