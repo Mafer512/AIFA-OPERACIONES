@@ -11786,7 +11786,9 @@ function ndwRefreshOnEntry(user) {
     const entry = { user };
     window._ndwEntryRefresh = entry;
     entry.promise = (async () => {
-        const updated = await ndwRefreshManifestSummary(true);
+        // Sin forzar: el freno de 2 minutos del servidor evita que muchas
+        // recargas a la vez repitan el refresco completo (12-15 s cada uno).
+        const updated = await ndwRefreshManifestSummary(false);
         if (window._ndwEntryRefresh !== entry) return;
         const dateKey = document.querySelector('#navdeck-weekly-banner [data-ndw-date]')?.value || ndwPreviousDay();
         const selected = window._ndwCurrentManifestDays?.[dateKey];
