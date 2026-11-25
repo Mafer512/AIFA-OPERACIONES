@@ -3,7 +3,7 @@
 
     // ============================================================
     // SETP · Supervisor × turno (recorridos de supervisión)
-    // Al elegir un supervisor en el filtro, su No. de empleado, nombre y
+    // El supervisor es el usuario que inició sesión; su No. de empleado, nombre y
     // cargo se llenan solos. "Iniciar recorrido" fija la hora de inicio y
     // "Finalizar recorrido" la de término (las pone el servidor). La
     // evidencia es una foto (cámara del celular) o un archivo de la PC.
@@ -17,8 +17,21 @@
     const MODAL_ID = 'setp-usuario-modal';
     const MAX_FILE = 10 * 1024 * 1024;
     const LIST_LIMIT = 100;
-    const COLS = 7;
+    // Sin "No. de empleado" ni "Nombre y apellido" (se retiraron de la pantalla;
+    // los datos siguen guardados y el historial los muestra).
+    const COLS = 5;
     const ACCEPT = 'image/*,.pdf,.doc,.docx,.xls,.xlsx';
+    // Celular o tableta (no computadora): ahí «Evidencia» y + abren directo la cámara.
+    // Se ve el navegador y no la pantalla táctil, para que una laptop con
+    // pantalla táctil siga como computadora. El iPad moderno se presenta como
+    // Mac, por eso se revisa también si tiene pantalla táctil.
+    const ES_MOVIL_O_TABLETA = (function () {
+        var nav = window.navigator || {};
+        if (nav.userAgentData && nav.userAgentData.mobile) return true;
+        var ua = nav.userAgent || '';
+        if (/Android|iPhone|iPad|iPod|Mobi|Tablet|Silk|Kindle/i.test(ua)) return true;
+        return /Macintosh/i.test(ua) && (nav.maxTouchPoints || 0) > 1;
+    })();
     // Turno que elige el supervisor al iniciar (columna turno, db/setp_recorridos_turno.sql).
     const TURNOS_REC = [
         { key: 'MATUTINO', label: 'Matutino' },
@@ -47,12 +60,15 @@
         evidenciaExtra: false, // el archivo elegido es una evidencia adicional (+)
         extras: {},         // id de recorrido -> hallazgos de sus evidencias adicionales
         descFor: null,      // recorrido cuya descripción se está capturando
-        resumen: [],        // todos los recorridos (id, no_empleado, turno) para la tarjeta de turnos
+        resumen: [],        // recorridos del periodo (id, no_empleado, turno) para la tarjeta de turnos
+        desdeCargado: '',   // inicio del periodo cargado ('' = todo el histórico)
         enFormato: {},      // id de recorrido -> true si ya salió en un formato guardado
         turnoOk: true,      // false si aún no se aplica db/setp_recorridos_turno.sql
         turnoNuevo: '',     // turno elegido en el renglón "Iniciar recorrido"
         areaNueva: '',      // piso elegido en el renglón "Iniciar recorrido"
-        status: null        // aviso visible { message, type }
+        areaCol: null,      // true si setp_hallazgos tiene la columna area (Cambiar el área responsable)
+        areaElegir: false,  // lista de áreas abierta en la ventana "Descripción del hallazgo"
+        status: null       // aviso visible { message, type }
     };
 
     function $(id) { return document.getElementById(id); }
@@ -81,6 +97,54 @@
     // "Crear usuario" sólo para superadmin (mismo criterio que el resto del aplicativo).
     function esSuperadmin() {
         try { return sessionStorage.getItem('user_role') === 'superadmin'; } catch (_) { return false; }
+    }
+
+    // Modo administración: un superadmin no es supervisor ni elige a ninguno.
+    // Ve y gestiona los recorridos de todos (área, turno, evidencia, finalizar
+    // y borrar) y también hace sus propios recorridos con el botón de inicio:
+    // quedan a su nombre (ver miSupervisorSa / asegurarSupervisorSa).
+    function modoGestion() {
+        return esSuperadmin() && !(state.selected && supervisor(state.selected));
+    }
+
+    function palabrasNombre(v) {
+        return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase().replace(/[^A-Z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean);
+    }
+
+    function nombreSesion() {
+        try { return String(sessionStorage.getItem('user_fullname') || '').trim().replace(/\s+/g, ' '); } catch (_) { return ''; }
+    }
+
+    // Registro del propio superadmin en setp_supervisores: el que lleva su
+    // nombre de perfil (si además es supervisor, es ese mismo).
+    function miSupervisorSa() {
+        var yo = palabrasNombre(nombreSesion());
+        if (!yo.length) return null;
+        var mejor = null, largo = 0;
+        state.supervisores.forEach(function (x) {
+            var p = palabrasNombre(x.nombre);
+            if (p.length > largo && p.every(function (w) { return yo.indexOf(w) >= 0; })) { mejor = x; largo = p.length; }
+        });
+        return mejor;
+    }
+
+    // Al iniciar su primer recorrido, el superadmin queda dado de alta solo
+    // (No. de empleado SA-…, cargo Superadmin). Nadie elige nada.
+    async function asegurarSupervisorSa(sb) {
+        var ya = miSupervisorSa();
+        if (ya) return ya;
+        var nombre = nombreSesion();
+        if (!nombre) throw new Error('tu perfil no tiene nombre; captúralo en tu usuario para registrar recorridos.');
+        var u = await sb.auth.getUser();
+        var uid = u && u.data && u.data.user ? u.data.user.id : '';
+        if (!uid) throw new Error('no se pudo identificar tu sesión. Vuelve a iniciar sesión.');
+        var datos = { no_empleado: 'SA-' + uid.replace(/-/g, '').slice(0, 8).toUpperCase(), nombre: nombre, cargo: 'Superadmin' };
+        var res = await sb.from(T_SUPERVISORES).insert([datos]).select('no_empleado, nombre, cargo').single();
+        if (res.error && res.error.code === '23505') res = await sb.from(T_SUPERVISORES).select('no_empleado, nombre, cargo').eq('no_empleado', datos.no_empleado).single();
+        if (res.error) throw res.error;
+        if (!supervisor(res.data.no_empleado)) state.supervisores = ordenarSupervisores(state.supervisores.concat([res.data]));
+        return res.data;
     }
 
     function supervisor(no) {
@@ -121,11 +185,17 @@
             var sup = await sb.from(T_SUPERVISORES).select('no_empleado, nombre, cargo').order('nombre', { ascending: true });
             if (sup.error) throw sup.error;
             state.supervisores = sup.data || [];
-            // Todos los recorridos de todos los usuarios (por páginas de 1000):
-            // "Detalle de registros" conserva el historial completo de cada uno.
+            // Recorridos de todos los usuarios (por páginas de 1000) del periodo
+            // de la pantalla (js/setp-reportes.js: últimos 3 meses, más o todo),
+            // y los que siguen en curso aunque sean anteriores. "Ver historial"
+            // de cada supervisor siempre trae su historial completo.
+            var desde = periodoDesde();
+            state.desdeCargado = desde;
             var rec = { data: [], error: null };
             for (var from = 0; ; from += 1000) {
-                var pag = await sb.from(T_RECORRIDOS).select('*').order('registrado_en', { ascending: false }).range(from, from + 999);
+                var qr = sb.from(T_RECORRIDOS).select('*');
+                if (desde) qr = qr.or('registrado_en.gte.' + desde + ',hora_termino.is.null');
+                var pag = await qr.order('registrado_en', { ascending: false }).range(from, from + 999);
                 if (pag.error) { rec.error = pag.error; break; }
                 rec.data = rec.data.concat(pag.data || []);
                 if (!pag.data || pag.data.length < 1000) break;
@@ -149,6 +219,13 @@
         state.loaded = true;
     }
 
+    // Fecha 'YYYY-MM-DD' desde la que se cargan los datos ('' = todo el histórico).
+    function periodoDesde() {
+        var p = window.setpPeriodo;
+        var d = p && typeof p.desde === 'function' ? p.desde() : '';
+        return /^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : '';
+    }
+
     // Recorridos que ya salieron en un formato guardado (setp_oficio_recorridos):
     // siguen en la base y en el historial, pero ya no se muestran en la tabla.
     async function cargarEnFormato(sb) {
@@ -165,8 +242,16 @@
     // Evidencias adicionales: hallazgos cuya foto lleva "-rec-<id del recorrido>-x.jpg".
     async function cargarExtras(sb) {
         var map = {};
-        var res = await sb.from('setp_hallazgos').select('id, descripcion, evidencia_url, evidencia_path')
-            .like('evidencia_path', '%-rec-%-x.jpg').order('created_at', { ascending: true });
+        var qx = sb.from('setp_hallazgos').select('id, descripcion, evidencia_url, evidencia_path')
+            .like('evidencia_path', '%-rec-%-x.jpg');
+        // Del periodo cargado (un día antes, por la diferencia de hora con UTC).
+        var desde = state.desdeCargado;
+        if (desde) {
+            var d = new Date(desde + 'T00:00:00');
+            d.setDate(d.getDate() - 1);
+            qx = qx.gte('created_at', d.toISOString().slice(0, 10));
+        }
+        var res = await qx.order('created_at', { ascending: true });
         if (res.error) return map; // sin evidencias adicionales no se detiene la captura
         (res.data || []).forEach(function (h) {
             var m = /-rec-(.+)-x\.jpg$/.exec(h.evidencia_path || '');
@@ -175,13 +260,16 @@
         return map;
     }
 
-    // Todos los recorridos (no sólo los últimos 100) con su turno, para la
-    // tarjeta "Turno con más recorridos" de cada supervisor.
+    // Recorridos del periodo cargado con su turno, para la tarjeta
+    // "Turno con más recorridos" de cada supervisor.
     async function cargarResumen(sb) {
         var cols = 'id, no_empleado, turno';
         var all = [];
+        var desde = state.desdeCargado;
         for (var from = 0; ; from += 1000) {
-            var res = await sb.from(T_RECORRIDOS).select(cols).range(from, from + 999);
+            var qs = sb.from(T_RECORRIDOS).select(cols);
+            if (desde) qs = qs.gte('registrado_en', desde);
+            var res = await qs.range(from, from + 999);
             if (res.error && cols.indexOf('turno') >= 0 && /turno/.test(res.error.message || '')) {
                 // Sin la columna turno todavía: la captura sigue sin elegir turno.
                 state.turnoOk = false;
@@ -226,6 +314,8 @@
             // queda dentro del desplazamiento de la tabla y no ensancha la página en celular.
             R + ' .table-responsive{position:relative;}',
             R + ' .setp-rec-table td{vertical-align:middle;}',
+            // Hora de inicio y de término centradas (en celular y tableta son tarjetas: se quedan a la izquierda).
+            '@container setp (min-width:1000px){' + R + ' .setp-rec-table th:nth-child(3),' + R + ' .setp-rec-table th:nth-child(4),' + R + ' .setp-rec-table td:nth-child(3),' + R + ' .setp-rec-table td:nth-child(4){text-align:center;}}',
             R + ' .setp-rec-area{min-width:180px;}',
             R + ' .setp-rec-hora{font-weight:700;font-variant-numeric:tabular-nums;color:#0f172a;}',
             R + ' .setp-rec-dia{display:block;font-size:.72rem;color:#64748b;}',
@@ -241,6 +331,20 @@
             R + ' .setp-rec-mas{width:48px;height:48px;border-style:dashed;display:inline-flex;align-items:center;justify-content:center;}',
             R + ' .setp-rec-pend{color:#b45309;font-weight:600;}',
             R + ' .setp-rec-desc-btn{font-size:.72rem;text-decoration:none;}',
+            // Botón flotante fijo para iniciar o finalizar el recorrido (pintarFab).
+            // Encima del botón "Sugerencias" (#fb-fab-wrap, style.css), que ocupa la misma esquina.
+            '#setp-rec-fab{position:fixed;right:calc(1.6rem + env(safe-area-inset-right,0px));bottom:calc(1.6rem + 64px + env(safe-area-inset-bottom,0px));z-index:1045;',
+            'display:inline-flex;align-items:center;gap:8px;padding:12px 20px;border:0;border-radius:999px;font:inherit;font-weight:700;font-size:.95rem;',
+            'color:#fff;box-shadow:0 10px 24px rgba(15,23,42,.28);cursor:pointer;transition:transform .15s ease,box-shadow .15s ease;}',
+            '#setp-rec-fab.is-ini{background:#198754;}',
+            '#setp-rec-fab.is-fin{background:#dc3545;}',
+            '#setp-rec-fab:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 14px 28px rgba(15,23,42,.34);}',
+            '#setp-rec-fab:focus-visible{outline:3px solid #93c5fd;outline-offset:3px;}',
+            '#setp-rec-fab:disabled{opacity:.85;cursor:progress;}',
+            // Dentro de una sección del menú de tarjetas "Sugerencias" se oculta (style.css): baja a la esquina.
+            'body.navdeck-mode.navdeck-active #setp-rec-fab{bottom:calc(1.6rem + env(safe-area-inset-bottom,0px));}',
+            'body.dark-mode #setp-rec-fab{box-shadow:0 10px 24px rgba(0,0,0,.5);}',
+            '@media (max-width:599.98px){#setp-rec-fab{padding:12px 16px;}}',
             // Modo oscuro (body.dark-mode).
             'body.dark-mode ' + R + ' .setp-rec-hora{color:var(--text-color);}',
             'body.dark-mode ' + R + ' .setp-rec-dia,body.dark-mode ' + R + ' .setp-rec-hint td{color:var(--text-muted-color);}',
@@ -260,8 +364,8 @@
     // Las etiquetas salen del orden de las columnas de la tabla.
     function estilosResponsive(R) {
         var T = R + ' .setp-rec-table';
-        var etiquetas = ['No. de empleado', 'Nombre y apellido', 'Cargo', 'Área de recorrido', 'Hora de inicio', 'Hora de término', 'Evidencia'];
-        var areas = ['no', 'nom', 'car', 'area', 'ini', 'fin', 'ev', 'acc'];
+        var etiquetas = ['Cargo', 'Área de recorrido', 'Hora de inicio', 'Hora de término', 'Evidencia'];
+        var areas = ['car', 'area', 'ini', 'fin', 'ev', 'acc'];
         return [
             '@container setp (max-width:999.98px){',
             R + ' .table-responsive{overflow:visible;}',
@@ -269,7 +373,7 @@
             T + ',' + T + ' tbody{display:block;width:100%;}',
             T + ' thead{display:none;}',
             T + ' tbody{padding:12px;}',
-            T + ' tr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"no nom car acc" "area area ini fin" "ev ev ev ev";',
+            T + ' tr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"car car car acc" "area area ini fin" "ev ev ev ev";',
             'gap:10px 14px;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px;margin-bottom:12px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.04);}',
             T + ' tr:last-child{margin-bottom:0;}',
             T + ' tr.setp-rec-curso{background:#fffbeb;border-color:#fcd34d;}',
@@ -281,7 +385,7 @@
             T + ' tr.setp-rec-hint td::before{content:none;}',
             etiquetas.map(function (e, i) { return T + ' td:nth-child(' + (i + 1) + ')::before{content:"' + e + '";}'; }).join(''),
             areas.map(function (a, i) { return T + ' tr:not(.setp-rec-hint) td:nth-child(' + (i + 1) + '){grid-area:' + a + ';}'; }).join(''),
-            T + ' td:nth-child(8){justify-self:end;align-self:start;}',
+            T + ' td:nth-child(6){justify-self:end;align-self:start;}',
             R + ' .setp-rec-area,' + R + ' .setp-rec-turno{min-width:0;max-width:none;width:100%;}',
             R + ' .setp-rec-turno{margin-top:6px;}',
             R + ' .setp-rec-file{max-width:100%;}',
@@ -293,9 +397,9 @@
             '}',
             '@container setp (max-width:599.98px){',
             T + ' tbody{padding:10px;}',
-            T + ' tr{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"nom acc" "no car" "area area" "ini fin" "ev ev";gap:8px 12px;padding:12px;}',
+            T + ' tr{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"car acc" "area area" "ini fin" "ev ev";gap:8px 12px;padding:12px;}',
             // Botones de captura a todo lo ancho de la tarjeta (fáciles de tocar).
-            T + ' td:nth-child(5) .btn,' + T + ' td:nth-child(6) .btn,' + T + ' td:nth-child(7) > .btn:not(.btn-link){width:100%;}',
+            T + ' td:nth-child(3) .btn,' + T + ' td:nth-child(4) .btn,' + T + ' td:nth-child(5) > .btn:not(.btn-link){width:100%;}',
             R + ' .setp-rec-thumb{width:120px;height:80px;}',
             '}'
         ];
@@ -338,7 +442,7 @@
         var html = '<div class="setp-rec-evs">';
         if (busy === 'guardar') html += '<span class="spinner-border spinner-border-sm text-primary"></span>';
         else if (p) html += evidenciaPendiente(r, p);
-        else html += '<button type="button" class="btn btn-sm btn-outline-primary setp-rec-mas" data-rec="evidencia-mas" data-id="' + esc(r.id) + '" title="Agregar otra evidencia (foto)" aria-label="Agregar otra evidencia"><i class="fas fa-plus"></i></button>';
+        else html += '<button type="button" class="btn btn-sm btn-outline-primary setp-rec-mas" data-rec="evidencia-mas" data-id="' + esc(r.id) + '" title="Tomar otra foto de evidencia" aria-label="Tomar otra foto de evidencia"><i class="fas fa-plus"></i></button>';
         html += '</div>';
         if (p && busy !== 'guardar') html += avisoPendiente(r, p);
         return html;
@@ -364,11 +468,13 @@
         return '<td class="text-end text-nowrap">' + html + '</td>';
     }
 
+    // "No. de empleado" y "Nombre y apellido" se retiraron de la tabla: sólo queda Cargo.
     function datosSupervisor(s) {
-        return '<td class="text-nowrap fw-semibold">' + esc(s ? s.no_empleado : '') + '</td>' +
-            '<td>' + esc(s ? s.nombre : '') + '</td>' +
-            '<td>' + (s && s.cargo ? esc(s.cargo) : '—') + '</td>';
+        // En modo administración hay recorridos de varios: se muestra quién es.
+        if (modoGestion() && s && s.nombre) return '<td><b>' + esc(s.nombre) + '</b>' + (s.cargo ? '<span class="setp-rec-dia">' + esc(s.cargo) + '</span>' : '') + '</td>';
+        return '<td>' + (s && s.cargo ? esc(s.cargo) : '—') + '</td>';
     }
+
 
     function turnoLabel(key) {
         var t = TURNOS_REC.find(function (x) { return x.key === key; });
@@ -425,7 +531,9 @@
             (state.enFormato[r.id] ? '<span class="setp-rec-dia text-success"><i class="fas fa-file-signature me-1"></i>En formato guardado</span>' : '');
         else if (!canEdit() || consulta) termino = '<span class="badge text-bg-warning">En curso</span>';
         else if (state.busy[r.id] === 'finalizar') termino = '<span class="spinner-border spinner-border-sm text-danger"></span>';
-        else termino = '<button type="button" class="btn btn-sm btn-danger" data-rec="finalizar" data-id="' + esc(r.id) + '"><i class="fas fa-flag-checkered me-1"></i>Finalizar recorrido</button>';
+        else if (modoGestion()) termino = '<span class="badge text-bg-warning">En curso</span> <button type="button" class="btn btn-sm btn-outline-danger ms-1" data-rec="finalizar" data-id="' + esc(r.id) + '"><i class="fas fa-flag-checkered me-1"></i>Finalizar</button>';
+        // Se finaliza con el botón flotante (pintarFab): aquí ya no se repite el botón.
+        else termino = '<span class="badge text-bg-warning">En curso</span><span class="setp-rec-dia">Finalízalo con el botón de la esquina</span>';
         return '<tr' + (enCurso ? ' class="setp-rec-curso"' : '') + '>' + datosSupervisor(s) +
             '<td>' + area + '</td>' +
             '<td><span class="setp-rec-hora">' + hhmm(r.hora_inicio) + '</span><span class="setp-rec-dia">' + fecha(r.registrado_en) + '</span></td>' +
@@ -439,16 +547,17 @@
         return '<tr class="setp-rec-nuevo">' + datosSupervisor(s) +
             '<td>' + areaSelect(state.areaNueva, 'id="setp-rec-area-nueva"' + (busy ? ' disabled' : '')) +
             (conTurno() ? turnoSelect(state.turnoNuevo, 'id="setp-rec-turno-nuevo"' + (busy ? ' disabled' : '')) : '') + '</td>' +
+            // Se inicia con el botón flotante (pintarFab): aquí ya no se repite el botón.
             '<td>' + (busy
                 ? '<span class="spinner-border spinner-border-sm text-success"></span>'
-                : '<button type="button" class="btn btn-sm btn-success" data-rec="iniciar"><i class="fas fa-play me-1"></i>Iniciar recorrido</button>') + '</td>' +
+                : '<span class="text-muted small">Elige área y turno, y presiona <b>Iniciar recorrido</b> en la esquina</span>') + '</td>' +
             '<td><span class="text-muted">—</span></td>' +
             '<td><span class="text-muted small">Al iniciar</span></td>' + (conAcciones() ? '<td></td>' : '') + '</tr>';
     }
 
     function render() {
         if (!state.el) return;
-        var thead = '<thead><tr><th>No. de empleado</th><th>Nombre y apellido</th><th>Cargo</th><th>Área de recorrido</th>' +
+        var thead = '<thead><tr><th>Cargo</th><th>Área de recorrido</th>' +
             '<th>Hora de inicio de recorrido</th><th>Hora de término de recorrido</th>' +
             '<th title="Fotografía o archivo">Evidencia <span class="fw-normal text-lowercase">(foto o archivo)</span></th>' +
             (conAcciones() ? '<th><span class="visually-hidden">Acciones</span></th>' : '') + '</tr></thead>';
@@ -460,7 +569,7 @@
         } else if (state.error && !state.supervisores.length) {
             body = hint(state.error);
         } else if (!state.supervisores.length) {
-            body = hint('Aún no hay supervisores.' + (esSuperadmin() ? ' Usa <b>Crear usuario</b> para dar de alta al primero.' : ''));
+            body = hint('Aún no hay supervisores.');
         } else {
             var s = state.selected ? supervisor(state.selected) : null;
             // Propios: los del supervisor elegido (o de todos) que aún no salen en un formato.
@@ -469,16 +578,25 @@
             // Además, los recorridos de HOY de todos los supervisores se ven siempre
             // (aunque se elija a otro o ya estén en un formato), sólo para consultar.
             var hoy = fechaLocal();
-            var visibles = state.recorridos.filter(function (r) { return propio(r) || fechaLocal(r.registrado_en) === hoy; });
+            // Al terminar, el recorrido sale de esta tabla: queda en "Detalle de
+            // registros" (historial). Sólo se queda mientras tenga una captura
+            // sin guardar o una operación en marcha, para no perderla.
+            var visibles = state.recorridos.filter(function (r) {
+                return (propio(r) || fechaLocal(r.registrado_en) === hoy) &&
+                    (!r.hora_termino || state.pending[r.id] || state.busy[r.id]);
+            });
             if (state.error) {
                 body += hint(state.error);
+            } else if (modoGestion()) {
+                body += hint('<i class="fas fa-user-shield me-1"></i><b>Administración:</b> ves y gestionas los recorridos, hallazgos y formatos de todos los supervisores.');
+                if (canEdit() && !recorridoEnCurso()) body += nuevoRow(miSupervisorSa() || { nombre: nombreSesion(), cargo: 'Superadmin' });
             } else if (!s) {
-                body += hint('<i class="fas fa-hand-pointer me-1"></i>Selecciona un supervisor en el filtro <b>Supervisor</b> para registrar su recorrido.');
+                body += hint('<i class="fas fa-circle-info me-1"></i>Tu usuario no está dado de alta como supervisor, así que no puedes registrar recorridos. El nombre de tu perfil debe coincidir con el de un supervisor.');
             } else if (canEdit() && !lista.some(function (r) { return !r.hora_termino; })) {
                 body += nuevoRow(s);
             }
             body += visibles.map(function (r) { return recorridoRow(r, !propio(r)); }).join('');
-            if (!visibles.length && s && !canEdit()) body += hint('Sin recorridos registrados.');
+            if (!visibles.length && s && !canEdit()) body += hint('Sin recorridos en curso. Los terminados están en <b>Detalle de registros</b>.');
         }
         state.el.innerHTML = '<div id="setp-rec-status" class="' + statusClass() + '">' + (state.status ? state.status.message : '') + '</div>' +
             '<div class="table-responsive"><table class="table table-sm mb-0 setp-table setp-rec-table" id="setp-recorridos">' +
@@ -486,15 +604,92 @@
             '<input type="file" id="setp-rec-file" class="d-none" accept="' + ACCEPT + '">';
         // "Detalle de registros" (js/setp-reportes.js) muestra el historial compacto.
         document.dispatchEvent(new CustomEvent('setp:recorridos-actualizados'));
+        pintarFab();
+    }
+
+    // ---------- botón flotante ----------
+    // Botón fijo en la esquina inferior derecha para iniciar el recorrido propio
+    // o, si hay uno en curso, finalizarlo. Vive dentro de #setp-section, así que
+    // sólo se ve en SETP. Lo ven quienes tienen acceso a SETP: las personas de
+    // SETP_PERSONAS_CON_ACCESO (script.js) y los superadmin.
+    var FAB_ID = 'setp-rec-fab';
+
+    function recorridoEnCurso() {
+        var s = state.selected ? supervisor(state.selected) : null;
+        if (!s && modoGestion()) s = miSupervisorSa();
+        if (!s) return null;
+        return state.recorridos.find(function (r) { return r.no_empleado === s.no_empleado && !r.hora_termino; }) || null;
+    }
+
+    function pintarFab() {
+        var host = $('setp-section');
+        if (!host) return;
+        var fab = $(FAB_ID);
+        var visible = state.loaded && (typeof window.puedeVerSetp !== 'function' || window.puedeVerSetp());
+        if (!visible) { if (fab) fab.remove(); return; }
+        if (!fab) {
+            fab = document.createElement('button');
+            fab.type = 'button';
+            fab.id = FAB_ID;
+            fab.addEventListener('click', clickFab);
+            host.appendChild(fab);
+        }
+        var curso = recorridoEnCurso();
+        var busy = curso ? state.busy[curso.id] : state.busy.new;
+        fab.className = curso ? 'is-fin' : 'is-ini';
+        fab.disabled = !!busy;
+        fab.innerHTML = busy
+            ? '<span class="spinner-border spinner-border-sm" aria-hidden="true"></span><span>' + (curso ? 'Finalizando…' : 'Iniciando…') + '</span>'
+            : curso
+                ? '<i class="fas fa-flag-checkered" aria-hidden="true"></i><span>Finalizar recorrido</span>'
+                : '<i class="fas fa-play" aria-hidden="true"></i><span>Iniciar recorrido</span>';
+        fab.title = curso ? 'Finalizar el recorrido en curso (' + (curso.area_recorrido || '') + ', inició ' + hhmm(curso.hora_inicio) + ' hrs)' : 'Iniciar un recorrido';
+    }
+
+    async function clickFab() {
+        var wrap = state.el;
+        if (!wrap) return;
+        var ver = function (el) { (el || wrap).scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+        var s = state.selected ? supervisor(state.selected) : null;
+        if (!s && !modoGestion()) {
+            setStatus('Tu usuario no está dado de alta como supervisor, así que no puedes iniciar recorridos. El nombre de tu perfil debe coincidir con el de un supervisor.', 'warning');
+            ver();
+            return;
+        }
+        if (!canEdit()) {
+            setStatus('Tu nivel en SETP es de consulta. Para iniciar recorridos pide el nivel de captura en Vistas.', 'warning');
+            ver();
+            return;
+        }
+        var curso = recorridoEnCurso();
+        if (curso) {
+            var ok = await confirmarBorrado(document, {
+                tono: 'ok', kicker: 'Recorrido en curso', titulo: '¿Finalizar el recorrido?',
+                filas: [['Área de recorrido', curso.area_recorrido || '—'], ['Inicio', hhmm(curso.hora_inicio) + ' hrs']],
+                aviso: 'La hora de término la pone el sistema al confirmar. El recorrido sale de esta tabla y queda en Detalle de registros.',
+                boton: 'Finalizar'
+            });
+            if (!ok) return;
+            await finalizar(curso.id);
+            // Si quedó en la tabla (captura sin guardar), se lleva a su renglón.
+            var ev = wrap.querySelector('[data-id="' + curso.id + '"]');
+            ver(ev ? ev.closest('tr') : null);
+            return;
+        }
+        // Sin recorrido en curso: lleva al renglón para iniciar. Si ya eligió
+        // área y turno lo inicia; si falta alguno, iniciar() lo pide y lo enfoca.
+        ver(wrap.querySelector('tr.setp-rec-nuevo'));
+        await iniciar();
     }
 
     // ---------- acciones ----------
 
     async function iniciar() {
-        var s = supervisor(state.selected);
+        var gestion = modoGestion();
+        var s = gestion ? null : supervisor(state.selected);
         var area = ($('setp-rec-area-nueva') || {}).value || '';
         area = area.trim().replace(/\s+/g, ' ');
-        if (!s || !canEdit() || state.busy.new) return;
+        if ((!s && !gestion) || !canEdit() || state.busy.new) return;
         if (!area) {
             setStatus('Elige el área de recorrido antes de iniciar.', 'warning');
             var input = $('setp-rec-area-nueva');
@@ -513,6 +708,7 @@
         render();
         try {
             var sb = await getClient();
+            if (gestion) s = await asegurarSupervisorSa(sb);
             // La hora de inicio la fija el servidor (db/setp_recorridos_captura.sql).
             var nuevo = { no_empleado: s.no_empleado, area_recorrido: area, hora_inicio: new Date().toTimeString().slice(0, 8) };
             if (turno) nuevo.turno = turno;
@@ -536,6 +732,20 @@
         }
     }
 
+    // Botón «Finalizar» del renglón (modo administración): pide confirmación como el botón flotante.
+    async function finalizarConfirmado(id) {
+        var r = state.recorridos.find(function (x) { return String(x.id) === String(id); });
+        if (!r) return;
+        var s = supervisor(r.no_empleado);
+        var ok = await confirmarBorrado(document, {
+            tono: 'ok', kicker: 'Recorrido en curso', titulo: '¿Finalizar el recorrido?',
+            filas: [['Supervisor', s ? s.nombre : r.no_empleado], ['Área de recorrido', r.area_recorrido || '—'], ['Inicio', hhmm(r.hora_inicio) + ' hrs']],
+            aviso: 'La hora de término la pone el sistema al confirmar. El recorrido sale de esta tabla y queda en Detalle de registros.',
+            boton: 'Finalizar'
+        });
+        if (ok) await finalizar(id);
+    }
+
     async function finalizar(id) {
         if (!canEdit() || state.busy[id]) return;
         state.busy[id] = 'finalizar';
@@ -555,7 +765,7 @@
             if (fmt && fmt.guardarBorrador) {
                 try {
                     await fmt.guardarBorrador(res.data);
-                    setStatus('Recorrido finalizado. Su formato quedó guardado en <b>Formatos guardados</b> para generarlo e imprimirlo al final del día.', 'success');
+                    setStatus('Recorrido finalizado: pasó a <b>Detalle de registros</b> y su formato quedó guardado en <b>Formatos guardados</b> para generarlo e imprimirlo al final del día.', 'success');
                 } catch (e) {
                     setStatus('Recorrido finalizado, pero su formato no se pudo guardar en <b>Formatos guardados</b>: ' + errText(e), 'warning');
                 }
@@ -720,7 +930,7 @@
         var previa = state.pending[id];
         var captura = {};
         if (previa && previa.extra === !!extra) {
-            ['descripcion', 'etiqueta', 'item', 'condicion', 'cantidad', 'modulo', 'local', 'detalle', 'mismoQue'].forEach(function (k) { captura[k] = previa[k]; });
+            ['descripcion', 'etiqueta', 'item', 'condicion', 'cantidad', 'area', 'modulo', 'local', 'localOtro', 'detalle', 'mismoQue'].forEach(function (k) { captura[k] = previa[k]; });
         }
         soltarPendiente(id);
         state.pending[id] = Object.assign(captura, { file: file, blob: blob, esFoto: esFoto, extra: !!extra, url: esFoto ? URL.createObjectURL(blob) : '' });
@@ -745,7 +955,7 @@
     // Columnas que pueden faltar si aún no se aplica su script SQL: se guarda sin
     // ellas. Sin "local" (db/setp_hallazgos_identificacion.sql), el local va en
     // el módulo para no perderlo.
-    const COLUMNAS_OPCIONALES = ['no_empleado', 'seccion', 'local', 'etiqueta', 'item', 'condicion', 'cantidad', 'detalle'];
+    const COLUMNAS_OPCIONALES = ['no_empleado', 'seccion', 'local', 'etiqueta', 'item', 'condicion', 'cantidad', 'detalle', 'area'];
 
     async function insertarHallazgo(sb, hallazgo) {
         var campos = 'id, folio';
@@ -801,6 +1011,8 @@
             created_by: actor,
             updated_by: actor
         };
+        // Área responsable elegida a mano (columna area); si no, sale de la regla.
+        if (p.area) hallazgo.area = p.area;
         var res = await insertarHallazgo(sb, hallazgo);
         if (res.error) {
             try { await sb.storage.from(BUCKET).remove([foto.path]); } catch (_) { /* sin efecto */ }
@@ -937,7 +1149,7 @@
             var act = btn.getAttribute('data-rec');
             var id = btn.getAttribute('data-id');
             if (act === 'iniciar') iniciar();
-            else if (act === 'finalizar') finalizar(id);
+            else if (act === 'finalizar') finalizarConfirmado(id);
             else if (act === 'borrar') borrar(id);
             else if (act === 'guardar') guardarEvidencia(id);
             else if (act === 'descripcion') abrirDescripcion(id);
@@ -945,7 +1157,14 @@
                 state.evidenciaFor = id;
                 state.evidenciaExtra = act === 'evidencia-mas';
                 var input = $('setp-rec-file');
-                input.accept = state.evidenciaExtra ? 'image/*' : ACCEPT;
+                // En celular y tableta, «Evidencia» y «+» abren directo la cámara
+                // trasera (sin el panel de Cámara / Archivos / Google Fotos).
+                // En computadora se sigue eligiendo el archivo como siempre: la
+                // primera evidencia permite foto o archivo (PDF, Word…) y la
+                // adicional, sólo fotos.
+                input.accept = state.evidenciaExtra || ES_MOVIL_O_TABLETA ? 'image/*' : ACCEPT;
+                if (ES_MOVIL_O_TABLETA) input.setAttribute('capture', 'environment');
+                else input.removeAttribute('capture');
                 input.value = '';
                 input.click();
             }
@@ -1095,13 +1314,12 @@
     // Captura por pasos (catálogo de js/setp-catalogo.js): Etiqueta → Item →
     // Condición → Cantidad → Módulo y Local, más un detalle opcional. Al
     // presionar Guardar se buscan en la base hallazgos pendientes iguales (mismo
-    // item en el mismo local; si el objeto se mueve, en todo el nivel durante
+    // item en el mismo local; si el objeto se mueve, en todo el edificio durante
     // 24 h) y se pregunta "¿Es el mismo?" con las fotos lado a lado. Guardar
     // cierra la ventana; el hallazgo se confirma después con ✓.
 
     const DESC_ID = 'setp-desc-modal';
     const DESC_MAX = 500;
-    const MOVIBLE_HORAS = 24;
 
     // Modo oscuro (body.dark-mode, script.js): mismas variables que el resto del aplicativo.
     function descEstilosOscuros(D) {
@@ -1111,12 +1329,12 @@
             D + ' .sd-head,' + D + ' .sd-foot{border-color:var(--border-color);}',
             D + ' .sd-foot{background:rgba(255,255,255,.03);}',
             D + ' .sd-icon{background:rgba(77,171,247,.14);color:var(--primary-color);}',
-            D + ' .sd-kicker,' + D + ' .sd-lbl,' + D + ' .sd-count,' + D + ' .sd-note,' + D + ' .sd-mod-vacio,' + D + ' .sd-paso .h,' + D + ' .sd-dup-sub{color:var(--text-muted-color);}',
-            D + ' .sd-title,' + D + ' .sd-val,' + D + ' .sd-dup-tit{color:var(--text-color);}',
+            D + ' .sd-kicker,' + D + ' .sd-lbl,' + D + ' .sd-count,' + D + ' .sd-note,' + D + ' .sd-mod-vacio,' + D + ' .sd-paso .h{color:var(--text-muted-color);}',
+            D + ' .sd-title,' + D + ' .sd-val{color:var(--text-color);}',
             D + ' label,' + D + ' .sd-paso{color:#c3c9d2;}',
             D + ' .sd-paso .n{background:rgba(77,171,247,.18);color:#8cc8ff;}',
             D + ' .sd-info{background:rgba(255,255,255,.04);border-color:var(--border-color);}',
-            D + ' .sd-info img,' + D + ' .sd-dup-foto{border-color:var(--border-color);}',
+            D + ' .sd-info img{border-color:var(--border-color);}',
             D + ' .btn-close{filter:invert(1) grayscale(100%) brightness(2);}',
             D + ' .sd-mod-lista,' + D + ' .sd-loc-lista{background:rgba(15,23,42,.55);border-color:var(--border-color);}',
             D + ' .sd-mod-item{color:var(--text-color);}',
@@ -1132,10 +1350,12 @@
             D + ' .sd-cant span{color:var(--text-color);}',
             D + ' .sd-resumen{background:rgba(77,171,247,.08);border-color:rgba(77,171,247,.3);color:#cfe6ff;}',
             D + ' .sd-resumen b{color:#fff;}',
-            D + ' .sd-dup{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.45);}',
-            D + ' .sd-dup-h{color:#fcd34d;}',
-            D + ' .sd-dup-cand{background:rgba(15,23,42,.55);border-color:var(--border-color);}',
-            D + ' .sd-dup-lbl{color:var(--text-muted-color);}'
+            D + ' .sd-areabox{background:rgba(255,255,255,.04);border-color:var(--border-color);}',
+            D + ' .sd-area-h{color:#c3c9d2;}',
+            D + ' .sd-area-h .h{color:var(--text-muted-color);}',
+            D + ' .sd-area-btn{background:rgba(255,255,255,.04);border-color:var(--border-color);color:#c3c9d2;}',
+            D + ' .sd-area-nota{color:#6ee7b7;}',
+            D + ' .sd-area-nota.is-man{color:#fcd34d;}'
         ];
     }
 
@@ -1187,6 +1407,18 @@
             M + ' .sd-cant{display:inline-flex;align-items:center;border:1px solid #cbd5e1;border-radius:10px;overflow:hidden;}',
             M + ' .sd-cant button{width:38px;height:34px;border:0;background:#f8fafc;color:#334155;font-weight:800;cursor:pointer;}',
             M + ' .sd-cant span{min-width:46px;text-align:center;font-weight:800;color:#0f172a;}',
+            M + ' .sd-areabox{margin-top:14px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;}',
+            M + ' .sd-areabox:empty{display:none;}',
+            M + ' .sd-area-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.8rem;font-weight:700;color:#334155;margin-bottom:6px;}',
+            M + ' .sd-area-h .h{font-weight:400;color:#64748b;font-size:.74rem;}',
+            M + ' .sd-area-fila{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}',
+            M + ' .sd-area-fila .setp-area-chip{font-size:.8rem;padding:5px 12px;}',
+            M + ' .sd-area-btn{font:inherit;font-size:.74rem;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;}',
+            M + ' .sd-area-nota{font-size:.74rem;font-weight:600;color:#047857;margin-top:5px;}',
+            M + ' .sd-area-nota.is-man{color:#b45309;}',
+            M + ' .sd-area-lista{margin-top:8px;}',
+            M + ' .sd-area-lista button i{color:var(--c);margin-right:5px;}',
+            M + ' .sd-area-lista button[aria-checked="true"] i{color:#fff;}',
             M + ' .sd-resumen{display:flex;align-items:flex-start;gap:8px;margin:14px 0 4px;padding:9px 11px;border-radius:12px;background:#eff6ff;border:1px solid #bfdbfe;font-size:.82rem;color:#1e3a8a;}',
             M + ' .sd-resumen i{margin-top:2px;}',
             M + ' .sd-mod-lista{list-style:none;margin:0;padding:4px;border:1px solid #e2e8f0;border-radius:12px;max-height:168px;overflow-y:auto;background:#fff;}',
@@ -1197,23 +1429,10 @@
             M + ' .sd-loc{font:inherit;font-size:.78rem;font-weight:600;padding:4px 10px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;cursor:pointer;}',
             M + ' .sd-loc:hover{background:#f1f5f9;}',
             M + ' .sd-loc[aria-checked="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}',
+            M + ' .sd-loc-otro{border-style:dashed;}',
             M + ' .sd-mod-vacio{font-size:.82rem;color:#64748b;padding:10px;text-align:center;}',
             M + ' :is(.sd-chip,.sd-cond button,.sd-loc,.sd-mod-item,.sd-cant button):focus-visible{outline:3px solid rgba(37,99,235,.45);outline-offset:1px;}',
             '@media (pointer:coarse){' + M + ' .sd-loc,' + M + ' .sd-cond button{min-height:40px;padding:6px 12px;}' + M + ' .sd-mod-item,' + M + ' .sd-chip{min-height:40px;}' + M + ' .sd-cant button{width:44px;height:40px;}}',
-            // ¿Es el mismo?
-            M + ' .sd-dup{border:1px solid #fcd34d;background:#fffbeb;border-radius:14px;padding:12px;}',
-            M + ' .sd-dup-h{display:flex;gap:8px;align-items:flex-start;font-size:.84rem;color:#92400e;font-weight:700;margin-bottom:10px;}',
-            M + ' .sd-dup-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start;}',
-            M + ' .sd-dup-lbl{font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;margin-bottom:4px;}',
-            M + ' .sd-dup-foto{width:100%;height:120px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0;display:block;background:#e2e8f0;}',
-            M + ' .sd-dup-tit{font-size:.8rem;font-weight:700;color:#0f172a;margin-top:6px;overflow-wrap:anywhere;}',
-            M + ' .sd-dup-sub{font-size:.74rem;color:#64748b;overflow-wrap:anywhere;}',
-            M + ' .sd-dup-lista{display:flex;flex-direction:column;gap:10px;max-height:340px;overflow-y:auto;}',
-            M + ' .sd-dup-cand{border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:8px;}',
-            M + ' .sd-dup-cand .btn{width:100%;margin-top:8px;}',
-            M + ' .sd-dup-btns{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}',
-            M + ' .sd-dup-btns .btn{flex:1 1 160px;}',
-            '@media (max-width:480px){' + M + ' .sd-dup-grid{grid-template-columns:1fr;}}',
             M + ' .sd-foot{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px;border-top:1px solid #e2e8f0;background:#f8fafc;flex:none;}',
             '@media (prefers-reduced-motion:reduce){' + M + ',' + M + ' .sd-card{transition:none;}}'
         ].concat(descEstilosOscuros('body.dark-mode ' + M)).join('');
@@ -1237,18 +1456,27 @@
             '<div class="sd-et" id="setp-desc-et" role="radiogroup" aria-labelledby="setp-desc-et-lbl"></div>' +
             '<div id="setp-desc-item-wrap" hidden>' + paso(2, 'Item *', '¿qué elemento?', 'setp-desc-item-lbl') +
             '<div class="sd-items" id="setp-desc-item" role="radiogroup" aria-labelledby="setp-desc-item-lbl"></div>' +
+            // Etiqueta "Otro": la descripción se escribe aquí, justo después del item.
+            '<div id="setp-desc-otro-slot"></div>' +
             paso(3, 'Condición *', '', 'setp-desc-cond-lbl') +
             '<div class="sd-cond" id="setp-desc-cond" role="radiogroup" aria-labelledby="setp-desc-cond-lbl"></div>' +
             paso(4, 'Cantidad', 'piezas') +
-            '<div class="sd-cant"><button type="button" data-cant="-1" aria-label="Menos">−</button><span id="setp-desc-cant" aria-live="polite">1</span><button type="button" data-cant="1" aria-label="Más">+</button></div></div>' +
+            '<div class="sd-cant"><button type="button" data-cant="-1" aria-label="Menos">−</button><span id="setp-desc-cant" aria-live="polite">1</span><button type="button" data-cant="1" aria-label="Más">+</button></div>' +
+            // Área responsable: sale sola de la etiqueta y el item (js/setp-catalogo.js).
+            '<div class="sd-areabox" id="setp-desc-areabox" aria-live="polite"></div></div>' +
             paso(5, 'Módulo *', '', 'setp-desc-mod-lbl').replace('</div>', '<span class="h" id="setp-desc-mod-nivel"></span></div>') +
             '<ul class="sd-mod-lista" id="setp-desc-mod" role="radiogroup" aria-labelledby="setp-desc-mod-lbl"></ul>' +
             '<div id="setp-desc-loc-wrap" hidden>' + paso(6, 'Local *', '', 'setp-desc-loc-lbl').replace('</div>', '<span class="h" id="setp-desc-loc-mod"></span></div>') +
-            '<div class="sd-loc-lista" id="setp-desc-loc" role="radiogroup" aria-labelledby="setp-desc-loc-lbl"></div></div>' +
+            '<div class="sd-loc-lista" id="setp-desc-loc" role="radiogroup" aria-labelledby="setp-desc-loc-lbl"></div>' +
+            // "Otro lugar": quioscos, bancas o puntos que no son un local del catálogo.
+            '<div id="setp-desc-loc-otro-wrap" hidden><input type="text" id="setp-desc-loc-otro" class="form-control mt-2" maxlength="120" autocomplete="off"' +
+            ' placeholder="Especifica el lugar (ej. Banca a un costado de las cajas de BANAMEX)" aria-label="Otro lugar"></div></div>' +
             '<div class="sd-resumen d-none" id="setp-desc-resumen"></div>' +
+            '<div id="setp-desc-text-home" hidden></div>' +
+            '<div id="setp-desc-text-wrap">' +
             '<label for="setp-desc-text" class="mt-2" id="setp-desc-text-lbl">Detalle <span class="fw-normal text-muted">(opcional)</span></label>' +
             '<textarea id="setp-desc-text" class="form-control" maxlength="' + DESC_MAX + '" rows="2" placeholder="Ej. Respaldo roto en la fila 3"></textarea>' +
-            '<div class="sd-count"><span id="setp-desc-n">0</span>/' + DESC_MAX + '</div>' +
+            '<div class="sd-count"><span id="setp-desc-n">0</span>/' + DESC_MAX + '</div></div>' +
             '<div class="sd-note"><i class="fas fa-circle-info me-1"></i>Al guardar se revisa si ya está reportado y se cierra esta ventana. Después presiona <b>✓</b> para confirmar el hallazgo.</div>' +
             '</div>' +
             '<div id="setp-desc-dup" hidden></div>' +
@@ -1267,11 +1495,32 @@
             if (e.target.closest('[data-etq], [data-item], [data-cond], [data-modulo], [data-local]')) descAviso('');
             if ((b = e.target.closest('[data-etq]'))) {
                 var etq = b.getAttribute('data-etq');
-                if (p.etiqueta !== etq) { p.etiqueta = etq; p.item = ''; p.condicion = ''; }
+                if (p.etiqueta !== etq) { p.etiqueta = etq; p.item = ''; p.condicion = ''; p.area = ''; state.areaElegir = false; }
                 pintarCaptura();
             } else if ((b = e.target.closest('[data-item]'))) {
                 p.item = p.item === b.getAttribute('data-item') ? '' : b.getAttribute('data-item');
+                // Otro item: el área vuelve a ser la de la regla.
+                p.area = '';
+                state.areaElegir = false;
                 pintarCaptura();
+                // Etiqueta "Otro" o item "Otro" de cualquier etiqueta: al elegirlo
+                // se pasa a escribir la descripción (la casilla sale bajo el item).
+                var catI = catalogo();
+                if (p.item && (p.etiqueta === 'OTRO' || (catI && p.item === catI.OTRO))) $('setp-desc-text').focus();
+            } else if ((b = e.target.closest('[data-area-cambiar]'))) {
+                state.areaElegir = !state.areaElegir;
+                pintarArea();
+            } else if ((b = e.target.closest('[data-area-auto]'))) {
+                p.area = '';
+                state.areaElegir = false;
+                pintarArea();
+            } else if ((b = e.target.closest('[data-area-elige]'))) {
+                var cat0 = catalogo();
+                var elegida = b.getAttribute('data-area-elige');
+                // Elegir la misma que marca la regla equivale a dejarla automática.
+                p.area = cat0 && elegida === cat0.areaRegla(p.etiqueta, p.item) ? '' : elegida;
+                state.areaElegir = false;
+                pintarArea();
             } else if ((b = e.target.closest('[data-cond]'))) {
                 p.condicion = p.condicion === b.getAttribute('data-cond') ? '' : b.getAttribute('data-cond');
                 pintarCaptura();
@@ -1283,10 +1532,18 @@
                 // Tocar el módulo elegido lo quita; al cambiar de módulo se limpia el local.
                 p.modulo = p.modulo === nombre ? '' : nombre;
                 p.local = '';
+                p.localOtro = false;
                 pintarCaptura();
+            } else if ((b = e.target.closest('[data-local-otro]'))) {
+                // "Otro lugar": el lugar se escribe en la casilla de abajo.
+                p.localOtro = !p.localOtro;
+                p.local = p.localOtro ? String($('setp-desc-loc-otro').value || '').trim().replace(/\s+/g, ' ') : '';
+                pintarCaptura();
+                if (p.localOtro) $('setp-desc-loc-otro').focus();
             } else if ((b = e.target.closest('[data-local]'))) {
                 var loc = b.getAttribute('data-local');
-                p.local = p.local === loc ? '' : loc;
+                p.local = p.local === loc && !p.localOtro ? '' : loc;
+                p.localOtro = false;
                 pintarCaptura();
             } else if ((b = e.target.closest('[data-dup-mismo]'))) {
                 p.mismoQue = { id: b.getAttribute('data-dup-mismo'), folio: b.getAttribute('data-dup-folio') || '' };
@@ -1303,7 +1560,7 @@
             else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); guardarDescripcion(); }
             else if (e.key === 'Tab') {
                 // El foco se queda dentro de la ventana.
-                var f = Array.prototype.filter.call(modal.querySelectorAll('button, textarea'), function (x) { return x.offsetParent !== null; });
+                var f = Array.prototype.filter.call(modal.querySelectorAll('button, textarea, input'), function (x) { return x.offsetParent !== null; });
                 var first = f[0], last = f[f.length - 1];
                 if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
                 else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
@@ -1313,6 +1570,16 @@
             var p = state.descFor && state.pending[state.descFor];
             if (p) p.detalle = e.target.value;
             $('setp-desc-n').textContent = e.target.value.length;
+            pintarResumen();
+        });
+        // Enter en "Otro lugar" no guarda la captura (se sigue con lo demás).
+        $('setp-desc-loc-otro').addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) e.preventDefault(); });
+        $('setp-desc-loc-otro').addEventListener('input', function (e) {
+            var p = state.descFor && state.pending[state.descFor];
+            if (!p || !p.localOtro) return;
+            p.local = e.target.value.trim().replace(/\s+/g, ' ');
+            if (p.local) descAviso('');
+            $('setp-desc-area').textContent = ubicacionTexto(state.recorridos.find(function (x) { return x.id === state.descFor; }), p);
             pintarResumen();
         });
         $('setp-desc-form').addEventListener('submit', function (e) { e.preventDefault(); guardarDescripcion(); });
@@ -1353,6 +1620,7 @@
                 return '<button type="button" data-cond="' + c.key + '"' + radio(p.condicion === c.key) + '>' + esc(c.texto) + '</button>';
             }).join('');
             $('setp-desc-cant').textContent = String(p.cantidad || 1);
+            pintarArea();
         }
         // 5 · Módulo y 6 · Local
         var modulos = modulosDe(r);
@@ -1369,15 +1637,67 @@
         if (elegido) {
             $('setp-desc-loc-mod').textContent = '· ' + elegido.nombre;
             $('setp-desc-loc').innerHTML = elegido.locales.map(function (l) {
-                return '<button type="button" class="sd-loc" data-local="' + esc(l) + '"' + radio(p.local === l) + '>' + esc(l) + '</button>';
-            }).join('');
+                return '<button type="button" class="sd-loc" data-local="' + esc(l) + '"' + radio(!p.localOtro && p.local === l) + '>' + esc(l) + '</button>';
+            }).join('') +
+                '<button type="button" class="sd-loc sd-loc-otro" data-local-otro' + radio(p.localOtro) + '><i class="fas fa-location-dot me-1"></i>Otro lugar</button>';
         }
+        $('setp-desc-loc-otro-wrap').hidden = !(elegido && p.localOtro);
+        if (elegido && p.localOtro && $('setp-desc-loc-otro').value.trim() !== (p.local || '')) $('setp-desc-loc-otro').value = p.local || '';
         // Con item "Otro" el detalle es obligatorio (es la descripción).
         var otro = p.item === cat.OTRO;
-        $('setp-desc-text-lbl').innerHTML = otro ? 'Describe el elemento *' : 'Detalle <span class="fw-normal text-muted">(opcional)</span>';
-        $('setp-desc-text').placeholder = otro ? 'Ej. Cartel del evento desprendido' : 'Ej. Respaldo roto en la fila 3';
+        // Etiqueta "Otro" o item "Otro" de cualquier etiqueta: la casilla de
+        // descripción sube justo debajo del item (con la etiqueta "Otro", sale
+        // hasta elegir el item); en lo demás va al final, como siempre.
+        var etqOtro = p.etiqueta === 'OTRO';
+        var caja = $('setp-desc-text-wrap');
+        if (etqOtro || otro) { if (caja.parentNode !== $('setp-desc-otro-slot')) $('setp-desc-otro-slot').appendChild(caja); }
+        else if (caja.previousElementSibling !== $('setp-desc-text-home')) $('setp-desc-text-home').after(caja);
+        caja.hidden = etqOtro && !p.item;
+        $('setp-desc-text-lbl').innerHTML = etqOtro ? 'Descripción *' : (otro ? 'Describe el elemento *' : 'Detalle <span class="fw-normal text-muted">(opcional)</span>');
+        $('setp-desc-text').placeholder = etqOtro ? 'Describe el hallazgo: qué es y qué tiene (ej. Cartel del evento desprendido)' : (otro ? 'Ej. Cartel del evento desprendido' : 'Ej. Respaldo roto en la fila 3');
         $('setp-desc-area').textContent = ubicacionTexto(r, p);
         pintarResumen();
+    }
+
+    // Área responsable del hallazgo: la de la regla (etiqueta + item) con cómo
+    // reportarle. "Cambiar" aparece sólo si la base ya guarda el área elegida
+    // (columna area de setp_hallazgos).
+    function pintarArea() {
+        var p = state.descFor && state.pending[state.descFor];
+        var cat = catalogo();
+        var box = $('setp-desc-areabox');
+        if (!p || !cat || !box) return;
+        if (!p.etiqueta || !cat.areaChip) { box.innerHTML = ''; return; }
+        var regla = cat.areaRegla(p.etiqueta, p.item);
+        var key = p.area || regla;
+        var manual = !!p.area && p.area !== regla;
+        var puede = state.areaCol === true;
+        var html = '<div class="sd-area-h"><i class="fas fa-route"></i>Área responsable <span class="h">· se asigna sola según la etiqueta y el item</span></div>' +
+            '<div class="sd-area-fila">' + cat.areaChip(key) +
+            (puede ? '<button type="button" class="sd-area-btn" data-area-cambiar aria-expanded="' + !!state.areaElegir + '"><i class="fas fa-pen me-1"></i>' + (key ? 'Cambiar' : 'Elegir área') + '</button>' : '') +
+            (puede && manual ? '<button type="button" class="sd-area-btn" data-area-auto><i class="fas fa-rotate-left me-1"></i>Usar la automática</button>' : '') + '</div>';
+        if (manual) html += '<div class="sd-area-nota is-man"><i class="fas fa-user-pen me-1"></i>Cambiada por el supervisor' + (regla ? ' (la regla marca ' + esc(cat.area(regla).corto) + ')' : '') + '</div>';
+        else if (key) html += '<div class="sd-area-nota"><i class="fas fa-wand-magic-sparkles me-1"></i>Asignada automáticamente</div>';
+        else html += '<div class="sd-area-nota is-man"><i class="fas fa-circle-info me-1"></i>' + (puede ? 'Las tablas de responsables no lo asignan: queda a consideración del supervisor. Elige a qué área se reporta.' : 'Las tablas de responsables no lo asignan: queda a consideración del supervisor.') + '</div>';
+        html += cat.areaInfo(key);
+        if (puede && state.areaElegir) {
+            html += '<div class="sd-cond sd-area-lista" role="radiogroup" aria-label="Área responsable">' + cat.areas().map(function (a) {
+                return '<button type="button" data-area-elige="' + a.key + '" style="--c:' + a.color + '" role="radio" aria-checked="' + (a.key === key) + '"><i class="fas ' + a.icono + '"></i>' + esc(a.corto) + '</button>';
+            }).join('') + '</div>';
+        }
+        box.innerHTML = html;
+    }
+
+    // ¿La base guarda el área elegida a mano? Se revisa una vez por sesión.
+    async function revisarColumnaArea() {
+        if (state.areaCol !== null) return;
+        state.areaCol = false;
+        try {
+            var sb = await getClient();
+            var res = await sb.from('setp_hallazgos').select('area').limit(1);
+            state.areaCol = !res.error;
+        } catch (_) { state.areaCol = false; }
+        if (state.areaCol && state.descFor) pintarArea();
     }
 
     function pintarResumen() {
@@ -1418,13 +1738,18 @@
         ensureDescModal();
         state.descFor = id;
         if (!p.cantidad) p.cantidad = 1;
+        // Modelos para comparar fotos: se descargan mientras se captura.
+        if (window.setpComparar) window.setpComparar.precargar();
         $('setp-desc-foto').src = p.url;
         $('setp-desc-fecha').textContent = (fecha(r.registrado_en) || '—') + ' · ' + hhmm(r.hora_inicio) + ' hrs' + (p.extra ? ' · evidencia adicional' : '');
         $('setp-desc-text').value = p.detalle || '';
+        $('setp-desc-loc-otro').value = p.localOtro ? (p.local || '') : '';
         $('setp-desc-n').textContent = String((p.detalle || '').length);
         descAviso(aviso || '', 'info');
         vistaDuplicados(false);
+        state.areaElegir = false;
         pintarCaptura();
+        revisarColumnaArea();
         var modal = $(DESC_ID);
         modal.hidden = false;
         document.body.style.overflow = 'hidden';
@@ -1456,76 +1781,40 @@
         else if (!p.item) f.push(['item', '#setp-desc-item']);
         if (p.etiqueta && !p.condicion) f.push(['condición', '#setp-desc-cond']);
         if (!p.modulo) f.push(['módulo', '#setp-desc-mod']);
-        else if (!p.local) f.push(['local', '#setp-desc-loc']);
-        if (cat && p.item === cat.OTRO && !String(p.detalle || '').trim()) f.push(['descripción del elemento', '#setp-desc-text']);
+        else if (!p.local) f.push(p.localOtro ? ['el lugar (Otro lugar)', '#setp-desc-loc-otro'] : ['local', '#setp-desc-loc']);
+        if (cat && p.item === cat.OTRO && !String(p.detalle || '').trim()) f.push([p.etiqueta === 'OTRO' ? 'descripción' : 'descripción del elemento', '#setp-desc-text']);
         return f;
     }
 
-    // Hallazgos pendientes iguales en la base: mismo item en el mismo local
-    // (y nivel); si el objeto se mueve, en todo el nivel durante las últimas
-    // 24 h. Sin las columnas de db/setp_hallazgos_identificacion.sql no revisa.
+    // Hallazgos pendientes que pueden ser el mismo (js/setp-comparar.js):
+    // mismo item; si el objeto se mueve (maleta, mochila…), en todo el
+    // edificio durante las últimas 24 h; si no, en el mismo nivel y local o
+    // módulo. Sin las columnas de db/setp_hallazgos_identificacion.sql no revisa.
+    function consultaDuplicados(r, p) {
+        return { etiqueta: p.etiqueta, item: p.item, nivel: r.area_recorrido, modulo: p.modulo, local: p.local };
+    }
+
     async function buscarDuplicados(r, p) {
-        var cat = catalogo();
-        if (!cat || (p.item === cat.OTRO && !cat.esMovible(p.etiqueta, p.item))) return [];
+        if (!window.setpComparar) return [];
         try {
-            var sb = await getClient();
-            var res = await sb.from('setp_hallazgos')
-                .select('id, folio, fecha_reporte, created_at, modulo, local, nivel, etiqueta, item, condicion, cantidad, descripcion, evidencia_url, no_empleado, veces')
-                .eq('estatus', 'PENDIENTE').is('duplicado_de', null).eq('etiqueta', p.etiqueta).eq('item', p.item)
-                .order('created_at', { ascending: false }).limit(40);
-            if (res.error) return [];
-            var nivel = cat.nivel(r.area_recorrido);
-            var mov = cat.esMovible(p.etiqueta, p.item);
-            var desde = Date.now() - MOVIBLE_HORAS * 3600 * 1000;
-            return (res.data || []).filter(function (h) {
-                if (cat.nivel(h.nivel) !== nivel) return false;
-                if (mov) return new Date(h.created_at).getTime() >= desde;
-                return h.local === p.local;
-            });
+            return await window.setpComparar.buscar(await getClient(), consultaDuplicados(r, p));
         } catch (_) {
             return [];
         }
     }
 
-    function fechaHora(ts) {
-        var d = ts ? new Date(ts) : null;
-        if (!d || isNaN(d)) return '';
-        return d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' +
-            d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
-    }
-
+    // "¿Es el mismo hallazgo?": candidatos con % de parecido de la foto.
     function pintarDuplicados(r, p, lista) {
-        var cat = catalogo();
-        var etq = cat.etiqueta(p.etiqueta);
-        var mov = cat.esMovible(p.etiqueta, p.item);
         var yo = supervisor(r.no_empleado);
-        var foto = function (url) {
-            return url ? '<img class="sd-dup-foto" src="' + esc(url) + '" alt="Foto del hallazgo registrado">' : '<div class="sd-dup-foto d-flex align-items-center justify-content-center small text-muted">Sin foto</div>';
-        };
-        var donde = mov ? 'en el nivel ' + esc(r.area_recorrido) + ' durante las últimas ' + MOVIBLE_HORAS + ' h' : 'en este mismo local (' + esc(p.local) + ')';
-        $('setp-desc-dup').innerHTML = '<div class="sd-dup">' +
-            '<div class="sd-dup-h"><i class="fas fa-triangle-exclamation mt-1"></i><span>' +
-            (lista.length === 1 ? 'Ya hay un hallazgo pendiente igual' : 'Ya hay ' + lista.length + ' hallazgos pendientes iguales') +
-            ': <b>' + esc(etq ? etq.nombre : '') + ' › ' + esc(p.item) + '</b> ' + donde + '.</span></div>' +
-            '<div class="sd-dup-grid">' +
-            '<div><div class="sd-dup-lbl">Tu foto · ahora</div>' + foto(p.url) +
-            '<div class="sd-dup-tit">' + esc(cat.componer(p)) + '</div>' +
-            '<div class="sd-dup-sub">' + esc(yo ? yo.nombre : r.no_empleado) + ' · ' + esc(ubicacionTexto(r, p)) + '</div></div>' +
-            '<div class="sd-dup-lista">' + lista.map(function (h) {
-                var s = supervisor(h.no_empleado);
-                return '<div class="sd-dup-cand"><div class="sd-dup-lbl">' + esc(h.folio || 'Registrado') + ' · pendiente</div>' + foto(h.evidencia_url) +
-                    '<div class="sd-dup-tit">' + esc(h.descripcion) + '</div>' +
-                    '<div class="sd-dup-sub">' + esc([h.nivel, h.modulo, h.local].filter(Boolean).join(' · ')) + '</div>' +
-                    '<div class="sd-dup-sub">' + esc(s ? s.nombre : (h.no_empleado || '')) + ' · ' + esc(fechaHora(h.created_at) || h.fecha_reporte) +
-                    (h.veces > 1 ? ' · reportado ' + h.veces + ' veces' : '') + '</div>' +
-                    '<button type="button" class="btn btn-warning btn-sm" data-dup-mismo="' + esc(h.id) + '" data-dup-folio="' + esc(h.folio || '') + '"><i class="fas fa-link me-1"></i>Es el mismo · agregar mi foto</button></div>';
-            }).join('') + '</div></div>' +
-            '<div class="small mt-2" style="color:inherit"><i class="fas fa-circle-info me-1"></i>Compara las fotos. Si es el mismo, tu foto se agrega a ese hallazgo y no se crea otro.</div>' +
-            '<div class="sd-dup-btns"><button type="button" class="btn btn-outline-secondary btn-sm" data-dup="volver"><i class="fas fa-arrow-left me-1"></i>Regresar</button>' +
-            '<button type="button" class="btn btn-primary btn-sm" data-dup="otro"><i class="fas fa-plus me-1"></i>Es otro hallazgo</button></div></div>';
+        var id = state.descFor;
         vistaDuplicados(true);
-        var b = $('setp-desc-dup').querySelector('[data-dup-mismo]');
-        if (b) b.focus();
+        window.setpComparar.pintar($('setp-desc-dup'), {
+            q: consultaDuplicados(r, p),
+            lista: lista,
+            mia: { url: p.url, tit: catalogo().componer(p), sub: (yo ? yo.nombre : r.no_empleado) + ' · ' + ubicacionTexto(r, p) },
+            nombre: function (no) { var s = supervisor(no); return s ? s.nombre : (no || ''); },
+            sigue: function () { return state.descFor === id && !$('setp-desc-dup').hidden; }
+        });
     }
 
     async function guardarDescripcion() {
@@ -1539,7 +1828,7 @@
         if (falta.length) {
             descAviso('Falta elegir: <b>' + falta.map(function (f) { return f[0]; }).join(', ') + '</b>.');
             var el = document.querySelector('#' + DESC_ID + ' ' + falta[0][1]);
-            if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); var f = el.matches('textarea') ? el : el.querySelector('button'); if (f) f.focus({ preventScroll: true }); }
+            if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); var f = el.matches('textarea, input') ? el : el.querySelector('button'); if (f) f.focus({ preventScroll: true }); }
             return;
         }
         descAviso('');
@@ -1660,7 +1949,7 @@
             }
             state.supervisores = ordenarSupervisores(state.supervisores.concat([res.data]));
             bootstrap.Modal.getOrCreateInstance($(MODAL_ID)).hide();
-            // El filtro Supervisor (js/setp-reportes.js) se actualiza y lo selecciona.
+            // "Detalle de registros" (js/setp-reportes.js) se actualiza y lo muestra.
             document.dispatchEvent(new CustomEvent('setp:supervisor-creado', { detail: res.data }));
         } catch (error) {
             modalStatus('No se pudo crear el usuario: ' + errText(error));
@@ -1818,6 +2107,8 @@
         ' var w=window.open("","_blank");',
         ' if(!w){alert("El navegador bloqueó la ventana del informe. Permite las ventanas emergentes de este sitio.");return;}',
         ' var n=tr.getAttribute("data-num");',
+        // Con el aplicativo abierto, el informe sale con el formato del oficio.
+        ' if(window.__setpInforme){w.document.write("<p style=\\"font-family:Arial,sans-serif;padding:24px;color:#475569\\">Preparando el informe…</p>");window.__setpInforme(Number(n),w);return;}',
         ' var wrap=document.querySelector(".wrap").cloneNode(true);',
         ' wrap.querySelectorAll(".cards,#aviso").forEach(function(x){x.remove();});',
         ' wrap.querySelectorAll("tbody tr").forEach(function(x){if(x.getAttribute("data-num")!==n)x.remove();else{x.classList.add("imprimir");x.classList.remove("sel");x.removeAttribute("id");}});',
@@ -1990,10 +2281,46 @@
                     var r = recs.find(function (x) { return x.id === id; });
                     if (r) borrarDesdeHistorial(w, s, r, hallazgos[id]);
                 };
+                // "Ver informe" (n = No. de registro, desde 1): formato del oficio.
+                if (window.setpFormato && window.setpFormato.informeRegistro) {
+                    w.__setpInforme = function (n, win) { verInformeRegistro(win, s, recs[n - 1], hallazgos, n); };
+                }
             }
         } catch (error) {
             escribirVentana(w, historialDoc(s, null, null, errText(error)));
         }
+    }
+
+    // Informe de un registro con el formato del oficio (js/setp-formato.js):
+    // la tabla lleva los hallazgos detectados en ese recorrido. Arriba, sólo en
+    // pantalla, el botón Imprimir.
+    async function verInformeRegistro(win, s, r, hallazgos, n) {
+        if (!win || win.closed || !r) return;
+        var info = hallazgos[r.id] || { principal: null, extras: [] };
+        var hs = (info.principal ? [info.principal] : []).concat(info.extras);
+        var area = String(r.area_recorrido || '').trim();
+        var donde = /^\d+(\.\d+)?$/.test(area) ? 'en el nivel ' + area : (area ? 'en ' + area : '');
+        // Fecha como en el oficio: "17 Nov. 2026".
+        var MES = ['Ene.', 'Feb.', 'Mar.', 'Abr.', 'May.', 'Jun.', 'Jul.', 'Ago.', 'Sep.', 'Oct.', 'Nov.', 'Dic.'];
+        var f = fechaLocal(r.registrado_en).split('-');
+        var texto = 'durante el recorrido realizado el ' + f[2] + ' ' + MES[Number(f[1]) - 1] + ' ' + f[0] +
+            (r.hora_inicio ? ', de ' + hhmm(r.hora_inicio) + (r.hora_termino ? ' a ' + hhmm(r.hora_termino) : '') + ' hrs' : '') +
+            (donde ? ', ' + donde : '') + ', por ' + s.nombre;
+        var html;
+        try {
+            html = await window.setpFormato.informeRegistro({
+                recorridoId: r.id, fecha: fechaLocal(r.registrado_en), texto: texto, hallazgos: hs,
+                titulo: 'Informe · Registro #' + n + ' · ' + s.nombre
+            });
+        } catch (error) {
+            if (!win.closed) escribirVentana(win, '<p style="font-family:Arial,sans-serif;padding:24px;color:#b91c1c">No se pudo armar el informe: ' + errText(error) + '</p>');
+            return;
+        }
+        var barra = '<style>.setp-inf-barra{position:fixed;top:12px;right:16px;z-index:10;display:flex;gap:8px;}' +
+            '.setp-inf-barra button{font:600 14px system-ui,"Segoe UI",Arial,sans-serif;padding:8px 16px;border-radius:8px;border:1px solid #2a78d6;background:#2a78d6;color:#fff;cursor:pointer;}' +
+            '.setp-inf-barra button:hover{background:#1d63b8;}@media print{.setp-inf-barra{display:none !important;}}</style>' +
+            '<div class="setp-inf-barra"><button type="button" onclick="window.print()">&#128424; Imprimir / PDF</button></div>';
+        escribirVentana(win, html.replace('<body>', '<body>' + barra));
     }
 
     // Sólo superadmin: borra un registro de prueba desde el historial: el
@@ -2063,7 +2390,7 @@
     window.setpRecorridos = {
         mount: mount,
         supervisores: function () { return state.supervisores.slice(); },
-        // Supervisor elegido en el filtro ('' = todos).
+        // Supervisor del usuario que inició sesión ('' = todos).
         select: function (no) {
             var cambio = state.selected !== (no || '');
             state.selected = no || '';
@@ -2086,7 +2413,8 @@
         },
         // Recorridos cargados, más recientes primero (null mientras cargan).
         recorridos: function () { return state.loaded ? state.recorridos.slice() : null; },
-        recorridosCompletos: function () { return true; }, // load() trae todos los recorridos
+        // false si load() trajo sólo el periodo reciente (barra de periodo de SETP).
+        recorridosCompletos: function () { return !state.desdeCargado; },
         enFormato: function (id) { return !!state.enFormato[id]; },
         // Todos los recorridos con su turno (null mientras cargan) y si ya existe la columna turno.
         resumen: function () { return state.loaded ? state.resumen.slice() : null; },

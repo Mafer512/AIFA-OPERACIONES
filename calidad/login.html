@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es-MX" data-theme="light" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0F3529">
+  <title>Iniciar sesión · SIGEC · AIFA</title>
+  <link rel="icon" type="image/svg+xml" href="images/favicon.svg">
+  <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css">
+  <link rel="stylesheet" href="vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/login.css">
+  <script src="js/config.js"></script>
+  <script src="js/boot.js" data-public></script>
+</head>
+<body class="login-body">
+  <main class="login">
+    <section class="login__hero" aria-hidden="true">
+      <div class="login__hero-inner">
+        <img src="images/aifa-logo-blanco.png" alt="" width="229" height="129" class="login__hero-logo">
+        <p class="login__kicker">Gerencia de Calidad</p>
+        <h1 class="login__headline">Sistema Integral de Gestión y Evaluación de la Calidad</h1>
+        <ul class="login__features">
+          <li><i class="bi bi-graph-up-arrow"></i>Indicadores operativos y de calidad</li>
+          <li><i class="bi bi-clipboard2-check"></i>Registro y seguimiento de incidencias</li>
+          <li><i class="bi bi-chat-square-heart"></i>Evaluación de la satisfacción del servicio</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="login__panel">
+      <div class="login__card">
+        <img src="images/aifa-logo.png" alt="Aeropuerto Internacional Felipe Ángeles" width="229" height="129" class="login__logo">
+        <h2 class="login__title">Iniciar sesión</h2>
+        <p class="login__sub">Ingresa con tu cuenta institucional.</p>
+
+        <div id="login-alert" class="callout callout--warn mb-3" role="alert" hidden><i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i><div id="login-alert-text"></div></div>
+
+        <form id="login-form" novalidate autocomplete="on">
+          <div class="mb-3">
+            <label class="form-label" for="username">Usuario</label>
+            <div class="input-icon"><i class="bi bi-person" aria-hidden="true"></i>
+              <input class="form-control form-control-lg" id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="40" required></div>
+            <div class="invalid-feedback d-block" data-for="username"></div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label" for="password">Contraseña</label>
+            <div class="input-icon position-relative"><i class="bi bi-lock" aria-hidden="true"></i>
+              <input class="form-control form-control-lg pe-5" id="password" name="password" type="password" autocomplete="current-password" maxlength="128" required>
+              <button type="button" class="login__eye" id="toggle-pw" aria-label="Mostrar contraseña" aria-pressed="false"><i class="bi bi-eye" aria-hidden="true"></i></button></div>
+            <div class="invalid-feedback d-block" data-for="password"></div>
+            <div class="form-text" id="caps-warn" hidden><i class="bi bi-capslock-fill" aria-hidden="true"></i> Bloq Mayús activado</div>
+          </div>
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <label class="d-flex align-items-center gap-2 small text-ink-2"><input class="form-check-input m-0" type="checkbox" id="remember"> Recordar usuario</label>
+            <button type="button" class="btn-link-accent small" id="forgot">¿Olvidaste tu contraseña?</button>
+          </div>
+
+          <fieldset class="login__demo mb-3" id="demo-box" hidden>
+            <legend><i class="bi bi-cone-striped" aria-hidden="true"></i> Modo demostración</legend>
+            <label class="form-label" for="role">Perfil a previsualizar</label>
+            <select class="form-select" id="role" name="role">
+              <option value="admin">Administrador</option>
+              <option value="supervisor" selected>Supervisor de Calidad</option>
+              <option value="capturista">Capturista</option>
+              <option value="consulta">Consulta</option>
+            </select>
+            <div class="form-text">Cualquier usuario (3+ caracteres) y contraseña (8+ caracteres). Sin conexión a servidor.</div>
+          </fieldset>
+
+          <button type="submit" class="btn btn-accent btn-lg w-100" id="btn-login"><span>Ingresar</span><i class="bi bi-arrow-right" aria-hidden="true"></i></button>
+        </form>
+
+        <p class="login__legal"><i class="bi bi-shield-lock-fill" aria-hidden="true"></i> Uso exclusivo de personal autorizado.</p>
+      </div>
+      <footer class="login__footer">© 2026 Aeropuerto Internacional Felipe Ángeles</footer>
+    </section>
+  </main>
+  <div class="toast-stack" id="toasts" role="status" aria-live="polite"></div>
+  <script src="js/sigec.js"></script>
+  <script src="js/core/format.js"></script>
+  <script src="js/core/dom.js"></script>
+  <script src="js/data/catalogs.js"></script>
+  <script src="js/core/ui.js"></script>
+  <script src="js/core/session.js"></script>
+  <script src="js/login.js"></script>
+</body>
+</html>

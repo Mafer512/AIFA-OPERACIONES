@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 260" fill="none" stroke="#C9D1CB" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Estela -->
+  <path d="M20 214 C 140 196, 250 160, 330 118" stroke-dasharray="2 9" opacity=".8"/>
+  <path d="M60 236 C 170 214, 268 176, 340 134" stroke-dasharray="2 9" opacity=".5"/>
+  <!-- Avión -->
+  <g transform="translate(338 34) rotate(-24 80 60)">
+    <path d="M6 66 L150 54 C 166 53, 172 60, 166 66 C 160 72, 150 72, 140 72 L 6 72 Z"/>
+    <path d="M70 66 L 40 18 L 58 18 L 104 62"/>
+    <path d="M80 72 L 54 116 L 72 116 L 112 72"/>
+    <path d="M12 66 L 2 44 L 14 44 L 30 64"/>
+    <path d="M12 72 L 4 88 L 16 88 L 28 74"/>
+    <path d="M118 60 h 6 M128 59 h 6 M138 58 h 6"/>
+  </g>
+  <!-- Torre -->
+  <g opacity=".7" transform="translate(452 120)">
+    <path d="M16 0 h28 l-4 14 h-20 z"/>
+    <path d="M22 14 l-6 104 M38 14 l6 104"/>
+    <path d="M18 40 l24 0 M17 66 l26 0 M16 92 l28 0"/>
+    <path d="M0 118 h60"/>
+  </g>
+</svg>

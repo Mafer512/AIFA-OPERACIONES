@@ -32,7 +32,7 @@ const $ = (id) => document.getElementById(id);
 const esperar = () => new Promise((r) => setTimeout(r, 0));
 // Los accesos internos se identifican por su sección; los externos (SMS), por su enlace.
 const ordenAccesos = (raizAccesos) => [...raizAccesos.querySelectorAll(':scope > a.si-quick')].map((a) => a.dataset.section || a.getAttribute('href'));
-const ORDEN = ['operaciones-totales', 'inicio', 'frecuencias-semana', 'conciliacion', 'aviacion-general', 'http://localhost:3000/reportes/general', 'puntualidad-agosto', 'demoras'];
+const ORDEN = ['operaciones-totales', 'inicio', 'frecuencias-semana', 'conciliacion', 'aviacion-general', 'https://sms.opn-nlu.com/reportes/general', 'puntualidad-agosto', 'demoras'];
 
 function montar(rol) {
     document.body.className = 'navdeck-mode';

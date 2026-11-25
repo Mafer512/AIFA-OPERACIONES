@@ -433,9 +433,15 @@ test('al crear se pueden adjuntar PDF o fotos y se suben con la tarea', async ()
     const exe = new File(['MZ'], 'virus.exe', { type: 'application/octet-stream' });
     Object.defineProperty(entrada, 'files', { value: [pdf, exe], configurable: true });
     entrada.dispatchEvent(new Event('change'));
+    await esperar(3);   // antes de aceptarlos se revisa el inicio de cada archivo
     expect(document.querySelector('#seg-evid').textContent).toContain('poliza.pdf');
     expect(document.querySelector('#seg-evid').textContent).not.toContain('virus.exe');
-    expect(document.getElementById('seg-toasts').textContent).toContain('sólo se aceptan PDF, JPG o PNG');
+    // Lo que no se acepta se explica en un aviso y no se sube.
+    const aviso = document.getElementById('seg-confirm');
+    expect(aviso.hidden).toBe(false);
+    expect(aviso.textContent).toContain('No se adjuntó «virus.exe»');
+    expect(aviso.textContent).toContain('Tipo no permitido');
+    aviso.querySelector('[data-cf="si"]').click();
     [...document.querySelectorAll('#seg-drawer [data-dr="subdireccion"]')][0].click();
     [...document.querySelectorAll('#seg-menu .seg-menu-item')].find(b => b.textContent.includes('Servicios Conexos')).click();
     document.querySelector('#seg-drawer [data-dr="crear"]').click();
@@ -536,7 +542,8 @@ test('tablero y calendario se pintan con las mismas tareas', async () => {
     document.querySelector('#seg-views [data-vista="tablero"]').click();
     await esperar();
     const cols = [...document.querySelectorAll('#seg-body .seg-col-head .seg-pill')].map(p => p.textContent.trim());
-    expect(cols).toEqual(['Pendiente', 'En proceso', 'En revisión', 'Detenida', 'Completada']);
+    // Con la validación del Director instalada, «Por validar» va antes de Completada.
+    expect(cols).toEqual(['Pendiente', 'En proceso', 'En revisión', 'Detenida', 'Por validar', 'Completada']);
     expect(document.querySelector('#seg-body .seg-card[data-id="a1"]')).not.toBeNull();
     // Las tarjetas también se pueden palomear.
     expect(document.querySelector('#seg-body .seg-card[data-id="a1"] .seg-hecho[data-accion="completar"]')).not.toBeNull();

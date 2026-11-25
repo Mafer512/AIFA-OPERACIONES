@@ -234,12 +234,15 @@ describe('detalles', () => {
     });
 
     test('los nombres de evidencia siempre pasan la política del bucket', () => {
-        // db/create_seguimiento.sql: <uuid>/[A-Za-z0-9_-]{6,64}.(pdf|jpg|png)
-        const sql = require('fs').readFileSync(require('path').join(__dirname, '..', 'db', 'create_seguimiento.sql'), 'utf8');
-        expect(sql).toContain("'^[0-9a-f-]{36}/[A-Za-z0-9_-]{6,64}\\.(pdf|jpg|png)$'");
-        const re = /^[0-9a-f-]{36}\/[A-Za-z0-9_-]{6,64}\.(pdf|jpg|png)$/;
+        // db/create_seguimiento.sql: <uuid>/[A-Za-z0-9_-]{6,64}.(pdf|jpg|png|doc|docx|xls|xlsx)
+        const leerSql = f => require('fs').readFileSync(require('path').join(__dirname, '..', 'db', f), 'utf8');
+        const patron = "'^[0-9a-f-]{36}/[A-Za-z0-9_-]{6,64}\\.(pdf|jpg|png|doc|docx|xls|xlsx)$'";
+        // Los tres scripts que crean la política dicen lo mismo: correr uno no deshace otro.
+        ['create_seguimiento.sql', 'seguimiento_alcance_por_area.sql', 'seguimiento_validacion.sql'].forEach(f => expect(leerSql(f)).toContain(patron));
+        const re = /^[0-9a-f-]{36}\/[A-Za-z0-9_-]{6,64}\.(pdf|jpg|png|doc|docx|xls|xlsx)$/;
         for (let i = 0; i < 500; i++) {
-            expect(re.test('3f2b8c1e-0000-4000-8000-1234567890ab/' + C.idCorto() + '.pdf')).toBe(true);
+            const ext = Object.keys(C.ARCHIVOS)[i % Object.keys(C.ARCHIVOS).length];
+            expect(re.test('3f2b8c1e-0000-4000-8000-1234567890ab/' + C.idCorto() + '.' + ext)).toBe(true);
         }
     });
 });

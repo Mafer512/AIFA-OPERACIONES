@@ -1,6 +1,172 @@
 
-document.addEventListener('DOMContentLoaded', () => {
+/* ==========================================================================
+   Lectura del archivo de Visits (export del sistema del aeropuerto)
+
+   Cada fila es una visita: la llegada [Arr] y la salida [Dep] de un avión.
+   De cada visita salen hasta dos tramos (la llegada y la salida). En la tabla
+   de frecuencias cada día cuenta las SALIDAS (frecuencias) y el detalle guarda
+   los dos tramos (db/frecuencias_contar_salidas.sql).
+
+   Además de leer, lleva la cuenta de lo que no entró y por qué, para poder
+   cuadrar contra el Excel: tramos de otras fechas, sin ruta/vuelo/hora, con
+   hora ilegible o repetidos.
+   ========================================================================== */
+(function () {
+    const AIFA = ['NLU', 'MMSM'];
+    const MESES = {
+        JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5, JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+        ENE: 0, ABR: 3, AGO: 7, DIC: 11,
+    };
+
+    /** El separador del archivo: coma, o punto y coma si se volvió a guardar desde Excel en español. */
+    function separador(texto) {
+        const primera = String(texto || '').split(/\r?\n/, 1)[0] || '';
+        const sinComillas = primera.replace(/"[^"]*"/g, '');
+        return (sinComillas.match(/;/g) || []).length > (sinComillas.match(/,/g) || []).length ? ';' : ',';
+    }
+
+    /** CSV completo → filas. Respeta comillas, comillas dobles ("") y saltos de línea dentro de un campo. */
+    function parsearCSV(texto) {
+        const t = String(texto || '').replace(/^﻿/, '');
+        const sep = separador(t);
+        const filas = [];
+        let fila = [];
+        let campo = '';
+        let enComillas = false;
+        for (let i = 0; i < t.length; i++) {
+            const c = t[i];
+            if (enComillas) {
+                if (c === '"') {
+                    if (t[i + 1] === '"') { campo += '"'; i++; } else enComillas = false;
+                } else campo += c;
+                continue;
+            }
+            if (c === '"') { enComillas = true; continue; }
+            if (c === sep) { fila.push(campo.trim()); campo = ''; continue; }
+            if (c === '\n' || c === '\r') {
+                if (c === '\r' && t[i + 1] === '\n') i++;
+                fila.push(campo.trim());
+                campo = '';
+                if (fila.some(x => x !== '')) filas.push(fila);
+                fila = [];
+                continue;
+            }
+            campo += c;
+        }
+        fila.push(campo.trim());
+        if (fila.some(x => x !== '')) filas.push(fila);
+        return filas;
+    }
+
+    /** «19JAN 08:24», «19JAN 08:24 (Dep)» o «19/01/2026 08:24» → { fecha, conAnio } o null. */
+    function leerHora(texto, anio) {
+        const limpio = String(texto || '').split('(')[0].trim();
+        let m = /^(\d{1,2})\s*([A-Za-z]{3})\s+(\d{1,2}):(\d{2})/.exec(limpio);
+        if (m) {
+            const mes = MESES[m[2].toUpperCase()];
+            if (mes === undefined) return null;
+            return { fecha: new Date(anio, mes, +m[1], +m[3], +m[4], 0), conAnio: false };
+        }
+        m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/.exec(limpio);
+        if (m) return { fecha: new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], 0), conAnio: true };
+        return null;
+    }
+
+    /** Del Routing, la otra punta: en la salida, a dónde va; en la llegada, de dónde viene. */
+    function otraPunta(routing, tipo) {
+        const partes = String(routing || '').split('-').map(x => x.trim().toUpperCase()).filter(Boolean);
+        if (!partes.length) return '';
+        const i = partes.findIndex(x => AIFA.includes(x));
+        if (i === -1) return tipo === 'DEP' ? (partes[1] || partes[0]) : partes[0];
+        return tipo === 'DEP' ? (partes[i + 1] || '') : (partes[i - 1] || '');
+    }
+
+    /**
+     * Lee el archivo y junta los tramos de la semana [inicio, fin] por ruta y
+     * aerolínea. Devuelve { mapa, resumen, total } o { error }.
+     */
+    function leerVisits(texto, inicio, fin) {
+        const filas = parsearCSV(texto);
+        if (filas.length < 2) return { error: 'El archivo parece estar vacío o inválido.' };
+        const h = filas[0].map(x => String(x).trim());
+        const col = {
+            depRouting: h.findIndex(x => x.includes('[Dep] Routing')),
+            arrRouting: h.findIndex(x => x.includes('[Arr] Routing')),
+            routing: h.findIndex(x => x === 'Routing'),
+            depAirline: h.findIndex(x => x.includes('[Dep] Airline code')),
+            arrAirline: h.findIndex(x => x.includes('[Arr] Airline code')),
+            depFlight: h.findIndex(x => x.includes('[Dep] Flight Designator')),
+            arrFlight: h.findIndex(x => x.includes('[Arr] Flight Designator')),
+            sobt: h.findIndex(x => x.includes('[Dep] SOBT')),
+            sibt: h.findIndex(x => x.includes('[Arr] SIBT')),
+        };
+        if (col.depRouting === -1 && col.arrRouting === -1 && col.routing === -1) {
+            return { error: 'No se encontraron columnas de Routing ([Dep] Routing, [Arr] Routing o Routing).' };
+        }
+        if (col.sobt === -1 && col.sibt === -1) return { error: 'No se encontraron las columnas de hora ([Dep] SOBT o [Arr] SIBT).' };
+
+        const resumen = { visitas: 0, salidas: 0, llegadas: 0, fueraDeSemana: 0, sinDatos: 0, horaIlegible: 0, repetidos: 0, ejemplos: [] };
+        const mapa = new Map();
+        const tramo = (routing, aerolineaRaw, vueloRaw, horaRaw, tipo) => {
+            const vuelo = String(vueloRaw || '').trim();
+            const hora = String(horaRaw || '').trim();
+            if (!vuelo && !hora) return;                         // la visita no trae este tramo
+            const ruta = otraPunta(routing, tipo);
+            if (!vuelo || !hora || !ruta || AIFA.includes(ruta)) { resumen.sinDatos++; return; }
+            const leida = leerHora(hora, inicio.getFullYear());
+            if (!leida) {
+                resumen.horaIlegible++;
+                if (resumen.ejemplos.length < 3) resumen.ejemplos.push(hora);
+                return;
+            }
+            let fecha = leida.fecha;
+            const enSemana = f => f >= inicio && f <= fin;
+            if (!enSemana(fecha) && !leida.conAnio) {
+                // «19JAN» no trae año: una semana que cruza el año puede ser del siguiente o del anterior.
+                const otra = [1, -1].map(d => { const f = new Date(fecha); f.setFullYear(fecha.getFullYear() + d); return f; }).find(enSemana);
+                if (otra) fecha = otra;
+            }
+            if (!enSemana(fecha)) { resumen.fueraDeSemana++; return; }
+            const aerolinea = String(aerolineaRaw || '').trim() || 'UNK';
+            const clave = ruta + '-' + aerolinea;
+            if (!mapa.has(clave)) mapa.set(clave, { route: ruta, airline: aerolinea, count: 0, salidas: 0, llegadas: 0, flights: [] });
+            const e = mapa.get(clave);
+            const vueloDir = vuelo.replace(/\s+/g, '') + ' (' + (tipo === 'DEP' ? 'Sal' : 'Lleg') + ')';
+            if (e.flights.some(f => f.flight === vueloDir && f.fullDate.getTime() === fecha.getTime())) { resumen.repetidos++; return; }
+            e.flights.push({ fullDate: fecha, sobt: hora.split('(')[0].trim(), flight: vueloDir });
+            e.count++;
+            if (tipo === 'DEP') { e.salidas++; resumen.salidas++; } else { e.llegadas++; resumen.llegadas++; }
+        };
+        const depVuelo = col.depFlight !== -1 ? col.depFlight : col.depAirline;
+        const arrVuelo = col.arrFlight !== -1 ? col.arrFlight : col.arrAirline;
+        for (let i = 1; i < filas.length; i++) {
+            const c = filas[i];
+            const v = k => (k >= 0 && k < c.length ? c[k] : '');   // filas cortas: lo que falta, vacío
+            resumen.visitas++;
+            if (col.sobt !== -1) tramo(col.depRouting !== -1 ? v(col.depRouting) : v(col.routing), v(col.depAirline), v(depVuelo), v(col.sobt), 'DEP');
+            if (col.sibt !== -1) tramo(col.arrRouting !== -1 ? v(col.arrRouting) : v(col.routing), v(col.arrAirline), v(arrVuelo), v(col.sibt), 'ARR');
+        }
+        return { mapa, resumen, total: resumen.salidas + resumen.llegadas };
+    }
+
+    /** El resumen en palabras, para cuadrar contra el Excel. */
+    function textoResumen(r) {
+        const partes = [r.visitas + ' visitas leídas: ' + r.salidas + ' salidas (frecuencias) y ' + r.llegadas + ' llegadas de la semana.'];
+        if (r.fueraDeSemana) partes.push(r.fueraDeSemana + ' tramos eran de otras fechas.');
+        if (r.sinDatos) partes.push(r.sinDatos + ' tramos sin ruta, vuelo u hora.');
+        if (r.horaIlegible) partes.push(r.horaIlegible + ' tramos con una hora que no se entendió (ej. «' + r.ejemplos.join('», «') + '»).');
+        if (r.repetidos) partes.push(r.repetidos + ' tramos repetidos no se contaron dos veces.');
+        return partes.join(' ');
+    }
+
+    const api = { separador, parsearCSV, leerHora, otraPunta, leerVisits, textoResumen };
+    if (typeof window !== 'undefined') window.FrecuenciasVisits = api;
+    if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})();
+
+if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', () => {
     const btnProcess = document.getElementById('btn-process-frecuencias');
+    if (!btnProcess) return;
     const inputDate = document.getElementById('frecuencias-week-start');
     const typeSelect = document.getElementById('frecuencias-type-select');
     const labelWeek = document.getElementById('frecuencias-week-display');
@@ -138,145 +304,22 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const file = fileInput.files[0];
         const text = await file.text();
-        const rows = text.split(/\r?\n/).filter(r => r.trim());
-
-        if (rows.length < 2) {
-            showError('El archivo parece estar vacío o inválido.');
-            return;
-        }
-
-        // Headers
-        const headers = parseCSVLine(rows[0]);
-        // Map columns
-        // Expected: [Dep] Routing, [Dep] Airline code, [Dep] Flight Designator, [Dep] SOBT
-        const idxDepRouting = headers.findIndex(h => h.includes('[Dep] Routing'));
-        const idxDepAirline = headers.findIndex(h => h.includes('[Dep] Airline code'));
-        const idxDepFlight = headers.findIndex(h => h.includes('[Dep] Flight Designator')); 
-        const idxDepFlightAlt = headers.findIndex(h => h === '[Dep] Airline code');
-        const idxSOBT = headers.findIndex(h => h.includes('[Dep] SOBT'));
-
-        // Expected Arrival Columns
-        const idxArrRouting = headers.findIndex(h => h.includes('[Arr] Routing'));
-        const idxArrAirline = headers.findIndex(h => h.includes('[Arr] Airline code'));
-        const idxArrFlight = headers.findIndex(h => h.includes('[Arr] Flight Designator'));
-        const idxArrFlightAlt = headers.findIndex(h => h === '[Arr] Airline code');
-        const idxSIBT = headers.findIndex(h => h.includes('[Arr] SIBT'));
-
-        if (idxDepRouting === -1 && idxArrRouting === -1) {
-             showError('No se encontraron columnas de Routing ([Dep] o [Arr]).');
-             return;
-        }
-        
-        const realIdxDepFlight = idxDepFlight !== -1 ? idxDepFlight : idxDepFlightAlt;
-        const realIdxArrFlight = idxArrFlight !== -1 ? idxArrFlight : idxArrFlightAlt;
 
         const startDate = new Date(inputDate.value + 'T00:00:00');
         const endDate = new Date(startDate);
         endDate.setDate(startDate.getDate() + 6);
         endDate.setHours(23, 59, 59, 999);
 
-        const dataMap = new Map(); // Key: Route|Airline -> { route, airline, count, flights: [] }
-        let totalCount = 0;
-
-        // Helper to process a flight
-        const processFlight = (routing, airlineRaw, flightRaw, timeRaw, type) => {
-            if (!routing || !flightRaw || !timeRaw) return;
-
-            // Normalize Routing
-            // NLU-ACA (Dep) -> Route is ACA (parts[1])
-            // MH-NLU (Arr) -> Route is MH (parts[0]) - Assuming standard 3 letter code or city name?
-            // Actually, usually headers are IATA-IATA. Check for AIFA code (NLU) to determine logic?
-            // Or assume Position 1 for Dep, Position 0 for Arr relative to NLU.
-            // But routing string order ensures NLU is Origin for Dep, Dest for Arr.
-            // [Dep] Routing: NLU-CUN -> Destination CUN
-            // [Arr] Routing: CUN-NLU -> Origin CUN
-            
-            const routeParts = routing.split('-');
-            let route = '';
-            if (type === 'DEP') {
-                route = routeParts.length > 1 ? routeParts[1] : routing;
-            } else {
-                route = routeParts.length > 1 ? routeParts[0] : routing;
-            }
-            
-            // Clean up route
-            route = route.trim();
-            if (route === 'NLU' || route === 'MMSM') return; // Should not happen if logic is correct, but safe guard
-
-            const airline = airlineRaw ? airlineRaw.trim() : 'UNK';
-            // Clean up flight number (remove spaces)
-            const flightClean = flightRaw.replace(/\s+/g, '');
-            const flightWithDir = `${flightClean} (${type === 'DEP' ? 'Sal' : 'Lleg'})`;
-
-            // Clean time string (remove (Dep), (Arr), etc from CSV)
-            const timeClean = timeRaw.split('(')[0].trim();
-
-            const flightDateRaw = parseSOBT(timeRaw, startDate.getFullYear());
-            if (!flightDateRaw) return;
-
-            // Date Filter Logic (shared)
-            let validDate = false;
-            let finalDate = new Date(flightDateRaw);
-            
-            finalDate.setFullYear(startDate.getFullYear());
-            if (finalDate >= startDate && finalDate <= endDate) validDate = true;
-            else {
-                 finalDate.setFullYear(startDate.getFullYear() + 1);
-                 if (finalDate >= startDate && finalDate <= endDate) validDate = true;
-                 else {
-                     finalDate.setFullYear(startDate.getFullYear() - 1);
-                     if (finalDate >= startDate && finalDate <= endDate) validDate = true;
-                 }
-            }
-
-            if (validDate) {
-                const key = `${route}-${airline}`;
-                if (!dataMap.has(key)) {
-                    dataMap.set(key, {
-                        route: route,
-                        airline: airline,
-                        count: 0,
-                        flights: []
-                    });
-                }
-                const entry = dataMap.get(key);
-                
-                // Deduplicate: Check if same flight number AND same EXACT date/time already exists
-                // This prevents adding the same flight twice if the CSV has duplicate rows
-                const exists = entry.flights.some(f => 
-                    f.flight === flightWithDir && 
-                    f.sobt === timeClean &&
-                    f.fullDate.getTime() === finalDate.getTime()
-                );
-
-                if (!exists) {
-                    entry.count++;
-                    entry.flights.push({
-                        fullDate: finalDate,
-                        sobt: timeClean, 
-                        flight: flightWithDir
-                    });
-                    totalCount++;
-                }
-            }
-        };
-
-        for (let i = 1; i < rows.length; i++) {
-            const cols = parseCSVLine(rows[i]);
-            if (cols.length < headers.length) continue;
-
-            // Process Departure
-            if (idxDepRouting !== -1 && idxSOBT !== -1) {
-                 const airline = idxDepAirline !== -1 ? cols[idxDepAirline] : 'UNK';
-                 processFlight(cols[idxDepRouting], airline, cols[realIdxDepFlight], cols[idxSOBT], 'DEP');
-            }
-
-            // Process Arrival
-            if (idxArrRouting !== -1 && idxSIBT !== -1) {
-                 const airline = idxArrAirline !== -1 ? cols[idxArrAirline] : 'UNK';
-                 processFlight(cols[idxArrRouting], airline, cols[realIdxArrFlight], cols[idxSIBT], 'ARR');
-            }
+        const lectura = window.FrecuenciasVisits.leerVisits(text, startDate, endDate);
+        if (lectura.error) {
+            showError(lectura.error);
+            resetButton();
+            return;
         }
+        const dataMap = lectura.mapa;       // Ruta|Aerolínea -> { route, airline, salidas, llegadas, flights }
+        const totalCount = lectura.total;
+        const resumenLectura = lectura.resumen;
+        pintarResumenLectura(resumenLectura);
 
         // --- SUPABASE INTEGRATION START ---
         
@@ -348,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.error('RPC Cargo error', rpcCargoError);
                     throw new Error('Error generando reporte de frecuencias (Carga): ' + rpcCargoError.message);
                 }
-                showSuccess(`Se procesaron y guardaron ${totalCount} vuelos correctamente. Se actualizaron frecuencias de Carga.`);
+                showSuccess(`Se guardaron ${resumenLectura.salidas} frecuencias (${totalCount} operaciones). Se actualizaron frecuencias de Carga.`);
             } else {
                 // 4. Call RPC to regenerate summary (NATIONAL)
                 const { error: rpcError } = await supabase.rpc('generate_weekly_frequencies', {
@@ -381,7 +424,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (trcFix && (trcFix.moved > 0 || trcFix.deleted > 0)) {
                     fixMsg = ` Ajuste aplicado: TRC movido a nacionales (${trcFix.moved} insertados, ${trcFix.deleted} eliminados de internacionales).`;
                 }
-                showSuccess(`Se procesaron y guardaron ${totalCount} vuelos correctamente. Se actualizaron frecuencias Nacionales e Internacionales.${fixMsg}`);
+                showSuccess(`Se guardaron ${resumenLectura.salidas} frecuencias (${totalCount} operaciones). Se actualizaron frecuencias Nacionales e Internacionales.${fixMsg}`);
             }
         } else {
             showSuccess('No se encontraron vuelos válidos en el rango de fechas seleccionado.');
@@ -473,7 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="fw-bold">${item.airline}</span>
                     </div>
                 </td>
-                <td class="text-center fw-bold fs-5">${item.count}</td>
+                <td class="text-center"><div class="fw-bold fs-5">${item.salidas}</div><div class="small text-muted">${item.llegadas} llegadas</div></td>
                 <td class="text-center">
                     <button class="btn btn-sm btn-outline-primary btn-details" data-key="${key}">
                         <i class="fas fa-list me-1"></i> Ver Vuelos
@@ -483,7 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tbody.appendChild(tr);
         });
 
-        totalBadge.textContent = `${totalCount} Operaciones`;
+        totalBadge.textContent = `${resumenLectura.salidas} frecuencias · ${totalCount} operaciones`;
         resultsDiv.classList.remove('d-none');
 
         // Wiring buttons
@@ -502,6 +545,24 @@ document.addEventListener('DOMContentLoaded', () => {
             resetButton();
         }
     });
+
+    function pintarResumenLectura(resumen) {
+        const results = document.getElementById('frecuencias-upload-results');
+        if (!results) return;
+        let caja = document.getElementById('frecuencias-upload-resumen');
+        if (!caja) {
+            caja = document.createElement('div');
+            caja.id = 'frecuencias-upload-resumen';
+            caja.className = 'alert alert-light border small mb-3';
+            results.insertBefore(caja, results.firstChild);
+        }
+        const hayFaltantes = resumen.fueraDeSemana || resumen.sinDatos || resumen.horaIlegible;
+        caja.className = 'alert small mb-3 border ' + (resumen.sinDatos || resumen.horaIlegible ? 'alert-warning' : 'alert-light');
+        caja.innerHTML = '<i class="fas fa-clipboard-check me-2"></i><b>Para cuadrar con el Excel:</b> ' +
+            window.FrecuenciasVisits.textoResumen(resumen).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c])) +
+            (hayFaltantes ? '' : ' Todo lo del archivo entró.') +
+            '<div class="text-muted mt-1">Cada día cuenta las salidas (frecuencias); el detalle de cada celda muestra la salida y la llegada.</div>';
+    }
 
     function resetButton() {
         const btnProcess = document.getElementById('btn-process-frecuencias');
@@ -526,72 +587,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const errorDiv = document.getElementById('frecuencias-upload-error');
         errorDiv.textContent = msg;
         errorDiv.classList.remove('d-none');
-    }
-
-    function parseCSVLine(text) {
-        // Simple regex parser for CSV with quotes
-        // Note: This regex handles basic "val","val"
-        const result = [];
-        const pattern = /(".*?"|[^",]+)(?=\s*,|\s*$)/g;
-        // This regex is slightly flawed for empty fields or confusing spacing, 
-        // but robust enough for the provided machine generated CSV.
-        // A manual state machine is better.
-        let cur = '';
-        let inQuote = false;
-        for(let i=0; i<text.length; i++) {
-            const char = text[i];
-            if (char === '"') {
-                inQuote = !inQuote;
-                // Don't add quote to cur
-                continue; 
-            }
-            if (char === ',' && !inQuote) {
-                result.push(cur.trim());
-                cur = '';
-                continue;
-            }
-            cur += char;
-        }
-        result.push(cur.trim());
-        return result;
-    }
-
-    function parseSOBT(sobtStr, defaultYear) {
-        // "19JAN 08:24" or "19JAN 08:24 (Dep)"
-        // Clean trailing info
-        const cleanStr = sobtStr.split('(')[0].trim();
-        
-        const MONTHS = {
-            'JAN': 0, 'FEB': 1, 'MAR': 2, 'APR': 3, 'MAY': 4, 'JUN': 5,
-            'JUL': 6, 'AUG': 7, 'SEP': 8, 'OCT': 9, 'NOV': 10, 'DEC': 11
-        };
-        const parts = cleanStr.split(' ');
-        if (parts.length < 2) return null; 
-        
-        try {
-            // Date Part "19JAN"
-            const datePart = parts[0];
-            const dayMatch = datePart.match(/\d+/);
-            const monthMatch = datePart.match(/[A-Z]+/);
-            
-            if (!dayMatch || !monthMatch) return null;
-
-            const day = parseInt(dayMatch[0]);
-            const monthStr = monthMatch[0];
-            const month = MONTHS[monthStr];
-            
-            if (month === undefined) return null;
-
-            // Time Part "08:24"
-            const timeParts = parts[1].split(':');
-            const hour = parseInt(timeParts[0]);
-            const min = parseInt(timeParts[1]);
-
-            return new Date(defaultYear, month, day, hour, min, 0);
-        } catch (e) {
-            console.error("Error parsing SOBT:", sobtStr, e);
-            return null;
-        }
     }
 
     function showModal(item) {

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="es-MX" data-theme="light" data-bs-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://*.supabase.co; font-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0F3529">
+  <title>SIGEC · AIFA</title>
+  <link rel="icon" type="image/svg+xml" href="images/favicon.svg">
+  <link rel="stylesheet" href="vendor/bootstrap/bootstrap.min.css">
+  <link rel="stylesheet" href="vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="css/app.css">
+  <!-- Tema y verificación de sesión antes del primer pintado -->
+  <script src="js/config.js"></script>
+  <script src="js/boot.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Saltar al contenido</a>
+
+  <div class="app" id="app">
+    <!-- ============ Barra lateral ============ -->
+    <aside class="sidebar" id="sidebar" aria-label="Navegación principal">
+      <div class="sidebar__brand">
+        <img src="images/aifa-logo-blanco.png" alt="Aeropuerto Internacional Felipe Ángeles" width="229" height="129">
+      </div>
+
+      <nav class="sidebar__nav">
+        <ul id="nav-list">
+          <li><a class="nav-link-app" href="#/inicio" data-route="inicio"><i class="bi bi-house-door-fill" aria-hidden="true"></i><span>Inicio</span></a></li>
+          <li><a class="nav-link-app" href="#/reportes" data-route="reportes"><i class="bi bi-file-earmark-bar-graph-fill" aria-hidden="true"></i><span>Reportes</span><span class="nav-badge" id="nav-badge-pendientes" hidden></span></a></li>
+          <li><a class="nav-link-app" href="#/encuestas" data-route="encuestas"><i class="bi bi-ui-checks" aria-hidden="true"></i><span>Encuestas</span></a></li>
+          <li><a class="nav-link-app" href="#/documentacion" data-route="documentacion"><i class="bi bi-folder-fill" aria-hidden="true"></i><span>Documentación</span></a></li>
+          <li><a class="nav-link-app" href="#/directorio" data-route="directorio"><i class="bi bi-person-lines-fill" aria-hidden="true"></i><span>Directorio</span></a></li>
+          <li><a class="nav-link-app" href="#/configuracion" data-route="configuracion"><i class="bi bi-gear-fill" aria-hidden="true"></i><span>Configuración</span></a></li>
+        </ul>
+      </nav>
+
+      <svg class="sidebar__swoosh" viewBox="0 0 200 160" fill="none" aria-hidden="true">
+        <g stroke-linecap="round" stroke-width="3">
+          <path d="M-10 160 C 40 120, 90 70, 150 10" stroke="#2BA36F" opacity=".9"/>
+          <path d="M-10 160 C 46 126, 100 84, 170 30" stroke="#2BA36F" opacity=".6"/>
+          <path d="M-10 160 C 52 132, 110 98, 186 54" stroke="#FFFFFF" opacity=".75"/>
+          <path d="M-10 160 C 58 138, 120 112, 198 80" stroke="#FFFFFF" opacity=".45"/>
+          <path d="M-10 160 C 62 144, 128 126, 206 108" stroke="#D0303F" opacity=".85"/>
+          <path d="M-10 160 C 66 150, 134 140, 210 134" stroke="#D0303F" opacity=".55"/>
+        </g>
+      </svg>
+
+      <div class="sidebar__footer">
+        <a class="sidebar__back" id="portal-link" href="#/inicio" hidden><i class="bi bi-grid-fill" aria-hidden="true"></i><span></span></a>
+        <button type="button" data-action="logout"><i class="bi bi-box-arrow-left" aria-hidden="true"></i><span>Cerrar sesión</span></button>
+      </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+
+    <!-- ============ Columna principal ============ -->
+    <div class="main">
+      <header class="topbar">
+        <button type="button" class="icon-btn d-lg-none" id="btn-menu" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
+          <i class="bi bi-list" aria-hidden="true"></i>
+        </button>
+
+        <div class="topbar__title">
+          <span class="topbar__eyebrow">Aeropuerto Internacional Felipe Ángeles</span>
+          <h1>Sistema Integral de Gestión y Evaluación de la Calidad</h1>
+        </div>
+
+        <div class="topbar__actions">
+          <!-- Notificaciones -->
+          <div class="dropdown">
+            <button type="button" class="icon-btn" id="btn-notif" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Notificaciones">
+              <i class="bi bi-bell-fill" aria-hidden="true"></i>
+              <span class="dot" id="notif-count" hidden></span>
+            </button>
+            <div class="dropdown-menu dropdown-menu-end notif-menu" aria-labelledby="btn-notif">
+              <div class="dropdown-header-x d-flex align-items-center">
+                <div><strong>Notificaciones</strong><span id="notif-sub">Sin pendientes</span></div>
+                <button type="button" class="btn-link-accent ms-auto" data-action="notif-read-all">Marcar como leídas</button>
+              </div>
+              <div id="notif-list"></div>
+            </div>
+          </div>
+
+          <!-- Usuario -->
+          <div class="dropdown">
+            <button type="button" class="user-chip" id="btn-user" data-bs-toggle="dropdown" aria-expanded="false">
+              <span class="user-chip__avatar" id="user-initials" aria-hidden="true">U</span>
+              <span class="user-chip__text">
+                <span class="user-chip__name" id="user-name">Usuario</span>
+                <span class="user-chip__role" id="user-role">—</span>
+              </span>
+              <i class="bi bi-chevron-down small" aria-hidden="true"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="btn-user">
+              <li class="dropdown-header-x"><strong id="user-menu-name">Usuario</strong><span id="user-menu-area">—</span></li>
+              <li><a class="dropdown-item" href="#/configuracion?s=perfil"><i class="bi bi-person" aria-hidden="true"></i>Mi perfil</a></li>
+              <li><a class="dropdown-item" href="#/configuracion?s=apariencia"><i class="bi bi-palette" aria-hidden="true"></i>Apariencia</a></li>
+              <li><button type="button" class="dropdown-item" data-action="toggle-theme"><i class="bi bi-moon-stars" aria-hidden="true"></i><span id="theme-toggle-label">Modo oscuro</span></button></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><button type="button" class="dropdown-item" data-action="logout"><i class="bi bi-box-arrow-right" aria-hidden="true"></i>Cerrar sesión</button></li>
+            </ul>
+          </div>
+        </div>
+      </header>
+
+      <main id="main" class="content" tabindex="-1">
+        <div id="view" aria-live="polite"></div>
+      </main>
+
+      <footer class="app-footer">
+        <span>© 2026 Aeropuerto Internacional Felipe Ángeles · SIGEC v0.2</span>
+        <span id="footer-mode"><i class="bi bi-shield-lock" aria-hidden="true"></i> Cierre automático por inactividad</span>
+      </footer>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toasts" role="status" aria-live="polite"></div>
+
+  <script src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="vendor/chartjs/chart.umd.js"></script>
+  <!-- Supabase: la misma base y la misma sesión que AIFA Operaciones -->
+  <script src="vendor/supabase/supabase.js"></script>
+  <script src="../js/supabase-client.js"></script>
+  <!-- Módulos de la aplicación (scripts clásicos: funciona con doble clic, sin servidor). El orden importa. -->
+  <script src="js/sigec.js"></script>
+  <script src="js/core/format.js"></script>
+  <script src="js/core/dom.js"></script>
+  <script src="js/data/catalogs.js"></script>
+  <script src="js/core/charts.js"></script>
+  <script src="js/core/ui.js"></script>
+  <script src="js/core/session.js"></script>
+  <script src="js/core/conexion.js"></script>
+  <script src="js/core/theme.js"></script>
+  <script src="js/data/fuente.js"></script>
+  <script src="js/data/api.js"></script>
+  <script src="js/views/inicio.js"></script>
+  <script src="js/views/reportes.js"></script>
+  <script src="js/views/encuestas.js"></script>
+  <script src="js/views/documentacion.js"></script>
+  <script src="js/views/directorio.js"></script>
+  <script src="js/views/configuracion.js"></script>
+  <script src="js/core/router.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -59,6 +59,7 @@
 
     const state = {
         hallazgos: [],
+        desdeCargado: '',   // inicio de los hallazgos cargados ('' = todos); los pendientes siempre se cargan
         lastOficio: null,
         periodo: '',
         editingId: null,
@@ -69,14 +70,33 @@
         // true con db/setp_hallazgos_por_supervisor.sql: cada supervisor ve
         // sólo sus hallazgos que aún no salen en un formato guardado.
         porSupervisor: false,
+        // true si setp_hallazgos tiene la columna area: el área responsable
+        // elegida a mano se guarda (sin ella, el área sale sólo de la regla).
+        areaCol: false,
         // Formato guardado al finalizar el recorrido que se está generando
         // desde "Formatos guardados" (null = Generar formato normal).
         borrador: null,
         // id de hallazgo -> true si ya se guardó en un reporte ("Guardar reporte"):
         // sale de "Hallazgos detectados" (sigue en pendientes hasta su seguimiento).
         archivados: {},
+        // id de formato generado -> { id de hallazgo: true } de los hallazgos que
+        // salieron en él: dejan "Pendientes por solucionar" de la pantalla.
+        fmtHallazgos: {},
         modal: null
     };
+
+    // El hallazgo ya salió en un formato generado (como detectado o pendiente).
+    function yaEnFormato(h) {
+        if (h.oficio_id) return true;
+        return Object.keys(state.fmtHallazgos).some(function (k) { return state.fmtHallazgos[k][h.id]; });
+    }
+
+    // { id de hallazgo: true } de las secciones detectados y pendientes de un formato.
+    function idsDeSecciones(s) {
+        var m = {};
+        ((s && s.detectados) || []).concat((s && s.pendientes) || []).forEach(function (x) { if (x && x.id) m[x.id] = true; });
+        return m;
+    }
 
     // ---------- utilidades ----------
 
@@ -160,7 +180,7 @@
         return sessionStorage.getItem('user_role') || 'authenticated';
     }
 
-    // Supervisor elegido en el filtro (js/setp-recorridos.js) · '' = ninguno.
+    // Supervisor del usuario que inició sesión (js/setp-reportes.js) · '' = ninguno.
     function supervisorActual() {
         var rec = window.setpRecorridos;
         return rec && rec.seleccionado ? rec.seleccionado() : '';
@@ -426,11 +446,14 @@
             return '<tr><td class="c-no">' + (i + 1) + '</td><td class="c-fecha">' + fmtDate(h[opts.fechaKey]) + '</td>' +
                 '<td class="c-ubic">' + ubicacionLines(h) + '</td><td class="c-desc">' + esc(h.descripcion) + '</td>' +
                 '<td class="c-foto">' + photoCell(h[opts.fotoKey] || (opts.fotoAlt ? h[opts.fotoAlt] : null)) + '</td></tr>';
-        }).join('') : '<tr><td colspan="5" class="vacio">Sin hallazgos en este periodo.</td></tr>';
+        }).join('') : '<tr><td colspan="5" class="vacio">' + (opts.vacio || 'Sin hallazgos en este periodo.') + '</td></tr>';
         return '<table class="hallazgos"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
     }
 
-    function buildDocument(datos, secciones, mode) {
+    // opts.registro: informe de un solo registro del historial (texto de "durante …"):
+    // mismo formato del oficio, sólo con la tabla de sus hallazgos detectados.
+    function buildDocument(datos, secciones, mode, opts) {
+        var registro = opts && opts.registro;
         var ym = secciones.periodo;
         var prevYm = prevMonth(ym);
         var logo = new URL('images/aifa-logo.png', document.baseURI).href;
@@ -475,17 +498,17 @@
             '<div class="encabezado"><div>' + esc(datos.area1) + '<br>' + esc(datos.area2) + '</div>',
             '<div class="der">' + esc(datos.lugar) + '<br>' + fmtOficioDate(datos.fecha_oficio) + '<br>No.: ' + esc(datos.numero) + '.</div></div>',
             '<div class="destinatario">' + esc(datos.destinatario) + '</div>',
-            '<p class="sangria">' + esc(datos.antecedente) + ', me permito informar a esa Superioridad, los hallazgos detectados en el Edificio Terminal de Pasajeros durante el periodo comprendido ' + periodText(ym) + ', como a continuación se indica:</p>',
-            tableHtml(secciones.detectados, { fechaLabel: 'FECHA DE REPORTE', fechaKey: 'fecha_reporte', fotoLabel: 'EVIDENCIA FOTOGRÁFICA', fotoKey: 'evidencia_url' }),
+            '<p class="sangria">' + esc(datos.antecedente) + ', me permito informar a esa Superioridad, los hallazgos detectados en el Edificio Terminal de Pasajeros ' + (registro ? esc(registro) : 'durante el periodo comprendido ' + periodText(ym)) + ', como a continuación se indica:</p>',
+            tableHtml(secciones.detectados, { fechaLabel: 'FECHA DE REPORTE', fechaKey: 'fecha_reporte', fotoLabel: 'EVIDENCIA FOTOGRÁFICA', fotoKey: 'evidencia_url', vacio: registro ? 'Sin hallazgos en este recorrido.' : '' }),
             '<p class="sangria">' + esc(datos.cierre) + '</p>',
-            '<p>Asimismo, me permito informar a esa Superioridad, los hallazgos del periodo comprendido ' + periodText(prevYm) + '; solucionados en el mes de ' + MONTH_NAMES[Number(ym.slice(5, 7)) - 1] + ', así como, los pendientes por solventar, como a continuación se indica:</p>',
-            tableHtml(secciones.solucionados, { title: 'HALLAZGOS SOLUCIONADOS.', fechaLabel: 'FECHA DE REPORTE SOLUCIONADO', fechaKey: 'fecha_solucion', fotoLabel: 'EVIDENCIA FOTOGRÁFICA SOLUCIONADA', fotoKey: 'evidencia_solucion_url', fotoAlt: 'evidencia_url' }),
-            tableHtml(secciones.pendientes, { title: 'HALLAZGOS PENDIENTES POR SOLUCIONAR.', fechaLabel: 'FECHA DE REPORTE', fechaKey: 'fecha_reporte', fotoLabel: 'EVIDENCIA FOTOGRÁFICA', fotoKey: 'evidencia_url' }),
+            registro ? '' : '<p>Asimismo, me permito informar a esa Superioridad, los hallazgos del periodo comprendido ' + periodText(prevYm) + '; solucionados en el mes de ' + MONTH_NAMES[Number(ym.slice(5, 7)) - 1] + ', así como, los pendientes por solventar, como a continuación se indica:</p>',
+            registro ? '' : tableHtml(secciones.solucionados, { title: 'HALLAZGOS SOLUCIONADOS.', fechaLabel: 'FECHA DE REPORTE SOLUCIONADO', fechaKey: 'fecha_solucion', fotoLabel: 'EVIDENCIA FOTOGRÁFICA SOLUCIONADA', fotoKey: 'evidencia_solucion_url', fotoAlt: 'evidencia_url' }),
+            registro ? '' : tableHtml(secciones.pendientes, { title: 'HALLAZGOS PENDIENTES POR SOLUCIONAR.', fechaLabel: 'FECHA DE REPORTE', fechaKey: 'fecha_reporte', fotoLabel: 'EVIDENCIA FOTOGRÁFICA', fotoKey: 'evidencia_url' }),
             '<div class="firma">' + esc(datos.despedida) + '<br>' + esc(datos.firmante_cargo) + '<div class="nombre">' + esc(datos.firmante_nombre) + '</div></div>',
             ccp.length ? '<div class="ccp">' + ccp.map(function (l) { return '<div><span>c.c.p.</span><span>' + esc(l) + '</span></div>'; }).join('') + '</div>' : '',
             datos.iniciales ? '<div class="iniciales">' + esc(datos.iniciales) + '</div>' : ''
         ].join('');
-        var title = 'Oficio ' + (datos.numero || '') + ' · Hallazgos ' + periodText(ym);
+        var title = registro && opts.titulo ? opts.titulo : 'Oficio ' + (datos.numero || '') + ' · Hallazgos ' + periodText(ym);
         if (mode === 'word') {
             // Word ignora flexbox: el membrete y el encabezado van en tablas sin borde.
             body = body
@@ -535,16 +558,45 @@
 
     // Si Supabase o la tabla no están disponibles, trabaja con los hallazgos
     // guardados en este navegador (state.store = 'local').
+    // Periodo cargado (barra de periodo, js/setp-reportes.js): sólo los hallazgos
+    // reportados o solucionados desde esa fecha, más TODOS los que siguen sin
+    // seguimiento (pendientes), sin importar su fecha. Si el reporte o el formato
+    // piden un mes anterior (su seguimiento es el mes previo), se carga desde ahí.
+    function desdeCarga() {
+        var p = window.setpPeriodo;
+        var g = p && typeof p.desde === 'function' ? p.desde() : '';
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(g || '')) return '';
+        var lista = [g];
+        if (/^\d{4}-\d{2}$/.test(rep.periodo || '')) lista.push(monthRange(prevMonth(rep.periodo)).start);
+        if (rep.desde) lista.push(rep.desde);
+        if (/^\d{4}-\d{2}$/.test(state.periodo || '')) lista.push(monthRange(prevMonth(state.periodo)).start);
+        return lista.sort()[0];
+    }
+
+    // true si la fecha queda antes de lo cargado y hay que volver a cargar.
+    function faltaCargar(fecha) {
+        return state.store === 'db' && !!state.desdeCargado && !!fecha && fecha < state.desdeCargado;
+    }
+
     async function loadHallazgos() {
         try {
             var sb = await getClient();
+            var desde = desdeCarga();
             var all = [];
             for (var from = 0; ; from += 1000) {
-                var res = await sb.from(T_HALLAZGOS).select('*').order('fecha_reporte', { ascending: true }).range(from, from + 999);
+                var qh = sb.from(T_HALLAZGOS).select('*');
+                if (desde) {
+                    qh = qh.or('fecha_reporte.gte.' + desde + ',fecha_solucion.gte.' + desde +
+                        ',estatus.is.null,estatus.neq.SOLUCIONADO,evidencia_solucion_url.is.null,confirmado_en.is.null');
+                }
+                var res = await qh.order('fecha_reporte', { ascending: true }).range(from, from + 999);
+                // Si el filtro falla (columna faltante), se cargan todos, como antes.
+                if (res.error && desde) { desde = ''; all = []; from = -1000; continue; }
                 if (res.error) throw res.error;
                 all = all.concat(res.data || []);
                 if (!res.data || res.data.length < 1000) break;
             }
+            state.desdeCargado = desde;
             state.hallazgos = all;
             state.store = 'db';
             // Columnas de db/setp_hallazgos_por_supervisor.sql.
@@ -554,20 +606,28 @@
             // Columnas de db/setp_hallazgos_identificacion.sql (folio, etiquetas, Fusionar).
             var c3 = await sb.from(T_HALLAZGOS).select('folio, duplicado_de').limit(1);
             state.identificacion = !c3.error;
+            // Área responsable elegida a mano (columna area).
+            var c4 = await sb.from(T_HALLAZGOS).select('area').limit(1);
+            state.areaCol = !c4.error;
             // Hallazgos ya guardados en un reporte (Guardar reporte).
-            var arch = {};
-            var rr = await sb.from(T_OFICIOS).select('numero, secciones').like('numero', REPORTE + '%');
+            // Y los que ya salieron en un formato generado (dejan "Pendientes por solucionar").
+            var arch = {}, enFmt = {};
+            var rr = await sb.from(T_OFICIOS).select('id, numero, secciones');
             if (!rr.error) {
-                (rr.data || []).filter(esReporte).forEach(function (o) {
-                    ((o.secciones && o.secciones.hallazgos) || []).forEach(function (h) { arch[h.id] = true; });
+                (rr.data || []).forEach(function (o) {
+                    if (esReporte(o)) ((o.secciones && o.secciones.hallazgos) || []).forEach(function (h) { arch[h.id] = true; });
+                    else if (!esBorrador(o)) enFmt[o.id] = idsDeSecciones(o.secciones);
                 });
             }
             state.archivados = arch;
+            state.fmtHallazgos = enFmt;
         } catch (_) {
             state.hallazgos = readLocal();
+            state.desdeCargado = '';
             state.store = 'local';
             state.porSupervisor = false;
             state.identificacion = false;
+            state.areaCol = false;
         }
         state.dbReady = state.store === 'db';
     }
@@ -900,6 +960,8 @@
             payload.cantidad = Math.max(1, Number(v.cantidad) || 1);
             payload.detalle = v.etiqueta ? v.detalle || null : null;
         }
+        // Área responsable elegida a mano (vacío: la de la regla).
+        if ('area' in v && state.areaCol) payload.area = v.area || null;
         // Si cambia el estatus, el nuevo se vuelve a confirmar con ✓ (un detectado
         // pasa a solucionados sólo ya confirmado como solucionado).
         if (prev && prev.estatus !== payload.estatus && prev.confirmado_en) {
@@ -1182,6 +1244,8 @@
             state.lastOficio = { numero: datos.numero, datos: datos };
             var msg = '<i class="fas fa-check-circle me-1"></i>Formato <b>' + esc(datos.numero) + '</b> guardado. Lo encuentras en <b>Formatos guardados</b>.';
             var oficioId = res.data.id;
+            // Sus hallazgos (detectados y pendientes) dejan "Pendientes por solucionar".
+            state.fmtHallazgos[oficioId] = idsDeSecciones(secciones);
             if (ids.length) {
                 // Los detectados del formato quedan ligados a él y salen del reporte del supervisor.
                 var up = await sb.from(T_HALLAZGOS).update({ oficio_id: oficioId }).in('id', ids).select('id');
@@ -1218,14 +1282,11 @@
             } else {
                 try { await limpiarBorradores(sb, sup); } catch (_) { /* el formato ya quedó guardado */ }
             }
-            // Con borrador, el filtro sólo se limpia si es el mismo supervisor.
-            if (sup && (!b || supervisorActual() === sup)) {
-                // El filtro vuelve a --Seleccionar-- para que el siguiente supervisor elija su nombre.
-                var sel = $('setp-f-supervisor');
-                if (sel) { sel.value = ''; sel.dispatchEvent(new Event('change', { bubbles: true })); }
-                msg += ' El filtro <b>Supervisor</b> quedó en --Seleccionar-- para el siguiente.';
-            }
+            // El filtro Supervisor se retiró: cada supervisor entra con su usuario,
+            // así que ya no se limpia tras guardar el formato.
+            msg += ' <b>Hallazgos pendientes por solucionar</b> queda limpio: lo que salió en el formato ya no se muestra ahí.';
             renderLists();
+            if (rep.el) renderReport();
             setStatus(msg, 'success');
         } catch (error) {
             setStatus('No se pudo guardar el formato: ' + esc(error && error.message ? error.message : error), 'danger');
@@ -1248,9 +1309,15 @@
         modal.querySelectorAll('[data-step]').forEach(function (b) {
             b.addEventListener('click', function () { showStep(b.getAttribute('data-step')); });
         });
-        $('setp-fmt-periodo').addEventListener('change', function (e) {
+        $('setp-fmt-periodo').addEventListener('change', async function (e) {
             if (!/^\d{4}-\d{2}$/.test(e.target.value)) return;
             state.periodo = e.target.value;
+            // Un mes anterior a lo cargado: se cargan sus hallazgos primero.
+            if (faltaCargar(monthRange(prevMonth(state.periodo)).start)) {
+                $('setp-fmt-lists').innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-2"></span>Cargando hallazgos…</div>';
+                await loadHallazgos();
+                if (state.periodo !== e.target.value) return;
+            }
             renderLists();
             if (!modal.querySelector('[data-pane="preview"]').classList.contains('d-none')) renderPreview();
         });
@@ -1299,8 +1366,10 @@
     // desde / hasta: periodo con día del reporte ('YYYY-MM-DD').
     // etiqueta: filtro de la barra Etiquetas ('' = todas; 'SIN' = sin etiqueta).
     // fusion: id del hallazgo que se va a unir a otro (botón Fusionar).
-    const rep = { el: null, periodo: '', desde: '', hasta: '', etiqueta: '', fusion: null, editing: null, editKind: null, solveId: null, solving: false, files: { evidencia: null, solucion: null }, saving: false };
-    const REP_COLS = 9;
+    const rep = { el: null, periodo: '', desde: '', hasta: '', etiqueta: '', area: '', fusion: null, editing: null, editKind: null, solveId: null, solving: false, files: { evidencia: null, solucion: null }, saving: false };
+    // Sin las columnas "Fecha de solución" y "Evidencia solucionada": la fecha y
+    // la foto de la solución se ven en Estatus de los solucionados (repSolHtml).
+    const REP_COLS = 8;
 
     function repStatus(message, type) {
         var box = $('setp-rep-status');
@@ -1316,7 +1385,7 @@
         style.id = 'setp-rep-styles';
         style.textContent = [
             R + '{border-top:1px solid #e2e8f0;}',
-            R + ' .setp-rep-head{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f8fafc;border-bottom:1px solid #e2e8f0;}',
+            R + ' .setp-rep-head{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f8fafc;border-top:2px solid #dbe2ea;}',
             R + ' .setp-rep-title{font-weight:800;color:#0f172a;font-size:.9rem;margin:0;}',
             R + ' .setp-rep-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}',
             R + ' .setp-rep-actions label{font-size:.72rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin:0;}',
@@ -1325,6 +1394,9 @@
             R + ' .setp-rep-al{font-size:.8rem;color:#64748b;}',
             'body.dark-mode ' + R + ' .setp-rep-al{color:var(--text-muted-color);}',
             R + ' .setp-rep-table td{vertical-align:middle;}',
+            // Separador entre hallazgos más visible (en celular y tableta son tarjetas con borde).
+            '@container setp (min-width:1000px){' + R + ' .setp-rep-table>tbody>tr>td{border-bottom:2px solid #dbe2ea;}' +
+                'body.dark-mode ' + R + ' .setp-rep-table>tbody>tr>td{border-bottom-color:#5b6b82;}}',
             R + ' .setp-rep-table td.setp-rep-desc{min-width:240px;white-space:normal;}',
             R + ' tr.setp-rep-group th{background:#eff6ff;color:#1e3a8a;font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid #bfdbfe;}',
             R + ' .setp-rep-count{display:inline-flex;min-width:22px;justify-content:center;border-radius:999px;background:#dbeafe;color:#1e3a8a;font-size:.7rem;padding:0 7px;margin-left:6px;}',
@@ -1336,14 +1408,25 @@
             R + ' label.setp-rep-photo{cursor:pointer;margin:0;display:block;}',
             R + ' label.setp-rep-photo:hover .setp-rep-nothumb,' + R + ' label.setp-rep-photo:hover .setp-rep-thumb{border-color:#2563eb;}',
             R + ' label.setp-rep-photo.is-disabled{cursor:not-allowed;opacity:.45;}',
+            // Datos obligatorios vacíos al guardar: campos en rojo y leyenda roja.
+            R + ' label.setp-rep-photo.is-invalid .setp-rep-nothumb,' + R + ' label.setp-rep-photo.is-invalid .setp-rep-thumb{border:2px solid #dc3545 !important;color:#dc3545;}',
+            R + ' tr.setp-rep-edit .is-invalid{border-color:#dc3545 !important;box-shadow:0 0 0 .2rem rgba(220,53,69,.2);}',
+            R + ' tr.setp-rep-aviso-row td{background:#fef2f2;border-top:0;padding:6px 12px 10px;}',
+            R + ' .setp-rep-leyenda{color:#dc3545;font-weight:600;}',
+            R + ' .setp-rep-leyenda .fa-question-circle{font-size:1.05em;}',
+            R + ' .setp-rep-leyenda-extra{font-weight:400;}',
             R + ' tr.setp-rep-edit td{background:#f8fbff;}',
             R + ' tr.setp-rep-edit .form-control,' + R + ' tr.setp-rep-edit .form-select{min-width:120px;}',
             R + ' .setp-rep-local{display:inline-flex;align-items:center;margin-left:8px;padding:1px 8px;border-radius:999px;background:#fffbeb;color:#92400e;font-weight:600;}',
             R + ' .setp-rep-ok{background:#ecfdf5;color:#047857;}',
+            R + ' .setp-rep-sol-info{display:flex;flex-direction:column;gap:4px;margin-top:6px;font-size:.78rem;color:#047857;font-weight:600;white-space:nowrap;}',
+            R + ' .setp-rep-sol{display:flex;flex-direction:column;gap:6px;margin-top:6px;}',
+            R + ' .setp-rep-sol.d-none{display:none !important;}',
+            'body.dark-mode ' + R + ' .setp-rep-sol-info{color:#6ee7b7;}',
             R + ' .setp-rep-pend{background:#fef2f2;color:#b91c1c;}',
             // Modo oscuro (body.dark-mode).
             'body.dark-mode ' + R + '{border-top-color:var(--border-color);}',
-            'body.dark-mode ' + R + ' .setp-rep-head{background:rgba(255,255,255,.03);border-bottom-color:var(--border-color);}',
+            'body.dark-mode ' + R + ' .setp-rep-head{background:rgba(255,255,255,.03);border-top-color:#5b6b82;}',
             'body.dark-mode ' + R + ' .setp-rep-title{color:var(--text-color);}',
             'body.dark-mode ' + R + ' .setp-rep-actions label,body.dark-mode ' + R + ' td.setp-rep-none{color:var(--text-muted-color);}',
             'body.dark-mode ' + R + ' tr.setp-rep-group th{background:rgba(77,171,247,.12);color:#8cc8ff;border-bottom-color:rgba(77,171,247,.3);}',
@@ -1353,6 +1436,9 @@
             'body.dark-mode ' + R + ' .setp-rep-nothumb{border-color:rgba(148,163,184,.4);color:var(--text-muted-color);}',
             'body.dark-mode ' + R + ' label.setp-rep-photo:hover .setp-rep-nothumb,body.dark-mode ' + R + ' label.setp-rep-photo:hover .setp-rep-thumb{border-color:var(--primary-color);}',
             'body.dark-mode ' + R + ' tr.setp-rep-edit td{background:rgba(77,171,247,.08);}',
+            'body.dark-mode ' + R + ' tr.setp-rep-aviso-row td{background:rgba(248,113,113,.10);}',
+            'body.dark-mode ' + R + ' .setp-rep-leyenda{color:#f87171;}',
+            'body.dark-mode ' + R + ' label.setp-rep-photo.is-invalid .setp-rep-nothumb,body.dark-mode ' + R + ' label.setp-rep-photo.is-invalid .setp-rep-thumb{border-color:#f87171 !important;color:#f87171;}',
             'body.dark-mode ' + R + ' .setp-rep-local{background:rgba(251,191,36,.14);color:#fcd34d;}',
             'body.dark-mode ' + R + ' .setp-rep-ok{background:rgba(16,185,129,.15);color:#6ee7b7;}',
             'body.dark-mode ' + R + ' .setp-rep-pend{background:rgba(248,113,113,.15);color:#fca5a5;}',
@@ -1371,7 +1457,7 @@
             R + ' details.setp-rep-veces summary::-webkit-details-marker{display:none;}',
             R + ' .setp-rep-fotos{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}',
             R + ' .setp-rep-fotos img{width:64px;height:44px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;display:block;}',
-            R + ' .setp-rep-filtro{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 16px;border-bottom:1px solid #e2e8f0;}',
+            R + ' .setp-rep-filtro{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 16px;border-bottom:2px solid #dbe2ea;}',
             R + ' .setp-rep-filtro .l{font-size:.72rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-right:4px;}',
             R + ' .setp-rep-filtro button{font:inherit;font-size:.76rem;font-weight:600;padding:3px 10px;border-radius:999px;border:1px solid #cbd5e1;background:#fff;color:#334155;display:inline-flex;align-items:center;gap:5px;cursor:pointer;}',
             R + ' .setp-rep-filtro button i{color:var(--c,#64748b);}',
@@ -1379,6 +1465,11 @@
             R + ' .setp-rep-filtro button[aria-pressed="true"]{background:#2563eb;border-color:#2563eb;color:#fff;}',
             R + ' .setp-rep-filtro button[aria-pressed="true"] i{color:#fff;}',
             R + ' tr.setp-rep-fusion-origen td{background:#fffbeb !important;}',
+            // Área responsable (columna y barra Áreas).
+            R + ' .setp-rep-table td.setp-rep-area{min-width:170px;max-width:260px;white-space:normal;}',
+            R + ' tr.setp-rep-edit td.setp-rep-area .form-select{min-width:200px;}',
+            R + ' .setp-rep-apend{display:inline-flex;min-width:18px;justify-content:center;border-radius:999px;background:#dc2626;color:#fff;font-size:.66rem;font-weight:800;padding:0 5px;}',
+            'body.dark-mode ' + R + ' .setp-rep-apend{background:#ef4444;}',
             R + ' .setp-rep-cap{display:grid;grid-template-columns:1fr 1fr;gap:4px;}',
             R + ' .setp-rep-cap .full{grid-column:1/-1;}',
             'body.dark-mode ' + R + ' .setp-rep-folio{color:#8cc8ff;}',
@@ -1388,7 +1479,7 @@
             'body.dark-mode ' + R + ' .setp-rep-cant{background:rgba(255,255,255,.08);color:#e2e8f0;}',
             'body.dark-mode ' + R + ' details.setp-rep-veces summary{background:rgba(251,191,36,.14);color:#fcd34d;}',
             'body.dark-mode ' + R + ' .setp-rep-fotos img{border-color:var(--border-color);}',
-            'body.dark-mode ' + R + ' .setp-rep-filtro{border-bottom-color:var(--border-color);}',
+            'body.dark-mode ' + R + ' .setp-rep-filtro{border-bottom-color:#5b6b82;}',
             'body.dark-mode ' + R + ' .setp-rep-filtro .l{color:var(--text-muted-color);}',
             'body.dark-mode ' + R + ' .setp-rep-filtro button{background:transparent;border-color:var(--border-color);color:#c3c9d2;}',
             'body.dark-mode ' + R + ' .setp-rep-filtro button[aria-pressed="true"]{background:rgba(77,171,247,.2);border-color:#4dabf7;color:#fff;}',
@@ -1402,8 +1493,8 @@
     // títulos de grupo como franjas. Las etiquetas siguen el orden de las columnas.
     function repEstilosResponsive(R) {
         var T = R + ' .setp-rep-table';
-        var etiquetas = ['No.', 'Fecha de reporte', 'Ubicación de incidencia', 'Descripción de incidencia', 'Evidencia fotográfica', 'Estatus', 'Fecha de solución', 'Evidencia solucionada'];
-        var areas = ['no', 'fec', 'ubi', 'des', 'evi', 'est', 'fso', 'evs', 'acc'];
+        var etiquetas = ['No.', 'Fecha de reporte', 'Ubicación de incidencia', 'Descripción de incidencia', 'Área responsable', 'Evidencia fotográfica', 'Estatus'];
+        var areas = ['no', 'fec', 'ubi', 'des', 'are', 'evi', 'est', 'acc'];
         var card = T + ' tr:not(.setp-rep-group)';
         return [
             '@container setp (max-width:999.98px){',
@@ -1414,14 +1505,14 @@
             T + ' tbody{padding:0 12px 4px;}',
             T + ' tr.setp-rep-group{display:block;margin:0 -12px 10px;}',
             T + ' tr.setp-rep-group th{display:block;white-space:normal;padding:10px 16px;line-height:1.6;}',
-            card + '{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"no fec ubi acc" "des des des des" "evi est fso evs";',
+            card + '{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));grid-template-areas:"no fec ubi acc" "des des des des" "are are are are" "evi evi est est";',
             'gap:10px 14px;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px;margin-bottom:12px;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.04);}',
             T + ' tr.setp-rep-edit{background:#f8fbff;border-color:#bfdbfe;}',
             T + ' td{display:block;border:0;padding:0;min-width:0;background:transparent !important;box-shadow:none !important;text-align:left !important;}',
             T + ' td::before{display:block;font-size:.66rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#64748b;margin-bottom:3px;}',
             etiquetas.map(function (e, i) { return T + ' td:nth-child(' + (i + 1) + ')::before{content:"' + e + '";}'; }).join(''),
             areas.map(function (a, i) { return card + ' td:nth-child(' + (i + 1) + '):not([colspan]){grid-area:' + a + ';}'; }).join(''),
-            T + ' td:nth-child(9){justify-self:end;align-self:start;}',
+            T + ' td:nth-child(8){justify-self:end;align-self:start;}',
             // "Sin hallazgos." y "Cargando…": aviso simple, sin etiqueta.
             T + ' td[colspan]{grid-column:1/-1;text-align:center !important;}',
             T + ' td[colspan]::before{content:none;}',
@@ -1434,7 +1525,7 @@
             'body.dark-mode ' + T + ' td::before{color:var(--text-muted-color);}',
             '}',
             '@container setp (max-width:599.98px){',
-            card + '{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"no acc" "fec ubi" "des des" "evi evs" "est fso";gap:8px 12px;padding:12px;}',
+            card + '{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"no acc" "fec ubi" "des des" "are are" "evi est";gap:8px 12px;padding:12px;}',
             R + ' .setp-rep-thumb,' + R + ' .setp-rep-nothumb{width:100%;max-width:200px;height:96px;}',
             R + ' .setp-rep-head{padding:12px;}',
             R + ' .setp-rep-actions{width:100%;}',
@@ -1447,6 +1538,14 @@
 
     function repShell() {
         return [
+            '<div id="setp-rep-status" class="d-none"></div>',
+            // Cámara (o archivo en PC) para la foto de la solución del ✓ de pendientes.
+            '<input type="file" id="setp-rep-sol-file" class="d-none" accept="image/*" capture="environment" aria-label="Foto de la solución">',
+            '<div class="setp-rep-filtro d-none" id="setp-rep-filtro" role="group" aria-label="Filtrar por etiqueta"></div>',
+            '<div class="setp-rep-filtro d-none" id="setp-rep-filtro-area" role="group" aria-label="Filtrar por área responsable"></div>',
+            '<div class="table-responsive"><table class="table table-sm mb-0 setp-table setp-rep-table" id="setp-rep-table"></table></div>',
+            // Panel del reporte (periodo y botones): al final, después de
+            // "Hallazgos pendientes por solucionar" y antes de "Detalle de registros".
             '<div class="setp-rep-head">',
             '  <div><h4 class="setp-rep-title"><i class="fas fa-clipboard-list me-1 text-primary"></i>Reporte de hallazgos del Edificio Terminal</h4><div class="setp-panel-hint" id="setp-rep-hint"></div></div>',
             '  <div class="setp-rep-actions">',
@@ -1459,12 +1558,6 @@
             '    <button type="button" class="btn btn-sm btn-outline-success" data-rep="guardados"><i class="fas fa-folder-open me-1"></i>Formatos guardados</button>',
             '  </div>',
             '</div>',
-            '<div id="setp-rep-status" class="d-none"></div>',
-            // Cámara (o archivo en PC) para la foto de la solución del ✓ de pendientes.
-            '<input type="file" id="setp-rep-sol-file" class="d-none" accept="image/*" capture="environment" aria-label="Foto de la solución">',
-            '<div class="setp-rep-filtro d-none" id="setp-rep-filtro" role="group" aria-label="Filtrar por etiqueta"></div>',
-            '<div class="table-responsive"><table class="table table-sm mb-0 setp-table setp-rep-table" id="setp-rep-table"></table></div>',
-            '<datalist id="setp-rep-modulos"></datalist><datalist id="setp-rep-locales"></datalist>',
             '<datalist id="setp-rep-niveles">' + NIVELES.map(function (n) { return '<option value="' + n + '">'; }).join('') + '</datalist>'
         ].join('');
     }
@@ -1517,6 +1610,46 @@
         return html;
     }
 
+    // Área responsable: píldora que abre cómo reportarle y a quién. Sale de la
+    // etiqueta e item (js/setp-catalogo.js) o de la que se eligió a mano.
+    function repAreaDe(h) {
+        var cat = catalogo();
+        return cat && cat.areaDe ? cat.areaDe(h) : null;
+    }
+
+    function repAreaHtml(h) {
+        var cat = catalogo();
+        if (!cat || !cat.areaChip) return '—';
+        var key = repAreaDe(h);
+        if (!key) return cat.areaChip(null);
+        var regla = cat.areaRegla(h.etiqueta, h.item);
+        var manual = !!h.area && h.area !== regla;
+        return '<details class="setp-area-det"><summary>' + cat.areaChip(key, true) + '</summary>' + cat.areaInfo(key, true) + '</details>' +
+            (manual ? '<span class="setp-area-man"><i class="fas fa-user-pen me-1"></i>Cambiada por el supervisor</span>' : '');
+    }
+
+    // Renglón en edición: con la columna area se puede elegir otra; sin ella,
+    // se muestra la que marca la regla para la etiqueta e item elegidos.
+    function repAreaEditHtml(h, etq, it) {
+        var cat = catalogo();
+        if (!cat || !cat.areaChip) return '—';
+        var regla = cat.areaRegla(etq, it);
+        if (!state.areaCol) return cat.areaChip(regla, true) + (regla ? '<div class="setp-rep-det mt-1">Se asigna sola</div>' : '');
+        var sel = h && h.area && h.area !== regla ? h.area : '';
+        return '<select class="form-select form-select-sm" data-f="area" aria-label="Área responsable">' +
+            '<option value="">' + esc(regla ? 'Automática: ' + cat.area(regla).corto : 'A consideración (elegir)…') + '</option>' +
+            cat.areas().map(function (a) { return '<option value="' + a.key + '"' + (a.key === sel ? ' selected' : '') + '>' + esc(a.corto) + '</option>'; }).join('') +
+            '</select>';
+    }
+
+    // Al cambiar etiqueta o item se vuelve a calcular el área (se conserva la elegida a mano).
+    function repPintarAreaEdit(fila) {
+        var celda = fila && fila.querySelector('td.setp-rep-area');
+        if (!celda) return;
+        var get = function (f) { var el = fila.querySelector('[data-f="' + f + '"]'); return el ? el.value : ''; };
+        celda.innerHTML = repAreaEditHtml({ area: get('area') }, get('etiqueta'), get('item'));
+    }
+
     // kind: grupo donde se dibuja el renglón. En pendientes, ✓ da el seguimiento
     // (solución con evidencia) y el hallazgo pasa a solucionados.
     function repViewRow(h, n, kind) {
@@ -1544,11 +1677,16 @@
         return '<tr' + (origen ? ' class="setp-rep-fusion-origen"' : '') + '><td class="text-center">' + n + (h.folio ? '<span class="setp-rep-folio">' + esc(h.folio) + '</span>' : '') + '</td>' +
             '<td class="text-nowrap">' + fmtDate(h.fecha_reporte) + '</td>' +
             '<td>' + repUbiHtml(h) + '</td>' +
-            '<td class="setp-rep-desc">' + repDescHtml(h) + '</td><td>' + repThumb(h.evidencia_url) + '</td>' +
-            '<td><span class="badge ' + (solved ? 'setp-rep-ok"><i class="fas fa-check-circle me-1"></i>Solucionado' : 'setp-rep-pend"><i class="fas fa-exclamation-circle me-1"></i>Pendiente') + '</span>' + confirmadoHtml(h) + '</td>' +
-            '<td class="text-nowrap">' + (solved ? fmtDate(h.fecha_solucion) : '—') + '</td>' +
-            '<td>' + (solved ? repThumb(h.evidencia_solucion_url) : '—') + '</td>' +
+            '<td class="setp-rep-desc">' + repDescHtml(h) + '</td>' +
+            '<td class="setp-rep-area">' + repAreaHtml(h) + '</td><td>' + repThumb(h.evidencia_url) + '</td>' +
+            '<td><span class="badge ' + (solved ? 'setp-rep-ok"><i class="fas fa-check-circle me-1"></i>Solucionado' : 'setp-rep-pend"><i class="fas fa-exclamation-circle me-1"></i>Pendiente') + '</span>' + confirmadoHtml(h) + (solved ? repSolHtml(h) : '') + '</td>' +
             '<td class="text-end text-nowrap">' + actions + '</td></tr>';
+    }
+
+    // Fecha y foto de la solución, debajo del estatus (antes eran dos columnas).
+    function repSolHtml(h) {
+        return '<div class="setp-rep-sol-info"><span><i class="far fa-calendar-check me-1"></i>' + fmtDate(h.fecha_solucion) + '</span>' +
+            (h.evidencia_solucion_url ? repThumb(h.evidencia_solucion_url) : '') + '</div>';
     }
 
     // Captura con etiquetas en el renglón de edición: Etiqueta, Item, Condición,
@@ -1586,15 +1724,80 @@
             esc(h ? (etq ? h.detalle || '' : h.descripcion) : '') + '</textarea></div>';
     }
 
-    // Sugerencias de módulo y local según el nivel y el módulo escritos.
-    function repSugerencias(row) {
+    // Módulo y Local: listas para elegir según el nivel (catálogo de
+    // js/setp-catalogo.js). Un valor guardado que no está en el catálogo
+    // (hallazgos de antes) se conserva como opción para no perderlo.
+    function repModuloOpciones(nivel, sel) {
         var cat = catalogo();
-        if (!cat || !row) return;
-        var get = function (f) { var el = row.querySelector('[data-f="' + f + '"]'); return el ? el.value.trim() : ''; };
-        var modulos = cat.modulos(get('nivel'));
-        var m = modulos.find(function (x) { return x.nombre.toLowerCase() === get('modulo').toLowerCase(); });
-        $('setp-rep-modulos').innerHTML = modulos.map(function (x) { return '<option value="' + esc(x.nombre) + '">'; }).join('');
-        $('setp-rep-locales').innerHTML = (m ? m.locales : []).map(function (l) { return '<option value="' + esc(l) + '">'; }).join('');
+        var modulos = cat ? cat.modulos(nivel) : [];
+        var html = '<option value="">' + (modulos.length ? 'Módulo…' : 'Elige primero el nivel…') + '</option>';
+        var esta = false;
+        html += modulos.map(function (m) {
+            var on = sel && m.nombre.toLowerCase() === String(sel).toLowerCase();
+            if (on) esta = true;
+            return '<option value="' + esc(m.nombre) + '"' + (on ? ' selected' : '') + '>' + esc(m.nombre + (m.zona ? ' (' + m.zona + ')' : '')) + '</option>';
+        }).join('');
+        if (sel && !esta) html += '<option value="' + esc(sel) + '" selected>' + esc(sel) + '</option>';
+        return html;
+    }
+
+    function repLocalOpciones(nivel, modulo, sel) {
+        var cat = catalogo();
+        var m = cat ? cat.modulos(nivel).find(function (x) { return x.nombre.toLowerCase() === String(modulo || '').toLowerCase(); }) : null;
+        var locales = m ? m.locales : [];
+        var html = '<option value="">' + (m ? 'Local…' : 'Elige primero el módulo…') + '</option>';
+        var esta = false;
+        html += locales.map(function (l) {
+            var on = sel && l.toUpperCase() === String(sel).toUpperCase();
+            if (on) esta = true;
+            return '<option value="' + esc(l) + '"' + (on ? ' selected' : '') + '>' + esc(l) + '</option>';
+        }).join('');
+        // "Otro lugar": quioscos, bancas o puntos que no son un local del catálogo
+        // (ej. banca a un costado de las cajas de BANAMEX). Se escribe abajo.
+        if (m) html += '<option value="' + LOCAL_OTRO + '"' + (sel && !esta ? ' selected' : '') + '>Otro lugar (especificar)…</option>';
+        else if (sel && !esta) html += '<option value="' + esc(sel) + '" selected>' + esc(sel) + '</option>';
+        return html;
+    }
+
+    const LOCAL_OTRO = '__otro';
+
+    // ¿El local guardado no está en el catálogo del módulo? (es un "Otro lugar").
+    function repLocalEsOtro(nivel, modulo, local) {
+        if (!local) return false;
+        var cat = catalogo();
+        var m = cat ? cat.modulos(nivel).find(function (x) { return x.nombre.toLowerCase() === String(modulo || '').toLowerCase(); }) : null;
+        return !!m && !m.locales.some(function (l) { return l.toUpperCase() === String(local).toUpperCase(); });
+    }
+
+    // Muestra la casilla "Otro lugar" sólo con esa opción elegida.
+    function repLocalOtroToggle(row) {
+        var loc = row && row.querySelector('[data-f="local"]');
+        var txt = row && row.querySelector('[data-f="local-otro"]');
+        if (!loc || !txt) return;
+        var on = loc.value === LOCAL_OTRO;
+        var antes = !txt.classList.contains('d-none');
+        txt.classList.toggle('d-none', !on);
+        if (!on) repCampoLleno(txt);
+        else if (!antes && document.activeElement === loc) txt.focus();
+    }
+
+    // Al cambiar el nivel se vuelven a ofrecer sus módulos; al cambiar el
+    // módulo, sus locales (se conserva lo elegido si sigue en la lista).
+    function repSugerencias(row, cambio) {
+        if (!row) return;
+        var el = function (f) { return row.querySelector('[data-f="' + f + '"]'); };
+        var mod = el('modulo'), loc = el('local');
+        if (!mod || !loc || mod.tagName !== 'SELECT') return;
+        var nivel = el('nivel') ? el('nivel').value.trim() : '';
+        if (cambio === 'nivel') mod.innerHTML = repModuloOpciones(nivel, mod.value);
+        if (cambio === 'nivel' || cambio === 'modulo') {
+            var otroTxt = el('local-otro');
+            // Al cambiar de nivel se conserva el "Otro lugar" escrito; al cambiar de módulo se limpia.
+            var actual = loc.value === LOCAL_OTRO ? (otroTxt ? otroTxt.value.trim() : '') : loc.value;
+            if (cambio === 'modulo' && otroTxt) otroTxt.value = '';
+            loc.innerHTML = repLocalOpciones(nivel, mod.value, cambio === 'modulo' ? '' : actual);
+        }
+        repLocalOtroToggle(row);
     }
 
     // Hallazgo nuevo en curso de captura: 'new:detectados' | 'new:solucionados' | 'new:pendientes'.
@@ -1619,13 +1822,18 @@
             '<td class="text-center">' + (h ? n : '<i class="fas fa-plus text-primary" aria-label="Nuevo"></i>') + '</td>' +
             '<td><input type="date" class="form-control form-control-sm" data-f="fecha" value="' + esc(fecha) + '"' + limits(kind === 'detectados' ? r : p) + ' aria-label="Fecha de reporte"></td>' +
             '<td><input type="text" class="form-control form-control-sm mb-1" data-f="nivel" list="setp-rep-niveles" placeholder="Nivel (10.50)" value="' + esc(h && h.nivel ? h.nivel : '') + '" aria-label="Nivel">' +
-            '<input type="text" class="form-control form-control-sm mb-1" data-f="modulo" list="setp-rep-modulos" placeholder="Módulo N" value="' + esc(h ? h.modulo : '') + '" aria-label="Ubicación (módulo)">' +
-            '<input type="text" class="form-control form-control-sm" data-f="local" list="setp-rep-locales" placeholder="Local (ej. SEIE4-12)" value="' + esc(h && h.local ? h.local : '') + '" aria-label="Local"></td>' +
+            '<select class="form-select form-select-sm mb-1" data-f="modulo" aria-label="Ubicación (módulo)">' + repModuloOpciones(h && h.nivel, h ? h.modulo : '') + '</select>' +
+            '<select class="form-select form-select-sm" data-f="local" aria-label="Local">' + repLocalOpciones(h && h.nivel, h ? h.modulo : '', h && h.local ? h.local : '') + '</select>' +
+            '<input type="text" class="form-control form-control-sm mt-1' + (h && repLocalEsOtro(h.nivel, h.modulo, h.local) ? '' : ' d-none') + '" data-f="local-otro" maxlength="120"' +
+            ' value="' + esc(h && repLocalEsOtro(h.nivel, h.modulo, h.local) ? h.local : '') + '" placeholder="Especifica el lugar (ej. Banca a un costado de las cajas de BANAMEX)" aria-label="Otro lugar"></td>' +
             '<td class="setp-rep-desc">' + repCapturaHtml(h) + '</td>' +
+            '<td class="setp-rep-area">' + repAreaEditHtml(h, h && h.etiqueta, h && h.item) + '</td>' +
             '<td>' + repPhotoInput('evidencia', h && h.evidencia_url, false, 'Evidencia fotográfica') + '</td>' +
-            '<td><select class="form-select form-select-sm" data-f="estatus" aria-label="Estatus"><option value="PENDIENTE">Pendiente</option><option value="SOLUCIONADO"' + (solved ? ' selected' : '') + '>Solucionado</option></select></td>' +
-            '<td><input type="date" class="form-control form-control-sm" data-f="fsol" value="' + esc(fsol) + '"' + (kind === 'solucionados' ? limits(r) : '') + (solved ? '' : ' disabled') + ' aria-label="Fecha de solución"></td>' +
-            '<td>' + repPhotoInput('solucion', h && h.evidencia_solucion_url, !solved, 'Evidencia fotográfica solucionada') + '</td>' +
+            '<td><select class="form-select form-select-sm" data-f="estatus" aria-label="Estatus"><option value="PENDIENTE">Pendiente</option><option value="SOLUCIONADO"' + (solved ? ' selected' : '') + '>Solucionado</option></select>' +
+            // Fecha y foto de la solución: sólo con estatus Solucionado.
+            '<div class="setp-rep-sol' + (solved ? '' : ' d-none') + '">' +
+            '<input type="date" class="form-control form-control-sm" data-f="fsol" value="' + esc(fsol) + '"' + (kind === 'solucionados' ? limits(r) : '') + (solved ? '' : ' disabled') + ' aria-label="Fecha de solución" title="Fecha de solución">' +
+            repPhotoInput('solucion', h && h.evidencia_solucion_url, !solved, 'Evidencia fotográfica solucionada') + '</div></td>' +
             '<td class="text-end text-nowrap"><div class="btn-group btn-group-sm">' +
             '<button type="button" class="btn btn-primary" data-rep="save" title="Guardar"><i class="fas fa-save"></i></button>' +
             '<button type="button" class="btn btn-outline-secondary" data-rep="cancel" title="Cancelar"><i class="fas fa-times"></i></button></div></td></tr>';
@@ -1672,23 +1880,33 @@
             (state.porSupervisor && no ? ' · Detectados de <b>' + esc(nombreSupervisor(no)) + '</b> que aún no salen en un formato' : '') +
             (state.store === 'local' ? '<span class="setp-rep-local" title="Las tablas de Supabase (db/create_setp_formatos.sql) aún no están disponibles"><i class="fas fa-laptop me-1"></i>Guardado en este navegador</span>' : '');
         rep.el.querySelector('[data-rep="add"]').classList.toggle('d-none', !canEdit());        var table = $('setp-rep-table');
-        var thead = '<thead><tr><th>' + (state.identificacion ? 'No. / Folio' : 'No.') + '</th><th>Fecha de reporte</th><th>Ubicación de incidencia</th><th>Descripción de incidencia</th><th>Evidencia fotográfica</th><th>Estatus</th><th>Fecha de solución</th><th>Evidencia solucionada</th><th></th></tr></thead>';
+        var thead = '<thead><tr><th>' + (state.identificacion ? 'No. / Folio' : 'No.') + '</th><th>Fecha de reporte</th><th>Ubicación de incidencia</th><th>Descripción de incidencia</th><th>Área responsable</th><th>Evidencia fotográfica</th><th>Estatus</th><th></th></tr></thead>';
         var byId = {};
         state.hallazgos.forEach(function (h) { byId[h.id] = h; });
         var s = seccionesDe(rango);
+        // En pantalla: detectados, sólo los de hoy; pendientes, sólo los que aún
+        // no salen en un formato generado (los demás ya están en Formatos guardados).
+        // El oficio no cambia: su seguimiento sigue llevando todos los pendientes.
+        var hoy = todayIso();
+        s.detectados = s.detectados.filter(function (x) { return x.fecha_reporte === hoy || x.id === rep.editing; });
+        s.pendientes = s.pendientes.filter(function (x) { return x.id === rep.editing || !byId[x.id] || !yaEnFormato(byId[x.id]); });
         var todos = {};
         [s.detectados, s.solucionados, s.pendientes].forEach(function (l) { l.forEach(function (x) { if (byId[x.id]) todos[x.id] = byId[x.id]; }); });
-        pintarFiltroEtiquetas(Object.keys(todos).map(function (k) { return todos[k]; }));
+        var listaTodos = Object.keys(todos).map(function (k) { return todos[k]; });
+        pintarFiltroEtiquetas(listaTodos);
+        pintarFiltroAreas(listaTodos);
         var pasa = function (h) {
             if (!h) return false;
-            if (!rep.etiqueta || h.id === rep.editing) return true;
-            return rep.etiqueta === 'SIN' ? !h.etiqueta : h.etiqueta === rep.etiqueta;
+            if (h.id === rep.editing) return true;
+            if (rep.etiqueta && (rep.etiqueta === 'SIN' ? !!h.etiqueta : h.etiqueta !== rep.etiqueta)) return false;
+            if (rep.area && (repAreaDe(h) || 'SIN') !== rep.area) return false;
+            return true;
         };
         var full = function (list) { return list.map(function (x) { return byId[x.id]; }).filter(pasa); };
         table.innerHTML = thead +
-            repGroup('Hallazgos detectados', rangoText(rango), full(s.detectados), 'detectados') +
+            repGroup('Hallazgos detectados', 'de hoy, ' + fmtDate(hoy), full(s.detectados), 'detectados') +
             repGroup('Hallazgos solucionados', 'solucionados ' + rangoText(rango) + ', con evidencia y estatus confirmado', full(s.solucionados), 'solucionados') +
-            repGroup('Hallazgos pendientes por solucionar', 'de todos los supervisores, hasta que se les dé seguimiento', full(s.pendientes), 'pendientes');
+            repGroup('Hallazgos pendientes por solucionar', 'de todos los supervisores, que aún no salen en un formato generado', full(s.pendientes), 'pendientes');
     }
 
     // Barra "Etiquetas": Todas y las etiquetas que tienen hallazgos en el periodo.
@@ -1713,6 +1931,38 @@
         box.innerHTML = '<span class="l"><i class="fas fa-tags me-1"></i>Etiquetas</span>' + boton('', 'Todas', lista.length) +
             cat.etiquetas.filter(function (e) { return cuenta[e.key]; }).map(function (e) { return boton(e.key, e.nombre, cuenta[e.key], e); }).join('') +
             (cuenta.SIN ? boton('SIN', 'Sin etiqueta', cuenta.SIN) : '');
+        box.classList.remove('d-none');
+    }
+
+    // Barra "Áreas": a quién le toca cada hallazgo del periodo y cuántos tiene
+    // pendientes (número rojo), para darles seguimiento.
+    function pintarFiltroAreas(lista) {
+        var box = $('setp-rep-filtro-area');
+        var cat = catalogo();
+        if (!box) return;
+        if (!cat || !cat.areas || !lista.some(function (h) { return repAreaDe(h); })) {
+            box.classList.add('d-none');
+            box.innerHTML = '';
+            if (rep.area) rep.area = '';
+            return;
+        }
+        var cuenta = {}, pend = {};
+        lista.forEach(function (h) {
+            var k = repAreaDe(h) || 'SIN';
+            cuenta[k] = (cuenta[k] || 0) + 1;
+            if (h.estatus !== 'SOLUCIONADO') pend[k] = (pend[k] || 0) + 1;
+        });
+        if (rep.area && !cuenta[rep.area]) rep.area = '';
+        var boton = function (key, texto, a) {
+            var n = key ? cuenta[key] : lista.length;
+            var p = key ? pend[key] || 0 : 0;
+            return '<button type="button" data-rep="filtro-area" data-area="' + key + '" aria-pressed="' + (rep.area === key) + '"' + (a ? ' style="--c:' + a.color + '"' : '') +
+                (a ? ' title="' + esc(a.nombre) + '"' : '') + '>' + (a ? '<i class="fas ' + a.icono + '"></i>' : '') + esc(texto) + ' <b>' + n + '</b>' +
+                (p ? '<span class="setp-rep-apend" title="Pendientes">' + p + '</span>' : '') + '</button>';
+        };
+        box.innerHTML = '<span class="l"><i class="fas fa-route me-1"></i>Áreas</span>' + boton('', 'Todas') +
+            cat.areas().filter(function (a) { return cuenta[a.key]; }).map(function (a) { return boton(a.key, a.corto, a); }).join('') +
+            (cuenta.SIN ? boton('SIN', 'A consideración') : '');
         box.classList.remove('d-none');
     }
 
@@ -1763,40 +2013,103 @@
     }
 
     function repCancel() {
+        repStatus('');
         rep.editing = null;
         rep.solving = false;
         rep.files = { evidencia: null, solucion: null };
         renderReport();
     }
 
+    const REP_LEYENDA = 'Favor de rellenar la información obligatoria';
+
+    // Aviso al guardar con datos obligatorios vacíos: leyenda roja con signo de
+    // interrogación debajo del renglón (y arriba, en el mensaje de la sección),
+    // y en rojo TODOS los campos que faltan, sean de escribir, de lista o la
+    // foto de la solución. El cursor va al primero. extra: indicación adicional;
+    // titulo: otra leyenda cuando el dato está lleno pero es incorrecto.
+    function repAviso(row, campos, extra, titulo) {
+        repLimpiarAviso(row);
+        var els = campos.map(function (f) {
+            if (f === 'foto-solucion') { var inp = row.querySelector('[data-file="solucion"]'); return inp && !inp.disabled ? inp.closest('label') : null; }
+            var el = row.querySelector('[data-f="' + f + '"]');
+            return el && !el.disabled ? el : null;
+        }).filter(Boolean);
+        els.forEach(function (el) { el.classList.add('is-invalid'); });
+        var texto = '<i class="fas fa-question-circle me-1"></i>' + (titulo || REP_LEYENDA) + '.' + (extra ? ' <span class="setp-rep-leyenda-extra">' + extra + '</span>' : '');
+        var aviso = document.createElement('tr');
+        aviso.className = 'setp-rep-aviso-row';
+        aviso.innerHTML = '<td colspan="' + REP_COLS + '"><div class="setp-rep-leyenda" role="alert">' + texto + '</div></td>';
+        row.after(aviso);
+        var primero = els[0];
+        if (primero) {
+            if (primero.tagName === 'LABEL') primero.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            else primero.focus();
+        }
+        repStatus('<span class="setp-rep-leyenda">' + texto + '</span>', 'danger');
+    }
+
+    function repLimpiarAviso(row) {
+        if (!row) return;
+        row.querySelectorAll('.is-invalid').forEach(function (el) { el.classList.remove('is-invalid'); });
+        var sig = row.nextElementSibling;
+        if (sig && sig.classList.contains('setp-rep-aviso-row')) sig.remove();
+    }
+
+    // Quita la marca roja del campo que ya se llenó; sin marcas, se va la leyenda.
+    function repCampoLleno(el) {
+        var marcado = el.classList.contains('is-invalid') ? el : el.closest('label.is-invalid');
+        if (!marcado) return;
+        marcado.classList.remove('is-invalid');
+        var row = marcado.closest('tr.setp-rep-edit');
+        if (row && !row.querySelector('.is-invalid')) { repLimpiarAviso(row); repStatus(''); }
+    }
+
     async function repSave(row) {
         if (rep.saving || !canEdit()) return;
+        repLimpiarAviso(row);
         var get = function (f) { var el = row.querySelector('[data-f="' + f + '"]'); return el ? el.value.trim() : ''; };
         var v = { fecha: get('fecha'), modulo: get('modulo'), nivel: get('nivel'), desc: get('desc'), solved: get('estatus') === 'SOLUCIONADO', fsol: get('fsol'), seccion: SECCIONES[repNewKind()] };
+        var prev = repNewKind() ? null : state.hallazgos.find(function (h) { return h.id === rep.editing; });
         var cat = catalogo();
-        if (cat && row.querySelector('[data-f="etiqueta"]')) {
-            v.local = get('local').toUpperCase();
+        var conCatalogo = !!(cat && row.querySelector('[data-f="etiqueta"]'));
+        if (conCatalogo) {
+            // "Otro lugar": se guarda tal como se escribió (no es una clave de local).
+            v.local = get('local') === LOCAL_OTRO ? get('local-otro').replace(/\s+/g, ' ') : get('local').toUpperCase();
+            v.localOtro = get('local') === LOCAL_OTRO;
             v.etiqueta = get('etiqueta');
             v.item = get('item');
             v.condicion = get('condicion');
             v.cantidad = Math.min(99, Math.max(1, Number(get('cantidad')) || 1));
             v.detalle = v.etiqueta ? v.desc.replace(/\s+/g, ' ') : '';
-            if (v.etiqueta) {
-                if (!v.item || !v.condicion) return repStatus('Con etiqueta, elige también el <b>item</b> y la <b>condición</b>.', 'warning');
-                if (v.item === cat.OTRO && !v.detalle) return repStatus('Con item <b>Otro</b>, describe el elemento en el detalle.', 'warning');
-                v.desc = cat.componer(v);
+        }
+        if (state.areaCol && row.querySelector('[data-f="area"]')) v.area = get('area');
+        // Todos los obligatorios vacíos de una vez, para marcarlos juntos.
+        var faltan = [];
+        var extra = '';
+        if (!v.fecha) faltan.push('fecha');
+        if (!v.modulo) faltan.push('modulo');
+        if (v.localOtro && !v.local) { faltan.push('local-otro'); extra = 'Con <b>Otro lugar</b>, escribe dónde está (ej. banca a un costado de las cajas de BANAMEX).'; }
+        if (conCatalogo && v.etiqueta) {
+            if (!v.item) faltan.push('item');
+            if (!v.condicion) faltan.push('condicion');
+            if (v.item === cat.OTRO && !v.detalle) { faltan.push('desc'); extra = 'Con item <b>Otro</b>, describe el elemento en el detalle.'; }
+        } else if (!v.desc) faltan.push('desc');
+        if (v.solved && !v.fsol) faltan.push('fsol');
+        var sinFotoSol = v.solved && !rep.files.solucion && !(prev && prev.evidencia_solucion_url);
+        if (sinFotoSol) faltan.push('foto-solucion');
+        if (faltan.length) {
+            // Si sólo falta la foto de la solución, se abre la cámara para tomarla.
+            if (faltan.length === 1 && sinFotoSol) {
+                var camara = row.querySelector('[data-file="solucion"]');
+                if (camara && !camara.disabled) camara.click();
+                extra = 'Toma la <b>foto de la solución</b> y vuelve a presionar <b>Guardar</b>.';
             }
+            return repAviso(row, faltan, extra);
         }
+        if (v.solved && v.fsol < v.fecha) return repAviso(row, ['fsol', 'fecha'], '', 'La fecha de solución no puede ser anterior a la fecha de reporte');
+        if (conCatalogo && v.etiqueta) v.desc = cat.componer(v);
         var invalid = validateHallazgo(v);
-        if (invalid) return repStatus(invalid, 'warning');
-        var prev = repNewKind() ? null : state.hallazgos.find(function (h) { return h.id === rep.editing; });
-        // Solucionado siempre lleva la foto de la solución (se sube al bucket al
-        // guardar): si falta, se abre la cámara para tomarla.
-        if (v.solved && !rep.files.solucion && !(prev && prev.evidencia_solucion_url)) {
-            var camara = row.querySelector('[data-file="solucion"]');
-            if (camara && !camara.disabled) camara.click();
-            return repStatus('Toma la <b>foto de la solución</b> y vuelve a presionar <b>Guardar</b>.', 'warning');
-        }
+        if (invalid) return repAviso(row, [], '', invalid.replace(/\.$/, ''));
         // Seguimiento desde pendientes (✓ o lápiz): solucionado con evidencia queda
         // confirmado y pasa a Hallazgos solucionados.
         var seguimiento = !!prev && rep.editKind === 'pendientes' && v.solved;
@@ -1805,6 +2118,28 @@
         rep.saving = true;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        // Hallazgo nuevo con foto: antes de crearlo se revisa si ya está
+        // reportado y se comparan las fotos (js/setp-comparar.js).
+        if (!prev && !v.solved && conCatalogo && v.etiqueta && v.item && rep.files.evidencia && state.store !== 'local' && window.setpComparar) {
+            var dec = { accion: 'otro' };
+            try {
+                dec = await window.setpComparar.preguntar({
+                    sb: await getClient(),
+                    q: { etiqueta: v.etiqueta, item: v.item, nivel: v.nivel, modulo: v.modulo, local: v.local },
+                    foto: rep.files.evidencia,
+                    tit: v.desc,
+                    sub: [v.nivel, v.modulo, v.local].filter(Boolean).join(' · '),
+                    nombre: nombreSupervisor
+                });
+            } catch (_) { /* sin revisión: se guarda como nuevo */ }
+            if (dec.accion !== 'otro') {
+                rep.saving = false;
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save"></i>';
+                if (dec.accion === 'mismo') await repSumarAHallazgo(dec, v, rep.files.evidencia, btn);
+                return;
+            }
+        }
         try {
             var saved = await persistHallazgo(prev, v, rep.files);
             rep.editing = null;
@@ -1821,6 +2156,49 @@
             renderReport();
         } catch (error) {
             repStatus('No se pudo guardar el hallazgo: ' + hallazgoErr(error), 'danger');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save"></i>';
+        } finally {
+            rep.saving = false;
+        }
+    }
+
+    // "Es el mismo · agregar mi foto" desde Agregar hallazgo: no crea otro;
+    // suma un reporte y la foto al existente (setp_sumar_reporte de
+    // db/setp_hallazgos_identificacion.sql; sin ella, se actualiza directo).
+    async function repSumarAHallazgo(dest, v, file, btn) {
+        if (rep.saving) return;
+        rep.saving = true;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        var foto = null;
+        try {
+            var sb = await getClient();
+            foto = await uploadPhoto(file, v.fecha, 'e');
+            var extra = { url: foto.url, path: foto.path, no_empleado: (state.porSupervisor && supervisorActual()) || null, fecha: v.fecha, descripcion: v.desc };
+            var res = await sb.rpc('setp_sumar_reporte', { p_hallazgo: dest.id, p_foto: extra });
+            if (res.error) {
+                var cur = await sb.from(T_HALLAZGOS).select('veces, fotos_extra').eq('id', dest.id).single();
+                if (cur.error) throw cur.error;
+                res = await sb.from(T_HALLAZGOS).update({
+                    veces: (Number(cur.data.veces) || 1) + 1,
+                    fotos_extra: (cur.data.fotos_extra || []).concat([extra]),
+                    updated_at: new Date().toISOString()
+                }).eq('id', dest.id).select('*').single();
+                if (res.error) throw res.error;
+            }
+            var fila = res.data && res.data.id ? res.data : null;
+            if (fila) {
+                var ya = state.hallazgos.some(function (h) { return h.id === fila.id; });
+                state.hallazgos = ya ? state.hallazgos.map(function (h) { return h.id === fila.id ? fila : h; }) : state.hallazgos.concat([fila]);
+            }
+            rep.editing = null;
+            rep.files = { evidencia: null, solucion: null };
+            repStatus('<i class="fas fa-link me-1"></i>Tu foto se agregó al hallazgo <b>' + esc(dest.folio || 'registrado') + '</b> (no se creó otro).', 'success');
+            renderReport();
+        } catch (error) {
+            if (foto) removePhotos([foto.path]);
+            repStatus('No se pudo agregar la foto al hallazgo: ' + hallazgoErr(error), 'danger');
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-save"></i>';
         } finally {
@@ -2002,7 +2380,9 @@
 
     function bindReport(el) {
         el.addEventListener('input', function (e) {
-            if (e.target.matches('tr.setp-rep-edit [data-f="nivel"], tr.setp-rep-edit [data-f="modulo"]')) repSugerencias(e.target.closest('tr'));
+            if (e.target.value && e.target.value.trim()) repCampoLleno(e.target);
+            if (e.target.matches('tr.setp-rep-edit [data-f="nivel"], tr.setp-rep-edit [data-f="modulo"]')) repSugerencias(e.target.closest('tr'), e.target.getAttribute('data-f'));
+            else if (e.target.matches('tr.setp-rep-edit [data-f="local"]')) repLocalOtroToggle(e.target.closest('tr'));
         });
         el.addEventListener('click', function (e) {
             var btn = e.target.closest('[data-rep]');
@@ -2013,6 +2393,11 @@
             if (rep.saving) return;
             if (act === 'filtro') {
                 rep.etiqueta = btn.getAttribute('data-etq') || '';
+                renderReport();
+                return;
+            }
+            if (act === 'filtro-area') {
+                rep.area = btn.getAttribute('data-area') || '';
                 renderReport();
                 return;
             }
@@ -2060,6 +2445,8 @@
                 rep.periodo = rep.desde.slice(0, 7);
                 rep.editing = null;
                 repStatus('');
+                // Un periodo anterior a lo cargado: se cargan sus hallazgos primero.
+                if (faltaCargar(rep.desde) || faltaCargar(monthRange(prevMonth(rep.periodo)).start)) { mountReport(rep.el); return; }
                 renderReport();
             } else if (t.matches('[data-f="etiqueta"]')) {
                 // Al cambiar la etiqueta se ofrecen sus items y condiciones.
@@ -2067,19 +2454,30 @@
                 var etq = t.value;
                 fila.querySelector('[data-f="item"]').innerHTML = repItemsOpciones(etq, '');
                 fila.querySelector('[data-f="condicion"]').innerHTML = repCondOpciones(etq, '');
-                ['item', 'condicion', 'cantidad'].forEach(function (f) { fila.querySelector('[data-f="' + f + '"]').disabled = !etq; });
+                ['item', 'condicion', 'cantidad'].forEach(function (f) {
+                    var campo = fila.querySelector('[data-f="' + f + '"]');
+                    campo.disabled = !etq;
+                    if (!etq) repCampoLleno(campo);   // sin etiqueta ya no son obligatorios
+                });
                 var ta = fila.querySelector('[data-f="desc"]');
                 ta.placeholder = etq ? 'Detalle (opcional)' : 'Descripción de la incidencia';
                 ta.setAttribute('aria-label', etq ? 'Detalle' : 'Descripción de incidencia');
+                repPintarAreaEdit(fila);
+            } else if (t.matches('tr.setp-rep-edit [data-f="item"]')) {
+                repPintarAreaEdit(t.closest('tr'));
             } else if (t.matches('[data-f="estatus"]')) {
                 var row = t.closest('tr');
                 var on = t.value === 'SOLUCIONADO';
                 var fsol = row.querySelector('[data-f="fsol"]');
+                var solBox = row.querySelector('.setp-rep-sol');
+                if (solBox) solBox.classList.toggle('d-none', !on);
                 fsol.disabled = !on;
                 if (on && !fsol.value) fsol.value = todayIso();
                 var file = row.querySelector('[data-file="solucion"]');
                 file.disabled = !on;
                 file.closest('label').classList.toggle('is-disabled', !on);
+                // Pendiente: la fecha y la foto de la solución dejan de ser obligatorias.
+                if (!on) { repCampoLleno(fsol); repCampoLleno(file); }
                 // Al marcarlo Solucionado se abre la cámara para la foto de la solución.
                 var prevH = state.hallazgos.find(function (x) { return x.id === rep.editing; });
                 if (on && !rep.files.solucion && !(prevH && prevH.evidencia_solucion_url)) file.click();
@@ -2087,6 +2485,7 @@
                 var f = t.files && t.files[0];
                 if (!f) return;
                 rep.files[t.getAttribute('data-file')] = f;
+                repCampoLleno(t);
                 var label = t.closest('label');
                 var holder = label.querySelector('.setp-rep-thumb, .setp-rep-nothumb');
                 var img = document.createElement('img');
@@ -2207,6 +2606,8 @@
                 bootstrap.Modal.getOrCreateInstance($(GUARDADOS_ID)).hide();
             } else if (act === 'eliminar') {
                 eliminarGuardado(btn, btn.getAttribute('data-kind'), id, btn.getAttribute('data-label'));
+            } else if (act === 'ver' || act === 'rep-ver') {
+                verGuardado(btn, act === 'rep-ver' ? 'reporte' : 'formato', id, btn.getAttribute('data-label'));
             } else if (act === 'pdf' || act === 'word' || act === 'rep-pdf' || act === 'rep-word') {
                 btn.disabled = true;
                 var esRep = act.indexOf('rep-') === 0;
@@ -2250,6 +2651,9 @@
             var res = await sb.from(T_OFICIOS).delete().eq('id', id).select('id');
             if (res.error) throw res.error;
             if (!res.data || !res.data.length) throw new Error('Supabase no permitió eliminarlo (revisa los permisos de setp_oficios).');
+            // Sus hallazgos vuelven a "Pendientes por solucionar" (oficio_id queda en null).
+            delete state.fmtHallazgos[id];
+            state.hallazgos = state.hallazgos.map(function (h) { return h.oficio_id === id ? Object.assign({}, h, { oficio_id: null }) : h; });
             // Sus recorridos vuelven a la tabla (ya no están en un formato).
             if (kind === 'formato' && rec && rec.mount) {
                 var wrap = document.getElementById('setp-recorridos-wrap');
@@ -2314,6 +2718,7 @@
             var ym = String(o.periodo).slice(0, 7);
             return '<li><div class="setp-g-main"><div class="setp-g-name">' + esc(o.numero) + '</div>' +
                 '<div class="setp-g-sub">Periodo ' + MONTH_ABBR[Number(ym.slice(5, 7)) - 1] + ' ' + ym.slice(0, 4) + ' · Oficio del ' + fmtDate(o.fecha_oficio) + '</div></div>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" data-g="ver" data-id="' + esc(o.id) + '" data-label="' + esc(o.numero) + '"><i class="fas fa-eye me-1"></i>Ver formato</button>' +
                 '<button type="button" class="btn btn-sm btn-outline-danger" data-g="pdf" data-id="' + esc(o.id) + '"><i class="fas fa-file-pdf me-1"></i>Imprimir / PDF</button>' +
                 '<button type="button" class="btn btn-sm btn-outline-primary" data-g="word" data-id="' + esc(o.id) + '"><i class="fas fa-file-word me-1"></i>Word</button>' +
                 delBtn('formato', o.id, o.numero) + '</li>';
@@ -2324,6 +2729,7 @@
             var hora = s.guardado_en ? new Date(s.guardado_en).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
             return '<li><div class="setp-g-main"><div class="setp-g-name">' + esc(grupoLabel(s.no_empleado, s.turno)) + '</div>' +
                 '<div class="setp-g-sub">Guardado el ' + fmtDate(s.fecha || o.fecha_oficio) + (hora ? ' · ' + esc(hora) + ' hrs' : '') + ' · ' + n + (n === 1 ? ' hallazgo' : ' hallazgos') + '</div></div>' +
+                '<button type="button" class="btn btn-sm btn-outline-secondary" data-g="rep-ver" data-id="' + esc(o.id) + '" data-label="' + esc(grupoLabel(s.no_empleado, s.turno)) + '"><i class="fas fa-eye me-1"></i>Ver</button>' +
                 '<button type="button" class="btn btn-sm btn-outline-danger" data-g="rep-pdf" data-id="' + esc(o.id) + '"><i class="fas fa-file-pdf me-1"></i>Imprimir / PDF</button>' +
                 '<button type="button" class="btn btn-sm btn-outline-primary" data-g="rep-word" data-id="' + esc(o.id) + '"><i class="fas fa-file-word me-1"></i>Word</button>' +
                 delBtn('reporte', o.id, grupoLabel(s.no_empleado, s.turno) + ' · ' + fmtDate(s.fecha || o.fecha_oficio) + (hora ? ' ' + hora : '')) + '</li>';
@@ -2357,19 +2763,144 @@
 
     // win: ventana de impresión abierta en el clic (si no, el navegador la bloquea tras la espera).
     async function downloadSaved(id, format, win) {
+        var g = await oficioGuardado(id);
+        if (format === 'word') downloadWord(g.datos, g.secciones);
+        else printDocument(buildDocument(g.datos, g.secciones, 'print'), win);
+    }
+
+    // Datos y secciones de un oficio guardado, con el estatus actual de cada hallazgo (seguimiento).
+    async function oficioGuardado(id) {
         var o = await getOficio(id);
         var datos = o.datos || {};
         var secciones = o.secciones || { periodo: String(o.periodo).slice(0, 7), detectados: [], solucionados: [], pendientes: [] };
-        // Se imprime con el estatus actual de cada hallazgo (seguimiento).
         try {
             await loadHallazgos();
             if (state.store === 'db') secciones = seccionesActuales(secciones, String(o.periodo).slice(0, 7));
-        } catch (_) { /* sin conexión: se imprime como se guardó */ }
-        if (format === 'word') downloadWord(datos, secciones);
-        else printDocument(buildDocument(datos, secciones, 'print'), win);
+        } catch (_) { /* sin conexión: se muestra como se guardó */ }
+        return { datos: datos, secciones: secciones };
     }
 
-    // Al cambiar de supervisor en el filtro, el reporte muestra sólo los suyos.
+    // ---------- Informe de un registro del historial ----------
+    // o: { recorridoId, fecha: 'YYYY-MM-DD', texto: 'durante el recorrido …',
+    //      hallazgos: [{ id, … }], titulo }. Sale con el formato del oficio:
+    // membrete, encabezado, destinatario, la tabla de los hallazgos detectados
+    // en ese recorrido, firma y c.c.p. El No. es el del formato en el que salió
+    // el recorrido; si aún no sale en uno, queda "SSO/GOET/".
+    async function informeRegistro(o) {
+        var sb = null;
+        try { sb = await getClient(); } catch (_) { /* sin conexión */ }
+        try { if (!state.lastOficio) await loadLastOficio(); } catch (_) { /* datos por omisión */ }
+        try { if (!state.hallazgos.length) await loadHallazgos(); } catch (_) { /* como vienen del historial */ }
+        var numero = '';
+        if (sb && o.recorridoId) {
+            try {
+                var l = await sb.from('setp_oficio_recorridos').select('oficio_id').eq('recorrido_id', o.recorridoId);
+                var ids = (l.data || []).map(function (x) { return x.oficio_id; });
+                if (!l.error && ids.length) {
+                    var of = await sb.from(T_OFICIOS).select('numero, created_at').in('id', ids);
+                    var lista = (of.data || []).filter(function (x) { return !esBorrador(x); })
+                        .sort(function (a, b) { return String(b.created_at).localeCompare(String(a.created_at)); });
+                    if (!of.error && lista.length) numero = lista[0].numero;
+                }
+            } catch (_) { /* sin No. de oficio */ }
+        }
+        var byId = {};
+        state.hallazgos.forEach(function (h) { byId[h.id] = h; });
+        var rows = (o.hallazgos || []).map(function (x) { return pickHallazgo(byId[x.id] || x); });
+        var datos = Object.assign({}, DEFAULT_DATOS, state.lastOficio && state.lastOficio.datos ? state.lastOficio.datos : {});
+        datos.numero = numero || DEFAULT_DATOS.numero;
+        datos.fecha_oficio = o.fecha;
+        var secciones = { periodo: String(o.fecha).slice(0, 7), detectados: rows, solucionados: [], pendientes: [] };
+        return buildDocument(datos, secciones, 'screen', { registro: o.texto, titulo: o.titulo });
+    }
+
+    // ---------- Ver formato ----------
+    // "Ver formato" / "Ver" de Formatos guardados: muestra el documento tal como
+    // se imprime (con el estatus actual), sin abrir la impresión. Al cerrar se
+    // regresa a Formatos guardados.
+    const VER_ID = 'setp-ver-modal';
+
+    function ensureVer() {
+        if ($(VER_ID)) return;
+        var wrap = document.createElement('div');
+        wrap.innerHTML = [
+            '<div class="modal fade" id="' + VER_ID + '" tabindex="-1" aria-labelledby="setp-ver-title" aria-hidden="true">',
+            ' <div class="modal-dialog modal-xl modal-dialog-scrollable modal-fullscreen-md-down">',
+            '  <div class="modal-content">',
+            '   <div class="modal-header gap-2">',
+            '    <h5 class="modal-title fw-bold me-auto" id="setp-ver-title"></h5>',
+            '    <button type="button" class="btn btn-sm btn-outline-danger" data-ver="pdf"><i class="fas fa-file-pdf me-1"></i>Imprimir / PDF</button>',
+            '    <button type="button" class="btn btn-sm btn-outline-primary" data-ver="word"><i class="fas fa-file-word me-1"></i>Word</button>',
+            '    <button type="button" class="btn-close ms-1" data-bs-dismiss="modal" aria-label="Cerrar"></button>',
+            '   </div>',
+            '   <div class="modal-body p-2"><iframe id="setp-ver-frame" class="setp-ver-frame" title="Vista del formato"></iframe></div>',
+            '  </div>',
+            ' </div>',
+            '</div>'
+        ].join('');
+        document.body.appendChild(wrap.firstChild);
+        var style = document.createElement('style');
+        style.textContent = '#' + VER_ID + ' .setp-ver-frame{width:100%;height:78vh;border:1px solid #cbd5e1;border-radius:10px;background:#e5e7eb;display:block;}' +
+            '@media (max-width:767.98px){#' + VER_ID + ' .setp-ver-frame{height:calc(100vh - 90px);}}' +
+            'body.dark-mode #' + VER_ID + ' .setp-ver-frame{border-color:var(--border-color);}';
+        document.head.appendChild(style);
+        // Imprimir / PDF y Word del documento que se está viendo.
+        $(VER_ID).addEventListener('click', function (e) {
+            var b = e.target.closest('[data-ver]');
+            var modal = $(VER_ID);
+            if (!b || b.disabled || !modal.dataset.id) return;
+            var formato = b.getAttribute('data-ver');
+            var win = formato === 'pdf' ? window.open('', '_blank') : null;
+            if (win) win.document.write('<p style="font-family:Arial,sans-serif;padding:24px;color:#475569">Preparando el formato…</p>');
+            b.disabled = true;
+            (modal.dataset.kind === 'reporte' ? descargarReporte(modal.dataset.id, formato, win) : downloadSaved(modal.dataset.id, formato, win))
+                .catch(function (error) { if (win && !win.closed) win.close(); alert('No se pudo abrir el formato: ' + (error && error.message ? error.message : error)); })
+                .finally(function () { b.disabled = false; });
+        });
+        // Al cerrar, de vuelta a Formatos guardados.
+        $(VER_ID).addEventListener('hidden.bs.modal', function () {
+            $('setp-ver-frame').srcdoc = '';
+            if ($(GUARDADOS_ID)) bootstrap.Modal.getOrCreateInstance($(GUARDADOS_ID)).show();
+        });
+    }
+
+    // kind: 'formato' (oficio con No.) | 'reporte' (reporte de hallazgos por usuario y turno).
+    async function verGuardado(btn, kind, id, label) {
+        btn.disabled = true;
+        var html;
+        try {
+            if (kind === 'reporte') {
+                var o = await getOficio(id);
+                try { await loadHallazgos(); } catch (_) { /* se muestra como se guardó */ }
+                // En pantalla, la hoja con margen (al imprimir se usa @page).
+                html = buildReporteDoc(o, 'print').replace('</style>', '@media screen{html{background:#e5e7eb;}body{max-width:27.94cm;margin:16px auto;padding:1.4cm;background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.18);box-sizing:border-box;}}</style>');
+            } else {
+                var g = await oficioGuardado(id);
+                html = buildDocument(g.datos, g.secciones, 'screen');
+            }
+        } catch (error) {
+            guardadosStatus('No se pudo abrir el formato: ' + esc(error && error.message ? error.message : error), 'danger');
+            btn.disabled = false;
+            return;
+        }
+        btn.disabled = false;
+        ensureVer();
+        var modal = $(VER_ID);
+        modal.dataset.id = id;
+        modal.dataset.kind = kind;
+        $('setp-ver-title').innerHTML = '<i class="fas fa-eye me-2 text-primary"></i>' + esc(label || 'Formato');
+        $('setp-ver-frame').srcdoc = html;
+        // Se abre cuando Formatos guardados termina de cerrarse (no se encimen).
+        var g2 = $(GUARDADOS_ID);
+        if (g2 && g2.classList.contains('show')) {
+            g2.addEventListener('hidden.bs.modal', function () { bootstrap.Modal.getOrCreateInstance(modal).show(); }, { once: true });
+            bootstrap.Modal.getOrCreateInstance(g2).hide();
+        } else {
+            bootstrap.Modal.getOrCreateInstance(modal).show();
+        }
+    }
+
+    // El reporte muestra sólo los del supervisor que inició sesión.
     document.addEventListener('setp:supervisor-elegido', function () {
         if (!rep.el || rep.saving) return;
         rep.editing = null;
@@ -2405,6 +2936,8 @@
         guardarBorrador: guardarBorrador,
         abrirGuardados: abrirGuardados,
         // expuesto para pruebas
+        // "Ver informe" del historial (js/setp-recorridos.js): documento con el formato del oficio.
+        informeRegistro: informeRegistro,
         _computeSections: computeSections,
         _buildDocument: buildDocument
     };

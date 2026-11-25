@@ -37,6 +37,8 @@
 !/videos/**
 !/lib/
 !/lib/**
+!/calidad/
+!/calidad/**
 
 # Recursos de produccion no utilizados por la interfaz.
 /images/Aviones FBO.png
@@ -53,3 +55,15 @@
 
 /excel/*
 !/excel/itinerario_completo.xlsx
+
+# Calidad (SIGEC): solo se publica lo que usa la página.
+/calidad/paquete/
+/calidad/server.js
+/calidad/package.json
+/calidad/vercel.json
+/calidad/empaquetar.py
+/calidad/*.md
+/calidad/.gitignore
+/calidad/.vercelignore
+/calidad/images/torre.webp
+/calidad/images/pista-noche.webp

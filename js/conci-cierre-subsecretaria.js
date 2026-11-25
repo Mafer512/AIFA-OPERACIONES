@@ -254,6 +254,12 @@
         cargarResumenLote();
     };
 
+    // ¿Este manifiesto ya está cerrado? Lo usa "Limpiar registro" (script.js)
+    // para no ofrecerse en filas cerradas; la base lo vuelve a revisar.
+    window._conciCierreEstaCerrado = function (persistedId) {
+        return _cierreRowMap.has(String(persistedId ?? '').trim());
+    };
+
     /* ── Icono de fila cerrada + acceso a corrección/solicitud ── */
     window._conciCierreExtraRowAction = function (group, persistedId) {
         const id = String(persistedId || '').trim();

@@ -127,7 +127,7 @@
         href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;700&family=Roboto+Condensed:wght@400;500;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" media="print" onload="this.media='all'" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-    <link rel="stylesheet" href="style.css?v=20261125-mixtas">
+    <link rel="stylesheet" href="style.css?v=20261125-mixtas-2">
     <link rel="stylesheet" href="visual-cards.css?v=1"> <!-- Visual Cards Styles -->
     <link rel="stylesheet" href="admin.css?v=20261012-director-general">
     <link rel="stylesheet" href="miscelanea.css?v=1">
@@ -1918,8 +1918,8 @@ FF
                         <span class="si-txt">Aviación General · FBO</span>
                     </a>
                     <!-- SMS (Seguimiento de hallazgos de Seguridad Operacional): aplicación aparte
-                         que corre en esta computadora; se abre en otra pestaña, como Contratos. -->
-                    <a class="menu-item si-link si-quick si-quick--sms" href="http://localhost:3000/reportes/general" target="_blank" rel="noopener noreferrer" title="SMS · Seguimiento de hallazgos de Seguridad Operacional (se abre en otra pestaña)">
+                         publicada en sms.opn-nlu.com; se abre en otra pestaña, como Contratos. -->
+                    <a class="menu-item si-link si-quick si-quick--sms" href="https://sms.opn-nlu.com/reportes/general" target="_blank" rel="noopener noreferrer" title="SMS · Seguimiento de hallazgos de Seguridad Operacional (se abre en otra pestaña)">
                         <i class="fas fa-shield-alt si-ico"></i>
                         <span class="si-txt">SMS</span>
                         <i class="fas fa-external-link-alt" style="font-size:.62rem;opacity:.55;flex:none;margin-left:-4px;" aria-hidden="true"></i>
@@ -2119,6 +2119,9 @@ FF
                                             </a>
                                             <a class="menu-item si-link si-link--l2" href="#" data-section="setp">
                                                 <i class="fas fa-user-tie si-ico"></i><span class="si-txt">Supervisores de Edificio Terminal (SETP)</span>
+                                            </a>
+                                            <a class="menu-item si-link si-link--l2" href="#" data-section="calidad">
+                                                <i class="fas fa-award si-ico"></i><span class="si-txt">Calidad (SIGEC)</span>
                                             </a>
                                         </div>
                                     </div>
@@ -6978,6 +6981,24 @@ FF
                         </div>
                     </div>
                     <div id="setp-root"></div>
+                </div>
+
+                <!-- Calidad · SIGEC: se abre en su propia pestaña (calidad/, js/calidad-host.js).
+                     Esta sección solo aparece si el navegador bloqueó la pestaña o se llega por #calidad. -->
+                <div id="calidad-section" class="content-section">
+                    <div class="mb-3">
+                        <h2 class="section-heading mb-0"><i class="fas fa-award me-2"></i>Calidad · SIGEC</h2>
+                        <small class="text-muted">Gerencia de Operaciones · Edificio Terminal — incidencias de equipaje, encuestas y documentación</small>
+                    </div>
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body text-center py-5">
+                            <i class="fas fa-up-right-from-square fa-2x text-muted mb-3"></i>
+                            <p class="mb-3">Calidad se abre en una pestaña aparte, con la misma cuenta.</p>
+                            <a class="btn btn-primary" href="calidad/index.html#/inicio" target="aifa-calidad">
+                                <i class="fas fa-award me-2"></i>Abrir Calidad (SIGEC)
+                            </a>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- FIDS Section -->
@@ -26399,6 +26420,10 @@ FF
                                                                 <li><a class="dropdown-item" href="#" onclick="window.conciExportExcel &amp;&amp; window.conciExportExcel('total'); return false;"><i class="fas fa-table text-success me-2"></i>Total</a></li>
                                                                 <li><a class="dropdown-item" href="#" onclick="window.conciExportExcel &amp;&amp; window.conciExportExcel('pax'); return false;"><i class="fas fa-users text-primary me-2"></i>Pasajeros</a></li>
                                                                 <li><a class="dropdown-item" href="#" onclick="window.conciExportExcel &amp;&amp; window.conciExportExcel('carga'); return false;"><i class="fas fa-box-open text-warning me-2"></i>Carga</a></li>
+                                                                <!-- Lo que entrará al próximo Cierre de Subsecretaría (js/conci-export-lote-cierre.js). -->
+                                                                <li><hr class="dropdown-divider my-1"></li>
+                                                                <li><h6 class="dropdown-header py-1" style="font-size:0.72rem;line-height:1.25;font-weight:600;">Cierre de Subsecretaría<br><span class="fw-normal text-muted">Solo lo que entrará al próximo cierre,<br>lo mismo que contará el SWEAR</span></h6></li>
+                                                                <li><a class="dropdown-item" href="#" id="btn-conci-export-lote-cierre" onclick="window.conciExportLoteCierre &amp;&amp; window.conciExportLoteCierre(); return false;"><i class="fas fa-lock text-warning me-2"></i>Próximo cierre</a></li>
                                                             </ul>
                                                         </div>
                                                         <!-- Mismo formato de Exportar Excel › Pasajeros/Carga, con una hoja por capturista. -->
@@ -41881,9 +41906,9 @@ FF
     <script src="js/vehiculos.js?v=2"></script>
     <script src="js/muebles-bienes.js?v=8"></script>
     <!-- Seguimiento · Dirección de Operación (sólo cuentas con acceso; db/create_seguimiento.sql) -->
-    <link rel="stylesheet" href="seguimiento.css?v=16">
-    <script src="js/seguimiento-core.js?v=8"></script>
-    <script src="js/seguimiento.js?v=18"></script>
+    <link rel="stylesheet" href="seguimiento.css?v=20">
+    <script src="js/seguimiento-core.js?v=12"></script>
+    <script src="js/seguimiento.js?v=22"></script>
     <script src="js/email-analisis.js"></script>
     <script src="js/agenda.js?v=20261030-sin-realtime"></script>
     <script src="js/agenda-assistant.js?v=2"></script>
@@ -41919,10 +41944,12 @@ FF
     <script src="js/ingenieria-civil.js?v=1"></script>
     <script src="js/capacidad-carga.js?v=4"></script>
     <script src="js/bhs-baggage-stats.js?v=4"></script>
-    <script src="js/setp-catalogo.js?v=1"></script>
-    <script src="js/setp-reportes.js?v=27"></script>
-    <script src="js/setp-recorridos.js?v=45"></script>
-    <script src="js/setp-formato.js?v=29"></script>
+    <script src="js/setp-catalogo.js?v=4"></script>
+    <script src="js/setp-comparar.js?v=1"></script>
+    <script src="js/setp-reportes.js?v=33"></script>
+    <script src="js/setp-recorridos.js?v=67"></script>
+    <script src="js/setp-formato.js?v=43"></script>
+    <script src="js/calidad-host.js?v=20261124"></script>
 
     <script src="js/miscelanea.js?v=1"></script>
     <script src="js/marca-agua.js?v=1"></script>
@@ -42074,14 +42101,14 @@ FF
         });
     })();
     </script>
-    <script src="js/frecuencias_upload_test.js" defer></script>
+    <script src="js/frecuencias_upload_test.js?v=20261116-salidas" defer></script>
     <script src="js/operations-metrics.js?v=20260724a" defer></script>
     <script src="js/conci-export-total.js?v=20260925-recepcion" defer></script>
     <!-- Avisos por periodo de los manifiestos (tabla manifiestos_avisos_periodo, migración 058) -->
     <!-- Capa única de totales (oficial hasta el corte, detalle después): ver el archivo -->
     <script src="js/totales-service.js?v=20261019-sin-sesion" defer></script>
     <script src="js/manifiestos-avisos.js?v=20261019-sin-sesion" defer></script>
-    <script src="script.js?v=20261125-mixtas" defer></script>
+    <script src="script.js?v=20261125-limpiar-registro-mixtas" defer></script>
     <!-- Campos de fecha en dd/mm/aaaa sin importar el idioma del navegador. -->
     <script src="js/fecha-ddmm.js?v=20260912-fecha-1" defer></script>
     <!-- Botón y menú de usuario del encabezado de inicio. -->
@@ -43502,19 +43529,21 @@ FF
 <script src="js/conci-manifiestos-table.js?v=1" defer></script>
 <script src="js/conci-manifiestos-captura.js?v=20260727-v1" defer></script>
 <script src="js/conci-manifiestos-historial.js?v=20260727-insert-chips" defer></script>
-<script src="js/conci-cierre-subsecretaria.js?v=20261026-cierre-editor" defer></script>
+<script src="js/conci-cierre-subsecretaria.js?v=20261125-limpiar-registro" defer></script>
 <script src="js/conci-alerta-30h.js?v=20260923-alerta30h" defer></script>
 <!-- Reportes de Conciliación (Carga / Pasajeros) -->
 <script src="js/conci-reportes.js?v=20260911-v1" defer></script>
 <script src="js/conci-reportes-edicion.js?v=20261012-director-general" defer></script>
 <!-- Saldos oficiales de los oficios (acumulados del mes, año e histórico) -->
-<script src="js/conci-saldos-oficio.js?v=20261105-oficio-0311-0411" defer></script>
-<script src="js/conci-reportes-pasajeros.js?v=20261020-oficios-octubre" defer></script>
+<script src="js/conci-saldos-oficio.js?v=20261123-oficio-2311" defer></script>
+<script src="js/conci-reportes-pasajeros.js?v=20261125-columnas" defer></script>
 <script src="js/conci-carga-catalogo.js?v=20260910-v1" defer></script>
 <script src="js/conci-presentacion-carga.js?v=20260911-v1" defer></script>
 <script src="js/conci-reportes-carga.js?v=20261020-oficios-octubre" defer></script>
 <!-- Mensaje para WhatsApp o Webex: usa las cifras de los dos reportes de arriba. -->
-<script src="js/conci-mensaje-envio.js?v=20261026-swear-hoy" defer></script>
+<script src="js/conci-mensaje-envio.js?v=20261123-fecha-enero" defer></script>
+<!-- Exportar Excel › Próximo cierre: el lote del Cierre de Subsecretaría con las cifras del SWEAR. -->
+<script src="js/conci-export-lote-cierre.js?v=20261125-lote" defer></script>
 <!-- Importar Excel: botón btn-conci-importar-excel de la barra de Conciliación. -->
 <script src="js/conci-importar-excel.js?v=20260930-boton" defer></script>
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
