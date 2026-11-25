@@ -20904,7 +20904,7 @@ function _conciRowIsCargo(row, optypeCol, airlineCol) {
 //     INFORMATIVO quedan fuera de esta regla.
 
 // Fecha de corte (AAAA-MM-DD, contra la FECHA de operación de cada fila) de la
-// regla de mixtas, la marca "Revisar" y la sección INFORMATIVOS. Las filas
+// regla de mixtas y la marca "Revisar". Las filas
 // anteriores, o sin FECHA legible, se cuentan y se muestran exactamente como
 // antes: los días ya cerrados no cambian. null = la regla nueva todavía no
 // aplica a ninguna fecha.
@@ -21078,35 +21078,6 @@ function _conciTipoParaTotales(row, ctx) {
     if (estado === 'carga-de-vuelo') return 'carga-mixta';
     if (estado) return 'pax';
     return _conciRowIsCargo(row, ctx.optypeCol, ctx.airlineCol) ? 'carga' : 'pax';
-}
-
-// Deja los vuelos marcados INFORMATIVO (070) al final, en el mismo orden en
-// que venían. Sólo los de la fecha de corte en adelante: los anteriores se
-// quedan donde estaban, como antes. `desde` es el índice del primero de
-// ellos, o -1 si no hay.
-function _conciSepararInformativos(data, ctx) {
-    const filas = Array.isArray(data) ? data : [];
-    const principales = [];
-    const informativas = [];
-    filas.forEach(row => (_conciEsInformativo(row) && _conciReglaNuevaAplica(row, ctx) ? informativas : principales).push(row));
-    if (!informativas.length) return { filas, desde: -1 };
-    return { filas: principales.concat(informativas), desde: principales.length };
-}
-
-// Encabezado de la sección INFORMATIVOS. Es una fila de la misma tabla (sin
-// data-row-index, como el aviso de "sin coincidencias"): así las filas de la
-// sección conservan la captura, el teclado, los filtros y el guardado.
-function _conciFilaEncabezadoInformativos(cantidad) {
-    const tr = document.createElement('tr');
-    tr.className = 'conci-seccion-informativos';
-    const td = document.createElement('td');
-    td.colSpan = 100;
-    const aviso = document.createElement('div');
-    aviso.className = 'conci-aviso-tabla';
-    aviso.textContent = `INFORMATIVOS (${cantidad}) · Vuelos marcados como informativos: no cuentan en ninguna suma.`;
-    td.appendChild(aviso);
-    tr.appendChild(td);
-    return tr;
 }
 
 // Convierte un movimiento del itinerario en una fila de la tabla, escrita
@@ -22653,16 +22624,6 @@ function _conciTopeFilasReveladas(table) {
     return Math.max(600, Math.ceil(hasta / 24) + 100);
 }
 
-// El encabezado de la sección INFORMATIVOS (_conciFilaEncabezadoInformativos)
-// se oculta cuando los filtros dejan la sección sin filas visibles.
-function _conciSyncEncabezadoInformativos(tbody) {
-    const encabezado = tbody ? tbody.querySelector('tr.conci-seccion-informativos') : null;
-    if (!encabezado) return;
-    const alguna = [...tbody.querySelectorAll('tr[data-conci-seccion="informativos"]')]
-        .some(tr => tr.style.display !== 'none');
-    encabezado.style.display = alguna ? '' : 'none';
-}
-
 // Muestra, en orden, hasta `n` filas diferidas. Devuelve si había alguna.
 function _conciRevelarDiferidas(tbody, n) {
     const filas = tbody ? tbody.querySelectorAll('tr[data-conci-diferida]') : [];
@@ -22670,7 +22631,6 @@ function _conciRevelarDiferidas(tbody, n) {
         filas[i].removeAttribute('data-conci-diferida');
         filas[i].style.display = '';
     }
-    if (filas.length) _conciSyncEncabezadoInformativos(tbody);
     return filas.length > 0;
 }
 
@@ -22743,7 +22703,6 @@ function _conciApplyPillFilter(filasNuevas) {
     } else if (emptyRow) {
         emptyRow.style.display = 'none';
     }
-    _conciSyncEncabezadoInformativos(tbody);
     _conciUpdatePillActiveStyles();
     _conciProgramarConteoFilas();
 }
@@ -25598,14 +25557,8 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
         data = _conciOrdenarFilas(_conciManifestosAllData);
         _conciManifestosAllData = data;
     }
-    // Contexto de la regla de mixtas (fecha de corte y filas a revisar) y
-    // sección INFORMATIVOS al final de la tabla: los vuelos marcados como
-    // informativos desde la fecha de corte.
+    // Contexto de la regla de mixtas (fecha de corte y filas a revisar).
     const _contextoTotales = _conciContextoTotales(_conciManifestosAllData, _conciManifestosSummaryColumns);
-    const _seccionInformativos = _conciSepararInformativos(_conciManifestosAllData, _contextoTotales);
-    data = _seccionInformativos.filas;
-    _conciManifestosAllData = data;
-    const _inicioInformativos = _seccionInformativos.desde;
 
     _conciUpdateResumen(data, columns);
     _conciBindCountPills();
@@ -25972,15 +25925,10 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
 
         for (; idx < end; idx++) {
             const row = data[idx];
-            if (idx === _inicioInformativos) {
-                frag.appendChild(_conciFilaEncabezadoInformativos(data.length - _inicioInformativos));
-            }
             const tr = document.createElement('tr');
             const tone = idx % rowToneCount;
             tr.classList.add(`conci-row-tone-${tone}`);
-            if (_inicioInformativos >= 0 && idx >= _inicioInformativos) {
-                tr.dataset.conciSeccion = 'informativos';
-            } else if (_conciFilaMixtaARevisar(row, _contextoTotales)) {
+            if (_conciFilaMixtaARevisar(row, _contextoTotales)) {
                 // Mismo número, fecha y sentido que otro vuelo de la mixta, con
                 // la misma hora de slot o sin ella: se cuenta y se revisa.
                 tr.classList.add('conci-row-revisar-mixta');
@@ -26209,8 +26157,7 @@ function _renderConciManifiestosTable(data, columns, fallbackYear) {
 
             frag.appendChild(tr);
         }
-        // Para filtrar solo este lote (abajo). El encabezado de INFORMATIVOS no es una fila de datos.
-        const filasDelLote = [...frag.children].filter(tr => tr.dataset.rowIndex !== undefined);
+        const filasDelLote = [...frag.children]; // para filtrar solo este lote (abajo)
 
         // Fondo azul grisáceo en las celdas con dato; el observador cubre los cambios después.
         frag.querySelectorAll('td[data-col]').forEach(_conciMarcarCeldaConDato);
@@ -35191,9 +35138,7 @@ function _conciAddBlankRow() {
         actionTd.appendChild(remove);
         tr.appendChild(actionTd);
     }
-    // Una fila nueva va con las principales, nunca dentro de la sección
-    // INFORMATIVOS (sin sección, insertBefore con null la deja al final).
-    tbody.insertBefore(tr, tbody.querySelector('tr.conci-seccion-informativos'));
+    tbody.appendChild(tr);
     tbody.scrollTop = tbody.scrollHeight;
     _conciBindRowActions();
     // MES/FECHA quedan bloqueados en una fila nueva (se completan solos con

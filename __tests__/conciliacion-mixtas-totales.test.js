@@ -57,7 +57,7 @@ window._conciResolveAirlineMeta = (valor) => {
 // El catálogo de carga real, con su lista de mixtas.
 new Function(leer('js/conci-carga-catalogo.js'))();
 
-// La fecha de corte real (pendiente de confirmar) y la que usan estas pruebas.
+// La fecha de corte real (25/11/2026) y la que usan estas pruebas.
 const LINEA_CORTE = extraerLinea('const _CONCI_REGLA_MIXTAS_DESDE = ');
 const CORTE = '2026-11-25';
 
@@ -88,14 +88,10 @@ const api = new Function('document', 'window', `
   ${extraer('_conciEstadoFilaMixta')}
   ${extraer('_conciFilaMixtaARevisar')}
   ${extraer('_conciTipoParaTotales')}
-  ${extraer('_conciSepararInformativos')}
-  ${extraer('_conciFilaEncabezadoInformativos')}
-  ${extraer('_conciSyncEncabezadoInformativos')}
   ${extraer('_updateManifiestosSummaryStrip')}
   return {
     _conciEsAerolineaMixta, _conciLlaveVueloMixta, _conciContextoTotales, _conciEstadoFilaMixta,
-    _conciFilaMixtaARevisar, _conciTipoParaTotales, _conciSepararInformativos, _conciEsInformativo,
-    _conciRowIsCargo, _conciFilaEncabezadoInformativos, _conciSyncEncabezadoInformativos,
+    _conciFilaMixtaARevisar, _conciTipoParaTotales, _conciEsInformativo, _conciRowIsCargo,
     _updateManifiestosSummaryStrip,
   };
 `)(document, window);
@@ -215,7 +211,6 @@ describe('los casos, uno por uno (tarjetas de cada caso solo)', () => {
     expect(estado('C1')).toBe('carga-de-vuelo');
     expect(tipo('C1')).toBe('carga-mixta');
     expect(tarjetasDe('P1', 'C1')).toEqual({ paxOps: 1, totalPax: 180, cargaOps: 0, kgs: 3200 });
-    expect(api._conciSepararInformativos([CASOS.P1, CASOS.C1]).desde).toBe(-1);
   });
 
   test('C1 sin slot · no se puede atribuir a P1: es un vuelo, 1 op PAX, y las dos se revisan', () => {
@@ -400,65 +395,17 @@ describe('fecha de corte: los días anteriores no cambian', () => {
 });
 
 describe('tabla', () => {
-  test('la sección INFORMATIVOS sólo lleva los vuelos marcados INFORMATIVO', () => {
-    const filas = [
-      { id: 1, ...CASOS.P1 },
-      { id: 2, ...CASOS.C1 },
-      { id: 3, ...fila('VB', 'VB 500', 'SALIDA', { 'TOTAL PAX': '120' }), INFORMATIVO: true },
-      { id: 4, ...CASOS.MY },
-    ];
-    const { filas: orden, desde } = api._conciSepararInformativos(filas, ctxDe(filas));
-    expect(orden.map(f => f.id)).toEqual([1, 2, 4, 3]);
-    expect(desde).toBe(3);
-  });
-
-  test('un informativo anterior a la fecha de corte se queda donde estaba', () => {
-    const filas = [
-      { id: 1, ...CASOS.P1, FECHA: '24/11/2026' },
-      { id: 2, ...fila('VB', 'VB 500', 'SALIDA', { 'TOTAL PAX': '120' }), FECHA: '24/11/2026', INFORMATIVO: true },
-      { id: 3, ...CASOS.MY, FECHA: '24/11/2026' },
-    ];
-    const resultado = api._conciSepararInformativos(filas, ctxDe(filas));
-    expect(resultado.filas).toBe(filas);
-    expect(resultado.desde).toBe(-1);
-  });
-
-  test('el encabezado no es una fila de datos y se oculta si los filtros vacían la sección', () => {
-    document.body.innerHTML = '<table><tbody></tbody></table>';
-    const tbody = document.querySelector('tbody');
-    const encabezado = api._conciFilaEncabezadoInformativos(2);
-    expect(encabezado.dataset.rowIndex).toBeUndefined();
-    expect(encabezado.textContent).toContain('INFORMATIVOS (2)');
-    tbody.appendChild(encabezado);
-    const tr = document.createElement('tr');
-    tr.dataset.rowIndex = '7';
-    tr.dataset.conciSeccion = 'informativos';
-    tbody.appendChild(tr);
-
-    api._conciSyncEncabezadoInformativos(tbody);
-    expect(encabezado.style.display).toBe('');
-    tr.style.display = 'none';
-    api._conciSyncEncabezadoInformativos(tbody);
-    expect(encabezado.style.display).toBe('none');
-  });
-
-  test('pinta la sección al final y marca las filas de mixtas a revisar', () => {
+  test('marca las filas de mixtas a revisar, con aviso al pasar el cursor', () => {
     const render = source.slice(source.indexOf('function _renderConciManifiestosTable('));
-    expect(render).toContain('_conciSepararInformativos(_conciManifestosAllData, _contextoTotales)');
-    expect(render).toMatch(/if \(idx === _inicioInformativos\) \{\s+frag\.appendChild\(_conciFilaEncabezadoInformativos\(/);
-    expect(render).toContain("tr.dataset.conciSeccion = 'informativos';");
-    expect(render).toMatch(/_conciFilaMixtaARevisar\(row, _contextoTotales\)\) \{[\s\S]*?tr\.classList\.add\('conci-row-revisar-mixta'\);/);
-    expect(render).toContain('const filasDelLote = [...frag.children].filter(tr => tr.dataset.rowIndex !== undefined);');
+    expect(render).toMatch(/_conciFilaMixtaARevisar\(row, _contextoTotales\)\) \{[\s\S]*?tr\.classList\.add\('conci-row-revisar-mixta'\);\s+tr\.title = 'Revisar:/);
   });
 
-  test('una fila nueva nunca cae dentro de la sección', () => {
-    expect(extraer('_conciAddBlankRow'))
-      .toContain("tbody.insertBefore(tr, tbody.querySelector('tr.conci-seccion-informativos'));");
+  test('los vuelos INFORMATIVO se muestran en su lugar, como antes (sin sección aparte)', () => {
+    expect(source).not.toContain('conci-seccion-informativos');
+    expect(css).not.toContain('conci-seccion-informativos');
   });
 
-  test('estilos: encabezado y fila a revisar, claro y oscuro', () => {
-    expect(css).toContain('#table-conci-manifiestos tbody tr.conci-seccion-informativos>td {');
-    expect(css).toContain('body.dark-mode #table-conci-manifiestos tbody tr.conci-seccion-informativos>td {');
+  test('estilos de la fila a revisar, claro y oscuro', () => {
     expect(css).toContain('#table-conci-manifiestos tbody tr.conci-row-revisar-mixta>td:first-child {');
     expect(css).toContain('body.dark-mode #table-conci-manifiestos tbody tr.conci-row-revisar-mixta>td:first-child {');
   });
