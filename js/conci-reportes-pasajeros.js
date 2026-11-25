@@ -1152,6 +1152,9 @@
         leer: descargar,
         descargar: descargar_,
         filasPlantilla1, filasPlantilla2,
+        // Las columnas de unas filas: Exportar Excel › Próximo cierre
+        // (js/conci-export-lote-cierre.js) agrega con estas mismas funciones.
+        columnas: detectarColumnas,
         _cache: () => cache,
         _edicion: () => edicion
     };

@@ -26420,6 +26420,10 @@ FF
                                                                 <li><a class="dropdown-item" href="#" onclick="window.conciExportExcel &amp;&amp; window.conciExportExcel('total'); return false;"><i class="fas fa-table text-success me-2"></i>Total</a></li>
                                                                 <li><a class="dropdown-item" href="#" onclick="window.conciExportExcel &amp;&amp; window.conciExportExcel('pax'); return false;"><i class="fas fa-users text-primary me-2"></i>Pasajeros</a></li>
                                                                 <li><a class="dropdown-item" href="#" onclick="window.conciExportExcel &amp;&amp; window.conciExportExcel('carga'); return false;"><i class="fas fa-box-open text-warning me-2"></i>Carga</a></li>
+                                                                <!-- Lo que entrará al próximo Cierre de Subsecretaría (js/conci-export-lote-cierre.js). -->
+                                                                <li><hr class="dropdown-divider my-1"></li>
+                                                                <li><h6 class="dropdown-header py-1" style="font-size:0.72rem;line-height:1.25;font-weight:600;">Cierre de Subsecretaría<br><span class="fw-normal text-muted">Solo lo que entrará al próximo cierre,<br>lo mismo que contará el SWEAR</span></h6></li>
+                                                                <li><a class="dropdown-item" href="#" id="btn-conci-export-lote-cierre" onclick="window.conciExportLoteCierre &amp;&amp; window.conciExportLoteCierre(); return false;"><i class="fas fa-lock text-warning me-2"></i>Próximo cierre</a></li>
                                                             </ul>
                                                         </div>
                                                         <!-- Mismo formato de Exportar Excel › Pasajeros/Carga, con una hoja por capturista. -->
@@ -43532,12 +43536,14 @@ FF
 <script src="js/conci-reportes-edicion.js?v=20261012-director-general" defer></script>
 <!-- Saldos oficiales de los oficios (acumulados del mes, año e histórico) -->
 <script src="js/conci-saldos-oficio.js?v=20261123-oficio-2311" defer></script>
-<script src="js/conci-reportes-pasajeros.js?v=20261020-oficios-octubre" defer></script>
+<script src="js/conci-reportes-pasajeros.js?v=20261125-columnas" defer></script>
 <script src="js/conci-carga-catalogo.js?v=20260910-v1" defer></script>
 <script src="js/conci-presentacion-carga.js?v=20260911-v1" defer></script>
 <script src="js/conci-reportes-carga.js?v=20261020-oficios-octubre" defer></script>
 <!-- Mensaje para WhatsApp o Webex: usa las cifras de los dos reportes de arriba. -->
 <script src="js/conci-mensaje-envio.js?v=20261123-fecha-enero" defer></script>
+<!-- Exportar Excel › Próximo cierre: el lote del Cierre de Subsecretaría con las cifras del SWEAR. -->
+<script src="js/conci-export-lote-cierre.js?v=20261125-lote" defer></script>
 <!-- Importar Excel: botón btn-conci-importar-excel de la barra de Conciliación. -->
 <script src="js/conci-importar-excel.js?v=20260930-boton" defer></script>
 <!-- Informe Estadístico (pestaña Estadística de Conciliación) -->
