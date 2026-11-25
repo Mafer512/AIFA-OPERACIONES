@@ -33892,6 +33892,20 @@ function _conciFillRowActionCell(actionTd, persistedId) {
         del.dataset.rowId = persistedId;
         group.appendChild(del);
     }
+    // Limpiar registro (migración 073): quita un manifiesto ABIERTO para que no
+    // entre al Cierre de Subsecretaría. Lo ve quien puede capturar; la base
+    // decide si la fila es suya (un capturista sólo limpia lo que capturó él).
+    const cerrado = typeof window._conciCierreEstaCerrado === 'function' && window._conciCierreEstaCerrado(persistedId);
+    if (!cerrado) {
+        const limpiar = document.createElement('button');
+        limpiar.type = 'button';
+        limpiar.className = 'btn btn-outline-warning conci-limpiar-row';
+        limpiar.title = 'Limpiar registro: quita lo capturado en esta fila para que no entre al Cierre de Subsecretaría';
+        limpiar.setAttribute('aria-label', 'Limpiar registro');
+        limpiar.innerHTML = '<i class="fas fa-eraser"></i>';
+        limpiar.dataset.rowId = persistedId;
+        group.appendChild(limpiar);
+    }
     // Hook opcional para js/conci-cierre-subsecretaria.js: agrega un icono de
     // candado cuando este manifiesto pertenece a un Cierre de Subsecretaría.
     if (typeof window._conciCierreExtraRowAction === 'function') {
@@ -34675,18 +34689,116 @@ async function _conciEliminarRegistro(rowId) {
     return true;
 }
 
+// Texto de la confirmación de "Limpiar registro": lo que se perdería y qué
+// pasa con la fila. revision = respuesta de conciliacion_revisar_limpieza().
+function _conciTextoConfirmarLimpieza(revision, vieneDelItinerario) {
+    const f = (revision && revision.fila) || {};
+    const valor = v => {
+        const t = String(v ?? '').trim();
+        return t && t !== '0' && t !== '-' ? t : '';
+    };
+    const kilos = valor(f['KG DE CARGA TOTAL'])
+        || [valor(f['KGS. DE CARGA NACIONAL']) && `${valor(f['KGS. DE CARGA NACIONAL'])} nacionales`,
+            valor(f['KGS. DE CARGA INTERNACIONAL']) && `${valor(f['KGS. DE CARGA INTERNACIONAL'])} internacionales`]
+            .filter(Boolean).join(', ');
+    const datos = [
+        ['Pasajeros', valor(f['TOTAL PAX'])],
+        ['Kilos de carga', kilos],
+        ['Matrícula', valor(f['MATRÍCULA'])],
+        ['HR. DE RECEPCIÓN', valor(f['HR. DE RECEPCIÓN'])],
+        ['Observaciones', valor(f['OBSERVACIONES'])]
+    ].filter(([, v]) => v).map(([etiqueta, v]) => `• ${etiqueta}: ${v}`);
+    // "# DE VUELO" suele traer ya el código ("AM 2469"): no se repite.
+    const numero = valor(f['# DE VUELO']);
+    const aerolinea = valor(f['AEROLINEA']);
+    const vuelo = (numero && aerolinea && !numero.toUpperCase().startsWith(aerolinea.toUpperCase())
+        ? `${aerolinea} ${numero}` : (numero || aerolinea)) || `registro ${revision?.id ?? ''}`;
+    const detalle = [valor(f['TIPO DE MANIFIESTO']), valor(f['FECHA'])].filter(Boolean).join(', ');
+    const capturo = valor(revision?.capturistas) || valor(f['CAPTURÓ']);
+    return [
+        `¿Limpiar el registro del vuelo ${vuelo}${detalle ? ` (${detalle})` : ''}?`,
+        '',
+        ...(datos.length ? ['Se perderá lo capturado:', ...datos] : ['No tiene pasajeros, kilos, matrícula ni HR. DE RECEPCIÓN capturados.']),
+        ...(capturo ? [`Capturó: ${capturo}`] : []),
+        '',
+        vieneDelItinerario
+            ? 'La fila volverá a aparecer como vuelo del itinerario, sin manifiesto, y no entrará al Cierre de Subsecretaría.'
+            : 'La fila desaparecerá de la tabla y no entrará al Cierre de Subsecretaría.',
+        'Queda un respaldo en la base.'
+    ].join('\n');
+}
+
+// "Limpiar registro" (migración 073). La base revisa si quien está en sesión
+// puede limpiar esa fila y, si sí, la quita con respaldo. Aquí sólo se pide la
+// confirmación y se evita que algo local (un guardado en camino, el borrador o
+// la cola) la vuelva a crear.
+async function _conciLimpiarRegistro(tr, button) {
+    const rowId = Number(String(button?.dataset.rowId || tr?.dataset.rowId || '').trim());
+    if (!rowId) return;
+    let client = window.supabaseClient;
+    if (!client && window.ensureSupabaseClient) client = await window.ensureSupabaseClient();
+    if (!client) { alert('No hay conexión con la base de datos.'); return; }
+    if (button) button.disabled = true;
+    try {
+        // Lo que ya iba a la base termina antes de revisar.
+        const enVuelo = tr && typeof _conciClaveEscrituraDeFila === 'function'
+            ? _conciEscriturasEnVuelo.get(_conciClaveEscrituraDeFila(tr)) : null;
+        if (enVuelo && enVuelo.promesa) { try { await enVuelo.promesa; } catch (_) { /* se revisa igual */ } }
+
+        const { data: revision, error } = await client.rpc('conciliacion_revisar_limpieza', { p_id: rowId });
+        if (error) throw error;
+        if (!revision || !revision.puede) {
+            alert(revision?.motivo || 'No puedes limpiar este registro.');
+            return;
+        }
+        if (!confirm(_conciTextoConfirmarLimpieza(revision, tr?.dataset.rowFuente === 'Manifiestos + Vuelos'))) return;
+
+        const { error: errorLimpiar } = await client.rpc('conciliacion_limpiar_registro', { p_id: rowId });
+        if (errorLimpiar) throw errorLimpiar;
+
+        if (tr) {
+            tr.dataset.conciDescartada = '1';
+            if (tr._conciAutoSaveTimer) { clearTimeout(tr._conciAutoSaveTimer); tr._conciAutoSaveTimer = null; }
+            tr._conciAutoSaveQueued = false;
+            if (typeof _conciBorradorOlvidarFila === 'function') _conciBorradorOlvidarFila(tr);
+            if (typeof _conciDesencolarPendientesDeFila === 'function') {
+                const columnas = [...tr.querySelectorAll('td[data-col]')].map(td => td.dataset.col);
+                _conciDesencolarPendientesDeFila(tr, columnas).catch(() => {});
+            }
+        }
+        _conciRenderCache.clear();
+        _conciRenderedKey = '';
+        if (typeof _conciNotificarManifiestosCambiaron === 'function') _conciNotificarManifiestosCambiaron();
+        if (typeof showNotification === 'function') {
+            showNotification('Registro limpiado: ya no entrará al Cierre de Subsecretaría.', 'success');
+        }
+        await loadConciliacionManifiestos({ forceRefresh: true });
+    } catch (error) {
+        const mensaje = error && error.message ? error.message : String(error);
+        alert(/conciliacion_(revisar_limpieza|limpiar_registro)/.test(mensaje) && /function|función/i.test(mensaje)
+            ? 'Falta instalar "Limpiar registro" en la base (migración 073).'
+            : 'No se pudo limpiar el registro: ' + mensaje);
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
+
 function _conciBindRowActions() {
     const table = document.getElementById('table-conci-manifiestos');
     const tbody = table ? table.querySelector('tbody') : null;
     if (!tbody || tbody.dataset.conciDeleteBound === 'true') return;
     tbody.dataset.conciDeleteBound = 'true';
     tbody.addEventListener('click', async (event) => {
-        const button = event.target.closest('.conci-delete-row, .conci-delete-new-row');
+        const button = event.target.closest('.conci-delete-row, .conci-delete-new-row, .conci-limpiar-row');
         if (!button || !tbody.contains(button)) return;
         event.preventDefault();
         event.stopPropagation();
         if (!_conciEditMode || !_conciCanCurrentUserEdit()) return;
         const tr = button.closest('tr');
+        if (button.classList.contains('conci-limpiar-row')) {
+            await _conciLimpiarRegistro(tr, button);
+            return;
+        }
         if (button.classList.contains('conci-delete-new-row')) {
             button.disabled = true;
             // Si el borrado no se pudo confirmar, la fila sigue en pantalla y el
