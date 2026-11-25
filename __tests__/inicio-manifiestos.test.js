@@ -37,7 +37,7 @@ test('al entrar con sesión se refresca una vez y se sustituyen automáticamente
   const entrada = ndwRefreshOnEntry('usuario-a');
   expect(ndwRefreshOnEntry('usuario-a')).toBe(entrada);
   expect(window.supabaseClient.rpc).toHaveBeenCalledTimes(1);
-  expect(window.supabaseClient.rpc).toHaveBeenCalledWith('refrescar_informe_estadistico', { p_forzar: true });
+  expect(window.supabaseClient.rpc).toHaveBeenCalledWith('refrescar_informe_estadistico', { p_forzar: false });
   expect(window.TotalesService.getDetalleDiario).not.toHaveBeenCalled();
   terminar({ error: null });
   await entrada;
