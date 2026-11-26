@@ -198,7 +198,9 @@ describe('limpiar', () => {
 
 describe('index.html', () => {
   test('carga las versiones nuevas de script.js y del cierre', () => {
-    expect(html).toMatch(/src="script\.js\?v=20261125-limpiar-registro"/);
+    // Cualquier versión desde la de "Limpiar registro" (otros cambios la vuelven a subir).
+    const v = (html.match(/src="script\.js\?v=(\d{8})/) || [])[1];
+    expect(Number(v)).toBeGreaterThanOrEqual(20261125);
     expect(html).toMatch(/src="js\/conci-cierre-subsecretaria\.js\?v=20261125-limpiar-registro"/);
   });
 });

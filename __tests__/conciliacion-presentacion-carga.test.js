@@ -109,6 +109,26 @@ describe('el modelo de la baraja', () => {
     expect(t.ACUM_TON).toBe('1,040,285.68');
   });
 
+  test('el renglón del día es el del SWEAR (lo cerrado ese día), no los vuelos con esa FECHA', () => {
+    const datos = api.agregar({
+      filas: [
+        // Vuelos del 24 que entraron al cierre del 25, y uno del 25.
+        manifiesto({ fecha: '2026-11-24', cierre: '2026-11-25', int: 1500 }),
+        manifiesto({ fecha: '2026-11-24', cierre: '2026-11-25', nac: 2250, operacion: 'NACIONAL', tipo: 'SALIDA' }),
+        manifiesto({ fecha: '2026-11-25', cierre: '2026-11-25', int: 1000 }),
+        // Uno con FECHA del 25 que se cerró antes no es del día del SWEAR.
+        manifiesto({ fecha: '2026-11-25', cierre: '2026-11-24', int: 4000 })
+      ],
+      columnas: COLUMNAS
+    }, '2026-11-25');
+    const { texto: t, resumen } = api.modeloPresentacion(datos);
+    expect(t.DIA_OPS).toBe('3');
+    expect(t.DIA_TON).toBe('4.75');
+    // El acumulado del año no cambia: CARGA 2026 + el día = total de la Hoja 1.
+    expect(t.H1_OPS_TOTAL).toBe('4');
+    expect(resumen.anios[resumen.anios.length - 1].ops + resumen.dia.ops).toBe(4);
+  });
+
   test('una aerolínea sin operaciones deja su renglón y su tarjeta en blanco', () => {
     const datos = api.agregar({ filas: [manifiesto({ fecha: '2026-08-31', int: 5000 })], columnas: COLUMNAS }, '2026-08-31');
     const m = api.modeloPresentacion(datos);

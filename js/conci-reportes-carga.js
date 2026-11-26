@@ -1064,6 +1064,24 @@
      * por aerolínea se truncan a dos decimales y el total es la suma de las
      * truncadas, como la columna O de la Hoja 1.
      */
+    /**
+     * El renglón "Carga <fecha>" lleva el día del SWEAR (oficio a la
+     * Subsecretaría): lo cerrado con CIERRE SUBSECRETARIA de esa fecha, con el
+     * dato enviado o el saldo oficial si los hay, no los vuelos cuya FECHA es
+     * ese día. Toneladas con dos decimales: los kilos del cierre más lo que el
+     * oficio corrige en enteras. CARGA <año> sigue siendo el total del año
+     * (Hoja 1) menos ese día, así el ACUMULADO no cambia.
+     */
+    function delDiaSwear(datos) {
+        const bloque = datos.sub && datos.sub.actual && datos.sub.actual.dia;
+        if (!bloque) return null;
+        const t = totales(bloque);
+        const ton = toneladas(bloque);
+        const calculadas = repartirEnteros(ton.exactas.nacional, ton.exactas.internacional).total;
+        const correccion = ton.enteras.total - calculadas;
+        return { ops: t.total.ops, ton: Math.round((ton.exactas.total + correccion) * 100) / 100 };
+    }
+
     function modeloPresentacion(datos) {
         const C = CAT();
         const { anio, mes, fechaIso, anioActual, delDia } = datos;
@@ -1073,7 +1091,7 @@
             ops: anioActual.ops,
             ton: [...catalogo.values()].reduce((a, v) => a + ton(v.kg), 0) + sinCatalogo.reduce((a, v) => a + ton(v.kg), 0)
         };
-        const dia = { ops: delDia.ops, ton: Math.round(delDia.kg / 10) / 100 };
+        const dia = delDiaSwear(datos) || { ops: delDia.ops, ton: Math.round(delDia.kg / 10) / 100 };
 
         const anios = C.BASE_HISTORICA.filter(b => b.anio < anio)
             .map(b => ({ etiqueta: `CARGA ${b.anio}`, ops: b.ops, ton: b.ton }));
