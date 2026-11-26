@@ -310,15 +310,11 @@
         var sel = $('setp-detail-usuario');
         if (!sel) return;
         list = list || (window.setpRecorridos ? window.setpRecorridos.supervisores() : []);
-        // Sólo el personal de SETP (SETP_PERSONAS_CON_ACCESO en script.js): quien
-        // no pertenece al grupo no aparece en la lista, aunque esté en la base.
-        var personal = (window.setpPersonasConAcceso || []).map(palabras);
-        if (personal.length) {
-            list = list.filter(function (s) {
-                var nombre = palabras(s.nombre);
-                return personal.some(function (p) { return p.length && p.every(function (w) { return nombre.indexOf(w) >= 0; }); });
-            });
-        }
+        // Sólo supervisores: el registro que se generaba al superadmin (No. de
+        // empleado SA-…, cargo Superadmin) no es de un supervisor y no se lista.
+        list = list.filter(function (s) {
+            return !/^SA-/i.test(String(s.no_empleado || '')) && String(s.cargo || '').trim().toLowerCase() !== 'superadmin';
+        });
         sel.innerHTML = '<option value="">Todos los usuarios</option>' + list.map(function (s) {
             return '<option value="' + esc(s.no_empleado) + '">' + esc(s.nombre) + '</option>';
         }).join('');
@@ -765,7 +761,7 @@
 
     async function activateModule() {
         init();
-        // Sección exclusiva (script.js, SETP_PERSONAS_CON_ACCESO): no cargar datos a nadie más.
+        // Sólo quien tiene SETP en sus permisos (script.js, puedeVerSetp) carga datos.
         if (typeof window.puedeVerSetp === 'function' && !window.puedeVerSetp()) return;
         if (!isSectionVisible()) return;
         await refresh();

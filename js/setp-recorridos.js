@@ -100,8 +100,7 @@
 
     // Modo administración: un superadmin no es supervisor ni elige a ninguno.
     // Ve y gestiona los recorridos de todos (área, turno, evidencia, finalizar
-    // y borrar) y también hace sus propios recorridos con el botón de inicio:
-    // quedan a su nombre (ver miSupervisorSa / asegurarSupervisorSa).
+    // y borrar), pero no hace recorridos.
     function modoGestion() {
         return esSuperadmin() && !(state.selected && supervisor(state.selected));
     }
@@ -115,23 +114,16 @@
         try { return String(sessionStorage.getItem('user_fullname') || '').trim().replace(/\s+/g, ' '); } catch (_) { return ''; }
     }
 
-    // ¿El usuario de la sesión es personal de SETP (SETP_PERSONAS_CON_ACCESO,
-    // script.js)? Un superadmin que no lo es (p. ej. Juan André Ramírez
-    // Ortiz) gestiona todo el módulo pero no hace recorridos: no tiene renglón
-    // de captura ni botón "Iniciar recorrido".
-    function esPersonalSetp() {
-        var lista = window.setpPersonasConAcceso;
-        if (!Array.isArray(lista)) return true;
-        var yo = palabrasNombre(nombreSesion());
-        if (!yo.length) return false;
-        return lista.some(function (persona) {
-            var p = palabrasNombre(persona);
-            return p.length && p.every(function (w) { return yo.indexOf(w) >= 0; });
-        });
+    // ¿Hace recorridos por su nivel en SETP (interfaz de permisos › Vistas)?
+    // Captura o Edición = supervisor; "Solo ver" consulta. Los admin y
+    // superadmin (nivel 'admin') no entran aquí: el superadmin sólo gestiona
+    // y el admin captura sólo si ya está dado de alta como supervisor.
+    function esSupervisorPorNivel() {
+        var level = typeof window.setpAccessLevel === 'function' ? window.setpAccessLevel() : 'read';
+        return level === 'capture' || level === 'edit';
     }
 
-    // Registro del propio superadmin en setp_supervisores: el que lleva su
-    // nombre de perfil (si además es supervisor, es ese mismo).
+    // Registro propio en setp_supervisores: el que lleva el nombre de perfil.
     function miSupervisorSa() {
         var yo = palabrasNombre(nombreSesion());
         if (!yo.length) return null;
@@ -143,9 +135,10 @@
         return mejor;
     }
 
-    // Al iniciar su primer recorrido, el superadmin queda dado de alta solo
-    // (No. de empleado SA-…, cargo Superadmin). Nadie elige nada.
-    async function asegurarSupervisorSa(sb) {
+    // Al iniciar su primer recorrido, quien tiene nivel de Captura/Edición en
+    // SETP queda dado de alta solo en setp_supervisores (No. de empleado
+    // SETP-…, cargo Supervisor): nadie tiene que crearle el usuario a mano.
+    async function asegurarSupervisor(sb) {
         var ya = miSupervisorSa();
         if (ya) return ya;
         var nombre = nombreSesion();
@@ -153,7 +146,7 @@
         var u = await sb.auth.getUser();
         var uid = u && u.data && u.data.user ? u.data.user.id : '';
         if (!uid) throw new Error('no se pudo identificar tu sesión. Vuelve a iniciar sesión.');
-        var datos = { no_empleado: 'SA-' + uid.replace(/-/g, '').slice(0, 8).toUpperCase(), nombre: nombre, cargo: 'Superadmin' };
+        var datos = { no_empleado: 'SETP-' + uid.replace(/-/g, '').slice(0, 8).toUpperCase(), nombre: nombre, cargo: 'Supervisor' };
         var res = await sb.from(T_SUPERVISORES).insert([datos]).select('no_empleado, nombre, cargo').single();
         if (res.error && res.error.code === '23505') res = await sb.from(T_SUPERVISORES).select('no_empleado, nombre, cargo').eq('no_empleado', datos.no_empleado).single();
         if (res.error) throw res.error;
@@ -602,9 +595,13 @@
                 body += hint(state.error);
             } else if (modoGestion()) {
                 body += hint('<i class="fas fa-user-shield me-1"></i><b>Administración:</b> ves y gestionas los recorridos, hallazgos y formatos de todos los supervisores.');
-                if (canEdit() && esPersonalSetp() && !recorridoEnCurso()) body += nuevoRow(miSupervisorSa() || { nombre: nombreSesion(), cargo: 'Superadmin' });
+            } else if (!s && esSupervisorPorNivel()) {
+                // Supervisor por permisos aún sin registro: se da de alta al iniciar.
+                body += nuevoRow({ nombre: nombreSesion(), cargo: 'Supervisor' });
             } else if (!s) {
-                body += hint('<i class="fas fa-circle-info me-1"></i>Tu usuario no está dado de alta como supervisor, así que no puedes registrar recorridos. El nombre de tu perfil debe coincidir con el de un supervisor.');
+                body += hint('<i class="fas fa-circle-info me-1"></i>' + (canEdit()
+                    ? 'No estás dado de alta como supervisor, así que no registras recorridos.'
+                    : 'Tu nivel en SETP es de consulta: ves los recorridos, pero no los registras.'));
             } else if (canEdit() && !lista.some(function (r) { return !r.hora_termino; })) {
                 body += nuevoRow(s);
             }
@@ -623,13 +620,12 @@
     // ---------- botón flotante ----------
     // Botón fijo en la esquina inferior derecha para iniciar el recorrido propio
     // o, si hay uno en curso, finalizarlo. Vive dentro de #setp-section, así que
-    // sólo se ve en SETP. Lo ven quienes tienen acceso a SETP: las personas de
-    // SETP_PERSONAS_CON_ACCESO (script.js) y los superadmin.
+    // sólo se ve en SETP. Lo ven los supervisores: quien tiene nivel de
+    // Captura/Edición en SETP o ya está dado de alta como supervisor.
     var FAB_ID = 'setp-rec-fab';
 
     function recorridoEnCurso() {
         var s = state.selected ? supervisor(state.selected) : null;
-        if (!s && modoGestion()) s = miSupervisorSa();
         if (!s) return null;
         return state.recorridos.find(function (r) { return r.no_empleado === s.no_empleado && !r.hora_termino; }) || null;
     }
@@ -639,8 +635,9 @@
         if (!host) return;
         var fab = $(FAB_ID);
         var visible = state.loaded && (typeof window.puedeVerSetp !== 'function' || window.puedeVerSetp()) &&
-            // Superadmin que no es personal de SETP: sólo gestiona, no hace recorridos.
-            !(modoGestion() && !esPersonalSetp());
+            // El superadmin sólo gestiona; "Solo ver" sólo consulta.
+            !modoGestion() && canEdit() &&
+            !!((state.selected && supervisor(state.selected)) || esSupervisorPorNivel());
         if (!visible) { if (fab) fab.remove(); return; }
         if (!fab) {
             fab = document.createElement('button');
@@ -666,8 +663,9 @@
         if (!wrap) return;
         var ver = function (el) { (el || wrap).scrollIntoView({ behavior: 'smooth', block: 'center' }); };
         var s = state.selected ? supervisor(state.selected) : null;
-        if (!s && !modoGestion()) {
-            setStatus('Tu usuario no está dado de alta como supervisor, así que no puedes iniciar recorridos. El nombre de tu perfil debe coincidir con el de un supervisor.', 'warning');
+        if (modoGestion()) return;
+        if (!s && !esSupervisorPorNivel()) {
+            setStatus('No estás dado de alta como supervisor, así que no puedes iniciar recorridos.', 'warning');
             ver();
             return;
         }
@@ -700,12 +698,12 @@
     // ---------- acciones ----------
 
     async function iniciar() {
-        var gestion = modoGestion();
-        var s = gestion ? null : supervisor(state.selected);
+        if (modoGestion()) return;
+        var s = supervisor(state.selected);
+        var alta = !s && esSupervisorPorNivel();
         var area = ($('setp-rec-area-nueva') || {}).value || '';
         area = area.trim().replace(/\s+/g, ' ');
-        if ((!s && !gestion) || !canEdit() || state.busy.new) return;
-        if (gestion && !esPersonalSetp()) return;
+        if ((!s && !alta) || !canEdit() || state.busy.new) return;
         if (!area) {
             setStatus('Elige el área de recorrido antes de iniciar.', 'warning');
             var input = $('setp-rec-area-nueva');
@@ -724,7 +722,10 @@
         render();
         try {
             var sb = await getClient();
-            if (gestion) s = await asegurarSupervisorSa(sb);
+            if (alta) {
+                s = await asegurarSupervisor(sb);
+                state.selected = s.no_empleado;
+            }
             // La hora de inicio la fija el servidor (db/setp_recorridos_captura.sql).
             var nuevo = { no_empleado: s.no_empleado, area_recorrido: area, hora_inicio: new Date().toTimeString().slice(0, 8) };
             if (turno) nuevo.turno = turno;
@@ -733,6 +734,8 @@
             state.areaNueva = '';
             replaceRow(res.data);
             setStatus('');
+            // Recién dado de alta: el selector y el Detalle (js/setp-reportes.js) lo incluyen.
+            if (alta) document.dispatchEvent(new CustomEvent('setp:supervisor-creado', { detail: s }));
         } catch (error) {
             var dup = error && error.code === '23505';
             var sinColumna = !dup && /turno/.test(error && error.message || '');
