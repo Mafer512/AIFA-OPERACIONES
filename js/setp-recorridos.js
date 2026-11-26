@@ -34,7 +34,6 @@
     })();
     // Turno que elige el supervisor al iniciar (columna turno, db/setp_recorridos_turno.sql).
     const TURNOS_REC = [
-        { key: 'MATUTINO', label: 'Matutino' },
         { key: 'VESPERTINO', label: 'Diurno' },   // se guarda como VESPERTINO (columna turno)
         { key: 'NOCTURNO', label: 'Nocturno' }
     ];
@@ -114,6 +113,21 @@
 
     function nombreSesion() {
         try { return String(sessionStorage.getItem('user_fullname') || '').trim().replace(/\s+/g, ' '); } catch (_) { return ''; }
+    }
+
+    // ¿El usuario de la sesión es personal de SETP (SETP_PERSONAS_CON_ACCESO,
+    // script.js)? Un superadmin que no lo es (p. ej. Juan André Ramírez
+    // Ortiz) gestiona todo el módulo pero no hace recorridos: no tiene renglón
+    // de captura ni botón "Iniciar recorrido".
+    function esPersonalSetp() {
+        var lista = window.setpPersonasConAcceso;
+        if (!Array.isArray(lista)) return true;
+        var yo = palabrasNombre(nombreSesion());
+        if (!yo.length) return false;
+        return lista.some(function (persona) {
+            var p = palabrasNombre(persona);
+            return p.length && p.every(function (w) { return yo.indexOf(w) >= 0; });
+        });
     }
 
     // Registro del propio superadmin en setp_supervisores: el que lleva su
@@ -495,12 +509,11 @@
 
     function conTurno() { return SELECTOR_TURNO && state.turnoOk; }
 
-    // Selector de turno (Matutino, Vespertino o Nocturno). attrs: id o data-rec-turno.
+    // Selector de turno (Diurno o Nocturno). attrs: id o data-rec-turno.
     function turnoSelect(valor, attrs) {
         return '<select class="form-select form-select-sm setp-rec-turno" ' + attrs + ' aria-label="Turno">' +
             '<option value=""' + (valor ? '' : ' selected') + '>Turno…</option>' +
-            // Matutino ya no se ofrece; sólo se muestra en recorridos que ya lo tienen guardado.
-            TURNOS_REC.filter(function (t) { return t.key !== 'MATUTINO' || valor === t.key; }).map(function (t) {
+            TURNOS_REC.map(function (t) {
                 return '<option value="' + t.key + '"' + (valor === t.key ? ' selected' : '') + '>' + t.label + '</option>';
             }).join('') + '</select>';
     }
@@ -589,7 +602,7 @@
                 body += hint(state.error);
             } else if (modoGestion()) {
                 body += hint('<i class="fas fa-user-shield me-1"></i><b>Administración:</b> ves y gestionas los recorridos, hallazgos y formatos de todos los supervisores.');
-                if (canEdit() && !recorridoEnCurso()) body += nuevoRow(miSupervisorSa() || { nombre: nombreSesion(), cargo: 'Superadmin' });
+                if (canEdit() && esPersonalSetp() && !recorridoEnCurso()) body += nuevoRow(miSupervisorSa() || { nombre: nombreSesion(), cargo: 'Superadmin' });
             } else if (!s) {
                 body += hint('<i class="fas fa-circle-info me-1"></i>Tu usuario no está dado de alta como supervisor, así que no puedes registrar recorridos. El nombre de tu perfil debe coincidir con el de un supervisor.');
             } else if (canEdit() && !lista.some(function (r) { return !r.hora_termino; })) {
@@ -625,7 +638,9 @@
         var host = $('setp-section');
         if (!host) return;
         var fab = $(FAB_ID);
-        var visible = state.loaded && (typeof window.puedeVerSetp !== 'function' || window.puedeVerSetp());
+        var visible = state.loaded && (typeof window.puedeVerSetp !== 'function' || window.puedeVerSetp()) &&
+            // Superadmin que no es personal de SETP: sólo gestiona, no hace recorridos.
+            !(modoGestion() && !esPersonalSetp());
         if (!visible) { if (fab) fab.remove(); return; }
         if (!fab) {
             fab = document.createElement('button');
@@ -690,6 +705,7 @@
         var area = ($('setp-rec-area-nueva') || {}).value || '';
         area = area.trim().replace(/\s+/g, ' ');
         if ((!s && !gestion) || !canEdit() || state.busy.new) return;
+        if (gestion && !esPersonalSetp()) return;
         if (!area) {
             setStatus('Elige el área de recorrido antes de iniciar.', 'warning');
             var input = $('setp-rec-area-nueva');
@@ -699,7 +715,7 @@
         var turnoSel = $('setp-rec-turno-nuevo');
         var turno = conTurno() && turnoSel ? turnoSel.value : '';
         if (conTurno() && !turno) {
-            setStatus('Elige el turno del recorrido (Matutino, Vespertino o Nocturno) antes de iniciar.', 'warning');
+            setStatus('Elige el turno del recorrido (Diurno o Nocturno) antes de iniciar.', 'warning');
             if (turnoSel) turnoSel.focus();
             return;
         }
@@ -866,7 +882,7 @@
         if (!r || !esSuperadmin() || state.busy[id]) return;
         var s = supervisor(r.no_empleado);
         var ok = await confirmarBorrado(document, {
-            kicker: 'Supervisor por turno',
+            kicker: 'Recorridos de supervisión',
             titulo: '¿Borrar este recorrido?',
             filas: [
                 ['Supervisor', s ? s.nombre : r.no_empleado],

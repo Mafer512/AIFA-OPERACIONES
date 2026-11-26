@@ -3,27 +3,22 @@
 
     // ============================================================
     // Supervisores de Edificio Terminal (SETP)
-    // Filtros, indicadores (tabla setp_reportes) y "Detalle de registros":
+    // Indicadores (a partir de los recorridos) y "Detalle de registros":
     // historial compacto de los reportes (recorridos) de cada supervisor,
     // con "Ver historial" para abrirlo completo en una ventana nueva.
     // ============================================================
 
     const ROOT_ID = 'setp-root';
     const SECTION_KEY = 'setp';
-    const TABLE = 'setp_reportes';
     // Primeros tres slots de la paleta categórica validada (todos los pares).
     const TURNOS = [
-        { key: 'MATUTINO', label: 'Matutino', color: '#2a78d6' },
         { key: 'VESPERTINO', label: 'Vespertino', color: '#eb6834' },
         { key: 'NOCTURNO', label: 'Nocturno', color: '#1baf7a' }
     ];
-    const MONTH_NAMES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
     const state = {
         initialized: false,
-        loading: false,
-        dbReady: false,
-        rows: []
+        loading: false
     };
 
     // Periodo cargado: meses hacia atrás desde hoy (0 = todo el histórico).
@@ -51,11 +46,6 @@
         return Number(value || 0).toLocaleString('es-MX');
     }
 
-    function fmtPercent(value) {
-        if (value == null || !isFinite(value)) return '—';
-        return value.toLocaleString('es-MX', { maximumFractionDigits: 1 }) + '%';
-    }
-
     function plain(value) {
         return String(value == null ? '' : value)
             .normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -72,12 +62,6 @@
         }
         box.className = 'alert alert-' + (type || 'info') + ' mb-3';
         box.innerHTML = message;
-    }
-
-    async function getClient() {
-        if (window.supabaseClient) return window.supabaseClient;
-        if (typeof window.ensureSupabaseClient === 'function') return window.ensureSupabaseClient();
-        throw new Error('Cliente Supabase no disponible');
     }
 
     // Nivel del módulo "setp" que el administrador asigna en Vistas (section_levels).
@@ -115,7 +99,7 @@
             R + ' .setp-filters .form-select{min-width:140px;}',
             R + ' .setp-filters label{font-size:.72rem;font-weight:700;color:var(--setp-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;display:block;}',
             R + ' .setp-actions{display:flex;flex-wrap:wrap;gap:8px;}',
-            R + ' .setp-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px;}',
+            R + ' .setp-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:14px;}',
             R + ' .setp-kpi{border:1px solid var(--setp-line);border-radius:16px;background:var(--setp-surface);padding:14px 16px;box-shadow:0 6px 16px rgba(15,23,42,.04);}',
             R + ' .setp-kpi-label{font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--setp-muted);}',
             R + ' .setp-kpi-value{font-size:1.6rem;font-weight:800;color:var(--setp-ink);line-height:1.1;margin-top:8px;overflow-wrap:anywhere;}',
@@ -147,7 +131,33 @@
             R + ' .setp-hist-tag{font-size:.72rem;font-weight:700;white-space:nowrap;color:var(--setp-ink-2);}',
             R + ' .setp-hist-tag--curso{color:#b45309;}',
             R + ' .setp-hist-btn{white-space:nowrap;flex:none;}',
+            // Detalle agrupado por día: un renglón por día que se despliega.
+            R + ' .setp-dia{border-bottom:1px solid var(--setp-line);}',
+            R + ' .setp-dia:last-child{border-bottom:0;}',
+            R + ' .setp-dia > summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:10px 16px;}',
+            R + ' .setp-dia > summary::-webkit-details-marker{display:none;}',
+            R + ' .setp-dia > summary:hover{background:rgba(100,116,139,.08);}',
+            R + ' .setp-dia-chev{flex:none;width:14px;color:var(--setp-muted);transition:transform .15s;}',
+            R + ' .setp-dia[open] > summary .setp-dia-chev{transform:rotate(90deg);}',
+            R + ' .setp-dia-fecha{font-size:.88rem;color:var(--setp-ink);}',
+            R + ' .setp-dia-fecha span{color:var(--setp-muted);font-weight:400;}',
+            R + ' .setp-dia-res{flex:1;min-width:0;font-size:.76rem;color:var(--setp-muted);text-align:right;overflow-wrap:anywhere;}',
+            R + ' .setp-dia-res b{color:var(--setp-ink);}',
+            R + ' .setp-dia-res .setp-hist-tag--curso{font-size:.76rem;}',
+            R + ' .setp-dia .setp-hist{border-top:1px solid var(--setp-line);}',
+            R + ' .setp-dia .setp-hist li{padding-left:42px;}',
+            '@media (prefers-reduced-motion:reduce){' + R + ' .setp-dia-chev{transition:none;}}',
             R + ' .setp-detail-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}',
+            // Título centrado exacto: ocupa todo el ancho del encabezado y el
+            // ícono y el texto se centran juntos como un solo bloque.
+            R + ' .setp-head-rep{flex:1 1 100%;min-width:0;display:flex;justify-content:center;align-items:center;}',
+            R + ' .setp-rep-title{display:inline-flex;align-items:center;justify-content:center;gap:6px;font-weight:800;color:var(--setp-ink);font-size:.9rem;line-height:1.2;margin:0;text-align:center;}',
+            R + ' .setp-rep-title i{flex:none;}',
+            R + ' .setp-detail-left{display:flex;align-items:center;gap:10px 20px;flex-wrap:wrap;min-width:0;}',
+            R + ' .setp-detail-periodo{display:flex;align-items:center;gap:6px;min-width:0;}',
+            R + ' .setp-detail-periodo label{font-size:.72rem;font-weight:700;color:var(--setp-muted);text-transform:uppercase;letter-spacing:.05em;margin:0;}',
+            R + ' .setp-detail-periodo input{width:145px;min-width:0;}',
+            R + ' .setp-detail-al{font-size:.8rem;color:var(--setp-muted);}',
             R + ' #setp-detail-usuario{width:auto;min-width:220px;}',
             // Barra del periodo cargado (últimos 3 meses, más o todo el histórico).
             R + ' .setp-periodo{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;border:1px solid var(--setp-line);border-radius:12px;background:var(--setp-surface);padding:8px 12px;margin-bottom:12px;font-size:.82rem;color:var(--setp-muted);}',
@@ -170,7 +180,7 @@
             '@media (prefers-reduced-motion:reduce){' + R + ' .setp-sk{animation:none;}}',
             '@media (pointer:coarse){' + R + ' .setp-periodo-btn{min-height:40px;padding:6px 14px;}}',
             '@media (max-width:575px){' + R + ' .setp-hist li{flex-wrap:wrap;}' + R + ' .setp-hist-btn{width:100%;}}',
-            '@media (max-width:1199px){' + R + ' .setp-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}}',
+            '@media (max-width:1199px){' + R + ' .setp-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}' + R + ' .setp-kpi:nth-child(3){grid-column:1/-1;}}',
             '@media (max-width:575px){' + R + ' .setp-kpis{grid-template-columns:1fr;}}',
             // Responsive por ancho del módulo (no de la ventana): así también se
             // acomoda cuando el menú lateral le quita espacio. Las tablas de
@@ -189,7 +199,8 @@
             R + ' .setp-kpi-value{font-size:1.3rem;margin-top:4px;}',
             R + ' .setp-panel{border-radius:12px;}',
             R + ' .setp-panel-head{padding:10px 12px;}',
-            R + ' .setp-detail-tools,' + R + ' #setp-detail-usuario{width:100%;min-width:0;}',
+            R + ' .setp-detail-tools,' + R + ' #setp-detail-usuario,' + R + ' .setp-detail-left,' + R + ' .setp-detail-periodo{width:100%;min-width:0;}',
+            R + ' .setp-detail-periodo input{flex:1 1 0;width:auto;}',
             R + ' .setp-hist li{padding:9px 12px;}',
             '}',
             // Pantallas táctiles (celular y tableta): controles de al menos 40 px y
@@ -216,14 +227,27 @@
             '<div class="setp-periodo" id="setp-periodo" role="status" aria-live="polite"></div>',
             '<div class="setp-kpis" id="setp-kpis"></div>',
             '<div class="setp-panel mb-3">',
-            '  <div class="setp-panel-head"><h3 class="setp-panel-title">Supervisor por turno</h3><span class="setp-panel-hint">Recorridos de supervisión</span></div>',
+            // Tarjeta de recorridos de supervisión (antes titulada "Supervisor por turno").
+            '  <div class="setp-panel-head">',
+            // Qué contiene la tarjeta: el Reporte de hallazgos.
+            '    <div class="setp-head-rep"><h4 class="setp-rep-title"><i class="fas fa-clipboard-list text-primary" aria-hidden="true"></i>Reporte de hallazgos en recorridos</h4></div>',
+            '  </div>',
             '  <div id="setp-recorridos-wrap"></div>',
             '  <div id="setp-reporte-hallazgos"></div>',
             '</div>',
             '<div class="setp-panel">',
-            '  <div class="setp-panel-head"><h3 class="setp-panel-title">Detalle de registros</h3>',
+            '  <div class="setp-panel-head"><div class="setp-detail-left"><h3 class="setp-panel-title">Detalle de registros</h3>',
+            // PERIODO: días que muestra el Detalle (y periodo del Reporte de hallazgos, js/setp-formato.js).
+            '    <div class="setp-detail-periodo" role="group" aria-label="Periodo">',
+            '      <label for="setp-rep-desde">Periodo</label><input type="date" id="setp-rep-desde" class="form-control form-control-sm" aria-label="Periodo desde">',
+            '      <span class="setp-detail-al">al</span><input type="date" id="setp-rep-hasta" class="form-control form-control-sm" aria-label="Periodo hasta">',
+            '    </div>',
+            // Abre los formatos guardados (js/setp-formato.js).
+            '    <button type="button" class="btn btn-sm btn-outline-success" id="setp-detail-guardados"><i class="fas fa-folder-open me-1"></i>Formatos guardados</button>',
+            '  </div>',
             '    <div class="setp-detail-tools">',
             '      <span class="setp-panel-hint" id="setp-detail-hint"></span>',
+            '      <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="setp-detail-hoy" title="Ocultar los días anteriores y mostrar sólo los recorridos de hoy"><i class="fas fa-calendar-day me-1"></i>Ver sólo hoy</button>',
             '      <label class="visually-hidden" for="setp-detail-usuario">Consultar historial de</label>',
             '      <select id="setp-detail-usuario" class="form-select form-select-sm" title="Consulta el historial de registros de cualquier usuario"></select>',
             '    </div>',
@@ -234,43 +258,6 @@
     }
 
     // ---------- datos ----------
-
-    async function loadRows() {
-        var sb;
-        try {
-            sb = await getClient();
-        } catch (error) {
-            state.dbReady = false;
-            state.rows = [];
-            setStatus('Supabase no está disponible. No es posible cargar los registros de SETP.', 'warning');
-            return;
-        }
-        var all = [];
-        var pageSize = 1000;
-        for (var from = 0; ; from += pageSize) {
-            var q = sb.from(TABLE).select('*');
-            if (periodo.desde) q = q.gte('fecha', periodo.desde);
-            var res = await q
-                .order('fecha', { ascending: false })
-                .order('created_at', { ascending: false })
-                .range(from, from + pageSize - 1);
-            if (res.error) {
-                state.dbReady = false;
-                state.rows = [];
-                setStatus('La tabla <code>' + TABLE + '</code> aún no está disponible. Aplica primero <code>db/create_setp_reportes.sql</code> en Supabase para habilitar el módulo.', 'warning');
-                return;
-            }
-            all = all.concat(res.data || []);
-            if (!res.data || res.data.length < pageSize) break;
-        }
-        state.dbReady = true;
-        state.rows = all;
-    }
-
-    // Los filtros Mes, Año y Supervisor se retiraron.
-    function fillFilters() {
-        fillSupervisores();
-    }
 
     function palabras(value) {
         return plain(value).replace(/[^A-Z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean);
@@ -323,6 +310,15 @@
         var sel = $('setp-detail-usuario');
         if (!sel) return;
         list = list || (window.setpRecorridos ? window.setpRecorridos.supervisores() : []);
+        // Sólo el personal de SETP (SETP_PERSONAS_CON_ACCESO en script.js): quien
+        // no pertenece al grupo no aparece en la lista, aunque esté en la base.
+        var personal = (window.setpPersonasConAcceso || []).map(palabras);
+        if (personal.length) {
+            list = list.filter(function (s) {
+                var nombre = palabras(s.nombre);
+                return personal.some(function (p) { return p.length && p.every(function (w) { return nombre.indexOf(w) >= 0; }); });
+            });
+        }
         sel.innerHTML = '<option value="">Todos los usuarios</option>' + list.map(function (s) {
             return '<option value="' + esc(s.no_empleado) + '">' + esc(s.nombre) + '</option>';
         }).join('');
@@ -345,25 +341,6 @@
             supervisor: supOpt ? supOpt.textContent : '',
             noEmpleado: supSel.value
         };
-    }
-
-    function applyFilters(rows, f) {
-        return rows.filter(function (r) {
-            var y = String(r.fecha).slice(0, 4);
-            var m = Number(String(r.fecha).slice(5, 7));
-            if (f.year && y !== f.year) return false;
-            if (f.month && m !== Number(f.month)) return false;
-            if (f.turno && r.turno !== f.turno) return false;
-            if (f.supervisor && plain(r.supervisor) !== plain(f.supervisor)) return false;
-            return true;
-        });
-    }
-
-    function periodLabel(f) {
-        if (f.month && f.year) return MONTH_NAMES[f.month - 1] + ' ' + f.year;
-        if (f.month) return MONTH_NAMES[f.month - 1] + ' (todos los años)';
-        if (f.year) return String(f.year);
-        return periodo.desde ? 'últimos ' + periodo.meses + ' meses' : 'todo el histórico';
     }
 
     // ---------- periodo cargado ----------
@@ -424,8 +401,8 @@
     function renderKpisCargando() {
         var box = $('setp-kpis');
         if (!box) return;
-        var anchos = [40, 30, 60, 45];
-        box.innerHTML = ['Registros', 'Supervisores', 'Turno con más recorridos', 'Cierre'].map(function (label, i) {
+        var anchos = [40, 30, 60];
+        box.innerHTML = ['Registros', 'Supervisores', 'Turno con más recorridos'].map(function (label, i) {
             return kpi(label, '<span class="setp-sk setp-sk--valor" style="width:' + anchos[i] + '%"></span>', '<span class="setp-sk" style="width:70%"></span>');
         }).join('');
         box.setAttribute('aria-busy', 'true');
@@ -440,28 +417,13 @@
         refresh();
     }
 
-    function aggregateBySupervisor(rows) {
-        var map = {};
-        rows.forEach(function (r) {
-            var s = map[r.supervisor] || (map[r.supervisor] = { supervisor: r.supervisor, total: 0, cerrados: 0, ultimo: '', MATUTINO: 0, VESPERTINO: 0, NOCTURNO: 0 });
-            s.total++;
-            s[r.turno] = (s[r.turno] || 0) + 1;
-            if (r.estatus === 'CERRADO') s.cerrados++;
-            if (String(r.fecha) > s.ultimo) s.ultimo = String(r.fecha);
-        });
-        return Object.values(map).sort(function (a, b) { return b.total - a.total || a.supervisor.localeCompare(b.supervisor, 'es'); });
-    }
-
     // ---------- render ----------
 
     function render() {
         // Mientras se cargan los datos, los indicadores siguen en gris (los
         // avisos de js/setp-recorridos.js llegan antes de que termine la carga).
         if (state.loading) { renderDetail(); return; }
-        var f = getFilters();
-        var rows = applyFilters(state.rows, f);
-        var bySup = aggregateBySupervisor(rows);
-        renderKpis(rows, bySup, f);
+        renderKpis(getFilters());
         renderDetail();
     }
 
@@ -496,16 +458,63 @@
         return kpi(label, top.length ? top.map(function (c) { return c.t.label; }).join(' y ') : '—', sub);
     }
 
-    function renderKpis(rows, bySup, f) {
-        var cerrados = rows.filter(function (r) { return r.estatus === 'CERRADO'; }).length;
-        var conEstatus = rows.filter(function (r) { return r.estatus; }).length;
-        var top = bySup[0];
-        $('setp-kpis').removeAttribute('aria-busy');
-        $('setp-kpis').innerHTML = [
-            kpi('Registros', fmtNumber(rows.length), 'Periodo: ' + esc(periodLabel(f))),
-            kpi('Supervisores', fmtNumber(bySup.length), top ? 'Más registros: ' + esc(top.supervisor) + ' (' + fmtNumber(top.total) + ')' : 'Sin registros'),
-            kpiTurnos(f),
-            kpi('Cierre', conEstatus ? fmtPercent(cerrados / conEstatus * 100) : '—', fmtNumber(cerrados) + ' cerrados de ' + fmtNumber(conEstatus) + ' con estatus')
+    // PERIODO de los indicadores Registros y Supervisores: el mismo que el
+    // Reporte de hallazgos (js/setp-formato.js); por omisión, el mes en curso.
+    var periodoKpi = null;
+
+    function mesEnCurso() {
+        var d = new Date();
+        return {
+            desde: claveDia(new Date(d.getFullYear(), d.getMonth(), 1)),
+            hasta: claveDia(new Date(d.getFullYear(), d.getMonth() + 1, 0))
+        };
+    }
+
+    // Registros: recorridos del PERIODO (del supervisor de la sesión o de todos).
+    // Supervisores: cuántos hicieron recorridos en el PERIODO y quién hizo más.
+    function renderKpis(f) {
+        var box = $('setp-kpis');
+        if (!box) return;
+        var rec = window.setpRecorridos;
+        var todos = rec ? rec.recorridos() : [];
+        box.removeAttribute('aria-busy');
+        if (!todos) {
+            box.innerHTML = [
+                kpi('Registros', '…', 'Cargando recorridos…'),
+                kpi('Supervisores', '…', 'Cargando recorridos…'),
+                kpiTurnos(f)
+            ].join('');
+            return;
+        }
+        var p = periodoKpi || mesEnCurso();
+        var lista = todos.filter(function (r) {
+            var k = claveDia(fechaDe(r.registrado_en));
+            return k >= p.desde && k <= p.hasta;
+        });
+        var propios = f.noEmpleado ? lista.filter(function (r) { return r.no_empleado === f.noEmpleado; }) : lista;
+        var enCurso = propios.filter(function (r) { return !r.hora_termino; }).length;
+        // Si el PERIODO empieza antes de lo cargado, la cifra puede estar incompleta.
+        var recortado = periodo.desde && p.desde < periodo.desde
+            ? '<div class="setp-kpi-who">Cargados desde ' + fmtDia(periodo.desde) + '</div>' : '';
+        var subReg = '<div class="setp-kpi-who">' + esc(f.noEmpleado ? f.supervisor : 'Todos los supervisores') + '</div>' +
+            'Recorridos del ' + fmtDia(p.desde) + ' al ' + fmtDia(p.hasta) +
+            (enCurso ? ' · ' + fmtNumber(enCurso) + ' en curso' : '') + recortado;
+
+        var nombres = {};
+        (rec.supervisores() || []).forEach(function (s) { nombres[s.no_empleado] = s.nombre; });
+        var porSup = {};
+        lista.forEach(function (r) { porSup[r.no_empleado] = (porSup[r.no_empleado] || 0) + 1; });
+        var ranking = Object.keys(porSup).map(function (no) { return { nombre: nombres[no] || no, n: porSup[no] }; })
+            .sort(function (a, b) { return b.n - a.n || a.nombre.localeCompare(b.nombre, 'es'); });
+        var top = ranking[0];
+        var subSup = top
+            ? 'Más recorridos: ' + esc(top.nombre) + ' (' + fmtNumber(top.n) + ')'
+            : 'Sin recorridos en el periodo';
+
+        box.innerHTML = [
+            kpi('Registros', fmtNumber(propios.length), subReg),
+            kpi('Supervisores', fmtNumber(ranking.length), subSup + recortado),
+            kpiTurnos(f)
         ].join('');
     }
 
@@ -541,14 +550,32 @@
         }
         var nombres = {};
         rec.supervisores().forEach(function (s) { nombres[s.no_empleado] = s.nombre; });
+        // Por omisión sólo se ve el día de hoy; los días anteriores aparecen
+        // al elegir un PERIODO en "Reporte de hallazgos" (js/setp-formato.js).
+        var hoy = claveDia(new Date());
+        var rango = filtroDias || { desde: hoy, hasta: hoy };
+        var soloHoy = !filtroDias;
+        var btnHoy = $('setp-detail-hoy');
+        if (btnHoy) btnHoy.classList.toggle('d-none', soloHoy);
         var lista = todos.filter(function (r) {
             if (f.noEmpleado && r.no_empleado !== f.noEmpleado) return false;
-            var d = fechaDe(r.registrado_en);
-            if (f.year && (!d || String(d.getFullYear()) !== f.year)) return false;
-            if (f.month && (!d || d.getMonth() + 1 !== Number(f.month))) return false;
-            return true;
+            var k = claveDia(fechaDe(r.registrado_en));
+            return k >= rango.desde && k <= rango.hasta;
         });
-        hint.textContent = lista.length ? fmtNumber(lista.length) + (lista.length === 1 ? ' reporte' : ' reportes') + (rec.recorridosCompletos() ? '' : ' recientes') : '';
+        var dias = agruparPorDia(lista);
+        var etiqueta = soloHoy ? 'Hoy' : 'Periodo ' + fmtDia(rango.desde) + ' al ' + fmtDia(rango.hasta);
+        hint.textContent = etiqueta + ' · ' + fmtNumber(lista.length) + (lista.length === 1 ? ' reporte' : ' reportes') +
+            (soloHoy ? '' : ' en ' + fmtNumber(dias.length) + (dias.length === 1 ? ' día' : ' días'));
+        if (!lista.length && soloHoy) {
+            box.innerHTML = '<div class="setp-empty">Sin recorridos hoy' + (f.noEmpleado ? ' de <b>' + esc(f.supervisor) + '</b>' : '') +
+                '. Para ver días anteriores elige las fechas en <b>PERIODO</b>.</div>';
+            return;
+        }
+        if (!lista.length && periodo.desde && rango.desde < periodo.desde) {
+            box.innerHTML = '<div class="setp-empty">Sin reportes cargados en ese periodo. Sólo están cargados los recorridos desde ' + fmtDia(periodo.desde) +
+                '; usa <b>Cargar ' + PASO_MESES + ' meses anteriores</b> o <b>Todo el histórico</b> (arriba) para ver los anteriores.</div>';
+            return;
+        }
         if (!lista.length) {
             var vacio = !todos.some(function (r) { return !f.noEmpleado || r.no_empleado === f.noEmpleado; });
             var recortado = !rec.recorridosCompletos();
@@ -559,16 +586,75 @@
                 : vacio ? 'Aún no hay reportes registrados.' : 'No hay reportes con los filtros seleccionados.') + '</div>';
             return;
         }
-        box.innerHTML = '<ul class="setp-hist">' + lista.map(function (r) {
+        // Un renglón por día (desplegable) con sus recorridos dentro. Se
+        // recuerda qué días están abiertos entre re-renders; si el usuario
+        // aún no ha abierto ninguno, se abre el día más reciente.
+        box.innerHTML = dias.map(function (g, i) {
+            var abierto = diasAbiertos ? !!diasAbiertos[g.key] : i === 0;
+            var conEvid = g.items.filter(function (r) { return r.evidencia_url; }).length;
+            var enCurso = g.items.filter(function (r) { return !r.hora_termino; }).length;
+            var res = ['<b>' + fmtNumber(g.items.length) + '</b> ' + (g.items.length === 1 ? 'recorrido' : 'recorridos')];
+            if (!f.noEmpleado) {
+                var sups = {};
+                g.items.forEach(function (r) { sups[r.no_empleado] = 1; });
+                var n = Object.keys(sups).length;
+                res.push(fmtNumber(n) + (n === 1 ? ' supervisor' : ' supervisores'));
+            }
+            if (conEvid) res.push('<i class="fas fa-camera" aria-hidden="true"></i> ' + fmtNumber(conEvid) + ' con evidencia');
+            if (enCurso) res.push('<span class="setp-hist-tag--curso"><i class="fas fa-circle-play me-1"></i>' + fmtNumber(enCurso) + ' en curso</span>');
+            return '<details class="setp-dia" data-dia="' + esc(g.key) + '"' + (abierto ? ' open' : '') + '>' +
+                '<summary><i class="fas fa-chevron-right setp-dia-chev" aria-hidden="true"></i>' +
+                '<div class="setp-dia-fecha"><b>' + esc(g.titulo) + '</b> <span>' + esc(g.semana) + '</span></div>' +
+                '<div class="setp-dia-res">' + res.join(' · ') + '</div></summary>' +
+                '<ul class="setp-hist">' + g.items.map(function (r) { return itemDetalle(r, f, nombres); }).join('') + '</ul>' +
+                '</details>';
+        }).join('');
+    }
+
+    // null = el usuario aún no abre/cierra días; luego { 'YYYY-MM-DD': true }.
+    var diasAbiertos = null;
+    // null = sólo hoy; { desde, hasta } ('YYYY-MM-DD') = PERIODO elegido.
+    var filtroDias = null;
+
+    function claveDia(d) {
+        var p = function (x) { return x < 10 ? '0' + x : String(x); };
+        return d ? d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) : 'sin-fecha';
+    }
+
+    // Agrupa los recorridos por día local de registrado_en, del más reciente
+    // al más antiguo; dentro de cada día, en orden de hora de inicio.
+    function agruparPorDia(lista) {
+        var map = {}, orden = [];
+        lista.forEach(function (r) {
             var d = fechaDe(r.registrado_en);
-            var dia = d ? d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+            var k = claveDia(d);
+            if (!map[k]) {
+                map[k] = {
+                    key: k,
+                    titulo: d ? d.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Sin fecha',
+                    semana: d ? d.toLocaleDateString('es-MX', { weekday: 'long' }) : '',
+                    items: []
+                };
+                orden.push(k);
+            }
+            map[k].items.push(r);
+        });
+        orden.sort(function (a, b) { return a < b ? 1 : a > b ? -1 : 0; });
+        return orden.map(function (k) {
+            var g = map[k];
+            g.items.sort(function (a, b) { return String(a.hora_inicio || '').localeCompare(String(b.hora_inicio || '')); });
+            return g;
+        });
+    }
+
+    function itemDetalle(r, f, nombres) {
             var enCurso = !r.hora_termino;
             var sub = [];
             if (!f.noEmpleado) sub.push(esc(nombres[r.no_empleado] || r.no_empleado));
             sub.push(esc(r.area_recorrido));
             if (r.evidencia_url) sub.push('<i class="fas ' + (r.evidencia_tipo === 'FOTO' ? 'fa-camera' : 'fa-paperclip') + '" title="Con evidencia"></i> Evidencia');
             return '<li><span class="setp-hist-dot' + (enCurso ? ' setp-hist-dot--curso' : '') + '" aria-hidden="true"></span>' +
-                '<div class="setp-hist-main"><div class="setp-hist-when"><b>' + dia + '</b> · ' + esc(hhmm(r.hora_inicio)) + ' hrs</div>' +
+                '<div class="setp-hist-main"><div class="setp-hist-when"><b>' + esc(hhmm(r.hora_inicio)) + ' hrs</b></div>' +
                 '<div class="setp-hist-sub">' + sub.join(' · ') + '</div></div>' +
                 (enCurso
                     ? '<span class="setp-hist-tag setp-hist-tag--curso"><i class="fas fa-circle-play me-1"></i>En curso</span>'
@@ -576,7 +662,6 @@
                 '<button type="button" class="btn btn-sm btn-outline-primary setp-hist-btn" data-hist-no="' + esc(r.no_empleado) + '" data-hist-id="' + esc(r.id) + '"' +
                 ' title="Abrir el historial de ' + esc(nombres[r.no_empleado] || r.no_empleado) + ' en una ventana nueva"><i class="fas fa-clock-rotate-left me-1"></i>Ver historial</button>' +
                 '</li>';
-        }).join('') + '</ul>';
     }
 
     // ---------- ciclo de vida ----------
@@ -593,6 +678,35 @@
         $('setp-detail').addEventListener('click', function (e) {
             var b = e.target.closest('[data-hist-no]');
             if (b && window.setpRecorridos) window.setpRecorridos.abrirHistorial(b.getAttribute('data-hist-no'), b.getAttribute('data-hist-id'));
+        });
+        // PERIODO del Reporte de hallazgos (js/setp-formato.js): muestra esos días.
+        document.addEventListener('setp:periodo-reporte', function (e) {
+            var p = e.detail || {};
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(p.desde || '') || !/^\d{4}-\d{2}-\d{2}$/.test(p.hasta || '')) return;
+            filtroDias = { desde: p.desde, hasta: p.hasta };
+            periodoKpi = { desde: p.desde, hasta: p.hasta };
+            diasAbiertos = null;
+            render();
+        });
+        // "Ver sólo hoy": vuelve a ocultar los días anteriores.
+        $('setp-detail-hoy').addEventListener('click', function () {
+            filtroDias = null;
+            diasAbiertos = null;
+            renderDetail();
+        });
+        // Recordar qué días abrió o cerró el usuario para conservarlos cuando
+        // el Detalle se vuelve a pintar (nuevo recorrido, cambio de usuario…).
+        $('setp-detail').addEventListener('click', function (e) {
+            var s = e.target.closest('.setp-dia > summary');
+            if (!s) return;
+            var dEl = s.parentNode;
+            if (!diasAbiertos) {
+                diasAbiertos = {};
+                $('setp-detail').querySelectorAll('.setp-dia[open]').forEach(function (x) { diasAbiertos[x.getAttribute('data-dia')] = true; });
+            }
+            var k = dEl.getAttribute('data-dia');
+            // El clic aún no cambia "open": el nuevo estado es el contrario.
+            if (!dEl.open) diasAbiertos[k] = true; else delete diasAbiertos[k];
         });
         // El usuario recién creado o editado queda elegido en el Detalle;
         // al eliminarlo, el Detalle vuelve al propio usuario.
@@ -628,14 +742,14 @@
         // Supervisores y recorridos (js/setp-recorridos.js): el filtro Supervisor los usa.
         var recorridos = window.setpRecorridos ? window.setpRecorridos.mount($('setp-recorridos-wrap')) : Promise.resolve();
         try {
-            await Promise.all([loadRows(), recorridos]);
+            await recorridos;
             state.loading = false;
-            if (state.dbReady) setStatus('');
-            fillFilters();
+            setStatus('');
+            fillSupervisores();
             render();
         } catch (error) {
             state.loading = false;
-            setStatus('No se pudieron cargar los registros: ' + esc(error && error.message ? error.message : error), 'danger');
+            setStatus('No se pudieron cargar los recorridos: ' + esc(error && error.message ? error.message : error), 'danger');
             try { render(); } catch (_) { /* los indicadores quedan con lo que haya */ }
         } finally {
             state.loading = false;

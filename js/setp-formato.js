@@ -532,6 +532,11 @@
             alert('El navegador bloqueó la ventana de impresión. Permite ventanas emergentes para este sitio.');
             return;
         }
+        // La pestaña sólo muestra la ventana de impresión: en pantalla el
+        // documento queda oculto (la vista previa de impresión sí lo dibuja)
+        // y la pestaña se cierra al guardar o cancelar.
+        var soloImpresion = '<style>@media screen{html{background:#fff !important;}body{visibility:hidden !important;}}</style>';
+        html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, soloImpresion + '</head>') : soloImpresion + html;
         win.document.open();
         win.document.write(html);
         win.document.close();
@@ -539,6 +544,9 @@
         Promise.all(imgs.map(function (img) {
             return img.complete ? Promise.resolve() : new Promise(function (res) { img.onload = img.onerror = res; });
         })).then(function () {
+            win.addEventListener('afterprint', function () {
+                setTimeout(function () { try { win.close(); window.focus(); } catch (_) { } }, 100);
+            }, { once: true });
             setTimeout(function () { win.focus(); win.print(); }, 150);
         });
     }
@@ -1385,14 +1393,8 @@
         style.id = 'setp-rep-styles';
         style.textContent = [
             R + '{border-top:1px solid #e2e8f0;}',
-            R + ' .setp-rep-head{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#f8fafc;border-top:2px solid #dbe2ea;}',
-            R + ' .setp-rep-title{font-weight:800;color:#0f172a;font-size:.9rem;margin:0;}',
-            R + ' .setp-rep-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}',
-            R + ' .setp-rep-actions label{font-size:.72rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin:0;}',
-            R + ' .setp-rep-periodo{display:flex;align-items:center;gap:6px;min-width:0;}',
-            R + ' .setp-rep-periodo input{width:145px;min-width:0;}',
-            R + ' .setp-rep-al{font-size:.8rem;color:#64748b;}',
-            'body.dark-mode ' + R + ' .setp-rep-al{color:var(--text-muted-color);}',
+            R + ' .setp-rep-generar{display:flex;justify-content:center;padding:12px 16px;border-top:1px solid #e2e8f0;}',
+            'body.dark-mode ' + R + ' .setp-rep-generar{border-top-color:var(--border-color);}',
             R + ' .setp-rep-table td{vertical-align:middle;}',
             // Separador entre hallazgos más visible (en celular y tableta son tarjetas con borde).
             '@container setp (min-width:1000px){' + R + ' .setp-rep-table>tbody>tr>td{border-bottom:2px solid #dbe2ea;}' +
@@ -1401,7 +1403,6 @@
             R + ' tr.setp-rep-group th{background:#eff6ff;color:#1e3a8a;font-size:.72rem;letter-spacing:.04em;text-transform:uppercase;border-bottom:1px solid #bfdbfe;}',
             R + ' .setp-rep-count{display:inline-flex;min-width:22px;justify-content:center;border-radius:999px;background:#dbeafe;color:#1e3a8a;font-size:.7rem;padding:0 7px;margin-left:6px;}',
             R + ' .setp-rep-note{font-weight:500;text-transform:none;letter-spacing:0;color:#475569;margin-left:6px;}',
-            R + ' .setp-rep-add-grupo{font-size:.75rem;font-weight:700;text-transform:none;letter-spacing:0;text-decoration:none;vertical-align:baseline;}',
             R + ' td.setp-rep-none{color:#64748b;font-size:.8rem;text-align:center;padding:10px;}',
             R + ' .setp-rep-thumb{width:84px;height:54px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0;background:#f1f5f9;display:block;}',
             R + ' .setp-rep-nothumb{width:84px;height:54px;border-radius:6px;border:1px dashed #cbd5e1;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:.7rem;}',
@@ -1417,7 +1418,6 @@
             R + ' .setp-rep-leyenda-extra{font-weight:400;}',
             R + ' tr.setp-rep-edit td{background:#f8fbff;}',
             R + ' tr.setp-rep-edit .form-control,' + R + ' tr.setp-rep-edit .form-select{min-width:120px;}',
-            R + ' .setp-rep-local{display:inline-flex;align-items:center;margin-left:8px;padding:1px 8px;border-radius:999px;background:#fffbeb;color:#92400e;font-weight:600;}',
             R + ' .setp-rep-ok{background:#ecfdf5;color:#047857;}',
             R + ' .setp-rep-sol-info{display:flex;flex-direction:column;gap:4px;margin-top:6px;font-size:.78rem;color:#047857;font-weight:600;white-space:nowrap;}',
             R + ' .setp-rep-sol{display:flex;flex-direction:column;gap:6px;margin-top:6px;}',
@@ -1426,9 +1426,7 @@
             R + ' .setp-rep-pend{background:#fef2f2;color:#b91c1c;}',
             // Modo oscuro (body.dark-mode).
             'body.dark-mode ' + R + '{border-top-color:var(--border-color);}',
-            'body.dark-mode ' + R + ' .setp-rep-head{background:rgba(255,255,255,.03);border-top-color:#5b6b82;}',
-            'body.dark-mode ' + R + ' .setp-rep-title{color:var(--text-color);}',
-            'body.dark-mode ' + R + ' .setp-rep-actions label,body.dark-mode ' + R + ' td.setp-rep-none{color:var(--text-muted-color);}',
+            'body.dark-mode ' + R + ' td.setp-rep-none{color:var(--text-muted-color);}',
             'body.dark-mode ' + R + ' tr.setp-rep-group th{background:rgba(77,171,247,.12);color:#8cc8ff;border-bottom-color:rgba(77,171,247,.3);}',
             'body.dark-mode ' + R + ' .setp-rep-count{background:rgba(77,171,247,.2);color:#cfe6ff;}',
             'body.dark-mode ' + R + ' .setp-rep-note{color:#c3c9d2;}',
@@ -1439,7 +1437,6 @@
             'body.dark-mode ' + R + ' tr.setp-rep-aviso-row td{background:rgba(248,113,113,.10);}',
             'body.dark-mode ' + R + ' .setp-rep-leyenda{color:#f87171;}',
             'body.dark-mode ' + R + ' label.setp-rep-photo.is-invalid .setp-rep-nothumb,body.dark-mode ' + R + ' label.setp-rep-photo.is-invalid .setp-rep-thumb{border-color:#f87171 !important;color:#f87171;}',
-            'body.dark-mode ' + R + ' .setp-rep-local{background:rgba(251,191,36,.14);color:#fcd34d;}',
             'body.dark-mode ' + R + ' .setp-rep-ok{background:rgba(16,185,129,.15);color:#6ee7b7;}',
             'body.dark-mode ' + R + ' .setp-rep-pend{background:rgba(248,113,113,.15);color:#fca5a5;}',
             // Folio, ubicación, etiquetas, items y duplicados.
@@ -1527,11 +1524,6 @@
             '@container setp (max-width:599.98px){',
             card + '{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"no acc" "fec ubi" "des des" "are are" "evi est";gap:8px 12px;padding:12px;}',
             R + ' .setp-rep-thumb,' + R + ' .setp-rep-nothumb{width:100%;max-width:200px;height:96px;}',
-            R + ' .setp-rep-head{padding:12px;}',
-            R + ' .setp-rep-actions{width:100%;}',
-            R + ' .setp-rep-actions .btn{flex:1 1 auto;}',
-            R + ' .setp-rep-periodo{width:100%;}',
-            R + ' .setp-rep-periodo input{flex:1 1 0;width:auto;}',
             '}'
         ];
     }
@@ -1544,19 +1536,12 @@
             '<div class="setp-rep-filtro d-none" id="setp-rep-filtro" role="group" aria-label="Filtrar por etiqueta"></div>',
             '<div class="setp-rep-filtro d-none" id="setp-rep-filtro-area" role="group" aria-label="Filtrar por área responsable"></div>',
             '<div class="table-responsive"><table class="table table-sm mb-0 setp-table setp-rep-table" id="setp-rep-table"></table></div>',
-            // Panel del reporte (periodo y botones): al final, después de
-            // "Hallazgos pendientes por solucionar" y antes de "Detalle de registros".
-            '<div class="setp-rep-head">',
-            '  <div><h4 class="setp-rep-title"><i class="fas fa-clipboard-list me-1 text-primary"></i>Reporte de hallazgos del Edificio Terminal</h4><div class="setp-panel-hint" id="setp-rep-hint"></div></div>',
-            '  <div class="setp-rep-actions">',
-            '    <div class="setp-rep-periodo" role="group" aria-label="Periodo del reporte">',
-            '      <label for="setp-rep-desde">Periodo</label><input type="date" id="setp-rep-desde" class="form-control form-control-sm" aria-label="Periodo desde">',
-            '      <span class="setp-rep-al">al</span><input type="date" id="setp-rep-hasta" class="form-control form-control-sm" aria-label="Periodo hasta">',
-            '    </div>',
-            '    <button type="button" class="btn btn-sm btn-outline-primary d-none" data-rep="add"><i class="fas fa-plus me-1"></i>Agregar hallazgo</button>',
-            '    <button type="button" class="btn btn-sm btn-success" data-rep="generar"><i class="fas fa-file-signature me-1"></i>Generar formato</button>',
-            '    <button type="button" class="btn btn-sm btn-outline-success" data-rep="guardados"><i class="fas fa-folder-open me-1"></i>Formatos guardados</button>',
-            '  </div>',
+            // El título "Reporte de hallazgos en recorridos" está en el
+            // encabezado de la tarjeta de recorridos; PERIODO y "Formatos
+            // guardados", en el de "Detalle de registros" (js/setp-reportes.js).
+            // "Generar formato": centrado al pie de la tarjeta de recorridos.
+            '<div class="setp-rep-generar">',
+            '  <button type="button" class="btn btn-sm btn-success" data-rep="generar"><i class="fas fa-file-signature me-1"></i>Generar formato</button>',
             '</div>',
             '<datalist id="setp-rep-niveles">' + NIVELES.map(function (n) { return '<option value="' + n + '">'; }).join('') + '</datalist>'
         ].join('');
@@ -1840,10 +1825,7 @@
     }
 
     function repGroup(title, note, rows, kind) {
-        var add = canEdit()
-            ? '<button type="button" class="btn btn-link btn-sm p-0 ms-2 setp-rep-add-grupo" data-rep="add-grupo" data-kind="' + kind + '"><i class="fas fa-plus me-1"></i>Agregar</button>'
-            : '';
-        var head = '<tr class="setp-rep-group"><th colspan="' + REP_COLS + '">' + title + '<span class="setp-rep-count">' + rows.length + '</span><span class="setp-rep-note">' + note + '</span>' + add + '</th></tr>';
+        var head = '<tr class="setp-rep-group"><th colspan="' + REP_COLS + '">' + title + '<span class="setp-rep-count">' + rows.length + '</span><span class="setp-rep-note">' + note + '</span></th></tr>';
         // El hallazgo se edita sólo en el grupo desde donde se abrió (puede salir en dos).
         var body = rows.map(function (h, i) {
             return rep.editing === h.id && rep.editKind === kind ? repEditRow(h, i + 1) : repViewRow(h, i + 1, kind);
@@ -1870,16 +1852,16 @@
         var ym = rep.periodo;
         var prevYm = prevMonth(ym);
         var rango = repRango();
+        // PERIODO vive en el encabezado de "Detalle de registros" (js/setp-reportes.js).
         var desde = $('setp-rep-desde'), hasta = $('setp-rep-hasta');
-        desde.value = rep.desde;
-        desde.max = rep.hasta;
-        hasta.value = rep.hasta;
-        hasta.min = rep.desde;
+        if (desde && hasta) {
+            desde.value = rep.desde;
+            desde.max = rep.hasta;
+            hasta.value = rep.hasta;
+            hasta.min = rep.desde;
+        }
         var no = supervisorActual();
-        $('setp-rep-hint').innerHTML = 'Periodo reportado ' + rangoText(rango) + ' · seguimiento del periodo ' + periodText(prevYm) +
-            (state.porSupervisor && no ? ' · Detectados de <b>' + esc(nombreSupervisor(no)) + '</b> que aún no salen en un formato' : '') +
-            (state.store === 'local' ? '<span class="setp-rep-local" title="Las tablas de Supabase (db/create_setp_formatos.sql) aún no están disponibles"><i class="fas fa-laptop me-1"></i>Guardado en este navegador</span>' : '');
-        rep.el.querySelector('[data-rep="add"]').classList.toggle('d-none', !canEdit());        var table = $('setp-rep-table');
+        var table = $('setp-rep-table');
         var thead = '<thead><tr><th>' + (state.identificacion ? 'No. / Folio' : 'No.') + '</th><th>Fecha de reporte</th><th>Ubicación de incidencia</th><th>Descripción de incidencia</th><th>Área responsable</th><th>Evidencia fotográfica</th><th>Estatus</th><th></th></tr></thead>';
         var byId = {};
         state.hallazgos.forEach(function (h) { byId[h.id] = h; });
@@ -2262,7 +2244,7 @@
     // por solucionar" hasta su seguimiento. Los reportes quedan en
     // "Formatos guardados" para imprimirlos con el estatus actual.
 
-    const TURNO_LABEL = { MATUTINO: 'Matutino', VESPERTINO: 'Diurno', NOCTURNO: 'Nocturno' };
+    const TURNO_LABEL = { VESPERTINO: 'Diurno', NOCTURNO: 'Nocturno' };
 
     function grupoLabel(no, turno) {
         return (no ? nombreSupervisor(no) : 'Sin usuario') + ' · ' + (TURNO_LABEL[turno] || 'Sin turno');
@@ -2414,12 +2396,7 @@
             if (act === 'generar') {
                 if (rep.editing) return repStatus('Guarda o cancela el hallazgo en edición antes de generar el formato.', 'warning');
                 open({ periodo: rep.periodo, step: 'preview' });
-            } else if (act === 'guardados') {
-                if (rep.editing) return repStatus('Guarda o cancela el hallazgo en edición antes de abrir los formatos guardados.', 'warning');
-                abrirGuardados();
-            } else if (act === 'add') repStartEdit('new:detectados', false);
-            else if (act === 'add-grupo') repStartEdit('new:' + btn.getAttribute('data-kind'), false);
-            else if (act === 'edit') repStartEdit(id, false, btn.getAttribute('data-kind'));
+            } else if (act === 'edit') repStartEdit(id, false, btn.getAttribute('data-kind'));
             else if (act === 'solve' && rep.editing) repStatus('Guarda o cancela el hallazgo en edición antes de solucionar otro.', 'warning');
             else if (act === 'solve') repTomarFotoSolucion(id);
             else if (act === 'confirm' && rep.editing) repStatus('Guarda o cancela el hallazgo en edición antes de confirmar otro.', 'warning');
@@ -2436,18 +2413,6 @@
                 rep.solveId = null;
                 t.value = '';
                 if (foto && hid) repSolucionar(hid, foto);
-            } else if (t.id === 'setp-rep-desde' || t.id === 'setp-rep-hasta') {
-                if (!/^\d{4}-\d{2}-\d{2}$/.test(t.value)) return;
-                var esDesde = t.id === 'setp-rep-desde';
-                if (esDesde) rep.desde = t.value; else rep.hasta = t.value;
-                // Si las fechas quedan al revés, la otra se iguala a la elegida.
-                if (rep.desde > rep.hasta) { if (esDesde) rep.hasta = rep.desde; else rep.desde = rep.hasta; }
-                rep.periodo = rep.desde.slice(0, 7);
-                rep.editing = null;
-                repStatus('');
-                // Un periodo anterior a lo cargado: se cargan sus hallazgos primero.
-                if (faltaCargar(rep.desde) || faltaCargar(monthRange(prevMonth(rep.periodo)).start)) { mountReport(rep.el); return; }
-                renderReport();
             } else if (t.matches('[data-f="etiqueta"]')) {
                 // Al cambiar la etiqueta se ofrecen sus items y condiciones.
                 var fila = t.closest('tr');
@@ -2498,6 +2463,38 @@
     }
 
     // Monta (o recarga) la tabla de reporte dentro del contenedor indicado.
+    // PERIODO y "Formatos guardados" (encabezado de "Detalle de registros",
+    // js/setp-reportes.js). PERIODO cambia el periodo del reporte y los días
+    // que muestra el Detalle.
+    var periodoLigado = false;
+    function bindPeriodo() {
+        if (periodoLigado) return;
+        periodoLigado = true;
+        document.addEventListener('click', function (e) {
+            if (!e.target.closest || !e.target.closest('#setp-detail-guardados')) return;
+            if (rep.editing) return repStatus('Guarda o cancela el hallazgo en edición antes de abrir los formatos guardados.', 'warning');
+            abrirGuardados();
+        });
+        document.addEventListener('change', function (e) {
+            var t = e.target;
+            if (!t || (t.id !== 'setp-rep-desde' && t.id !== 'setp-rep-hasta')) return;
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(t.value)) return;
+            var esDesde = t.id === 'setp-rep-desde';
+            if (esDesde) rep.desde = t.value; else rep.hasta = t.value;
+            // Si las fechas quedan al revés, la otra se iguala a la elegida.
+            if (rep.desde > rep.hasta) { if (esDesde) rep.hasta = rep.desde; else rep.desde = rep.hasta; }
+            rep.periodo = rep.desde.slice(0, 7);
+            rep.editing = null;
+            repStatus('');
+            // "Detalle de registros" (js/setp-reportes.js) muestra los días de este periodo.
+            document.dispatchEvent(new CustomEvent('setp:periodo-reporte', { detail: { desde: rep.desde, hasta: rep.hasta } }));
+            if (!rep.el) return;
+            // Un periodo anterior a lo cargado: se cargan sus hallazgos primero.
+            if (faltaCargar(rep.desde) || faltaCargar(monthRange(prevMonth(rep.periodo)).start)) { mountReport(rep.el); return; }
+            renderReport();
+        });
+    }
+
     async function mountReport(container) {
         if (!container) return;
         if (rep.el !== container) {
@@ -2507,6 +2504,7 @@
             if (!rep.desde) repPonerMes(todayIso().slice(0, 7));
             container.innerHTML = repShell();
             bindReport(container);
+            bindPeriodo();
         }
         if (rep.editing) return;
         $('setp-rep-table').innerHTML = '<tbody><tr><td class="setp-empty"><span class="spinner-border spinner-border-sm me-2"></span>Cargando hallazgos…</td></tr></tbody>';
@@ -2636,7 +2634,7 @@
         if (!esSuperadminFmt() || !id) return;
         var tipos = {
             borrador: { titulo: '¿Eliminar este formato por generar?', aviso: 'Sólo se quita de "Por generar". Los recorridos y hallazgos no se borran. Si el usuario finaliza otro recorrido ese mismo día, se vuelve a crear.' },
-            formato: { titulo: '¿Eliminar este formato generado?', aviso: 'Los hallazgos y sus fotos no se borran. Sus recorridos vuelven a aparecer en "Supervisor por turno" para salir en otro formato.' },
+            formato: { titulo: '¿Eliminar este formato generado?', aviso: 'Los hallazgos y sus fotos no se borran. Sus recorridos vuelven a aparecer en la tabla de recorridos para salir en otro formato.' },
             reporte: { titulo: '¿Eliminar este reporte de hallazgos?', aviso: 'Los hallazgos y sus fotos no se borran: vuelven a aparecer en "Hallazgos detectados".' }
         };
         var t = tipos[kind] || tipos.formato;

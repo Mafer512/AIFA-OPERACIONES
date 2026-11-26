@@ -2250,6 +2250,9 @@ const SETP_PERSONAS_CON_ACCESO = [
     'Luis Fernando Gutiérrez Hernández',
     'Tania Vargas Gonzalez'
 ];
+// js/setp-reportes.js la usa para listar sólo a este personal en el
+// selector de usuarios de "Detalle de registros".
+window.setpPersonasConAcceso = SETP_PERSONAS_CON_ACCESO;
 
 function _palabrasDeNombre(nombre) {
     return String(nombre || '')
