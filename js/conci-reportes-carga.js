@@ -469,9 +469,16 @@
             if (cierre) {
                 const carril = llegada ? 'LLEGADA' : 'SALIDA';
                 const opsOficio = cierre >= OFICIO_SIN_MIXTAS_DESDE && opDelta && esFilaMixta() ? 0 : opDelta;
+                // En el cierre, los kilos de la operación (nacional + internacional,
+                // lo vacío vale 0) van completos al lado que diga TIPO DE
+                // OPERACIÓN, igual que la operación: una internacional capturada
+                // en la columna nacional suma como internacional, no se pierde.
+                const opInt = esInternacional(operacion);
+                const subNac = opInt ? 0 : kg;
+                const subInt = opInt ? kg : 0;
                 const delDiaKg = kgPorCierre.get(cierre) || { nac: 0, int: 0, opsNac: 0, opsInt: 0 };
-                delDiaKg.nac += nacKg;
-                delDiaKg.int += intKg;
+                delDiaKg.nac += subNac;
+                delDiaKg.int += subInt;
                 if (esInternacional(operacion)) delDiaKg.opsInt += opsOficio;
                 else delDiaKg.opsNac += opsOficio;
                 kgPorCierre.set(cierre, delDiaKg);
@@ -480,8 +487,8 @@
                     if (cierre > corte) continue;
                     const suma = alcance => {
                         const c = sub[clave][alcance][carril];
-                        c.NACIONAL.kg += nacKg;
-                        c.INTERNACIONAL.kg += intKg;
+                        c.NACIONAL.kg += subNac;
+                        c.INTERNACIONAL.kg += subInt;
                         // El libro cuenta AEROLINEA, y la operación cae del
                         // lado que diga TIPO DE OPERACIÓN, no de los kilos.
                         if (esInternacional(operacion)) c.INTERNACIONAL.ops += opsOficio;

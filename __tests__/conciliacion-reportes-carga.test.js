@@ -142,20 +142,27 @@ describe('agregación', () => {
     expect(dia.SALIDA.NACIONAL.kg).toBe(11465);         // KG. DE CARGA SALIDA NLU
   });
 
-  test('una salida internacional con carga nacional cae del lado nacional', () => {
+  test('en el cierre, una salida internacional con carga en la columna nacional suma como internacional', () => {
+    // Los kilos de la operación (nacional + internacional) van completos al
+    // lado de TIPO DE OPERACIÓN, igual que la operación.
     const r = agregar([
       manifiesto({ fecha: '2026-08-31', cierre: '2026-09-01', tipo: 'SALIDA', operacion: 'INTERNACIONAL', nac: 4150 })
     ]);
-    expect(r.sub.actual.dia.SALIDA.NACIONAL.kg).toBe(4150);
-    expect(r.sub.actual.dia.SALIDA.INTERNACIONAL.kg).toBe(0);
-    // Pero la OPERACIÓN sí se cuenta como internacional, que es lo que declara.
+    expect(r.sub.actual.dia.SALIDA.INTERNACIONAL.kg).toBe(4150);
+    expect(r.sub.actual.dia.SALIDA.NACIONAL.kg).toBe(0);
     expect(r.sub.actual.dia.SALIDA.INTERNACIONAL.ops).toBe(1);
   });
 
-  test('un manifiesto mixto aporta a los dos lados', () => {
-    const r = agregar([manifiesto({ fecha: '2026-08-31', cierre: '2026-09-01', tipo: 'LLEGADA', nac: 1000, int: 5000 })]);
-    expect(r.sub.actual.dia.LLEGADA.NACIONAL.kg).toBe(1000);
-    expect(r.sub.actual.dia.LLEGADA.INTERNACIONAL.kg).toBe(5000);
+  test('en el cierre, una operación con kilos en las dos columnas suma ambas de su lado (lo vacío vale 0)', () => {
+    const r = agregar([
+      manifiesto({ fecha: '2026-08-31', cierre: '2026-09-01', tipo: 'LLEGADA', operacion: 'INTERNACIONAL', nac: 1000, int: 5000 }),
+      manifiesto({ fecha: '2026-08-31', cierre: '2026-09-01', tipo: 'LLEGADA', operacion: 'NACIONAL', nac: 200, int: 300 })
+    ]);
+    expect(r.sub.actual.dia.LLEGADA.INTERNACIONAL.kg).toBe(6000);
+    expect(r.sub.actual.dia.LLEGADA.NACIONAL.kg).toBe(500);
+    // El Reporte de Carga (por FECHA) conserva cada columna en su campo.
+    expect(r.porMes[7].impKg).toBe(5300);
+    expect(r.porMes[7].nacLlegadaKg).toBe(1200);
   });
 
   test('la captura vieja de solo total se atribuye por tipo de operación', () => {
